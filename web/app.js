@@ -171,11 +171,23 @@ function line() {
   }
   return currentLine;
 }
+const colorContext = document.createElement("canvas").getContext("2d");
+function markTextColor(element, color) {
+  element.classList.add("has-text-color");
+  colorContext.fillStyle = "#000000";
+  colorContext.fillStyle = color;
+  const hex = /^#([0-9a-f]{6})$/i.exec(colorContext.fillStyle);
+  const channels = hex ? hex[1].match(/../g).map((channel) => Number.parseInt(channel, 16)) : [0, 0, 0];
+  const chromatic = Math.max(...channels) - Math.min(...channels) > 24;
+  element.classList.toggle("text-color-chromatic", chromatic);
+  element.classList.toggle("text-color-neutral", !chromatic);
+}
 function applyStyle(element, style) {
   element.classList.add("output-text");
   element.classList.toggle("font-bold", !!(style.fontStyle & 1));
   element.classList.toggle("font-italic", !!(style.fontStyle & 2));
   element.classList.toggle("font-underline", !!(style.fontStyle & 4));
+  markTextColor(element, style.color);
   if (style.color.toLowerCase() !== "#ffffff") element.style.setProperty("--output-color", style.color);
   else element.style.removeProperty("--output-color");
   if (style.background.toLowerCase() !== "#000000") element.style.setProperty("--output-background", style.background);
@@ -341,7 +353,10 @@ async function renderHtml(markup, parent) {
       const alignment = node.getAttribute("align")?.toLowerCase();
       if (["left", "center", "right"].includes(alignment)) element.style.textAlign = alignment;
       const color = node.getAttribute("color");
-      if (color && /^(?:#[0-9a-f]{6}|[a-z]+)$/i.test(color)) element.style.color = color;
+      if (color && /^(?:#[0-9a-f]{6}|[a-z]+)$/i.test(color)) {
+        element.style.color = color;
+        markTextColor(element, color);
+      }
     } else throw new Error(`Unsupported HTML tag: <${node.tagName.toLowerCase()}>`);
     const title = node.getAttribute("title");
     if (title && !element.dataset.tooltip) describe(element, title);

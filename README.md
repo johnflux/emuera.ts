@@ -124,8 +124,12 @@ the tooltip; historical screens do not expose active tooltips.
 Plain-text numeric menu markers, including padded forms such as `[  0]`, are
 clickable choices; their original spacing is preserved. Each marker includes
 the following label up to the next marker or end of that text fragment, excluding
-trailing whitespace. The whole choice turns yellow on hover or keyboard focus,
-including explicitly colored HTML children; only bracketed label text is underlined.
+trailing whitespace. Choices use yellow hover/focus for neutral text and amber
+for chromatic text, including explicitly colored HTML children; only bracketed
+label text is underlined. Applied text colors receive `has-text-color` and
+`text-color-neutral` or `text-color-chromatic` classes. The heuristic treats
+RGB channel spreads of 24 or less as neutral; it does not infer game state.
+The CSS variable `--choice-hover-color` controls each category's hover color.
 ERB-defined buttons, including section headings, retain their original input values.
 `PRINTPLAIN` and `PRINTPLAINFORM` suppress automatic choice recognition,
 including for bracketed numbers. Both continue the current line; the latter

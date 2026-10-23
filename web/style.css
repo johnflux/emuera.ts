@@ -31,6 +31,8 @@ main { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 1
 .align-center { text-align: center; }
 .align-right { text-align: right; }
 .output-text { color: var(--output-color, var(--terminal-foreground)); background-color: var(--output-background, var(--terminal-background)); font-weight: normal; font-style: normal; text-decoration: none; }
+.text-color-neutral { --choice-hover-color: #ffff00; }
+.text-color-chromatic { --choice-hover-color: #ffbf00; }
 .font-bold { font-weight: bold; }
 .font-italic { font-style: italic; }
 .font-underline { text-decoration: underline; }
@@ -39,7 +41,7 @@ main { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 1
 .image-line, .image-line p { min-height: 0; line-height: 0; }
 .image-line .sprite { vertical-align: top; }
 .line button.choice { font: inherit; background: transparent; color: inherit; border: 0; padding: 0; text-decoration: none; }
-.screen.is-active button.choice:enabled:hover, .screen.is-active button.choice:enabled:hover *, .screen.is-active button.choice:enabled:focus-visible, .screen.is-active button.choice:enabled:focus-visible * { color: #ffff00 !important; }
+.screen.is-active button.choice:enabled:hover, .screen.is-active button.choice:enabled:hover *, .screen.is-active button.choice:enabled:focus-visible, .screen.is-active button.choice:enabled:focus-visible * { color: var(--choice-hover-color, #ffff00) !important; }
 .choice .interactive-label { text-decoration: underline; text-decoration-color: slategray; text-decoration-thickness: from-font; text-underline-offset: .15em; }
 .line button.choice:disabled { opacity: .5; }
 .screen.is-active button.choice:disabled { opacity: 1; }
