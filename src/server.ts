@@ -7,7 +7,7 @@ import { compatibility } from "./compatibility.js";
 import { demoGame } from "./demo.js";
 import { GAME_ROOT, loadGame, type Game } from "./loader.js";
 import { EraError, key } from "./model.js";
-import { Runtime } from "./runtime.js";
+import { GAME_INSTRUCTION_LIMIT, Runtime } from "./runtime.js";
 import { FileGlobalStore, MemoryGlobalStore, type GlobalStore } from "./storage.js";
 import { patchTitleImage } from "./render-patches.js";
 
@@ -16,6 +16,7 @@ const mime: Record<string, string> = {
   ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
   ".css": "text/css; charset=utf-8", ".png": "image/png", ".webp": "image/webp",
   ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".bmp": "image/bmp",
+  ".ttf": "font/ttf", ".txt": "text/plain; charset=utf-8",
 };
 class HttpError extends Error {
   constructor(public status: number, message: string) { super(message); }
@@ -88,7 +89,7 @@ export function createApp(game: Game, development = false, store: GlobalStore = 
         if (sessions.size >= 8) throw new HttpError(429, "Too many sessions; restart the server or wait for expiry");
         const id = randomUUID();
         try {
-          const runtime = new Runtime(data.mode === "demo" ? demoGame(game) : game, 50_000, {
+          const runtime = new Runtime(data.mode === "demo" ? demoGame(game) : game, data.mode === "game" ? GAME_INSTRUCTION_LIMIT : 50_000, {
             store: data.mode === "game" ? store : new MemoryGlobalStore(),
             columns: typeof data.columns === "number" ? data.columns : 120,
           });
@@ -104,10 +105,13 @@ export function createApp(game: Game, development = false, store: GlobalStore = 
       if (request.method === "POST" && url.pathname === "/api/input") {
         const data = await body(request);
         if (typeof data.session !== "string" || typeof data.value !== "string") throw new HttpError(400, "Expected session and value strings");
+        if (data.columns !== undefined && (typeof data.columns !== "number" || !Number.isSafeInteger(data.columns) || data.columns < 20 || data.columns > 1000))
+          throw new HttpError(400, "columns must be an integer from 20 to 1000");
         const session = sessions.get(data.session);
         if (!session) throw new HttpError(404, "Session expired or does not exist; start a new run");
         session.used = Date.now();
         try {
+          if (typeof data.columns === "number") session.runtime.setColumns(data.columns);
           const snapshot = session.runtime.input(data.value);
           if (snapshot.status !== "waiting") sessions.delete(data.session);
           json(response, { session: data.session, ...patchTitleImage(game, snapshot) });
@@ -138,7 +142,11 @@ export function createApp(game: Game, development = false, store: GlobalStore = 
         response.end(await readFile(file));
         return;
       }
-      const pages: Record<string, string> = { "/": "index.html", "/app.js": "app.js", "/style.css": "style.css" };
+      const pages: Record<string, string> = {
+        "/": "index.html", "/app.js": "app.js", "/style.css": "style.css",
+        "/fonts/BIZUDGothic-Regular.ttf": "fonts/BIZUDGothic-Regular.ttf",
+        "/fonts/OFL.txt": "fonts/OFL.txt",
+      };
       const page = pages[url.pathname];
       if (request.method === "GET" && page) {
         response.writeHead(200, { "Content-Type": mime[path.extname(page)]! });

@@ -14,6 +14,9 @@ export interface Game {
   diagnostics: Diagnostic[];
   scriptFiles: number;
   variableSizes: Map<string, number[]>;
+  characters: Map<number, { file: string; rows: string[][] }>;
+  renames: Map<string, string>;
+  money: { label: string; first: boolean };
 }
 export async function filesUnder(root: string): Promise<string[]> {
   const result: string[] = [];
@@ -53,7 +56,7 @@ export function csvRows(source: string): string[][] {
   });
 }
 export function emptyGame(root = ""): Game {
-  return { root, routines: new Map(), headers: [], tables: new Map(), names: new Map(), sprites: new Map(), diagnostics: [], scriptFiles: 0, variableSizes: new Map() };
+  return { root, routines: new Map(), headers: [], tables: new Map(), names: new Map(), sprites: new Map(), diagnostics: [], scriptFiles: 0, variableSizes: new Map(), characters: new Map(), renames: new Map(), money: { label: "\u00a5", first: true } };
 }
 function* logicalLines(source: string, file: string): Generator<Line> {
   const rows = source.replace(/^\uFEFF/, "").split(/\r?\n/);
@@ -92,7 +95,7 @@ export function indexScript(game: Game, source: string, file: string, header = f
   for (const logical of logicalLines(source, file)) {
     lastLine = logical.line;
     // Emuera joins continuation rows before interpreting comments.
-    const content = stripComment(logical.text).trimStart();
+    const content = stripComment(logical.text.replace(/\[\[([^\]]+)\]\]/g, (match, name: string) => game.renames.get(name) ?? match)).trimStart();
     const line: Line = { ...logical, text: content };
     if (content === "[SKIPSTART]") { skipBlock = true; continue; }
     if (content === "[SKIPEND]") { skipBlock = false; continue; }
@@ -133,6 +136,7 @@ export function indexScript(game: Game, source: string, file: string, header = f
       const match = /^@([^\s(,]+)\s*(.*)$/.exec(content)!;
       let args = match[2]!.trim();
       if (args.startsWith("(") && args.endsWith(")")) args = args.slice(1, -1);
+      else if (args.startsWith(",")) args = args.slice(1).trimStart();
       let parameters: string[] = [];
       const directives: Line[] = [];
       try { parameters = args ? splitArguments(args) : []; }
@@ -154,18 +158,52 @@ export function indexScript(game: Game, source: string, file: string, header = f
 }
 export async function loadGame(root = GAME_ROOT): Promise<Game> {
   const game = emptyGame(root);
-  const scripts = (await filesUnder(path.join(root, "ERB"))).filter((file) => /\.(erb|erh)$/i.test(file));
+  const csvFiles = (await filesUnder(path.join(root, "CSV"))).filter((file) => /\.csv$/i.test(file));
+  for (const file of csvFiles.filter((file) => path.basename(file).toUpperCase() === "_RENAME.CSV")) {
+    for (const row of csvRows(await readText(file))) {
+      if (row[1]) game.renames.set(row[1], row[0] ?? "");
+    }
+  }
+  const erbFiles = await filesUnder(path.join(root, "ERB"));
+  for (const file of erbFiles.filter((file) => /\.erd$/i.test(file))) {
+    const name = key(path.basename(file).slice(0, -4));
+    if (game.names.has(name)) throw new EraError(`Duplicate ERD name table: ${name}`, { file, line: 0 });
+    const names = new Map<string, number>();
+    for (const row of csvRows(await readText(file))) {
+      const index = Number(row[0]);
+      if (!/^\d+$/.test(row[0] ?? "") || !Number.isSafeInteger(index) || !row[1])
+        throw new EraError(`Invalid ERD index definition: ${row.join(",")}`, { file, line: 0 });
+      names.set(key(row[1]), index);
+    }
+    game.names.set(name, names);
+  }
+  const scripts = erbFiles.filter((file) => /\.(erb|erh)$/i.test(file));
   // Header macro declarations must be available to ERB conditional compilation.
   scripts.sort((a, b) => Number(/\.erh$/i.test(b)) - Number(/\.erh$/i.test(a)));
   for (const file of scripts) {
     indexScript(game, await readText(file), path.relative(root, file), /\.erh$/i.test(file));
     game.scriptFiles++;
   }
-  for (const file of await filesUnder(path.join(root, "CSV"))) {
-    if (!/\.csv$/i.test(file)) continue;
+  for (const file of csvFiles) {
     const relative = path.relative(path.join(root, "CSV"), file).split(path.sep).join("/");
     const name = key(relative.replace(/\.csv$/i, ""));
     const rows = csvRows(await readText(file));
+    if (name === "_REPLACE") {
+      for (const row of rows) {
+        if (row[0] === "お金の単位") game.money.label = row[1] ?? "";
+        if (row[0] === "単位の位置") {
+          if (row[1] !== "前" && row[1] !== "後") throw new EraError("Invalid money unit position", { file, line: 0 });
+          game.money.first = row[1] === "前";
+        }
+      }
+    }
+    if (/(?:^|\/)CHARA\d/i.test(name)) {
+      const number = rows.find((row) => row[0] === "番号")?.[1];
+      if (!number || !/^\d+$/.test(number)) throw new EraError("Character CSV requires a numeric 番号", { file, line: 0 });
+      const id = Number(number);
+      if (game.characters.has(id)) throw new EraError(`Duplicate character number: ${id}`, { file, line: 0 });
+      game.characters.set(id, { file: path.relative(root, file), rows });
+    }
     if (name === "VARIABLESIZE") {
       for (const row of rows) {
         const dimensions = row.slice(1).map(Number);

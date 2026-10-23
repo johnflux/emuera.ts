@@ -1,4 +1,4 @@
-import { quotedEnd } from "./strings.js";
+import { conditionalEnd, quotedEnd } from "./strings.js";
 
 export type Value = bigint | string;
 export interface Source { file: string; line: number }
@@ -28,10 +28,24 @@ export function text(value: Value): string {
   if (typeof value !== "string") throw new EraError("Expected a string, received an integer");
   return value;
 }
+export const INTEGER_LITERAL = /^(0[xX][0-9a-fA-F]+|0[bB][01]+|\d+)(?:([pPeE])([+-]?\d+))?/;
+export function integerLiteral(source: string): bigint {
+  const match = INTEGER_LITERAL.exec(source);
+  if (!match || match[0] !== source) throw new EraError(`Invalid integer literal: ${source}`);
+  let value = BigInt(match[1]!);
+  if (match[2]) {
+    const exponent = Number(match[3]);
+    if (!Number.isSafeInteger(exponent) || Math.abs(exponent) > 63) throw new EraError(`Integer exponent out of range: ${source}`);
+    const scale = (match[2].toLowerCase() === "p" ? 2n : 10n) ** BigInt(Math.abs(exponent));
+    value = exponent < 0 ? value / scale : value * scale;
+  }
+  return value;
+}
 export function stripComment(line: string): string {
-  if (/^\s*(?:PRINT(?:FORM)?[LW]?|DATA(?:FORM)?)(?:\s|$)/i.test(line)) return line.trimStart();
+  if (/^\s*(?:PRINT(?:FORM)?[LW]?|PRINTPLAIN(?:FORM)?|DATA(?:FORM)?)(?:\s|$)/i.test(line)) return line.trimStart();
   for (let i = 0; i < line.length; i++) {
     const c = line[i];
+    if (line.startsWith("\\@", i)) { i = conditionalEnd(line, i) - 1; continue; }
     if (c === '"' || line.startsWith('@"', i)) { i = quotedEnd(line, i) - 1; continue; }
     if (c === ";") return line.slice(0, i).trimEnd();
   }
@@ -42,6 +56,12 @@ export function splitArguments(input: string): string[] {
   let start = 0, depth = 0;
   for (let i = 0; i < input.length; i++) {
     const c = input[i];
+    if (input.startsWith("\\@", i)) {
+      const end = conditionalEnd(input, i);
+      if (end > input.length) throw new EraError("Unclosed FORM conditional in argument list");
+      i = end - 1;
+      continue;
+    }
     if (c === '"' || input.startsWith('@"', i)) {
       const end = quotedEnd(input, i);
       if (end > input.length) throw new EraError("Unbalanced argument list");

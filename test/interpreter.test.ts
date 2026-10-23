@@ -25,10 +25,12 @@ test("signed 64-bit arithmetic, precedence, ternary and short circuit without ev
     ["0 && BAD()", 0n], ["1 || BAD()", 1n], ["1 ? 4 # BAD()", 4n], ["0 ? BAD() # 8", 8n],
     ["1 << 40", 1099511627776n], ['"a" + "b"', "ab"], ['"a" * 3', "aaa"],
     ["1 || 0 && 0", 0n],
+    ["1p1 + 3P2", 14n], ["2e3 + 5E-1", 2000n], ["0x10p2", 64n], ["-8p-2", -2n],
   ] as const) assert.equal(evaluate(parseExpression(source), context), expected, source);
   assert.throws(() => evaluate(parseExpression("1 / 0"), context), /Division by zero/);
   assert.throws(() => evaluate(parseExpression('"1" + 2'), context), /string/);
   assert.throws(() => parseExpression("process.exit()"), /Unsupported/);
+  assert.throws(() => parseExpression("1p100000"), /exponent out of range/);
 });
 test("CSV comments, escaped quotes, quoted commas and semicolons", () => {
   assert.deepEqual(csvRows('; comment\n0,"a,b"\n1,"x;""y"; ignored'), [["0", "a,b"], ["1", 'x;"y']]);
@@ -229,7 +231,7 @@ test("budget stops infinite loops and global QUIT stops callers", () => {
   const quit = runtime("@SYSTEM_TITLE\nCALL STOP\nTHROW should not execute\n@STOP\nQUIT").start();
   assert.equal(quit.status, "halted");
   const recursive = runtime("@SYSTEM_TITLE\nCALL SYSTEM_TITLE").start();
-  assert.match(recursive.error!.message, /Recursive calls/);
+  assert.match(recursive.error!.message, /Call depth limit/);
 });
 test("string parameters default to empty strings and built-ins reject invalid arguments", () => {
   const result = runtime(`@SYSTEM_TITLE

@@ -1,7 +1,10 @@
 import { EraError, key, type Line, type Routine } from "./model.js";
+import { TABLE_OPERATIONS } from "./data-tables.js";
 
 export const SUPPORTED = new Set([
+  ...TABLE_OPERATIONS,
   "PRINT", "PRINTL", "PRINTW", "PRINTFORM", "PRINTFORML", "PRINTFORMW",
+  "PRINTPLAIN", "PRINTPLAINFORM",
   "PRINTV", "PRINTVL", "PRINTVW", "PRINTS", "PRINTSL", "PRINTSW", "HTML_PRINT",
   "PRINTBUTTON", "PRINTBUTTONC", "DRAWLINE", "CUSTOMDRAWLINE", "CLEARLINE",
   "IF", "ELSEIF", "ELSE", "ENDIF", "SIF", "SELECTCASE", "CASE", "CASEELSE", "ENDSELECT",
@@ -11,7 +14,8 @@ export const SUPPORTED = new Set([
   "LOADGLOBAL", "SAVEGLOBAL", "CLEARMEMORY", "RETURNF", "FONTSTYLE", "REDRAW",
   "MAP_RELEASE", "MAP_CREATE", "MAP_SET", "PRINTDATA", "PRINTDATAL", "PRINTDATAW", "DATA", "DATAFORM", "ENDDATA",
   "DEBUGPRINT", "DEBUGPRINTL", "DEBUGPRINTFORM", "DEBUGPRINTFORML",
-  "SPLIT", "VARSET",
+  "SPLIT", "VARSET", "ARRAYREMOVE", "SETBIT", "CLEARBIT", "INVERTBIT",
+  "RESETDATA", "ADDCHARA", "BEGIN", "CALLF", "CALLFORM", "CALLFORMF", "TRYCALLFORM", "TRYCCALLFORM", "CATCH", "ENDCATCH",
 ]);
 export interface Instruction extends Line { op: string; args: string; target: number }
 export interface Compiled {
@@ -21,6 +25,9 @@ export interface Compiled {
 }
 export function classify(line: Line): { op: string; args: string } {
   if (line.text.startsWith("$")) return { op: "LABEL", args: line.text.slice(1).trim() };
+  // Literal PRINT arguments start after one separator; further spaces are output.
+  const print = /^((?:DEBUG)?PRINT(?:FORM)?[LW]?|PRINTPLAIN(?:FORM)?)(?:[ \t](.*))?$/i.exec(line.text);
+  if (print) return { op: key(print[1]!), args: print[2] ?? "" };
   const command = /^(\S+)\s*(.*)$/.exec(line.text)!;
   const op = key(command[1]!);
   if (SUPPORTED.has(op) || /^(?:DEBUG)?PRINT/.test(op)) return { op, args: command[2]! };
@@ -42,6 +49,17 @@ export function compile(routine: Routine): Compiled {
     }
     if (["IF", "SELECTCASE", "FOR", "WHILE", "DO", "REPEAT"].includes(line.op))
       stack.push({ op: line.op, start: i, branches: [i] });
+    else if (line.op === "TRYCCALLFORM") stack.push({ op: line.op, start: i, branches: [i] });
+    else if (line.op === "CATCH") {
+      const frame = stack.at(-1);
+      if (frame?.op !== "TRYCCALLFORM" || frame.branches.length !== 1) throw new EraError("Unmatched CATCH", line);
+      frame.branches.push(i);
+      code[frame.start]!.target = i;
+    } else if (line.op === "ENDCATCH") {
+      const frame = stack.pop();
+      if (frame?.op !== "TRYCCALLFORM" || frame.branches.length !== 2) throw new EraError("Unmatched ENDCATCH", line);
+      code[frame.branches[1]!]!.target = i;
+    }
     else if (["PRINTDATA", "PRINTDATAL", "PRINTDATAW"].includes(line.op))
       stack.push({ op: "PRINTDATA", start: i, branches: [i] });
     else if (line.op === "ENDDATA") {

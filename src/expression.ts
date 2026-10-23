@@ -1,12 +1,13 @@
-import { EraError, integer, key, text, type Value } from "./model.js";
-import { readFormattedLiteral } from "./format.js";
+import { EraError, integer, integerLiteral, INTEGER_LITERAL, key, text, type Value } from "./model.js";
+import { readConditional, readFormattedLiteral } from "./format.js";
+import { stringWidth } from "./strings.js";
 
 export type Expr =
   | { kind: "literal"; value: Value }
   | { kind: "variable"; name: string; indices: Expr[] }
   | { kind: "call"; name: string; args: Expr[] }
   | { kind: "format"; parts: Expr[] }
-  | { kind: "interpolation"; string: boolean; expression: Expr }
+  | { kind: "interpolation"; string: boolean; expression: Expr; width?: Expr; left?: boolean }
   | { kind: "omitted" }
   | { kind: "unary"; op: string; operand: Expr }
   | { kind: "binary"; op: string; left: Expr; right: Expr }
@@ -25,6 +26,12 @@ function tokenize(source: string): Token[] {
     const rest = source.slice(i);
     const space = /^\s+/.exec(rest);
     if (space) { i += space[0].length; continue; }
+    if (rest.startsWith("\\@")) {
+      const result = readConditional(source, i);
+      tokens.push({ type: "format", value: "", expression: result.expression });
+      i = result.end;
+      continue;
+    }
     if (rest.startsWith('@"')) {
       const result = readFormattedLiteral(source, i);
       tokens.push({ type: "format", value: "", expression: result.expression });
@@ -48,9 +55,9 @@ function tokenize(source: string): Token[] {
       tokens.push({ type: "string", value });
       continue;
     }
-    const number = /^(?:0[xX][0-9a-fA-F]+|0[bB][01]+|\d+)/.exec(rest);
+    const number = INTEGER_LITERAL.exec(rest);
     if (number) { tokens.push({ type: "number", value: number[0] }); i += number[0].length; continue; }
-    const name = /^[\p{L}\p{N}_\p{M}]+/u.exec(rest);
+    const name = /^[\p{L}\p{N}\p{Sc}_\p{M}\u30FB]+/u.exec(rest);
     if (name) { tokens.push({ type: "name", value: key(name[0]) }); i += name[0].length; continue; }
     const op = /^(?:==|!=|<=|>=|<<|>>|&&|\|\||\^\^|!&|!\||[+\-*/%<>&|^!~():,?#])/.exec(rest);
     if (!op) throw new EraError(`Unsupported expression syntax near: ${rest.slice(0, 35)}`);
@@ -70,7 +77,7 @@ export function parseExpression(source: string): Expr {
   };
   function primary(): Expr {
     const token = take();
-    if (token.type === "number") return { kind: "literal", value: BigInt.asIntN(64, BigInt(token.value)) };
+    if (token.type === "number") return { kind: "literal", value: BigInt.asIntN(64, integerLiteral(token.value)) };
     if (token.type === "string") return { kind: "literal", value: token.value };
     if (token.type === "format") return token.expression!;
     if (["!", "~", "+", "-"].includes(token.value)) return { kind: "unary", op: token.value, operand: primary() };
@@ -141,7 +148,13 @@ export function evaluate(expr: Expr, context: EvaluationContext): Value {
     }
     case "interpolation": {
       const value = ev(expr.expression);
-      return expr.string ? text(value) : integer(value).toString();
+      const result = expr.string ? text(value) : integer(value).toString();
+      if (!expr.width) return result;
+      const width = integer(ev(expr.width));
+      if (width < 0n || width > 1_000_000n) throw new EraError("FORM width out of range");
+      const measured = stringWidth(result);
+      const padding = " ".repeat(Math.max(0, Number(width) - measured));
+      return expr.left ? result + padding : padding + result;
     }
     case "conditional": return ev(integer(ev(expr.condition)) !== 0n ? expr.yes : expr.no);
     case "unary": {

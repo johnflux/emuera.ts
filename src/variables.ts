@@ -7,15 +7,35 @@ interface Variable {
   constant: boolean;
   dimensions: number[];
   values: Map<string, Value>;
+  character?: boolean;
 }
 export type GlobalData = Record<string, Record<string, string>>;
 export class Variables {
   private values = new Map<string, Variable>();
   private declarations = new Map<string, Line>();
   private initializing = new Set<string>();
+  private scalarReferences = new Map<string, { variable: Variable; address: string }>();
   constructor(private game: Game, public parent?: Variables) {}
   define(name: string, string = false, dimensions = [1000], constant = false): void {
     this.values.set(key(name), { string, dimensions, constant, values: new Map() });
+  }
+  defineCharacter(name: string, string = false, dimensions: number[] = []): void {
+    this.values.set(key(name), { string, dimensions: [0, ...dimensions], constant: false, character: true, values: new Map() });
+  }
+  addCharacter(): number {
+    const variables = [...this.values.values()].filter((variable) => variable.character);
+    const index = variables[0]?.dimensions[0] ?? 0;
+    for (const variable of variables) variable.dimensions[0] = index + 1;
+    return index;
+  }
+  resetData(): void {
+    const preserved = new Set(this.globalNames());
+    for (const [name, variable] of this.values) {
+      if (variable.constant || preserved.has(name) || name.startsWith("GAMEBASE_") || name === "WINDOW_TITLE") continue;
+      if (this.declarations.has(name)) this.values.delete(name);
+      else variable.values.clear();
+      if (variable.character) variable.dimensions[0] = 0;
+    }
   }
   declare(line: Line): void {
     const match = /^#DIM(S)?\s+((?:(?:CONST|DYNAMIC|GLOBAL|SAVEDATA|REF|CHARADATA)\s+)*)([^\s,=]+)(.*)$/i.exec(line.text);
@@ -24,16 +44,51 @@ export class Variables {
     if (this.values.has(name) || this.declarations.has(name)) throw new EraError(`Duplicate variable: ${name}`, line);
     this.declarations.set(name, line);
   }
+  bindReference(name: string, source: Variables, sourceName: string, indices: Expr[], context: EvaluationContext): void {
+    const declaration = this.declarations.get(key(name));
+    if (!declaration || !/^#DIMS?\s+REF\s/i.test(declaration.text)) throw new EraError(`Not a REF parameter: ${name}`);
+    const match = /^#DIM(S)?\s+REF\s+[^\s,=]+\s*(?:,(.*))?$/i.exec(declaration.text);
+    const variable = source.resolve(sourceName, context);
+    if (!match || variable.string !== !!match[1] || match[2] !== undefined && (indices.length || splitArguments(match[2]).length !== variable.dimensions.length))
+      throw new EraError(`REF type or dimensions mismatch: ${name}`, declaration);
+    if (match[2] === undefined) {
+      this.scalarReferences.set(key(name), source.address(sourceName, indices, context));
+    }
+    this.values.set(key(name), variable);
+  }
   has(name: string): boolean {
     return this.values.has(key(name)) || this.declarations.has(key(name)) || !!this.parent?.has(name);
   }
   dimensions(name: string, context: EvaluationContext): number[] {
-    return [...this.resolve(name, context).dimensions];
+    if (this.scalarReferences.has(key(name))) return [1];
+    const variable = this.resolve(name, context);
+    const dimensions = variable.character ? variable.dimensions.slice(1) : [...variable.dimensions];
+    return dimensions.length ? dimensions : [1];
   }
   reset(name: string, context: EvaluationContext): void {
     const variable = this.resolve(name, context);
     if (variable.constant) throw new EraError(`Cannot reset constant: ${name}`);
+    if (this.scalarReferences.has(key(name))) {
+      this.set(name, [], variable.string ? "" : 0n, context);
+      return;
+    }
     variable.values.clear();
+  }
+  remove(name: string, indices: Expr[], start: number, count: number, context: EvaluationContext): void {
+    const { variable, address } = this.address(name, [...indices, { kind: "literal", value: BigInt(start) }], context);
+    if (variable.constant) throw new EraError(`Cannot modify constant: ${name}`);
+    const size = variable.dimensions.at(-1)!;
+    if (!Number.isSafeInteger(count) || count < 0 || start + count > size) throw new EraError("Invalid ARRAYREMOVE range");
+    const prefix = address.slice(0, address.lastIndexOf(":") + 1);
+    const moved = new Map<string, Value>();
+    for (const [address, value] of variable.values) {
+      if (!address.startsWith(prefix)) continue;
+      const index = Number(address.slice(prefix.length));
+      if (index < start) continue;
+      variable.values.delete(address);
+      if (index >= start + count) moved.set(prefix + (index - count), value);
+    }
+    for (const [address, value] of moved) variable.values.set(address, value);
   }
   private globalNames(): string[] {
     return ["GLOBAL", "GLOBALS", ...[...this.declarations].filter(([, line]) => /^#DIMS?\s+(?:\w+\s+)*GLOBAL\b/i.test(line.text))
@@ -84,7 +139,7 @@ export class Variables {
     try {
       const match = /^#DIM(S)?\s+((?:(?:CONST|DYNAMIC|GLOBAL|SAVEDATA|REF|CHARADATA)\s+)*)([^\s,=]+)(.*)$/i.exec(line.text)!;
       const modifiers = match[2]!.toUpperCase().trim().split(/\s+/);
-      if (modifiers.includes("REF") || modifiers.includes("CHARADATA")) throw new EraError(`Unsupported declaration modifier for ${name}`, line);
+      if (modifiers.includes("REF")) throw new EraError(`Unsupported declaration modifier for ${name}`, line);
       const rest = match[4]!.trim();
       const equal = rest.indexOf("=");
       const sizes = (equal < 0 ? rest : rest.slice(0, equal)).trim().replace(/^,/, "");
@@ -95,7 +150,13 @@ export class Variables {
       if (initial.length && (dimensions.length > 1 || initial.length > dimensions[0]!)) throw new EraError(`Invalid initializer for ${name}`, line);
       if (modifiers.includes("CONST") && (!initial.length || initial.length !== dimensions[0]!))
         throw new EraError(`Constant dimensions must match initial values: ${name}`, line);
-      const variable: Variable = { string: !!match[1], constant: modifiers.includes("CONST"), dimensions, values: new Map() };
+      const character = modifiers.includes("CHARADATA");
+      if (character && initial.length) throw new EraError(`CHARADATA initializers are not yet supported: ${name}`, line);
+      const variable: Variable = {
+        string: !!match[1], constant: modifiers.includes("CONST"),
+        dimensions: character ? [Number(integer(context.get("CHARANUM", []))), ...dimensions] : dimensions,
+        values: new Map(), character,
+      };
       initial.forEach((value, i) => {
         if ((typeof value === "string") !== variable.string) throw new EraError(`Initializer type mismatch: ${name}`, line);
         variable.values.set(String(i), value);
@@ -105,9 +166,16 @@ export class Variables {
     } finally { this.initializing.delete(name); }
   }
   private address(name: string, indices: Expr[], context: EvaluationContext): { variable: Variable; address: string } {
+    const reference = this.scalarReferences.get(key(name));
+    if (reference) {
+      if (indices.length && (indices.length !== 1 || integer(evaluate(indices[0]!, context)) !== 0n)) throw new EraError(`Scalar REF cannot be indexed: ${name}`);
+      return reference;
+    }
     const variable = this.resolve(name, context);
     const values = indices.map((expr) => {
-      const symbols = this.game.names.get(key(name).replace(/NAME$/, ""));
+      const normalized = key(name).replace(/NAME$/, "");
+      const table = ({ MAXBASE: "BASE", JUEL: "PALAM", GOTJUEL: "PALAM", NOWEX: "EX" } as Record<string, string>)[normalized] ?? normalized;
+      const symbols = this.game.names.get(table);
       if (expr.kind === "variable" && !expr.indices.length && !this.has(expr.name) && symbols?.has(expr.name))
         return symbols.get(expr.name)!;
       const value = evaluate(expr, context);
@@ -120,6 +188,8 @@ export class Variables {
       if (!Number.isSafeInteger(n)) throw new EraError(`Invalid array index: ${value}`);
       return n;
     });
+    if (variable.character && values.length === variable.dimensions.length - 1)
+      values.unshift(Number(integer(context.get("TARGET", []))));
     if (!values.length) values.push(0);
     if (values.length !== variable.dimensions.length) throw new EraError(`Expected ${variable.dimensions.length} indices for ${name}, received ${values.length}`);
     values.forEach((n, i) => {
@@ -136,6 +206,7 @@ export class Variables {
     this.setMany(name, indices, [value], context);
   }
   setMany(name: string, indices: Expr[], values: Value[], context: EvaluationContext): void {
+    if (this.scalarReferences.has(key(name)) && values.length > 1) throw new EraError(`Cannot batch assign scalar REF: ${name}`);
     const { variable, address } = this.address(name, indices, context);
     if (variable.constant) throw new EraError(`Cannot assign constant: ${name}`);
     if (values.some((value) => (typeof value === "string") !== variable.string)) throw new EraError(`Assignment type mismatch: ${name}`);

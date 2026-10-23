@@ -17,6 +17,29 @@ function game(source: string, headers = "") {
 function printed(snapshot: Snapshot): string {
   return snapshot.output.filter((item) => item.type === "text").map((item) => item.text).join("\n");
 }
+test("separators and width queries share the terminal columns, including after resizing", () => {
+  const runtime = new Runtime(game(`@SYSTEM_TITLE
+DRAWLINE
+CUSTOMDRAWLINE -=
+CUSTOMDRAWLINE 日
+PRINTFORML {MAXWIDTH()} {STRLENS(DRAWLINESTR)}
+INPUT
+DRAWLINE
+PRINTFORML {MAXWIDTH()} {STRLENS(DRAWLINESTR)}
+PRINTFORM %@"□ "%
+PRINTBUTTON "Experience", 163
+PRINTFORML  □%"-"*(MAXWIDTH()-6-STRLENS("Experience"))%
+PRINTFORML {LINECOUNT}`), 50_000, { columns: 25 });
+  const initial = runtime.start();
+  assert.equal(initial.status, "waiting", JSON.stringify(initial.error));
+  assert.equal(printed(initial), ["-".repeat(25), "-=".repeat(12), "日".repeat(12), "25 25"].join("\n"));
+  runtime.setColumns(40);
+  const resized = runtime.input("0");
+  assert.equal(resized.status, "halted", JSON.stringify(resized.error));
+  assert.equal(printed(resized), ["-".repeat(40), "40 40", "□ ", " □" + "-".repeat(24), "8"].join("\n"));
+  assert.throws(() => runtime.setColumns(0), /Terminal columns/);
+  assert.throws(() => runtime.setColumns(1.5), /Terminal columns/);
+});
 test("formatted literals, nested string expressions and lazy FORM conditionals", () => {
   const source = String.raw`@SYSTEM_TITLE
 LOCALS '= @"Version: \@ 1 ? %TOSTR(4,"000")% # %MISSING()% \@"
@@ -52,6 +75,29 @@ RETURNF ARGS`)).start();
     assert.equal(invalid.status, "error");
     assert.match(invalid.error!.message, expected);
   }
+});
+test("FORM conditionals can be string operands inside percent interpolation", () => {
+  const result = new Runtime(game(String.raw`@SYSTEM_TITLE
+LOCALS = first
+PRINTFORML %LOCALS + \@ STRLENS(LOCALS) ? %" "%#\@%second
+PRINTSL @"%LOCALS + \@ 0 ? %MISSING()% # \@ 1 ? , %TOSTR(2,"00")% # wrong \@ \@%"
+#DIM A・B = 7
+PRINTFORML {A・B}`)).start();
+  assert.equal(result.status, "halted", JSON.stringify(result.error));
+  assert.equal(printed(result), "first second\nfirst, 02\n7");
+});
+test("MONEYSTR formats exact integer currency with the game's unit and placement", () => {
+  const value = game(`@SYSTEM_TITLE
+PRINTFORML %MONEYSTR(5000, "#,##0")% %MONEYSTR(-9223372036854775808, "#,##0")%
+PRINTFORML %MONEYSTR(7, "000")% %MONEYSTR(-7)%`);
+  const snapshot = new Runtime(value).start();
+  assert.equal(snapshot.status, "halted", JSON.stringify(snapshot.error));
+  assert.equal(printed(snapshot), "\u00a55,000 \u00a5-9,223,372,036,854,775,808\n\u00a5007 \u00a5-7");
+  value.money = { label: " coins", first: false };
+  assert.equal(printed(new Runtime(value).start()).split("\n")[1], "007 coins -7 coins");
+  const invalid = new Runtime(game('@SYSTEM_TITLE\nPRINTSL MONEYSTR(5, "unsupported")')).start();
+  assert.equal(invalid.status, "error");
+  assert.match(invalid.error!.message, /Unsupported MONEYSTR format/);
 });
 test("dynamic private variables reset each call while static private variables persist", () => {
   const result = new Runtime(game(`@SYSTEM_TITLE
@@ -188,4 +234,11 @@ test("literal print arguments retain spacing and semicolons", () => {
   assert.ok(first?.type === "text");
   assert.equal(first.text, "Random Tip: ");
   assert.match(printed(result), /text;not a comment/);
+});
+test("PRINT and PRINTFORM consume only one separator and preserve leading layout spaces", () => {
+  const result = new Runtime(game("@SYSTEM_TITLE\nPRINT □ \nPRINTL  □---\nPRINTFORM  {1,3,LEFT} \nPRINTL\nPRINTL 　Indented\nPRINTL\t\tTabbed")).start();
+  assert.equal(result.status, "halted", JSON.stringify(result.error));
+  assert.deepEqual(result.output.filter((item) => item.type === "text").map((item) => item.text), [
+    "□ ", " □---", " 1   ", "", "　Indented", "\tTabbed",
+  ]);
 });
