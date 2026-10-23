@@ -10,10 +10,14 @@ import { escapeHtml, plainHtml } from "./html.js";
 
 export interface Style { color: string; background: string; alignment: "left" | "center" | "right"; fontStyle: number }
 export type Output =
-  | { type: "text" | "html"; text: string; newline: boolean; style: Style }
+  | { type: "text" | "html" | "input"; text: string; newline: boolean; style: Style }
   | { type: "button"; text: string; value: string; style: Style }
   | { type: "clear"; count: number };
-export interface InputRequest { kind: "integer" | "string" | "wait" }
+export interface InputRequest {
+  kind: "integer" | "string" | "wait";
+  singleCharacter?: boolean;
+  defaultValue?: string;
+}
 type Yield = { output: Output } | { input: InputRequest };
 export interface Snapshot {
   status: "waiting" | "halted" | "error";
@@ -82,6 +86,9 @@ export class Runtime {
   }
   input(value: string): Snapshot {
     if (!this.pending) throw new EraError("Runtime is not waiting for input");
+    if (this.pending.singleCharacter) {
+      value = Array.from(value)[0] ?? this.pending.defaultValue ?? "";
+    }
     if (this.pending.kind === "integer" && !/^-?\d+$/.test(value.trim())) throw new EraError("Enter a whole number");
     if (this.pending.kind === "integer") {
       const n = BigInt(value.trim());
@@ -271,7 +278,7 @@ export class Runtime {
   private formatted(source: string, frame: Frame): string {
     return text(evaluate(parseFormat(source), frame.context));
   }
-  private emit(type: "text" | "html", value: string, newline: boolean): Yield {
+  private emit(type: "text" | "html" | "input", value: string, newline: boolean): Yield {
     if (value.length > 1_000_000) throw new EraError("Output string exceeds limit");
     this.lineCount += (value.match(/\n/g)?.length ?? 0) + (newline ? 1 : 0);
     this.printingHtml += type === "html" ? value : escapeHtml(value);
@@ -548,10 +555,23 @@ export class Runtime {
             return frame.returnType === "string" ? text(value) : integer(value);
           }
           case "QUIT": this.finished = true; return;
-          case "INPUT": case "INPUTS": {
-            if (args) throw new EraError(`Arguments for ${op} are not yet supported`);
-            const value = yield { input: { kind: op === "INPUT" ? "integer" : "string" } };
-            this.globals.set(op === "INPUT" ? "RESULT" : "RESULTS", [], op === "INPUT" ? BigInt(value.trim()) : value, frame.context);
+          case "INPUT": case "INPUTS": case "ONEINPUT": case "ONEINPUTS": {
+            const singleCharacter = op.startsWith("ONE");
+            const numeric = !op.endsWith("S");
+            const request: InputRequest = { kind: numeric ? "integer" : "string" };
+            if (singleCharacter) {
+              request.singleCharacter = true;
+              if (args) {
+                const fallback = numeric ? integer(ev(args)) : text(ev(args));
+                if (typeof fallback === "string" || fallback >= 0n) {
+                  const first = Array.from(fallback.toString())[0];
+                  if (first !== undefined) request.defaultValue = first;
+                }
+              }
+            } else if (args) throw new EraError(`Arguments for ${op} are not yet supported`);
+            const value = yield { input: request };
+            yield this.emit("input", value, true);
+            this.globals.set(numeric ? "RESULT" : "RESULTS", [], numeric ? BigInt(value.trim()) : value, frame.context);
             break;
           }
           case "WAIT": case "FORCEWAIT": yield { input: { kind: "wait" } }; break;

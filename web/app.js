@@ -10,6 +10,9 @@ let busy = false;
 let currentLine = null;
 let generation = 0;
 const sprites = new Map();
+new ResizeObserver(() => {
+  if (input) terminal.lastElementChild?.scrollIntoView({ block: "nearest" });
+}).observe(terminal);
 
 async function watchDevelopment() {
   let runtime;
@@ -63,8 +66,11 @@ function updateControls() {
   command.disabled = busy || !input;
   send.disabled = busy || !input;
   send.textContent = input?.kind === "wait" ? "Continue" : "Send";
-  command.placeholder = !input ? "Not waiting for input" : input.kind === "integer" ? "Enter a whole number" : input.kind === "wait" ? "Press Enter to continue" : "Enter text";
+  command.title = !input ? "Not waiting for input" : input.singleCharacter
+    ? input.kind === "integer" ? "Type one digit (no Enter needed)" : "Type one character (no Enter needed)"
+    : input.kind === "integer" ? "Enter a whole number" : input.kind === "wait" ? "Press Enter to continue" : "Enter text";
   startButtons.forEach((button) => { button.disabled = busy; });
+  document.querySelector("#input-form").hidden = !input;
   terminal.querySelectorAll("button.choice").forEach((button) => { button.disabled = busy || !input || input.kind === "wait"; });
 }
 function line() {
@@ -243,6 +249,7 @@ async function render(snapshot) {
         span.textContent = `[HTML renderer: ${error.message}]`;
       }
     } else if (output.type === "button") span.append(choice(output.text, output.value));
+    else if (output.type === "input") span.textContent = output.text;
     else {
       const parts = output.text.split("\n");
       for (let i = 0; i < parts.length; i++) {
@@ -285,6 +292,7 @@ async function start(mode) {
   updateControls();
   message(`Starting ${mode === "demo" ? "conformance demo" : "bundled game"}...`);
   terminal.replaceChildren();
+  command.value = "";
   currentLine = null;
   try {
     const probe = document.createElement("span");
@@ -297,7 +305,7 @@ async function start(mode) {
     await render(await api("/api/start", { mode, previousSession: session, columns }));
   }
   catch (error) { message(error.message, true); }
-  finally { busy = false; updateControls(); }
+  finally { busy = false; updateControls(); if (input) command.focus({ preventScroll: true }); }
 }
 async function submit(value) {
   if (busy || !input) return;
@@ -313,6 +321,38 @@ async function submit(value) {
 document.querySelector("#input-form").addEventListener("submit", (event) => {
   event.preventDefault();
   void submit(command.value);
+});
+function submitCharacter() {
+  if (busy || !input?.singleCharacter || !command.value) return;
+  const first = Array.from(command.value)[0];
+  if (input.kind === "integer" && !/^[0-9]$/.test(first)) return;
+  void submit(first);
+}
+command.addEventListener("input", (event) => {
+  if (!event.isComposing) submitCharacter();
+});
+command.addEventListener("compositionend", submitCharacter);
+document.addEventListener("keydown", (event) => {
+  if (busy || !input || event.defaultPrevented || event.isComposing || event.ctrlKey || event.metaKey || event.altKey) return;
+  const target = event.target;
+  if (target !== command && target instanceof Element && target.closest("input, textarea, select, [contenteditable]:not([contenteditable='false'])")) return;
+  if (event.repeat && input.singleCharacter) {
+    event.preventDefault();
+    return;
+  }
+  if (target === command) return;
+  if ((event.key === "Enter" || event.key === " ") && target instanceof Element && target.closest("button, a[href]")) return;
+  if (event.key === "Enter") {
+    event.preventDefault();
+    void submit(command.value);
+  } else if (Array.from(event.key).length === 1) {
+    event.preventDefault();
+    command.focus({ preventScroll: true });
+    command.setRangeText(event.key, command.selectionStart, command.selectionEnd, "end");
+    command.dispatchEvent(new Event("input", { bubbles: true }));
+  } else if (["Backspace", "Delete", "ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
+    command.focus({ preventScroll: true });
+  }
 });
 startButtons[0].addEventListener("click", () => { void start("demo"); });
 startButtons[1].addEventListener("click", () => { void start("game"); });

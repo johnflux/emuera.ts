@@ -37,7 +37,7 @@ automatic browser refresh. If switching from the old, already-running
 non-watching server, stop that process once, then use `npm start` instead.
 
 - **Run conformance demo**: execute a small ERB program with loops, calls,
-  arithmetic, text input, HTML choices, an external documentation link, and a
+  arithmetic, text input, single-character input (menu option 3), HTML choices, an external documentation link, and a
   real cropped title-image resource from the local game.
 - **Run bundled game**: execute the real `SYSTEM_TITLE` and display its menu.
   Invalid menu choices return to the menu; Start Game and Continue are not yet
@@ -53,6 +53,20 @@ to the game's `.era-typescript/global.json`. This is a separate, versioned JSON
 format, not Emuera's native `global.sav`; existing saves are never overwritten.
 Writes use atomic replacement, and corrupt files or I/O failures stop execution
 with a diagnostic. The demo uses isolated in-memory globals instead.
+
+Typing anywhere in the game page goes to the input line while the interpreter
+is waiting, without needing to click it first. Browser shortcuts, Tab navigation,
+and other form controls retain their normal behavior. `INPUT` / `INPUTS` require
+Enter (including this game's title menu); `ONEINPUT` / `ONEINPUTS` submit the first
+digit / character automatically, including pasted text and completed IME input.
+Single-character commands also support their optional default value on Enter.
+Menu labels are not used to guess whether input should submit automatically.
+The borderless input stays at the bottom of the window, with output bottom-aligned
+above it and unused space at the top. Longer output scrolls independently.
+Accepted input is echoed as plain text before the game's response (including
+clicked choices and single-character input); rejected input stays editable and
+does not enter the scrollback. Echoed input counts as a logical line for
+`LINECOUNT` and `CLEARLINE`. `WAIT` continues without adding an input echo.
 
 ```sh
 npm test          # unit, loader, HTTP and optional local bundled-game integration
@@ -120,7 +134,7 @@ game's `ERB/`, `CSV/`, and `resources/` directories.
   `SUBSTRING`, `STRLENS`, `HTML_TOPLAINTEXT`, and `HTML_POPPRINTINGSTR` support
   the game's tip-wrapping helper. HTML-to-text parsing uses parse5; popped print
   text is removed from the browser before the wrapped replacement is rendered.
-- `INPUT`, `INPUTS`, `WAIT`, `FORCEWAIT`, `PRINTBUTTON`/`PRINTBUTTONC`,
+- `INPUT`, `INPUTS`, `ONEINPUT`, `ONEINPUTS`, `WAIT`, `FORCEWAIT`, `PRINTBUTTON`/`PRINTBUTTONC`,
   `HTML_PRINT`, line drawing/clearing, RGB colors, alignment, `THROW`, `QUIT`.
   Output and input requests are structured events, independent of the browser.
   `FONTSTYLE` carries bold/italic/underline styles; `REDRAW 0/1` uses the existing

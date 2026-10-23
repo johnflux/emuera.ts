@@ -23,12 +23,11 @@
       <div class="line">Black background. White text. Real ERB execution.</div>
       <div class="line">Run the bundled game to open its real title menu, or try the conformance demo. Starting or loading gameplay is not supported yet.</div>
     </section>
+    <form id="input-form" autocomplete="off" hidden>
+      <input id="command" aria-label="Game input" disabled spellcheck="false">
+      <button id="submit" disabled>Send</button>
+    </form>
     <aside id="compatibility" hidden aria-label="Compatibility report"></aside>
   </main>
-  <form id="input-form" autocomplete="off">
-    <label for="command">&gt;</label>
-    <input id="command" aria-label="Game input" disabled spellcheck="false">
-    <button id="submit" disabled>Send</button>
-  </form>
 </body>
 </html>

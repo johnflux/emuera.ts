@@ -80,6 +80,14 @@ test("HTTP UI, isolated sessions, real image bytes, sprite metadata, errors and 
     assert.equal(demo.status, "waiting", JSON.stringify(demo.error));
     const arithmetic = await (await post("/api/input", { session: demo.session, value: "1" })).json();
     assert.ok(arithmetic.output.some((item: { text?: string }) => item.text === "Result from CALL: 42"));
+    const singleDigit = await (await post("/api/input", { session: demo.session, value: "3" })).json();
+    assert.deepEqual(singleDigit.input, { kind: "integer", singleCharacter: true });
+    const singleText = await (await post("/api/input", { session: demo.session, value: "7" })).json();
+    assert.ok(singleText.output.some((item: { text?: string }) => item.text === "Received digit: 7"));
+    assert.deepEqual(singleText.input, { kind: "string", singleCharacter: true });
+    const menu = await (await post("/api/input", { session: demo.session, value: "x" })).json();
+    assert.ok(menu.output.some((item: { text?: string }) => item.text === "Received character: x"));
+    assert.deepEqual(menu.input, { kind: "integer" });
   } finally {
     if (app.listening) await new Promise<void>((resolve, reject) => app.close((error) => error ? reject(error) : resolve()));
     await rm(root, { recursive: true });

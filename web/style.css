@@ -1,7 +1,7 @@
 :root { color-scheme: dark; --font-size: 16px; }
 * { box-sizing: border-box; }
-body { margin: 0; background: #000; color: #fff; font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace; }
-header { padding: 14px 20px 4px; border-bottom: 1px solid #333; background: #090909; }
+body { margin: 0; height: 100dvh; display: flex; flex-direction: column; background: #000; color: #fff; font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace; }
+header { flex-shrink: 0; padding: 14px 20px 4px; border-bottom: 1px solid #333; background: #090909; }
 h1 { margin: 0 0 12px; font-size: 18px; font-weight: 500; }
 small { color: #aaa; font-size: 12px; }
 nav { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
@@ -12,8 +12,10 @@ button:disabled { color: #666; cursor: default; }
 nav label { font-size: 12px; display: flex; gap: 8px; align-items: center; }
 #status { color: #aaa; font-size: 12px; min-height: 1.5em; }
 #status.error { color: #ff9d9d; }
-main { padding: 16px 20px 80px; }
-#terminal { font-size: var(--font-size); line-height: 1.25; min-height: 55vh; overflow-x: auto; }
+main { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 16px 20px; }
+#terminal { flex: 1; min-height: 0; display: flex; flex-direction: column; font-size: var(--font-size); line-height: 1.25; overflow: auto; }
+#terminal::before { content: ""; margin-top: auto; }
+#terminal > * { flex-shrink: 0; }
 .line { min-height: 1.25em; white-space: pre-wrap; overflow-wrap: anywhere; }
 .line p { margin: 0; min-height: 1.25em; }
 .image-line, .image-line p { min-height: 0; line-height: 0; }
@@ -28,7 +30,8 @@ a { color: #8ddaff; }
 #compatibility h2 { font-size: 16px; }
 #compatibility table { border-collapse: collapse; width: 100%; }
 #compatibility td, #compatibility th { border-bottom: 1px solid #333; padding: 8px; text-align: left; vertical-align: top; white-space: pre-wrap; }
-#input-form { position: fixed; bottom: 0; display: flex; gap: 10px; width: 100%; padding: 12px 20px; background: #090909; border-top: 1px solid #444; }
-#input-form label { align-self: center; }
-#command { flex: 1; min-width: 0; background: #000; border: 1px solid #444; padding: 7px; outline-offset: 2px; }
+#input-form { order: 1; flex-shrink: 0; display: flex; align-items: center; gap: 10px; font-size: var(--font-size); line-height: 1.25; }
+#input-form[hidden] { display: none; }
+#command { flex: 1; min-width: 0; background: transparent; border: 0; padding: 0; line-height: inherit; outline: none; }
+#submit { font-size: 12px; padding: 2px 8px; }
 @media (max-width: 600px) { header, main { padding-left: 10px; padding-right: 10px; } small { display: block; margin-top: 6px; } nav button { font-size: 12px; } }

@@ -27,7 +27,31 @@ function titleRectangle(game: Game): (Sprite & { url: string }) | null {
   };
 }
 
-// Patch presentation only: runtime output, LINECOUNT, and ERB control flow stay untouched.
+/**
+ * Browser-only optimization for the bundled game's title artwork, not an Emuera
+ * language feature. Its ERB prints TW_title000 through TW_title034 as 35 centered
+ * HTML lines. Those sprites are adjacent horizontal slices of the same image;
+ * rendering each separately would create 35 cropped images and metadata lookups
+ * for artwork that the browser can display with a single crop.
+ *
+ * Called when serializing a runtime snapshot for the browser, after the original
+ * ERB has executed. titleRectangle first verifies that all 35 sprites share a
+ * file, x coordinate, width and height, with exactly contiguous y coordinates.
+ * We then match the complete, ordered sequence of exact HTML events, requiring
+ * newlines, identical styles and a line boundary before the sequence. Anything
+ * incomplete or changed falls back to ordinary output; unrelated side-by-side
+ * images and images mixed with text are deliberately not combined.
+ *
+ * A match becomes one presentation-only title-image event containing the combined
+ * source rectangle and resource URL. The browser scales it to 35 text-line heights
+ * and retains that logical line count, clipping the bottom when CLEARLINE removes
+ * only part of it. The crop uses the validated strip bounds, not the whole source
+ * file, which may contain additional pixels outside the title.
+ *
+ * Neither the snapshot nor sprite metadata is mutated. The interpreter still
+ * executes all original prints, so LINECOUNT, print-buffer operations and ERB
+ * control flow see the unmodified behavior, with no edits to the game's files.
+ */
 export function patchTitleImage(game: Game, snapshot: Snapshot): Omit<Snapshot, "output"> & { output: BrowserOutput[] } {
   const sprite = titleRectangle(game);
   if (!sprite) return snapshot;

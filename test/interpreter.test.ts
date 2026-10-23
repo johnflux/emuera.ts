@@ -13,7 +13,7 @@ function runtime(source: string, headers = "", limit?: number) {
   return new Runtime(game, limit);
 }
 function output(snapshot: Snapshot): string {
-  return snapshot.output.map((item) => item.type === "text" || item.type === "html" ? item.text : "").join("\n");
+  return snapshot.output.filter((item) => item.type === "text" || item.type === "html").map((item) => item.text).join("\n");
 }
 const context = {
   get(): never { throw new EraError("Unexpected variable evaluation"); },
@@ -122,6 +122,75 @@ RETURN ARG:0 * ARG:1`);
   assert.equal(output(second), "23");
   assert.equal(second.input?.kind, "string");
   assert.equal(output(rt.input("<b>safe as text</b>")), "<b>safe as text</b>!");
+});
+test("single-character input is explicit, truncates pastes and preserves ordinary input", () => {
+  const rt = runtime(`@SYSTEM_TITLE
+ONEINPUT
+PRINTFORML {RESULT}
+ONEINPUTS
+PRINTFORML %RESULTS%
+INPUT
+PRINTFORML {RESULT}
+INPUTS
+PRINTFORML %RESULTS%`);
+  assert.deepEqual(rt.start().input, { kind: "integer", singleCharacter: true });
+  assert.throws(() => rt.input(""), /whole number/);
+  assert.throws(() => rt.input("x"), /whole number/);
+  const second = rt.input("42");
+  assert.equal(output(second), "4");
+  assert.deepEqual(second.input, { kind: "string", singleCharacter: true });
+  const third = rt.input("日本語");
+  assert.equal(output(third), "日");
+  assert.deepEqual(third.input, { kind: "integer" });
+  const fourth = rt.input("42");
+  assert.equal(output(fourth), "42");
+  assert.deepEqual(fourth.input, { kind: "string" });
+  assert.equal(output(rt.input("whole string")), "whole string");
+});
+test("single-character input defaults and empty strings follow ONEINPUT semantics", () => {
+  for (const [op, fallback, expected] of [
+    ["ONEINPUT", "42", "4"], ["ONEINPUTS", '"hello"', "h"],
+    ["ONEINPUTS", '""', ""], ["ONEINPUTS", "", ""],
+  ]) {
+    const rt = runtime(`@SYSTEM_TITLE\n${op} ${fallback}\nPRINTFORML ${op === "ONEINPUT" ? "{RESULT}" : "%RESULTS%"}`);
+    assert.equal(rt.start().status, "waiting");
+    assert.equal(output(rt.input("")), expected);
+  }
+  const rt = runtime("@SYSTEM_TITLE\nONEINPUT -1");
+  assert.equal(rt.start().input?.defaultValue, undefined);
+  assert.throws(() => rt.input(""), /whole number/);
+  assert.equal(rt.input("7").status, "halted");
+});
+test("accepted input is echoed before responses and participates in logical line clearing", () => {
+  const rt = runtime(`@SYSTEM_TITLE
+PRINT Name:
+INPUTS
+PRINTFORML Hello, %RESULTS%.
+PRINTFORML {LINECOUNT}
+CLEARLINE 1
+INPUT
+ONEINPUT 42
+WAIT
+PRINTL Finished`);
+  const initial = rt.start();
+  assert.equal(initial.output.length, 1);
+  const named = rt.input("<b>John</b> [3]");
+  assert.deepEqual(named.output.map((item) => item.type), ["input", "text", "text", "clear"]);
+  const echo = named.output[0];
+  assert.ok(echo && echo.type === "input");
+  assert.equal(echo.text, "<b>John</b> [3]");
+  assert.equal(echo.newline, true);
+  assert.equal(output(named), "Hello, <b>John</b> [3].\n2");
+  assert.throws(() => rt.input("wrong"), /whole number/);
+  const number = rt.input("0");
+  assert.equal(number.output.length, 1);
+  assert.equal(number.output[0]?.type, "input");
+  const defaulted = rt.input("");
+  assert.equal(defaulted.output[0]?.type, "input");
+  assert.ok(defaulted.output[0] && "text" in defaulted.output[0]);
+  assert.equal(defaulted.output[0].text, "4");
+  const waited = rt.input("");
+  assert.deepEqual(waited.output.map((item) => item.type), ["text"]);
 });
 test("global/private declarations, multidimensional arrays and CSV aliases", () => {
   const game = emptyGame();

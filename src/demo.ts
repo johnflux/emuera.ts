@@ -19,6 +19,7 @@ $MENU
 PRINTL
 PRINTBUTTON " [1] Integer arithmetic ", 1
 PRINTBUTTON " [2] Enter text ", 2
+PRINTBUTTON " [3] Single-character input (no Enter) ", 3
 HTML_PRINT "<button value='0' title='End this demo'>[0] Quit</button>"
 INPUT
 SELECTCASE RESULT
@@ -29,11 +30,18 @@ SELECTCASE RESULT
     PRINTL Enter a name:
     INPUTS
     PRINTFORML Hello, %RESULTS%.
+  CASE 3
+    PRINTL ONEINPUT: type one digit; it submits immediately without Enter.
+    ONEINPUT
+    PRINTFORML Received digit: {RESULT}
+    PRINTL ONEINPUTS: type one character; it also submits without Enter.
+    ONEINPUTS
+    PRINTFORML Received character: %RESULTS%
   CASE 0
     PRINTL Demo finished. Start another run using the toolbar.
     RETURN
   CASEELSE
-    PRINTL Choose 0, 1 or 2.
+    PRINTL Choose 0, 1, 2 or 3.
 ENDSELECT
 GOTO MENU
 
