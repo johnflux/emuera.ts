@@ -1,0 +1,32 @@
+:root { color-scheme: dark; --font-size: 16px; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #000; color: #fff; font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace; }
+header { padding: 14px 20px 4px; border-bottom: 1px solid #333; background: #090909; }
+h1 { margin: 0 0 12px; font-size: 18px; font-weight: 500; }
+small { color: #aaa; font-size: 12px; }
+nav { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+button, input { font: inherit; color: inherit; }
+button { background: #101010; border: 1px solid #555; padding: 5px 10px; cursor: pointer; }
+button:hover:enabled, button:focus-visible { background: #242424; border-color: #aaa; }
+button:disabled { color: #666; cursor: default; }
+nav label { font-size: 12px; display: flex; gap: 8px; align-items: center; }
+#status { color: #aaa; font-size: 12px; min-height: 1.5em; }
+#status.error { color: #ff9d9d; }
+main { padding: 16px 20px 80px; }
+#terminal { font-size: var(--font-size); line-height: 1.25; min-height: 55vh; overflow-x: auto; }
+.line { min-height: 1.25em; white-space: pre-wrap; overflow-wrap: anywhere; }
+.line p { margin: 0; min-height: 1.25em; }
+.line button.choice { font: inherit; background: transparent; color: inherit; border: 0; padding: 0; text-decoration: underline; }
+.line button.choice:disabled { opacity: .5; }
+a { color: #8ddaff; }
+.sprite { display: inline-block; position: relative; overflow: hidden; vertical-align: middle; }
+.sprite img { position: absolute; max-width: none; }
+.missing { color: #ff9d9d; font-size: 12px; }
+#compatibility { border: 1px solid #444; padding: 16px; margin-top: 20px; font-size: 13px; overflow: auto; max-height: 65vh; }
+#compatibility h2 { font-size: 16px; }
+#compatibility table { border-collapse: collapse; width: 100%; }
+#compatibility td, #compatibility th { border-bottom: 1px solid #333; padding: 8px; text-align: left; vertical-align: top; white-space: pre-wrap; }
+#input-form { position: fixed; bottom: 0; display: flex; gap: 10px; width: 100%; padding: 12px 20px; background: #090909; border-top: 1px solid #444; }
+#input-form label { align-self: center; }
+#command { flex: 1; min-width: 0; background: #000; border: 1px solid #444; padding: 7px; outline-offset: 2px; }
+@media (max-width: 600px) { header, main { padding-left: 10px; padding-right: 10px; } small { display: block; margin-top: 6px; } nav button { font-size: 12px; } }

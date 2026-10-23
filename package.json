@@ -1,0 +1,21 @@
+{
+  "name": "era-typescript",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.6" },
+  "scripts": {
+    "dev": "tsx watch --clear-screen=false --include 'web/**' --include 'anon-tw-anon-tw_eng-modding/ERB/**' --include 'anon-tw-anon-tw_eng-modding/CSV/**' --include 'anon-tw-anon-tw_eng-modding/resources/**' src/server.ts --dev",
+    "build": "tsc",
+    "start": "npm run dev",
+    "start:prod": "node dist/server.js",
+    "check": "tsc --noEmit",
+    "test": "tsx --test test/*.test.ts",
+    "compat": "tsx src/compat.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0"
+  }
+}

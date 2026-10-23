@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TypeScript Emuera</title>
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <header>
+    <h1>TypeScript Emuera <small>interpreter foundation</small></h1>
+    <nav aria-label="Interpreter controls">
+      <button id="demo">Run conformance demo</button>
+      <button id="game">Run bundled game</button>
+      <button id="report">Compatibility report</button>
+      <label>Font <input id="font-size" type="range" min="12" max="24" value="16"></label>
+    </nav>
+    <p id="status" role="status">Ready. The bundled game is not fully supported yet.</p>
+  </header>
+  <main>
+    <section id="terminal" role="log" aria-label="Interpreter output" tabindex="0">
+      <div class="line">Black background. White text. Real ERB execution.</div>
+      <div class="line">Start the conformance demo to test supported features, or run the game to see its first compatibility blocker.</div>
+    </section>
+    <aside id="compatibility" hidden aria-label="Compatibility report"></aside>
+  </main>
+  <form id="input-form" autocomplete="off">
+    <label for="command">&gt;</label>
+    <input id="command" aria-label="Game input" disabled spellcheck="false">
+    <button id="submit" disabled>Send</button>
+  </form>
+</body>
+</html>
