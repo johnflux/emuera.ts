@@ -71,7 +71,8 @@ async function api(url, data) {
 function updateControls() {
   terminal.classList.toggle("is-waiting", !busy && input?.kind === "wait");
   command.disabled = busy || !input;
-  send.disabled = busy || !input;
+  send.disabled = !input;
+  send.setAttribute("aria-disabled", String(busy || !input));
   send.textContent = input?.kind === "wait" ? "Continue" : "Send";
   command.title = !input ? "Not waiting for input" : input.singleCharacter
     ? input.kind === "integer" ? "Type one digit (no Enter needed)" : "Type one character (no Enter needed)"

@@ -79,6 +79,27 @@ test("bundled game renders its title and runs real custom-character creation", {
   assert.equal(separators.length, 7);
   assert.ok(separators.every((value) => stringWidth(value) === 180),
     "Plain separators and labeled section separators must fill the same column width");
+  const traits = wideRuntime.input("3000");
+  assert.equal(traits.status, "waiting", JSON.stringify(traits.error));
+  assert.ok(traits.output.some((item) => item.type === "text" && item.plain &&
+    item.text.includes("Human")), "Unavailable traits must print as non-clickable plain FORM output");
+  const changedTraits = wideRuntime.input("1");
+  assert.equal(changedTraits.status, "waiting", JSON.stringify(changedTraits.error));
+  assert.ok(changedTraits.output.some((item) => item.type === "clear"));
+  const traitEntry = (snapshot: typeof traits) => snapshot.output.find((item) =>
+    item.type === "text" && item.text.includes("[  1]Male Virgin"));
+  assert.ok(traitEntry(traits));
+  assert.ok(traitEntry(changedTraits));
+  assert.notDeepEqual(traitEntry(changedTraits), traitEntry(traits),
+    "Changing a trait must update its displayed state");
+  const restoredTraits = wideRuntime.input("1");
+  assert.equal(restoredTraits.status, "waiting", JSON.stringify(restoredTraits.error));
+  assert.deepEqual(
+    restoredTraits.output.filter((item) => item.type === "text"),
+    traits.output.filter((item) => item.type === "text"),
+    "Toggling a trait twice must restore the menu, including its colors and availability");
+  const returned = wideRuntime.input("9999");
+  assert.equal(returned.status, "waiting", JSON.stringify(returned.error));
   const rename = wideRuntime.input("0");
   assert.equal(rename.input?.kind, "string", JSON.stringify(rename.error));
   const renamed = wideRuntime.input("John");

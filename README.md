@@ -176,6 +176,8 @@ game's `ERB/`, `CSV/`, and `resources/` directories.
 - Literal `PRINT` / `PRINTFORM` arguments preserve layout whitespace after the
   single command separator, including leading, trailing and full-width spaces.
 - Indexed functions and labels; ordinary `CALL`, `JUMP`, `RETURN`, `GOTO`.
+  `RESTART` repeats the current routine without rebinding arguments or resetting
+  locals, clearing active loop bookkeeping and retaining the instruction budget.
   Numeric parameter targets such as `ARG:0` and private declared parameter
   targets, including default expressions and legacy comma-prefixed signatures.
   `CALLF`, `CALLFORM`, `CALLFORMF`, `TRYCALLFORM` and `TRYCCALLFORM`/`CATCH`/

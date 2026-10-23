@@ -787,6 +787,11 @@ export class Runtime {
             else next = loop.end;
             break;
           }
+          case "RESTART":
+            if (args) throw new EraError("RESTART does not accept arguments");
+            loopStates.clear();
+            next = 0;
+            break;
           case "GOTO": {
             const destination = labels.get(key(args));
             if (destination === undefined) throw new EraError(`Unknown label: ${args}`);

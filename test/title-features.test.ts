@@ -17,6 +17,53 @@ function game(source: string, headers = "") {
 function printed(snapshot: Snapshot): string {
   return snapshot.output.filter((item) => item.type === "text").map((item) => item.text).join("\n");
 }
+test("RESTART repeats the current frame, retaining arguments and locals but resetting loop bookkeeping", () => {
+  const result = new Runtime(game(`@SYSTEM_TITLE
+CALL MENU(7)
+PRINTL returned
+RETURN
+@MENU(ARG)
+#DIM DYNAMIC PASSES
+PASSES++
+PRINTFORML {ARG}:{PASSES}
+FOR LOCAL, 0, 2
+  SIF PASSES == 1
+    RESTART
+  PRINTFORML {LOCAL}
+NEXT
+RETURN`)).start();
+  assert.equal(result.status, "halted", JSON.stringify(result.error));
+  assert.equal(printed(result), "7:1\n7:2\n0\n1\nreturned");
+  const infinite = new Runtime(game("@SYSTEM_TITLE\nRESTART"), 20).start();
+  assert.equal(infinite.status, "error");
+  assert.match(infinite.error!.message, /Instruction limit/);
+  const invalid = new Runtime(game("@SYSTEM_TITLE\nRESTART 1")).start();
+  assert.equal(invalid.status, "error");
+  assert.match(invalid.error!.message, /does not accept arguments/);
+});
+test("PRINTPLAIN variants preserve literal layout and FORM formatting without automatic buttons or newlines", () => {
+  const result = new Runtime(game(`@SYSTEM_TITLE
+LOCALS = [7] disabled
+SETCOLOR 0x70C070
+PRINTPLAIN   [1] literal; {2}
+PRINTPLAINFORM   %LOCALS, 20, LEFT%; {2+3}
+PRINTFORM [8] enabled
+PRINTL
+PRINTFORML {LINECOUNT}`)).start();
+  assert.equal(result.status, "halted", JSON.stringify(result.error));
+  const [literal, formatted, normal] = result.output;
+  assert.ok(literal?.type === "text" && formatted?.type === "text" && normal?.type === "text");
+  assert.equal(literal.text, "  [1] literal; {2}");
+  assert.equal(formatted.text, "  " + "[7] disabled".padEnd(20) + "; 5");
+  assert.equal(literal.plain, true);
+  assert.equal(formatted.plain, true);
+  assert.equal(normal.plain, undefined);
+  assert.equal(literal.newline, false);
+  assert.equal(formatted.newline, false);
+  assert.equal(formatted.style.color, "#70c070");
+  assert.equal(result.output.at(-1)?.type, "text");
+  assert.equal(printed(result).split("\n").at(-1), "1");
+});
 test("separators and width queries share the terminal columns, including after resizing", () => {
   const runtime = new Runtime(game(`@SYSTEM_TITLE
 DRAWLINE
