@@ -110,14 +110,14 @@ function sizeAttribute(value, fallback) {
   if (/^\d+(?:\.\d+)?$/.test(value)) return Math.min(4096, Number(value) / 100 * Number.parseFloat(getComputedStyle(terminal).fontSize));
   throw new Error(`Unsupported image dimension: ${value}`);
 }
-async function image(source, token) {
+async function image(source, token, suppliedSprite) {
   const holder = document.createElement("span");
   holder.className = "sprite";
   const name = source.getAttribute("src");
   if (!name) throw new Error("Image has no src");
   const draw = async () => {
     try {
-      let promise = sprites.get(name);
+      let promise = suppliedSprite ? Promise.resolve(suppliedSprite) : sprites.get(name);
       if (!promise) {
         promise = api(`/api/sprite?name=${encodeURIComponent(name)}`);
         sprites.set(name, promise);
@@ -194,8 +194,37 @@ async function render(snapshot) {
   document.title = snapshot.title || "TypeScript Emuera";
   for (const output of snapshot.output) {
     if (output.type === "clear") {
-      // A final open line is also a displayed line.
-      for (let i = 0; i < output.count; i++) terminal.lastElementChild?.remove();
+      let remaining = output.count;
+      while (remaining > 0 && terminal.lastElementChild) {
+        const last = terminal.lastElementChild;
+        const lines = Number(last.dataset.logicalLines ?? 1);
+        if (lines > remaining) {
+          const retained = lines - remaining;
+          last.dataset.logicalLines = String(retained);
+          last.style.height = `${retained * Number(last.dataset.lineHeight)}px`;
+          break;
+        }
+        last.remove();
+        remaining -= lines;
+      }
+      currentLine = null;
+      continue;
+    }
+    if (output.type === "title-image") {
+      currentLine = null;
+      const target = line();
+      applyStyle(target, output.style);
+      target.classList.add("image-line");
+      target.style.textAlign = "center";
+      target.style.overflow = "hidden";
+      const lineHeight = Number.parseFloat(getComputedStyle(terminal).fontSize);
+      target.dataset.logicalLines = String(output.lines);
+      target.dataset.lineHeight = String(lineHeight);
+      target.style.height = `${output.lines * lineHeight}px`;
+      const source = document.createElement("span");
+      source.setAttribute("src", "TW title");
+      source.setAttribute("height", `${output.lines * lineHeight}px`);
+      target.append(await image(source, generation, output.sprite));
       currentLine = null;
       continue;
     }

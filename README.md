@@ -134,6 +134,13 @@ game's `ERB/`, `CSV/`, and `resources/` directories.
   nonbuttons and HTTP(S) links are rebuilt as allowlisted DOM nodes.
   Unitless image dimensions use percentages of the terminal font size; `px`
   dimensions are supported too. Unsupported tags and missing images show errors.
+- A presentation-only patch recognizes the title's exact 35-strip HTML sequence
+  and contiguous resource rectangles, rendering one cropped image instead of
+  35 images and metadata requests. ERB files, runtime output and `LINECOUNT`
+  remain unchanged. The browser retains 35 logical lines for `CLEARLINE`,
+  including partial removal from the bottom. Incomplete/changed sequences,
+  inline text, side-by-side images and other HTML use the normal renderer.
+  This targeted patch lives in `src/render-patches.ts`, outside the game code.
 
 ## Deliberate limits
 

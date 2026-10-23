@@ -9,6 +9,7 @@ import { GAME_ROOT, loadGame, type Game } from "./loader.js";
 import { EraError, key } from "./model.js";
 import { Runtime } from "./runtime.js";
 import { FileGlobalStore, MemoryGlobalStore, type GlobalStore } from "./storage.js";
+import { patchTitleImage } from "./render-patches.js";
 
 const WEB_ROOT = fileURLToPath(new URL("../web/", import.meta.url));
 const mime: Record<string, string> = {
@@ -93,7 +94,7 @@ export function createApp(game: Game, development = false, store: GlobalStore = 
           });
           const snapshot = runtime.start();
           if (snapshot.status === "waiting") sessions.set(id, { runtime, used: now });
-          json(response, { session: id, ...snapshot });
+          json(response, { session: id, ...patchTitleImage(game, snapshot) });
         } catch (error) {
           if (!(error instanceof EraError)) throw error;
           json(response, { session: id, status: "error", output: [], input: null, error: error.diagnostic() });
@@ -109,7 +110,7 @@ export function createApp(game: Game, development = false, store: GlobalStore = 
         try {
           const snapshot = session.runtime.input(data.value);
           if (snapshot.status !== "waiting") sessions.delete(data.session);
-          json(response, { session: data.session, ...snapshot });
+          json(response, { session: data.session, ...patchTitleImage(game, snapshot) });
         } catch (error) {
           if (!(error instanceof EraError)) throw error;
           throw new HttpError(400, error.message);

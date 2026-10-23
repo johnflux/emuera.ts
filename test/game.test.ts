@@ -5,6 +5,7 @@ import { compatibility } from "../src/compatibility.js";
 import { demoGame } from "../src/demo.js";
 import { GAME_ROOT, loadGame } from "../src/loader.js";
 import { Runtime } from "../src/runtime.js";
+import { patchTitleImage } from "../src/render-patches.js";
 
 test("bundled game loads, inventories gaps and renders its actual title menu at INPUT", {
   skip: !existsSync(GAME_ROOT),
@@ -38,6 +39,9 @@ test("bundled game loads, inventories gaps and renders its actual title menu at 
   assert.equal(boot.error, null);
   assert.equal(boot.title, "eraThe World AnonTW (TW: 4.980 - ATW: 2025.04.18)");
   assert.equal(boot.output.filter((item) => item.type === "html" && /TW_title\d{3}/.test(item.text)).length, 35);
+  const presentation = patchTitleImage(game, boot);
+  assert.equal(presentation.output.filter((item) => item.type === "title-image").length, 1);
+  assert.equal(presentation.output.filter((item) => item.type === "html").length, 0);
   const text = boot.output.filter((item) => item.type === "text").map((item) => item.text).join("\n");
   assert.match(text, /eraThe World AnonTW/);
   assert.match(text, /\[0\] Start Game/);
