@@ -166,6 +166,17 @@ game's `ERB/`, `CSV/`, and `resources/` directories.
 
 ## Implemented subset
 
+Identifier normalization is memoized in a bounded process-wide cache (65,536
+entries, identifiers up to 256 characters). Argument splitting is cached per
+runtime (16,384 entries, source strings up to 4,096 characters). Each runtime
+also caches parsed `FORM` strings, assignment targets and operators, `CALL`
+targets, `CASE` tests, and per-routine metadata (return type,
+`DYNAMIC`/`REF` declarations, parameter targets and defaults). Variable
+accesses normalize names once, and routines without `DYNAMIC`/`REF`
+declarations reuse their evaluation context. Only lexical results are reused:
+expressions are evaluated against current state on every execution. Inputs
+beyond the cache limits are processed normally.
+
 - Recursive, deterministic ERB/ERH, ERD name-index and CSV discovery; UTF-8/BOM, UTF-16LE BOM,
   and strict Shift-JIS decoding. Source filenames and original line numbers
   survive indexing. Release-mode `[IF_DEBUG]`, `[IF_NDEBUG]`, `[ELSE]`,

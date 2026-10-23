@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { compatibility } from "../src/compatibility.js";
 import { evaluate, parseExpression } from "../src/expression.js";
 import { csvRows, emptyGame, indexScript } from "../src/loader.js";
-import { EraError } from "../src/model.js";
+import { EraError, key } from "../src/model.js";
 import { Runtime, type Snapshot } from "../src/runtime.js";
 
 function runtime(source: string, headers = "", limit?: number) {
@@ -19,6 +19,58 @@ const context = {
   get(): never { throw new EraError("Unexpected variable evaluation"); },
   call(): never { throw new EraError("Unexpected function evaluation"); },
 };
+test("cached identifier normalization preserves Unicode and case equivalence", () => {
+  for (let i = 0; i < 3; i++) {
+    assert.equal(key("player"), "PLAYER");
+    assert.equal(key("Player"), key("PLAYER"));
+    assert.equal(key("か\u3099"), key("が"));
+    assert.equal(key("cafe\u0301"), "CAFÉ");
+    assert.equal(key(""), "");
+    const long = "a".repeat(300);
+    assert.equal(key(long), long.toUpperCase());
+  }
+});
+test("cached arguments retain omitted fields and reevaluate values without mutation", () => {
+  const result = runtime(`@SYSTEM_TITLE
+FOR A, 0, 3
+  FLAG:0 = A, A + 1,
+  SETBIT FLAG:2, A
+  CALL CHECK(A,,A+2)
+NEXT
+PRINTFORML {FLAG:0},{FLAG:1},{FLAG:2}
+RETURN
+@CHECK(ARG, ARG:1=9, ARG:2)
+PRINTFORML {ARG},{ARG:1},{ARG:2}`).start();
+  assert.equal(result.status, "halted", JSON.stringify(result.error));
+  assert.equal(output(result), "0,9,2\n1,9,3\n2,9,4\n2,3,7");
+});
+test("pre-parsed CASE, assignment, CALL and FORM forms reevaluate on each execution", () => {
+  const result = runtime(`@SYSTEM_TITLE
+FOR A, 0, 6
+  CALL CLASSIFY, A
+  CALL BUMP(FLAG:1, A)
+  CALL BUMP(FLAG:1, A)
+NEXT
+PRINTFORML total={FLAG:1}
+RETURN
+@CLASSIFY(V)
+#DIMS LABEL
+SELECTCASE V
+  CASE 0, 1 TO 1
+    LABEL = low
+  CASE IS >= 3 + 1
+    LABEL = high{V}
+  CASEELSE
+    LABEL '= "mid"
+ENDSELECT
+PRINTFORML {V}:%LABEL%
+@BUMP(R, N)
+#DIM REF R
+R += N
+R ++`).start();
+  assert.equal(result.status, "halted", JSON.stringify(result.error));
+  assert.equal(output(result), "0:low\n1:low\n2:mid\n3:mid\n4:high4\n5:high5\ntotal=42");
+});
 test("signed 64-bit arithmetic, precedence, ternary and short circuit without eval", () => {
   for (const [source, expected] of [
     ["2 + 3 * 4", 14n], ["-7 / 3", -2n], ["9223372036854775807 + 1", -9223372036854775808n],

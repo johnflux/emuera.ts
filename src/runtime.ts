@@ -28,6 +28,22 @@ export interface Snapshot {
   error: Diagnostic | null;
   title: string;
 }
+interface RoutineInfo {
+  returnType: "integer" | "string" | undefined;
+  dynamic: Routine["directives"];
+  references: boolean[];
+  parameters: { target: Extract<Expr, { kind: "variable" }>; defaultSource: string | undefined }[];
+}
+type CaseTest =
+  | { kind: "range"; from: string; to: string }
+  | { kind: "compare"; op: string; operand: string }
+  | { kind: "value"; source: string };
+interface Assignment { reference: Extract<Expr, { kind: "variable" }>; operator: string; value: string }
+interface CallTarget { name: string; parameters: string }
+const NO_VARIABLES: EvaluationContext = {
+  get() { throw new EraError("Unexpected variable"); },
+  call() { throw new EraError("Unexpected call"); },
+};
 interface Frame { variables: Variables; compiled: Compiled; context: EvaluationContext; returnType?: "integer" | "string" }
 interface LoopState { variable: Expr; end: bigint; step: bigint }
 interface ReferenceArgument { variables: Variables; name: string; indices: Expr[]; context: EvaluationContext }
@@ -36,6 +52,22 @@ class BeginTransition {
   constructor(public state: string) {}
 }
 const literal = (value: Value): Expr => ({ kind: "literal", value });
+const BUILTIN_ARITIES: Record<string, [number, number]> = {
+    ABS: [1, 1], MIN: [1, 1000], MAX: [1, 1000], LIMIT: [3, 3],
+    TOSTR: [1, 2], MONEYSTR: [1, 2], TOINT: [1, 1], STRLENU: [1, 1], MAXWIDTH: [0, 0],
+    GETCOLOR: [0, 0], GETSTYLE: [0, 0], EXISTVAR: [1, 1], GETVARS: [1, 1], VARSIZE: [1, 2],
+    MAP_EXIST: [1, 1], MAP_SIZE: [1, 1], MAP_HAS: [2, 2], MAP_GET: [2, 2],
+    HTML_POPPRINTINGSTR: [0, 0], HTML_TOPLAINTEXT: [1, 1], STRLENS: [1, 1],
+    STRCOUNT: [2, 2], REPLACE: [3, 3], SUBSTRING: [2, 3],
+    EXISTCSV: [1, 1], CSVCSTR: [2, 2], CSVNAME: [1, 1], CSVCALLNAME: [1, 1],
+    INRANGE: [3, 3], ESCAPE: [1, 1],
+    ISNUMERIC: [1, 1],
+    GROUPMATCH: [2, 1000], GETBIT: [2, 2],
+    UNICODE: [1, 1],
+    TOLOWER: [1, 1], TOUPPER: [1, 1], STRLENSU: [1, 1], HTML_ESCAPE: [1, 1],
+    CURRENTREDRAW: [0, 0],
+    CSVABL: [2, 2], CSVTALENT: [2, 2], CSVBASE: [2, 2], CSVEXP: [2, 2], CSVRELATION: [2, 2], CSVFLAG: [2, 2],
+};
 export interface RuntimeOptions { store?: GlobalStore; columns?: number }
 export const GAME_INSTRUCTION_LIMIT = 1_000_000;
 
@@ -44,6 +76,8 @@ export class Runtime {
   private globals: Variables;
   private statics = new Map<Routine, Variables>();
   private compiled = new Map<Routine, Compiled>();
+  private routineInfo = new Map<Routine, RoutineInfo>();
+  private contexts = new WeakMap<Variables, EvaluationContext>();
   private iterator: Generator<Yield, Value | undefined, string> | undefined;
   private pending: InputRequest | null = null;
   private steps = 0;
@@ -52,6 +86,11 @@ export class Runtime {
   private style: Style = { color: "#ffffff", background: "#000000", alignment: "left", fontStyle: 0 };
   private finished = false;
   private expressionCache = new Map<string, Expr>();
+  private argumentCache = new Map<string, readonly string[]>();
+  private formatCache = new Map<string, Expr>();
+  private assignmentCache = new Map<string, Assignment>();
+  private callCache = new Map<string, CallTarget | null>();
+  private caseCache = new Map<string, CaseTest[]>();
   private currentSource: Source | undefined;
   private maps = new Map<string, Map<string, string>>();
   private store: GlobalStore;
@@ -225,6 +264,8 @@ export class Runtime {
     return expr;
   }
   private context(variables: Variables): EvaluationContext {
+    const cached = this.contexts.get(variables);
+    if (cached) return cached;
     const context: EvaluationContext = {
       get: (name, indices) => {
         if (name === "LINECOUNT") return BigInt(this.lineCount);
@@ -281,23 +322,7 @@ export class Runtime {
       },
       call: (name, args) => {
         if (TABLE_OPERATIONS.has(name)) return this.tableOperation(name, args, context);
-        const arities: Record<string, [number, number]> = {
-          ABS: [1, 1], MIN: [1, 1000], MAX: [1, 1000], LIMIT: [3, 3],
-          TOSTR: [1, 2], MONEYSTR: [1, 2], TOINT: [1, 1], STRLENU: [1, 1], MAXWIDTH: [0, 0],
-          GETCOLOR: [0, 0], GETSTYLE: [0, 0], EXISTVAR: [1, 1], GETVARS: [1, 1], VARSIZE: [1, 2],
-          MAP_EXIST: [1, 1], MAP_SIZE: [1, 1], MAP_HAS: [2, 2], MAP_GET: [2, 2],
-          HTML_POPPRINTINGSTR: [0, 0], HTML_TOPLAINTEXT: [1, 1], STRLENS: [1, 1],
-          STRCOUNT: [2, 2], REPLACE: [3, 3], SUBSTRING: [2, 3],
-          EXISTCSV: [1, 1], CSVCSTR: [2, 2], CSVNAME: [1, 1], CSVCALLNAME: [1, 1],
-          INRANGE: [3, 3], ESCAPE: [1, 1],
-          ISNUMERIC: [1, 1],
-          GROUPMATCH: [2, 1000], GETBIT: [2, 2],
-          UNICODE: [1, 1],
-          TOLOWER: [1, 1], TOUPPER: [1, 1], STRLENSU: [1, 1], HTML_ESCAPE: [1, 1],
-          CURRENTREDRAW: [0, 0],
-          CSVABL: [2, 2], CSVTALENT: [2, 2], CSVBASE: [2, 2], CSVEXP: [2, 2], CSVRELATION: [2, 2], CSVFLAG: [2, 2],
-        };
-        const arity = arities[name];
+        const arity = BUILTIN_ARITIES[name];
         if (arity && (args.length < arity[0] || args.length > arity[1]))
           throw new EraError(`Invalid number of arguments for ${name}`);
         const n = (i: number): bigint => integer(args[i] ?? (() => { throw new EraError(`Missing argument for ${name}`); })());
@@ -426,6 +451,7 @@ export class Runtime {
         }
       },
     };
+    this.contexts.set(variables, context);
     return context;
   }
   private expressionFunction(name: string, args: Argument[]): Value {
@@ -468,7 +494,46 @@ export class Runtime {
     frame.variables.set(reference.name, reference.indices, value, frame.context);
   }
   private formatted(source: string, frame: Frame): string {
-    return text(evaluate(parseFormat(source), frame.context));
+    let expr = this.formatCache.get(source);
+    if (!expr) { expr = parseFormat(source); this.formatCache.set(source, expr); }
+    return text(evaluate(expr, frame.context));
+  }
+  private assignment(source: string): Assignment {
+    let assignment = this.assignmentCache.get(source);
+    if (assignment) return assignment;
+    const match = /^(.*?)\s*(\+\+|--|'=|[+\-*/%&|^]?=)\s*(.*)$/.exec(source);
+    if (!match) throw new EraError("Invalid assignment");
+    const reference = this.parse(match[1]!.trim());
+    if (reference.kind !== "variable") throw new EraError("Invalid assignment target");
+    assignment = { reference, operator: match[2]!, value: match[3]! };
+    this.assignmentCache.set(source, assignment);
+    return assignment;
+  }
+  private callTarget(source: string): CallTarget | null {
+    let target = this.callCache.get(source);
+    if (target !== undefined) return target;
+    const match = /^([^\s,(]+)\s*(.*)$/.exec(source);
+    if (match) {
+      let parameters = match[2]!.trim();
+      if (parameters.startsWith("(") && parameters.endsWith(")")) parameters = parameters.slice(1, -1);
+      else parameters = parameters.replace(/^,/, "");
+      target = { name: key(match[1]!), parameters: parameters.trim() };
+    } else target = null;
+    this.callCache.set(source, target);
+    return target;
+  }
+  private caseTests(source: string): CaseTest[] {
+    let tests = this.caseCache.get(source);
+    if (tests) return tests;
+    tests = this.arguments(source).filter((part) => part !== "").map((part): CaseTest => {
+      const range = /^(.*?)\s+TO\s+(.*)$/i.exec(part);
+      if (range) return { kind: "range", from: range[1]!, to: range[2]! };
+      const comparison = /^IS\s+(==|!=|<=|>=|<|>)\s*(.*)$/i.exec(part);
+      if (comparison) return { kind: "compare", op: comparison[1]!, operand: comparison[2]! };
+      return { kind: "value", source: part };
+    });
+    this.caseCache.set(source, tests);
+    return tests;
   }
   private emit(type: "text" | "html" | "input", value: string, newline: boolean, plain = false): Yield {
     if (value.length > 1_000_000) throw new EraError("Output string exceeds limit");
@@ -478,13 +543,40 @@ export class Runtime {
     else if (value.includes("\n")) this.printingHtml = escapeHtml(value.slice(value.lastIndexOf("\n") + 1));
     return { output: { type, text: value, newline, style: { ...this.style }, ...(plain ? { plain: true } : {}) } };
   }
-  private callArguments(name: string, sources: string[], frame: Frame): Argument[] {
+  private arguments(source: string): readonly string[] {
+    let parts = this.argumentCache.get(source);
+    if (!parts) {
+      parts = splitArguments(source);
+      if (source.length <= 4096 && this.argumentCache.size < 16_384)
+        this.argumentCache.set(source, parts);
+    }
+    return parts;
+  }
+  private info(routine: Routine): RoutineInfo {
+    let info = this.routineInfo.get(routine);
+    if (info) return info;
+    const functionType = routine.directives.find((line) => /^#FUNCTIONS?$/i.test(line.text));
+    const references = new Set(routine.directives.map((d) => /^#DIMS?\s+REF\s+([^\s,=]+)/i.exec(d.text)?.[1]).filter((name) => name !== undefined).map(key));
+    info = {
+      returnType: functionType ? key(functionType.text) === "#FUNCTIONS" ? "string" : "integer" : undefined,
+      dynamic: routine.directives.filter((line) => /^#DIMS?\s/i.test(line.text) && /\b(?:DYNAMIC|REF)\b/i.test(line.text)),
+      references: routine.parameters.map((parameter) => references.has(key(parameter.split("=")[0]!.trim().split(":")[0]!))),
+      parameters: routine.parameters.map((parameter) => {
+        const equal = parameter.indexOf("=");
+        const target = this.parse(equal < 0 ? parameter : parameter.slice(0, equal).trim());
+        if (target.kind !== "variable") throw new EraError("Parameter target must be a variable", routine);
+        return { target, defaultSource: equal < 0 ? undefined : parameter.slice(equal + 1) };
+      }),
+    };
+    this.routineInfo.set(routine, info);
+    return info;
+  }
+  private callArguments(name: string, sources: readonly string[], frame: Frame): Argument[] {
     const routine = this.game.routines.get(name)?.[0];
+    const references = routine && this.info(routine).references;
     return sources.map((source, i) => {
       if (!source) return undefined;
-      const parameter = routine?.parameters[i]?.split("=")[0]?.trim().split(":")[0];
-      const ref = routine?.directives.some((d) => key(/^#DIMS?\s+REF\s+([^\s,=]+)/i.exec(d.text)?.[1] ?? "") === key(parameter ?? ""));
-      if (!ref) return evaluate(this.parse(source), frame.context);
+      if (!references?.[i]) return evaluate(this.parse(source), frame.context);
       const reference = this.parse(source);
       if (reference.kind !== "variable") throw new EraError("REF arguments must be variable references");
       return { variables: frame.variables, name: reference.name, indices: reference.indices, context: frame.context };
@@ -497,8 +589,8 @@ export class Runtime {
       if (!routines?.length) throw new EraError(`Undefined function: ${name}`, this.currentSource);
       if (!selected && routines.length !== 1) throw new EraError(`Multiple definitions/event dispatch not yet supported: ${name}`, this.currentSource);
       const routine = selected ?? routines[0]!;
-      const functionType = routine.directives.find((line) => /^#FUNCTIONS?$/i.test(line.text));
-      if (expression && !functionType) throw new EraError(`${name} is not declared #FUNCTION or #FUNCTIONS`, routine);
+      const info = this.info(routine);
+      if (expression && !info.returnType) throw new EraError(`${name} is not declared #FUNCTION or #FUNCTIONS`, routine);
       let compiled = this.compiled.get(routine);
       if (!compiled) { compiled = compile(routine); this.compiled.set(routine, compiled); }
       let variables = this.statics.get(routine);
@@ -520,31 +612,27 @@ export class Runtime {
         }
         this.statics.set(routine, variables);
       }
-      const dynamic = routine.directives.filter((line) => /^#DIMS?\s/i.test(line.text) && /\b(?:DYNAMIC|REF)\b/i.test(line.text));
-      if (dynamic.length) {
+      if (info.dynamic.length) {
         variables = new Variables(this.game, variables);
-        for (const declaration of dynamic) variables.declare(declaration);
+        for (const declaration of info.dynamic) variables.declare(declaration);
       }
       const context = this.context(variables);
       const frame: Frame = { variables, compiled, context };
-      if (functionType) frame.returnType = key(functionType.text) === "#FUNCTIONS" ? "string" : "integer";
-      if (args.length > routine.parameters.length) throw new EraError(`Too many arguments for ${name}`, routine);
-      for (let i = 0; i < routine.parameters.length; i++) {
-        const parameter = routine.parameters[i]!;
-        const equal = parameter.indexOf("=");
-        const reference = this.parse(equal < 0 ? parameter : parameter.slice(0, equal).trim());
-        if (reference.kind !== "variable") throw new EraError("Parameter target must be a variable", routine);
+      if (info.returnType) frame.returnType = info.returnType;
+      if (args.length > info.parameters.length) throw new EraError(`Too many arguments for ${name}`, routine);
+      for (let i = 0; i < info.parameters.length; i++) {
+        const { target: reference, defaultSource } = info.parameters[i]!;
         const argument = args[i];
         if (typeof argument === "object") {
           variables.bindReference(reference.name, argument.variables, argument.name, argument.indices, argument.context);
           continue;
         }
-        const value = argument ?? (equal >= 0 ? evaluate(this.parse(parameter.slice(equal + 1)), context)
+        const value = argument ?? (defaultSource !== undefined ? evaluate(this.parse(defaultSource), context)
           : variables.isString(reference.name, context) ? "" : 0n);
         this.assign(frame, reference, value);
       }
       const result = yield* this.runFrame(frame);
-      if (functionType && result === undefined) return frame.returnType === "string" ? "" : 0n;
+      if (info.returnType && result === undefined) return frame.returnType === "string" ? "" : 0n;
       return result;
     } finally { this.depth--; }
   }
@@ -571,20 +659,20 @@ export class Runtime {
           yield this.emit("text", value, /[LW]$/.test(op));
           if (op.endsWith("W")) yield { input: { kind: "wait" } };
         } else if (TABLE_OPERATIONS.has(op)) {
-          const parts = splitArguments(args);
+          const parts = this.arguments(args).slice();
           if (parts.at(-1) === "" && op === "DT_ROW_ADD") parts.pop();
           const value = this.tableOperation(op, parts.map((part) => part ? ev(part) : undefined), frame.context);
           this.globals.set(typeof value === "string" ? "RESULTS" : "RESULT", [], value, frame.context);
         } else switch (op) {
           case "ARRAYREMOVE": {
-            const parts = splitArguments(args);
+            const parts = this.arguments(args);
             const reference = this.parse(parts[0] ?? "");
             if (parts.length !== 3 || reference.kind !== "variable") throw new EraError("ARRAYREMOVE expects array, start, count");
             frame.variables.remove(reference.name, reference.indices, Number(num(parts[1]!)), Number(num(parts[2]!)), frame.context);
             break;
           }
           case "SETBIT": case "CLEARBIT": case "INVERTBIT": {
-            const parts = splitArguments(args);
+            const parts = this.arguments(args).slice();
             const reference = this.parse(parts.shift() ?? "");
             if (reference.kind !== "variable" || !parts.length) throw new EraError(`${op} expects variable and bit indices`);
             let value = integer(evaluate(reference, frame.context));
@@ -603,7 +691,7 @@ export class Runtime {
             for (const variables of this.statics.values()) variables.resetData();
             break;
           case "ADDCHARA":
-            for (const part of splitArguments(args)) this.addCharacter(Number(num(part)), frame.context);
+            for (const part of this.arguments(args)) this.addCharacter(Number(num(part)), frame.context);
             break;
           case "BEGIN": throw new BeginTransition(key(args));
           case "CALLF": {
@@ -626,7 +714,7 @@ export class Runtime {
             let parameters = match[2]!.trim();
             if (parameters.startsWith("(") && parameters.endsWith(")")) parameters = parameters.slice(1, -1);
             else if (parameters.startsWith(",")) parameters = parameters.slice(1);
-            const values = this.callArguments(name, parameters ? splitArguments(parameters) : [], frame);
+            const values = this.callArguments(name, parameters ? this.arguments(parameters) : [], frame);
             const result = op === "CALLFORMF" ? this.expressionFunction(name, values) : yield* this.execute(name, values);
             this.globals.set(typeof result === "string" ? "RESULTS" : "RESULT", [], result ?? 0n, frame.context);
             break;
@@ -649,7 +737,12 @@ export class Runtime {
             if (args) throw new EraError("CLEARMEMORY takes no arguments");
             const before = process.memoryUsage().heapUsed;
             this.expressionCache.clear();
+            this.formatCache.clear();
+            this.assignmentCache.clear();
+            this.callCache.clear();
+            this.caseCache.clear();
             this.compiled.clear();
+            this.routineInfo.clear();
             if (global.gc) global.gc();
             const freed = Math.max(0, before - process.memoryUsage().heapUsed);
             this.globals.set("RESULT", [], BigInt(freed), frame.context);
@@ -663,7 +756,7 @@ export class Runtime {
             break;
           }
           case "MAP_SET": {
-            const parts = splitArguments(args);
+            const parts = this.arguments(args);
             if (parts.length !== 3) throw new EraError("MAP_SET expects map, key and value");
             this.map(text(ev(parts[0]!))).set(text(ev(parts[1]!)), text(ev(parts[2]!)));
             break;
@@ -694,14 +787,10 @@ export class Runtime {
           }
           case "LABEL": case "ENDIF": case "ENDSELECT": break;
           case "ASSIGN": {
-            const match = /^(.*?)\s*(\+\+|--|'=|[+\-*/%&|^]?=)\s*(.*)$/.exec(args);
-            if (!match) throw new EraError("Invalid assignment");
-            const reference = this.parse(match[1]!.trim());
-            const operator = match[2]!;
-            if (reference.kind !== "variable") throw new EraError("Invalid assignment target");
+            const { reference, operator, value: source } = this.assignment(args);
             const string = frame.variables.isString(reference.name, frame.context);
             if (operator === "'=" || (operator === "=" && !string)) {
-              const parts = splitArguments(match[3]!);
+              const parts = this.arguments(source).slice();
               if (parts.at(-1) === "") parts.pop();
               if (!parts.length) throw new EraError("Assignment requires a value");
               const values = parts.map(ev);
@@ -709,8 +798,8 @@ export class Runtime {
               break;
             }
             const rhs = operator === "++" || operator === "--" ? 1n : operator === "=" && string
-              ? this.formatted(match[3]!, frame) : ev(match[3]!);
-            if ((operator === "++" || operator === "--") && match[3]) throw new EraError("Unexpected text after increment/decrement");
+              ? this.formatted(source, frame) : ev(source);
+            if ((operator === "++" || operator === "--") && source) throw new EraError("Unexpected text after increment/decrement");
             const value = operator === "=" || operator === "'=" ? rhs : evaluate({
               kind: "binary", op: operator === "++" ? "+" : operator === "--" ? "-" : operator[0]!,
               left: literal(evaluate(reference, frame.context)), right: literal(rhs),
@@ -720,7 +809,7 @@ export class Runtime {
           }
           case "HTML_PRINT": yield this.emit("html", text(ev(args)), true); break;
           case "PRINTBUTTON": case "PRINTBUTTONC": {
-            const parts = splitArguments(args);
+            const parts = this.arguments(args);
             if (parts.length !== 2) throw new EraError(`${op} expects label and value`);
             yield { output: { type: "button", text: text(ev(parts[0]!)), value: String(ev(parts[1]!)), style: { ...this.style } } };
             break;
@@ -749,7 +838,7 @@ export class Runtime {
             let branch = target;
             while (code[branch]!.op !== "ENDSELECT") {
               const candidate = code[branch]!;
-              if (candidate.op === "CASEELSE" || splitArguments(candidate.args).filter((part) => part !== "").some((part) => this.matchesCase(value, part, ev))) break;
+              if (candidate.op === "CASEELSE" || this.caseTests(candidate.args).some((test) => this.matchesCase(value, test, ev))) break;
               branch = candidate.target;
             }
             next = branch + 1;
@@ -757,7 +846,7 @@ export class Runtime {
           }
           case "CASE": case "CASEELSE": next = this.blockEnd(code, pc) + 1; break;
           case "FOR": case "REPEAT": {
-            const parts = op === "FOR" ? splitArguments(args) : ["COUNT", "0", args];
+            const parts = op === "FOR" ? this.arguments(args) : ["COUNT", "0", args];
             if (parts.length < 3 || parts.length > 4) throw new EraError("FOR expects variable, start, end[, step]");
             let state = loopStates.get(pc);
             if (!state) {
@@ -804,18 +893,14 @@ export class Runtime {
             next = destination; break;
           }
           case "CALL": case "JUMP": {
-            const match = /^([^\s,(]+)\s*(.*)$/.exec(args);
-            if (!match) throw new EraError("Missing CALL target");
-            let rest = match[2]!.trim();
-            if (rest.startsWith("(") && rest.endsWith(")")) rest = rest.slice(1, -1);
-            else rest = rest.replace(/^,/, "");
-            const name = key(match[1]!);
-            yield* this.execute(name, this.callArguments(name, rest.trim() ? splitArguments(rest) : [], frame));
+            const call = this.callTarget(args);
+            if (!call) throw new EraError("Missing CALL target");
+            yield* this.execute(call.name, this.callArguments(call.name, call.parameters ? this.arguments(call.parameters) : [], frame));
             if (op === "JUMP") return;
             break;
           }
           case "RETURN":
-            if (args) splitArguments(args).map(ev).forEach((value, i) => this.globals.set("RESULT", [literal(BigInt(i))], value, frame.context));
+            if (args) this.arguments(args).map(ev).forEach((value, i) => this.globals.set("RESULT", [literal(BigInt(i))], value, frame.context));
             return;
           case "VARSET": {
             const reference = this.parse(args);
@@ -824,7 +909,7 @@ export class Runtime {
             break;
           }
           case "SPLIT": {
-            const parts = splitArguments(args);
+            const parts = this.arguments(args);
             if (parts.length !== 3) throw new EraError("SPLIT expects source, separator, destination");
             const separator = text(ev(parts[1]!));
             if (!separator) throw new EraError("SPLIT separator must not be empty");
@@ -862,7 +947,7 @@ export class Runtime {
           }
           case "WAIT": case "FORCEWAIT": yield { input: { kind: "wait" } }; break;
           case "SETCOLOR": case "SETBGCOLOR": {
-            const channels = splitArguments(args).map(num);
+            const channels = this.arguments(args).map(num);
             if (channels.length !== 1 && channels.length !== 3) throw new EraError(`${op} expects RGB integer or three channels`);
             if (channels.some((c) => c < 0n || c > (channels.length === 1 ? 0xffffffn : 255n))) throw new EraError("Color out of range");
             const color = channels.length === 1 ? channels[0]! : (channels[0]! << 16n) | (channels[1]! << 8n) | channels[2]!;
@@ -890,11 +975,9 @@ export class Runtime {
     while (!["ENDIF", "ENDSELECT"].includes(code[current]!.op)) current = code[current]!.target;
     return current;
   }
-  private matchesCase(value: Value, source: string, ev: (source: string) => Value): boolean {
-    const range = /^(.*?)\s+TO\s+(.*)$/i.exec(source);
-    if (range) return integer(value) >= integer(ev(range[1]!)) && integer(value) <= integer(ev(range[2]!));
-    const comparison = /^IS\s+(==|!=|<=|>=|<|>)\s*(.*)$/i.exec(source);
-    if (comparison) return integer(evaluate({ kind: "binary", op: comparison[1]!, left: literal(value), right: literal(ev(comparison[2]!)) }, { get() { throw new EraError("Unexpected variable"); }, call() { throw new EraError("Unexpected call"); } })) !== 0n;
-    return value === ev(source);
+  private matchesCase(value: Value, test: CaseTest, ev: (source: string) => Value): boolean {
+    if (test.kind === "range") return integer(value) >= integer(ev(test.from)) && integer(value) <= integer(ev(test.to));
+    if (test.kind === "compare") return integer(evaluate({ kind: "binary", op: test.op, left: literal(value), right: literal(ev(test.operand)) }, NO_VARIABLES)) !== 0n;
+    return value === ev(test.source);
   }
 }

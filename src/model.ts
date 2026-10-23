@@ -19,7 +19,17 @@ export class EraError extends Error {
     return { file: this.source?.file ?? "<runtime>", line: this.source?.line ?? 0, message: this.message };
   }
 }
-export const key = (name: string): string => name.normalize("NFC").toUpperCase();
+const keyCache = new Map<string, string>();
+export function key(name: string): string {
+  const cached = keyCache.get(name);
+  if (cached !== undefined) return cached;
+  const normalized = name.normalize("NFC").toUpperCase();
+  if (name.length <= 256) {
+    if (keyCache.size >= 65_536) keyCache.delete(keyCache.keys().next().value!);
+    keyCache.set(name, normalized);
+  }
+  return normalized;
+}
 export function integer(value: Value): bigint {
   if (typeof value !== "bigint") throw new EraError("Expected an integer, received a string");
   return value;

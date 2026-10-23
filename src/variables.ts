@@ -9,6 +9,17 @@ interface Variable {
   values: Map<string, Value>;
   character?: boolean;
 }
+const SYMBOL_ALIASES: Record<string, string> = { MAXBASE: "BASE", JUEL: "PALAM", GOTJUEL: "PALAM", NOWEX: "EX" };
+const symbolTables = new Map<string, string>();
+function symbolTable(name: string): string {
+  let table = symbolTables.get(name);
+  if (table === undefined) {
+    const normalized = name.replace(/NAME$/, "");
+    table = SYMBOL_ALIASES[normalized] ?? normalized;
+    symbolTables.set(name, table);
+  }
+  return table;
+}
 export type GlobalData = Record<string, Record<string, string>>;
 export class Variables {
   private values = new Map<string, Variable>();
@@ -45,37 +56,44 @@ export class Variables {
     this.declarations.set(name, line);
   }
   bindReference(name: string, source: Variables, sourceName: string, indices: Expr[], context: EvaluationContext): void {
-    const declaration = this.declarations.get(key(name));
+    name = key(name);
+    sourceName = key(sourceName);
+    const declaration = this.declarations.get(name);
     if (!declaration || !/^#DIMS?\s+REF\s/i.test(declaration.text)) throw new EraError(`Not a REF parameter: ${name}`);
     const match = /^#DIM(S)?\s+REF\s+[^\s,=]+\s*(?:,(.*))?$/i.exec(declaration.text);
     const variable = source.resolve(sourceName, context);
     if (!match || variable.string !== !!match[1] || match[2] !== undefined && (indices.length || splitArguments(match[2]).length !== variable.dimensions.length))
       throw new EraError(`REF type or dimensions mismatch: ${name}`, declaration);
     if (match[2] === undefined) {
-      this.scalarReferences.set(key(name), source.address(sourceName, indices, context));
+      this.scalarReferences.set(name, source.address(sourceName, indices, context));
     }
-    this.values.set(key(name), variable);
+    this.values.set(name, variable);
   }
   has(name: string): boolean {
-    return this.values.has(key(name)) || this.declarations.has(key(name)) || !!this.parent?.has(name);
+    return this.hasKey(key(name));
+  }
+  private hasKey(name: string): boolean {
+    return this.values.has(name) || this.declarations.has(name) || !!this.parent?.hasKey(name);
   }
   dimensions(name: string, context: EvaluationContext): number[] {
-    if (this.scalarReferences.has(key(name))) return [1];
+    name = key(name);
+    if (this.scalarReferences.has(name)) return [1];
     const variable = this.resolve(name, context);
     const dimensions = variable.character ? variable.dimensions.slice(1) : [...variable.dimensions];
     return dimensions.length ? dimensions : [1];
   }
   reset(name: string, context: EvaluationContext): void {
+    name = key(name);
     const variable = this.resolve(name, context);
     if (variable.constant) throw new EraError(`Cannot reset constant: ${name}`);
-    if (this.scalarReferences.has(key(name))) {
+    if (this.scalarReferences.has(name)) {
       this.set(name, [], variable.string ? "" : 0n, context);
       return;
     }
     variable.values.clear();
   }
   remove(name: string, indices: Expr[], start: number, count: number, context: EvaluationContext): void {
-    const { variable, address } = this.address(name, [...indices, { kind: "literal", value: BigInt(start) }], context);
+    const { variable, address } = this.address(key(name), [...indices, { kind: "literal", value: BigInt(start) }], context);
     if (variable.constant) throw new EraError(`Cannot modify constant: ${name}`);
     const size = variable.dimensions.at(-1)!;
     if (!Number.isSafeInteger(count) || count < 0 || start + count > size) throw new EraError("Invalid ARRAYREMOVE range");
@@ -98,7 +116,7 @@ export class Variables {
     const result: GlobalData = {};
     for (const name of this.globalNames()) {
       if (!this.has(name)) continue;
-      result[name] = Object.fromEntries([...this.resolve(name, context).values].map(([address, value]) => [address, String(value)]));
+      result[name] = Object.fromEntries([...this.resolve(key(name), context).values].map(([address, value]) => [address, String(value)]));
     }
     return result;
   }
@@ -106,7 +124,7 @@ export class Variables {
     const updates: { variable: Variable; values: Map<string, Value> }[] = [];
     for (const name of this.globalNames()) {
       if (!this.has(name)) continue;
-      const variable = this.resolve(name, context);
+      const variable = this.resolve(key(name), context);
       const values = new Map<string, Value>();
       const saved = data[name];
       if (saved) for (const [address, raw] of Object.entries(saved)) {
@@ -114,7 +132,7 @@ export class Variables {
           if (!/^\d+$/.test(n)) throw new EraError(`Invalid saved global index: ${name}:${address}`);
           return { kind: "literal", value: BigInt(n) } satisfies Expr;
         });
-        this.address(name, indices, context);
+        this.address(key(name), indices, context);
         if (!variable.string && !/^-?\d+$/.test(raw)) throw new EraError(`Invalid saved integer: ${name}:${address}`);
         const value = variable.string ? raw : BigInt(raw);
         if (typeof value === "bigint" && BigInt.asIntN(64, value) !== value) throw new EraError(`Saved integer out of range: ${name}`);
@@ -125,8 +143,8 @@ export class Variables {
     }
     for (const update of updates) update.variable.values = update.values;
   }
+  // Internal lookups expect names already normalized with key().
   private resolve(name: string, context: EvaluationContext): Variable {
-    name = key(name);
     const existing = this.values.get(name);
     if (existing) return existing;
     const line = this.declarations.get(name);
@@ -166,17 +184,15 @@ export class Variables {
     } finally { this.initializing.delete(name); }
   }
   private address(name: string, indices: Expr[], context: EvaluationContext): { variable: Variable; address: string } {
-    const reference = this.scalarReferences.get(key(name));
+    const reference = this.scalarReferences.get(name);
     if (reference) {
       if (indices.length && (indices.length !== 1 || integer(evaluate(indices[0]!, context)) !== 0n)) throw new EraError(`Scalar REF cannot be indexed: ${name}`);
       return reference;
     }
     const variable = this.resolve(name, context);
+    const symbols = indices.length ? this.game.names.get(symbolTable(name)) : undefined;
     const values = indices.map((expr) => {
-      const normalized = key(name).replace(/NAME$/, "");
-      const table = ({ MAXBASE: "BASE", JUEL: "PALAM", GOTJUEL: "PALAM", NOWEX: "EX" } as Record<string, string>)[normalized] ?? normalized;
-      const symbols = this.game.names.get(table);
-      if (expr.kind === "variable" && !expr.indices.length && !this.has(expr.name) && symbols?.has(expr.name))
+      if (expr.kind === "variable" && !expr.indices.length && symbols?.has(expr.name) && !this.has(expr.name))
         return symbols.get(expr.name)!;
       const value = evaluate(expr, context);
       if (typeof value === "string") {
@@ -198,15 +214,16 @@ export class Variables {
     return { variable, address: values.join(":") };
   }
   get(name: string, indices: Expr[], context: EvaluationContext): Value {
-    const { variable, address } = this.address(name, indices, context);
+    const { variable, address } = this.address(key(name), indices, context);
     return variable.values.get(address) ?? (variable.string ? "" : 0n);
   }
-  isString(name: string, context: EvaluationContext): boolean { return this.resolve(name, context).string; }
+  isString(name: string, context: EvaluationContext): boolean { return this.resolve(key(name), context).string; }
   set(name: string, indices: Expr[], value: Value, context: EvaluationContext): void {
     this.setMany(name, indices, [value], context);
   }
   setMany(name: string, indices: Expr[], values: Value[], context: EvaluationContext): void {
-    if (this.scalarReferences.has(key(name)) && values.length > 1) throw new EraError(`Cannot batch assign scalar REF: ${name}`);
+    name = key(name);
+    if (this.scalarReferences.has(name) && values.length > 1) throw new EraError(`Cannot batch assign scalar REF: ${name}`);
     const { variable, address } = this.address(name, indices, context);
     if (variable.constant) throw new EraError(`Cannot assign constant: ${name}`);
     if (values.some((value) => (typeof value === "string") !== variable.string)) throw new EraError(`Assignment type mismatch: ${name}`);
