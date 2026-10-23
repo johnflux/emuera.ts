@@ -8,6 +8,10 @@ export const SUPPORTED = new Set([
   "FOR", "NEXT", "WHILE", "WEND", "DO", "LOOP", "REPEAT", "REND", "BREAK", "CONTINUE",
   "CALL", "JUMP", "RETURN", "GOTO", "INPUT", "INPUTS", "WAIT", "FORCEWAIT",
   "SETCOLOR", "RESETCOLOR", "SETBGCOLOR", "RESETBGCOLOR", "ALIGNMENT", "QUIT", "THROW",
+  "LOADGLOBAL", "SAVEGLOBAL", "CLEARMEMORY", "RETURNF", "FONTSTYLE", "REDRAW",
+  "MAP_RELEASE", "MAP_CREATE", "MAP_SET", "PRINTDATA", "PRINTDATAL", "PRINTDATAW", "DATA", "DATAFORM", "ENDDATA",
+  "DEBUGPRINT", "DEBUGPRINTL", "DEBUGPRINTFORM", "DEBUGPRINTFORML",
+  "SPLIT", "VARSET",
 ]);
 export interface Instruction extends Line { op: string; args: string; target: number }
 export interface Compiled {
@@ -17,10 +21,12 @@ export interface Compiled {
 }
 export function classify(line: Line): { op: string; args: string } {
   if (line.text.startsWith("$")) return { op: "LABEL", args: line.text.slice(1).trim() };
+  const command = /^(\S+)\s*(.*)$/.exec(line.text)!;
+  const op = key(command[1]!);
+  if (SUPPORTED.has(op) || /^(?:DEBUG)?PRINT/.test(op)) return { op, args: command[2]! };
   if (/^[^\s=]+(?::.*?)?\s*(?:\+\+|--|(?:'|[+\-*/%&|^])?=)(?!=)/u.test(line.text))
     return { op: "ASSIGN", args: line.text };
-  const match = /^(\S+)\s*(.*)$/.exec(line.text)!;
-  return { op: key(match[1]!), args: match[2]! };
+  return { op, args: command[2]! };
 }
 export function compile(routine: Routine): Compiled {
   const code = routine.lines.map((line) => ({ ...line, ...classify(line), target: -1 }));
@@ -36,6 +42,13 @@ export function compile(routine: Routine): Compiled {
     }
     if (["IF", "SELECTCASE", "FOR", "WHILE", "DO", "REPEAT"].includes(line.op))
       stack.push({ op: line.op, start: i, branches: [i] });
+    else if (["PRINTDATA", "PRINTDATAL", "PRINTDATAW"].includes(line.op))
+      stack.push({ op: "PRINTDATA", start: i, branches: [i] });
+    else if (line.op === "ENDDATA") {
+      const frame = stack.pop();
+      if (!frame || frame.op !== "PRINTDATA") throw new EraError("Unmatched ENDDATA", line);
+      code[frame.start]!.target = i;
+    }
     else if (["ELSEIF", "ELSE", "CASE", "CASEELSE"].includes(line.op)) {
       const frame = stack.at(-1);
       const expected = line.op.startsWith("CASE") ? "SELECTCASE" : "IF";

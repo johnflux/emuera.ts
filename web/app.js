@@ -79,6 +79,9 @@ function applyStyle(element, style) {
   element.style.color = style.color;
   element.style.backgroundColor = style.background;
   element.style.textAlign = style.alignment;
+  element.style.fontWeight = style.fontStyle & 1 ? "bold" : "normal";
+  element.style.fontStyle = style.fontStyle & 2 ? "italic" : "normal";
+  element.style.textDecoration = style.fontStyle & 4 ? "underline" : "none";
 }
 function choice(label, value, title = "") {
   const button = document.createElement("button");
@@ -141,6 +144,7 @@ async function image(source, token) {
       if (token !== generation) return;
       holder.className = "missing";
       holder.textContent = `[Image ${name}: ${error.message}]`;
+      holder.closest(".line")?.classList.remove("image-line");
     }
   };
   void draw();
@@ -187,6 +191,7 @@ async function renderHtml(markup, parent) {
   for (const child of documentNode.body.childNodes) await copy(child, parent);
 }
 async function render(snapshot) {
+  document.title = snapshot.title || "TypeScript Emuera";
   for (const output of snapshot.output) {
     if (output.type === "clear") {
       // A final open line is also a displayed line.
@@ -200,7 +205,10 @@ async function render(snapshot) {
     applyStyle(span, output.style);
     target.append(span);
     if (output.type === "html") {
-      try { await renderHtml(output.text, span); }
+      try {
+        await renderHtml(output.text, span);
+        if (!span.textContent.trim() && span.querySelector(".sprite")) target.classList.add("image-line");
+      }
       catch (error) {
         span.className = "missing";
         span.textContent = `[HTML renderer: ${error.message}]`;
@@ -249,7 +257,16 @@ async function start(mode) {
   message(`Starting ${mode === "demo" ? "conformance demo" : "bundled game"}...`);
   terminal.replaceChildren();
   currentLine = null;
-  try { await render(await api("/api/start", { mode, previousSession: session })); }
+  try {
+    const probe = document.createElement("span");
+    probe.textContent = "0".repeat(100);
+    probe.style.cssText = "position:absolute;visibility:hidden;white-space:pre";
+    terminal.append(probe);
+    const cellWidth = probe.getBoundingClientRect().width / 100;
+    probe.remove();
+    const columns = Math.max(20, Math.min(1000, Math.floor(terminal.clientWidth / cellWidth)));
+    await render(await api("/api/start", { mode, previousSession: session, columns }));
+  }
   catch (error) { message(error.message, true); }
   finally { busy = false; updateControls(); }
 }

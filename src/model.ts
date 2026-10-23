@@ -1,3 +1,5 @@
+import { quotedEnd } from "./strings.js";
+
 export type Value = bigint | string;
 export interface Source { file: string; line: number }
 export interface Line extends Source { text: string }
@@ -27,32 +29,30 @@ export function text(value: Value): string {
   return value;
 }
 export function stripComment(line: string): string {
-  let quoted = false;
-  let escaped = false;
+  if (/^\s*(?:PRINT(?:FORM)?[LW]?|DATA(?:FORM)?)(?:\s|$)/i.test(line)) return line.trimStart();
   for (let i = 0; i < line.length; i++) {
     const c = line[i];
-    if (escaped) { escaped = false; continue; }
-    if (c === "\\" && quoted) { escaped = true; continue; }
-    if (c === '"') quoted = !quoted;
-    if (c === ";" && !quoted) return line.slice(0, i).trimEnd();
+    if (c === '"' || line.startsWith('@"', i)) { i = quotedEnd(line, i) - 1; continue; }
+    if (c === ";") return line.slice(0, i).trimEnd();
   }
   return line.trimEnd();
 }
 export function splitArguments(input: string): string[] {
   const parts: string[] = [];
-  let start = 0, depth = 0, quoted = false, escaped = false;
+  let start = 0, depth = 0;
   for (let i = 0; i < input.length; i++) {
     const c = input[i];
-    if (escaped) { escaped = false; continue; }
-    if (c === "\\" && quoted) { escaped = true; continue; }
-    if (c === '"') quoted = !quoted;
-    if (!quoted) {
-      if (c === "(") depth++;
-      if (c === ")") depth--;
-      if (c === "," && depth === 0) { parts.push(input.slice(start, i).trim()); start = i + 1; }
+    if (c === '"' || input.startsWith('@"', i)) {
+      const end = quotedEnd(input, i);
+      if (end > input.length) throw new EraError("Unbalanced argument list");
+      i = end - 1;
+      continue;
     }
+    if (c === "(") depth++;
+    if (c === ")") depth--;
+    if (c === "," && depth === 0) { parts.push(input.slice(start, i).trim()); start = i + 1; }
   }
-  if (quoted || depth !== 0) throw new EraError("Unbalanced argument list");
+  if (depth !== 0) throw new EraError("Unbalanced argument list");
   parts.push(input.slice(start).trim());
   return parts;
 }

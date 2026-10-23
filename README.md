@@ -4,9 +4,12 @@ A Node.js interpreter foundation for Emuera/eramaker ERB, with a browser termina
 The local game directory `anon-tw-anon-tw_eng-modding` is the default target.
 Game scripts, data, and images are read in place and are not bundled or copied.
 
-**This is not yet a playable implementation of the bundled game.** The real
-`@SYSTEM_TITLE` is invoked, but execution stops with a source-located error at
-`LOADGLOBAL` (currently `ERB/TITLE.ERB:5`). Nothing silently substitutes for it.
+**The real title menu renders and waits for numeric input. Gameplay is not yet
+supported.** The unmodified `@SYSTEM_TITLE` executes its startup calls, builds
+the talent maps, renders all 35 title-image strips, displays version information
+and a random tip, and reaches `INPUT`. Starting a new game or loading an existing
+save still encounters unsupported engine features; neither path is advertised
+as playable. Unsupported operations stop with their source filename and line.
 The separate conformance demo is an original ERB program exercising the supported
 subset; it is not the game's title screen.
 
@@ -36,14 +39,20 @@ non-watching server, stop that process once, then use `npm start` instead.
 - **Run conformance demo**: execute a small ERB program with loops, calls,
   arithmetic, text input, HTML choices, an external documentation link, and a
   real cropped title-image resource from the local game.
-- **Run bundled game**: attempt the actual `SYSTEM_TITLE`; display the first
-  unsupported operation with its ERB filename and line number.
+- **Run bundled game**: execute the real `SYSTEM_TITLE` and display its menu.
+  Invalid menu choices return to the menu; Start Game and Continue are not yet
+  supported end to end.
 - **Compatibility report**: inspect unsupported instruction names, directives,
   duplicate function/event definitions, and loader diagnostics.
 
 The interface uses a black background, white monospace text, scrollback, keyboard
 input, clickable choices, and adjustable font size. Each browser run has its own
-runtime. Restarting a run resets its memory; nothing is persisted.
+runtime. Restarting a run resets its ordinary variables. `SAVEGLOBAL` persists
+`GLOBAL`, `GLOBALS`, and header variables declared with the `GLOBAL` modifier
+to the game's `.era-typescript/global.json`. This is a separate, versioned JSON
+format, not Emuera's native `global.sav`; existing saves are never overwritten.
+Writes use atomic replacement, and corrupt files or I/O failures stop execution
+with a diagnostic. The demo uses isolated in-memory globals instead.
 
 ```sh
 npm test          # unit, loader, HTTP and optional local bundled-game integration
@@ -73,16 +82,25 @@ game's `ERB/`, `CSV/`, and `resources/` directories.
 - Indexed functions and labels; ordinary `CALL`, `JUMP`, `RETURN`, `GOTO`.
   Numeric parameter targets such as `ARG:0` and private declared parameter
   targets, including default expressions.
+- User-defined `#FUNCTION` / `#FUNCTIONS` expression functions and `RETURNF`,
+  typed results, defaults and omitted expression-call arguments. Expression
+  functions cannot yield output or request input.
 - A parsed expression AST, never JavaScript `eval`. Signed 64-bit integer
   arithmetic, comparisons, bitwise operators, short-circuit logical operators,
   `? ... # ...` conditionals, strings, array access, and selected built-ins
-  (`ABS`, `MIN`, `MAX`, `LIMIT`, `TOSTR`, `TOINT`, `STRLENU`, `MAXWIDTH`).
+  (`ABS`, `MIN`, `MAX`, `LIMIT`, `TOSTR`, `TOINT`, `STRLENU`, `MAXWIDTH`,
+  `GETCOLOR`, `GETSTYLE`, `EXISTVAR`, `GETVARS`, `VARSIZE`, `GETNUM`).
   Bare array indices bind tightly; parenthesize computed indices.
 - Sparse, bounds-checked numeric/string variables; one- to three-dimensional
-  `#DIM`/`#DIMS`, constant initializers, ERH globals and static private variables.
+  `#DIM`/`#DIMS`, constant initializers, ERH globals, static private variables,
+  and per-call `DYNAMIC` private variables.
   Declarations initialize lazily on access. A subset of built-in arrays is
   available; the full Emuera variable catalog is not implemented.
 - CSV name-to-index mappings and `*NAME` tables, plus basic GameBase metadata.
+  Basic built-in array sizes come from `VariableSize.csv`; `-1` disabled arrays
+  are not accessible. This game's `proto` version marker maps to the unversioned
+  numeric version `0`, allowing its ERB version formatter to run. Other
+  non-numeric version markers still fail explicitly.
   CSV character files are indexed as data but not instantiated as characters.
 - `IF`/`ELSEIF`/`ELSE`, single-instruction `SIF`, `SELECTCASE` (values,
   inclusive `TO` ranges, `IS` comparisons, default), exclusive-end `FOR`,
@@ -92,9 +110,24 @@ game's `ERB/`, `CSV/`, and `resources/` directories.
   string `=` formatted assignment and `'=` expression assignment;
   numeric compound assignment and increment/decrement. Numeric `=` and string
   `'=` batch assignments advance along the final array dimension without wrapping.
+- `@"..."` formatted string expressions, nested interpolation and lazy
+  `\@ condition ? true text # false text \@` FORM conditionals. Comments and
+  argument lists correctly handle nested quoted expressions inside FORM strings.
+- `MAP_CREATE`, `MAP_RELEASE`, `MAP_SET` and `MAP_EXIST`/`MAP_SIZE`/`MAP_HAS`/
+  `MAP_GET`, backed by actual runtime maps. Flat `PRINTDATA`/`PRINTDATAL`/
+  `PRINTDATAW` blocks choose randomly among `DATA`/`DATAFORM` entries.
+- `SPLIT`, bare-variable zero/empty `VARSET`, `STRCOUNT`, `REPLACE`,
+  `SUBSTRING`, `STRLENS`, `HTML_TOPLAINTEXT`, and `HTML_POPPRINTINGSTR` support
+  the game's tip-wrapping helper. HTML-to-text parsing uses parse5; popped print
+  text is removed from the browser before the wrapped replacement is rendered.
 - `INPUT`, `INPUTS`, `WAIT`, `FORCEWAIT`, `PRINTBUTTON`/`PRINTBUTTONC`,
   `HTML_PRINT`, line drawing/clearing, RGB colors, alignment, `THROW`, `QUIT`.
   Output and input requests are structured events, independent of the browser.
+  `FONTSTYLE` carries bold/italic/underline styles; `REDRAW 0/1` uses the existing
+  snapshot buffering. Release-mode debug print instructions do not evaluate
+  their arguments. `CLEARMEMORY` clears interpreter parser/compiler caches and
+  requests V8 garbage collection when Node exposes it; it returns observed
+  reclaimed heap bytes (possibly zero), not a promise to release native resources.
 - Resource CSV sprite rectangles and local PNG/WebP/JPEG/GIF/BMP serving.
   Named `<img src='SPRITENAME'>` images are cropped from sprite sheets.
   Basic HTML paragraphs, breaks, emphasis, fonts (color only), numeric choices,
@@ -106,19 +139,23 @@ game's `ERB/`, `CSV/`, and `resources/` directories.
 
 The compatibility inventory is **lexical**, not a playability score: recognizing
 an opcode does not validate its expressions, argument forms, or reachable paths.
-For example, this game uses millions of instructions, user-defined expression
-functions, macros, save/load, characters, engine lifecycle transitions, drawing
-APIs, and extensions that are not implemented yet.
+For example, this game uses millions of instructions, macros, game-save loading,
+characters, engine lifecycle transitions, drawing APIs, and extensions that are
+not implemented yet.
 
-Not supported: saves/global persistence, `BEGIN` lifecycle dispatch, character
-state, random APIs, user-defined expression functions/`RETURNF`, event dispatch
-or overloaded functions, macro expansion/rename/replace tables,
-reference/dynamic/character declarations, the full configuration and
+Not supported: native Emuera saves and game-slot persistence, `BEGIN` lifecycle
+dispatch, character state, general random APIs, event dispatch or overloaded
+functions, macro expansion/rename/replace tables,
+reference/character declarations, the full configuration and
 variable-size rules, graphics/audio APIs, arbitrary HTML/CSS, resource animations,
-or exact Emuera layout/line-measurement semantics. `MAXWIDTH()` is currently a
-fixed logical width of 120, not the browser's measured width. Non-numeric
-GameBase versions fail explicitly on access. Recursive calls are rejected until
-their parameter/local behavior is implemented and tested.
+or exact Emuera layout/line-measurement semantics. `MAXWIDTH()` uses terminal
+columns measured at browser run start (default 120 in direct/API runs); restart
+the run after resizing or changing font size. `STRLENS`/`SUBSTRING` approximate
+legacy display width, not every CP932 encoding edge case. Regex helpers use
+JavaScript regex syntax, not all .NET regex extensions. Only argument-free flat
+print-data blocks, basic FORM interpolation, and zero-padded `TOSTR` formatting
+are supported; more complex forms still fail explicitly. Recursive calls are
+rejected until their parameter/local behavior is implemented and tested.
 
 The first unsupported instruction on an executed path stops that runtime.
 Malformed function signatures are diagnosed during indexing and rejected if
@@ -136,15 +173,17 @@ symlinks). No game-supplied scripts or event attributes are attached to the DOM.
 
 - `src/loader.ts`: script/data/resource indexing and encoding.
 - `src/expression.ts`, `src/variables.ts`: expression and variable semantics.
+- `src/format.ts`, `src/strings.ts`, `src/html.ts`: FORM and text parsing.
+- `src/storage.ts`: memory/file global storage adapters.
 - `src/compiler.ts`, `src/runtime.ts`: control-flow compilation and execution.
 - `src/compatibility.ts`: unsupported-feature inventory.
 - `src/server.ts`: HTTP/session/resource adapter.
 - `web/`: terminal renderer and input client.
 - `test/`: conformance, HTTP, loader and bundled-game regression tests.
 
-Next work should follow actual startup blockers: implement global persistence
-with explicit storage semantics, memory reset, missing variable/config rules,
-and user-defined expression functions, then the title's custom function calls.
+Next work should follow the menu's actual branches: implement `RESETDATA`,
+character templates/state and `BEGIN FIRST` lifecycle dispatch for Start Game,
+and native save-format/slot handling for Continue.
 Keep unsupported behavior explicit and add conformance tests for each feature
 before claiming the title menu or the game is supported.
 

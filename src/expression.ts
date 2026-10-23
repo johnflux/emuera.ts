@@ -1,13 +1,17 @@
 import { EraError, integer, key, text, type Value } from "./model.js";
+import { readFormattedLiteral } from "./format.js";
 
 export type Expr =
   | { kind: "literal"; value: Value }
   | { kind: "variable"; name: string; indices: Expr[] }
   | { kind: "call"; name: string; args: Expr[] }
+  | { kind: "format"; parts: Expr[] }
+  | { kind: "interpolation"; string: boolean; expression: Expr }
+  | { kind: "omitted" }
   | { kind: "unary"; op: string; operand: Expr }
   | { kind: "binary"; op: string; left: Expr; right: Expr }
   | { kind: "conditional"; condition: Expr; yes: Expr; no: Expr };
-interface Token { value: string; type: "name" | "number" | "string" | "op" | "end" }
+interface Token { value: string; type: "name" | "number" | "string" | "format" | "op" | "end"; expression?: Expr }
 const precedence: Record<string, number> = {
   "||": 1, "&&": 1, "^^": 1, "!&": 1, "!|": 1,
   "|": 2, "&": 2, "^": 2, "==": 3, "!=": 3,
@@ -21,6 +25,12 @@ function tokenize(source: string): Token[] {
     const rest = source.slice(i);
     const space = /^\s+/.exec(rest);
     if (space) { i += space[0].length; continue; }
+    if (rest.startsWith('@"')) {
+      const result = readFormattedLiteral(source, i);
+      tokens.push({ type: "format", value: "", expression: result.expression });
+      i = result.end;
+      continue;
+    }
     if (rest[0] === '"') {
       let value = "", closed = false;
       i++;
@@ -31,8 +41,7 @@ function tokenize(source: string): Token[] {
           const next = source[i++];
           if (next === undefined) throw new EraError("Unterminated string escape");
           const escapes: Record<string, string> = { n: "\n", r: "\r", t: "\t", '"': '"', "\\": "\\" };
-          if (!(next in escapes)) throw new EraError(`Unsupported string escape: \\${next}`);
-          value += escapes[next];
+          value += next in escapes ? escapes[next] : "\\" + next;
         } else value += c;
       }
       if (!closed) throw new EraError("Unterminated string");
@@ -63,6 +72,7 @@ export function parseExpression(source: string): Expr {
     const token = take();
     if (token.type === "number") return { kind: "literal", value: BigInt.asIntN(64, BigInt(token.value)) };
     if (token.type === "string") return { kind: "literal", value: token.value };
+    if (token.type === "format") return token.expression!;
     if (["!", "~", "+", "-"].includes(token.value)) return { kind: "unary", op: token.value, operand: primary() };
     if (token.value === "(") { const result = expression(0); expect(")"); return result; }
     if (token.type !== "name") throw new EraError(`Expected value in expression: ${source}`);
@@ -70,7 +80,11 @@ export function parseExpression(source: string): Expr {
       take();
       const args: Expr[] = [];
       if (peek().value !== ")") {
-        do { args.push(expression(0)); if (peek().value !== ",") break; take(); } while (true);
+        do {
+          args.push(peek().value === "," || peek().value === ")" ? { kind: "omitted" } : expression(0));
+          if (peek().value !== ",") break;
+          take();
+        } while (true);
       }
       expect(")");
       return { kind: "call", name: token.value, args };
@@ -107,14 +121,28 @@ export function parseExpression(source: string): Expr {
 }
 export interface EvaluationContext {
   get(name: string, indices: Expr[]): Value;
-  call(name: string, args: Value[]): Value;
+  call(name: string, args: (Value | undefined)[]): Value;
+  referenceCall?(name: string, args: Expr[]): Value | undefined;
 }
 export function evaluate(expr: Expr, context: EvaluationContext): Value {
   const ev = (node: Expr): Value => evaluate(node, context);
   switch (expr.kind) {
     case "literal": return expr.value;
     case "variable": return context.get(expr.name, expr.indices);
-    case "call": return context.call(expr.name, expr.args.map(ev));
+    case "call": return context.referenceCall?.(expr.name, expr.args) ?? context.call(expr.name, expr.args.map((arg) => arg.kind === "omitted" ? undefined : ev(arg)));
+    case "omitted": throw new EraError("Omitted argument outside a function call");
+    case "format": {
+      let value = "";
+      for (const part of expr.parts) {
+        value += text(ev(part));
+        if (value.length > 1_000_000) throw new EraError("Formatted string exceeds limit");
+      }
+      return value;
+    }
+    case "interpolation": {
+      const value = ev(expr.expression);
+      return expr.string ? text(value) : integer(value).toString();
+    }
     case "conditional": return ev(integer(ev(expr.condition)) !== 0n ? expr.yes : expr.no);
     case "unary": {
       const value = integer(ev(expr.operand));

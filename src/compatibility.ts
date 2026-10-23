@@ -21,8 +21,8 @@ export function compatibility(game: Game) {
     for (const routine of routines) {
       functions++;
       for (const directive of routine.directives) {
-        if (!/^#DIMS?\s/i.test(directive.text)) record(`Function directive: ${directive.text.split(/\s/)[0]}`, directive);
-        else if (/\b(?:DYNAMIC|REF|CHARADATA)\b/i.test(directive.text)) record("DYNAMIC/REF/CHARADATA private declarations", directive);
+        if (!/^#DIMS?\s/i.test(directive.text) && !/^#FUNCTIONS?$/i.test(directive.text)) record(`Function directive: ${directive.text.split(/\s/)[0]}`, directive);
+        else if (/\b(?:REF|CHARADATA)\b/i.test(directive.text)) record("REF/CHARADATA private declarations", directive);
       }
       for (const line of routine.lines) {
         if (line.text.startsWith("[")) {

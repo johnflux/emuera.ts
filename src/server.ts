@@ -8,6 +8,7 @@ import { demoGame } from "./demo.js";
 import { GAME_ROOT, loadGame, type Game } from "./loader.js";
 import { EraError, key } from "./model.js";
 import { Runtime } from "./runtime.js";
+import { FileGlobalStore, MemoryGlobalStore, type GlobalStore } from "./storage.js";
 
 const WEB_ROOT = fileURLToPath(new URL("../web/", import.meta.url));
 const mime: Record<string, string> = {
@@ -54,7 +55,8 @@ async function resourceFile(root: string, relative: string): Promise<string> {
   if (!(await stat(resolved)).isFile()) throw new HttpError(404, "Image file not found");
   return resolved;
 }
-export function createApp(game: Game, development = false) {
+export function createApp(game: Game, development = false, store: GlobalStore = game.root
+  ? new FileGlobalStore(path.join(game.root, ".era-typescript", "global.json")) : new MemoryGlobalStore()) {
   const sessions = new Map<string, { runtime: Runtime; used: number }>();
   const report = compatibility(game);
   const instance = randomUUID();
@@ -77,13 +79,18 @@ export function createApp(game: Game, development = false) {
       if (request.method === "POST" && url.pathname === "/api/start") {
         const data = await body(request);
         if (data.mode !== "game" && data.mode !== "demo") throw new HttpError(400, "mode must be game or demo");
+        if (data.columns !== undefined && (typeof data.columns !== "number" || !Number.isSafeInteger(data.columns) || data.columns < 20 || data.columns > 1000))
+          throw new HttpError(400, "columns must be an integer from 20 to 1000");
         const now = Date.now();
         for (const [id, session] of sessions) if (now - session.used > 30 * 60_000) sessions.delete(id);
         if (typeof data.previousSession === "string") sessions.delete(data.previousSession);
         if (sessions.size >= 8) throw new HttpError(429, "Too many sessions; restart the server or wait for expiry");
         const id = randomUUID();
         try {
-          const runtime = new Runtime(data.mode === "demo" ? demoGame(game) : game);
+          const runtime = new Runtime(data.mode === "demo" ? demoGame(game) : game, 50_000, {
+            store: data.mode === "game" ? store : new MemoryGlobalStore(),
+            columns: typeof data.columns === "number" ? data.columns : 120,
+          });
           const snapshot = runtime.start();
           if (snapshot.status === "waiting") sessions.set(id, { runtime, used: now });
           json(response, { session: id, ...snapshot });

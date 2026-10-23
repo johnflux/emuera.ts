@@ -8,6 +8,7 @@ interface Variable {
   dimensions: number[];
   values: Map<string, Value>;
 }
+export type GlobalData = Record<string, Record<string, string>>;
 export class Variables {
   private values = new Map<string, Variable>();
   private declarations = new Map<string, Line>();
@@ -25,6 +26,49 @@ export class Variables {
   }
   has(name: string): boolean {
     return this.values.has(key(name)) || this.declarations.has(key(name)) || !!this.parent?.has(name);
+  }
+  dimensions(name: string, context: EvaluationContext): number[] {
+    return [...this.resolve(name, context).dimensions];
+  }
+  reset(name: string, context: EvaluationContext): void {
+    const variable = this.resolve(name, context);
+    if (variable.constant) throw new EraError(`Cannot reset constant: ${name}`);
+    variable.values.clear();
+  }
+  private globalNames(): string[] {
+    return ["GLOBAL", "GLOBALS", ...[...this.declarations].filter(([, line]) => /^#DIMS?\s+(?:\w+\s+)*GLOBAL\b/i.test(line.text))
+      .map(([name]) => name)];
+  }
+  exportGlobals(context: EvaluationContext): GlobalData {
+    const result: GlobalData = {};
+    for (const name of this.globalNames()) {
+      if (!this.has(name)) continue;
+      result[name] = Object.fromEntries([...this.resolve(name, context).values].map(([address, value]) => [address, String(value)]));
+    }
+    return result;
+  }
+  importGlobals(data: GlobalData, context: EvaluationContext): void {
+    const updates: { variable: Variable; values: Map<string, Value> }[] = [];
+    for (const name of this.globalNames()) {
+      if (!this.has(name)) continue;
+      const variable = this.resolve(name, context);
+      const values = new Map<string, Value>();
+      const saved = data[name];
+      if (saved) for (const [address, raw] of Object.entries(saved)) {
+        const indices = address.split(":").map((n) => {
+          if (!/^\d+$/.test(n)) throw new EraError(`Invalid saved global index: ${name}:${address}`);
+          return { kind: "literal", value: BigInt(n) } satisfies Expr;
+        });
+        this.address(name, indices, context);
+        if (!variable.string && !/^-?\d+$/.test(raw)) throw new EraError(`Invalid saved integer: ${name}:${address}`);
+        const value = variable.string ? raw : BigInt(raw);
+        if (typeof value === "bigint" && BigInt.asIntN(64, value) !== value) throw new EraError(`Saved integer out of range: ${name}`);
+        values.set(address, value);
+      }
+      // Missing variables retain their declared initial values.
+      if (saved) updates.push({ variable, values });
+    }
+    for (const update of updates) update.variable.values = update.values;
   }
   private resolve(name: string, context: EvaluationContext): Variable {
     name = key(name);

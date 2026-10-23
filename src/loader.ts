@@ -13,6 +13,7 @@ export interface Game {
   sprites: Map<string, Sprite>;
   diagnostics: Diagnostic[];
   scriptFiles: number;
+  variableSizes: Map<string, number[]>;
 }
 export async function filesUnder(root: string): Promise<string[]> {
   const result: string[] = [];
@@ -52,7 +53,7 @@ export function csvRows(source: string): string[][] {
   });
 }
 export function emptyGame(root = ""): Game {
-  return { root, routines: new Map(), headers: [], tables: new Map(), names: new Map(), sprites: new Map(), diagnostics: [], scriptFiles: 0 };
+  return { root, routines: new Map(), headers: [], tables: new Map(), names: new Map(), sprites: new Map(), diagnostics: [], scriptFiles: 0, variableSizes: new Map() };
 }
 function* logicalLines(source: string, file: string): Generator<Line> {
   const rows = source.replace(/^\uFEFF/, "").split(/\r?\n/);
@@ -91,7 +92,7 @@ export function indexScript(game: Game, source: string, file: string, header = f
   for (const logical of logicalLines(source, file)) {
     lastLine = logical.line;
     // Emuera joins continuation rows before interpreting comments.
-    const content = stripComment(logical.text).trim();
+    const content = stripComment(logical.text).trimStart();
     const line: Line = { ...logical, text: content };
     if (content === "[SKIPSTART]") { skipBlock = true; continue; }
     if (content === "[SKIPEND]") { skipBlock = false; continue; }
@@ -165,6 +166,18 @@ export async function loadGame(root = GAME_ROOT): Promise<Game> {
     const relative = path.relative(path.join(root, "CSV"), file).split(path.sep).join("/");
     const name = key(relative.replace(/\.csv$/i, ""));
     const rows = csvRows(await readText(file));
+    if (name === "VARIABLESIZE") {
+      for (const row of rows) {
+        const dimensions = row.slice(1).map(Number);
+        if (dimensions.length && dimensions.every((n) => n === -1)) {
+          game.variableSizes.set(key(row[0]!), []);
+          continue;
+        }
+        if (!row[0] || !dimensions.length || dimensions.some((n) => !Number.isSafeInteger(n) || n < 1 || n > 1_000_000))
+          throw new EraError(`Invalid variable size: ${row.join(",")}`, { file: path.relative(root, file), line: 0 });
+        game.variableSizes.set(key(row[0]), dimensions);
+      }
+    }
     const table = new Map<number, string[]>(), names = new Map<string, number>();
     for (const row of rows) {
       if (!/^\d+$/.test(row[0] ?? "")) continue;

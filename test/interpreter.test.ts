@@ -143,7 +143,7 @@ test("constants, unknown variables, bounds, bad declarations and directives fail
     ["MISSING = 1", "", /Unknown variable/],
     ["A:1000 = 1", "", /out of range/],
     ["PRINTFORML {BADSIZE}", "#DIM BADSIZE, 0", /dimensions/],
-    ["#FUNCTION\nRETURN 1", "", /directive/],
+    ["#UNKNOWN_DIRECTIVE\nRETURN 1", "", /directive/],
     ["IF 1\nPRINTL bad", "", /Unclosed IF/],
     ["GOTO missing", "", /Unknown label/],
     ["UNSUPPORTED_THING", "", /Unsupported instruction/],

@@ -73,6 +73,9 @@ test("HTTP UI, isolated sessions, real image bytes, sprite metadata, errors and 
     assert.equal((await post("/api/start", { mode: "game" }, { Origin: "http://other.example" })).status, 403);
     assert.equal((await fetch(base + "/api/compatibility")).status, 200);
     assert.equal((await post("/api/start", { mode: "unknown" })).status, 400);
+    for (const columns of [0, 1001, 1.5, "120"]) {
+      assert.equal((await post("/api/start", { mode: "game", columns })).status, 400);
+    }
     const demo = await (await post("/api/start", { mode: "demo" })).json();
     assert.equal(demo.status, "waiting", JSON.stringify(demo.error));
     const arithmetic = await (await post("/api/input", { session: demo.session, value: "1" })).json();
