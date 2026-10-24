@@ -5,18 +5,22 @@ export interface Source { file: string; line: number }
 export interface Line extends Source { text: string }
 export interface Routine extends Source {
   name: string;
+  /** The label as written, for GETDOINGFUNCTION. */
+  label?: string;
   parameters: string[];
   lines: Line[];
   directives: Line[];
 }
-export interface Diagnostic extends Source { message: string }
+export interface Diagnostic extends Source { message: string; trace?: string[] }
 export class EraError extends Error {
+  /** Calling lines, innermost caller first, recorded as the error unwinds. */
+  trace: Source[] = [];
   constructor(message: string, public source?: Source) {
     super(message);
     this.name = "EraError";
   }
   diagnostic(): Diagnostic {
-    return { file: this.source?.file ?? "<runtime>", line: this.source?.line ?? 0, message: this.message };
+    return { file: this.source?.file ?? "<runtime>", line: this.source?.line ?? 0, message: this.message, ...(this.trace.length ? { trace: this.trace.map((source) => `${source.file}:${source.line}`) } : {}) };
   }
 }
 const keyCache = new Map<string, string>();
@@ -39,6 +43,28 @@ export function text(value: Value): string {
   return value;
 }
 export const INTEGER_LITERAL = /^(0[xX][0-9a-fA-F]+|0[bB][01]+|\d+)(?:([pPeE])([+-]?\d+))?/;
+/**
+ * Emuera's ISNUMERIC/TOINT parsing: a digit (or sign then digit), an integer literal
+ * (0x/0b prefixes and p/e exponents included) and an optional ".digits" tail.
+ * Strings with multibyte characters are never numeric. Returns undefined when not numeric.
+ */
+export function numericString(source: string): bigint | undefined {
+  if (/[^\x00-\x7f]/.test(source)) return undefined;
+  const match = /^(?:0[xX]([0-9a-fA-F]*)(?:[pP]([0-9a-fA-F]*))?|0[bB]([01]*)(?:[pPeE]([01]*))?|([+-]?\d+)(?:[pPeE](\d*))?)(?:\.\d*)?$/.exec(source);
+  if (!match) return undefined;
+  const [, hex, hexExponent, binary, binaryExponent, decimal, decimalExponent] = match;
+  const [digits, base, exponentDigits, exponentBase] = hex !== undefined ? [hex, 16, hexExponent, 2]
+    : binary !== undefined ? [binary, 2, binaryExponent, /[eE]/.test(source) ? 10 : 2] : [decimal!, 10, decimalExponent, /[eE]/.test(source) ? 10 : 2];
+  const parse = (value: string | undefined, radix: number): bigint =>
+    !value || value === "+" || value === "-" ? 0n : radix === 10 ? BigInt(value) : BigInt((radix === 16 ? "0x" : "0b") + value);
+  let value = parse(digits, base);
+  const exponent = parse(exponentDigits, base);
+  if (exponent > 0n) {
+    if (exponent > 63n) throw new EraError(`"${source}" is outside the 64-bit integer range`);
+    value *= BigInt(exponentBase) ** exponent;
+  }
+  return BigInt.asIntN(64, value);
+}
 export function integerLiteral(source: string): bigint {
   const match = INTEGER_LITERAL.exec(source);
   if (!match || match[0] !== source) throw new EraError(`Invalid integer literal: ${source}`);
@@ -51,15 +77,28 @@ export function integerLiteral(source: string): bigint {
   }
   return value;
 }
-export function stripComment(line: string): string {
-  if (/^\s*(?:PRINT(?:FORM)?[LW]?|PRINTPLAIN(?:FORM)?|DATA(?:FORM)?)(?:\s|$)/i.test(line)) return line.trimStart();
+// Instructions whose argument is raw text: ';' and further spaces are output.
+export const LITERAL_TEXT_INSTRUCTION = /^(?:(?:DEBUG)?PRINT(?:SINGLE)?(?:FORM)?(?:C|LC)?[KD]?[LW]?|PRINTPLAIN(?:FORM)?|DATA(?:FORM)?)$/i;
+/**
+ * Emuera whitespace is space and tab; the full-width space U+3000 counts only when the
+ * config 全角スペースをホワイトスペースに含める is enabled (Emuera's default).
+ */
+export function trimEndWhitespace(value: string, fullWidth = true): string {
+  return fullWidth ? value.trimEnd() : value.replace(/[ \t\r\n]+$/, "");
+}
+export function allowsFullWidthSpace(config: ReadonlyMap<string, string>): boolean {
+  return config.get("全角スペースをホワイトスペースに含める")?.toUpperCase() !== "NO";
+}
+export function stripComment(line: string, fullWidthSpace = true): string {
+  const first = /^\s*([^\s;]+)(?:\s|$)/.exec(line)?.[1];
+  if (first && LITERAL_TEXT_INSTRUCTION.test(first)) return line.trimStart();
   for (let i = 0; i < line.length; i++) {
     const c = line[i];
     if (line.startsWith("\\@", i)) { i = conditionalEnd(line, i) - 1; continue; }
     if (c === '"' || line.startsWith('@"', i)) { i = quotedEnd(line, i) - 1; continue; }
-    if (c === ";") return line.slice(0, i).trimEnd();
+    if (c === ";") return trimEndWhitespace(line.slice(0, i), fullWidthSpace);
   }
-  return line.trimEnd();
+  return trimEndWhitespace(line, fullWidthSpace);
 }
 export function splitArguments(input: string): string[] {
   const parts: string[] = [];

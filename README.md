@@ -1,6 +1,6 @@
-# TypeScript Emuera
+# Emuera.ts
 
-A Node.js interpreter foundation for Emuera/eramaker ERB, with a browser terminal.
+A TypeScript/Node.js interpreter for Emuera/eramaker ERB, with a browser terminal.
 The local game directory `anon-tw-anon-tw_eng-modding` is the default target.
 Game scripts, data, and images are read in place and are not bundled or copied.
 
@@ -13,9 +13,9 @@ and reaches mode selection. Choose Custom Character, press Enter at the intro,
 and use the actual character editor (including renaming the player). Finishing
 and confirming reaches dialogue selection and then map preference. Achievement
 initialization now completes with real tables and legacy-achievement checks.
-The verified path enters housing setup, then stops at `VARSET MAP, "NULL"` in
-the colored-map renderer (value-filling `VARSET` is not implemented), before
-housing selection and the day-to-day game loop. Pre-defined-character
+The verified path continues through housing setup: the colored map renders,
+a location and room can be chosen, and the run reaches the pre-game settings
+menu ("Re-customize yourself") before the day-to-day game loop. Pre-defined-character
 selection and loading existing saves are not yet supported end to end.
 Unsupported operations stop with their source filename and line.
 The separate conformance demo is an original ERB program exercising the supported
@@ -44,21 +44,38 @@ server is reported while the browser waits for reconnection.
 automatic browser refresh. If switching from the old, already-running
 non-watching server, stop that process once, then use `npm start` instead.
 
-- **Run conformance demo**: execute a small ERB program with loops, calls,
-  arithmetic, text input, single-character input (menu option 3), HTML choices, an external documentation link, and a
-  real cropped title-image resource from the local game.
-- **Run bundled game**: execute the real `SYSTEM_TITLE` and display its menu.
+The header shows the app name, the current run mode (Game or Demo) and the
+interpreter status. While a step runs, the clicked (or typed) choice is
+highlighted and the cursor changes immediately; if the step takes more than
+~0.1s, a progress bar sweeps under the header and a live timer counts up. When
+it finishes, the timer stays as the last step's duration (amber when 1s or
+longer); hover it for the split between script time (server) and render time
+(browser). Every control is in the **☰ menu** at the top right
+(keyboard: arrow keys move between items, Escape closes it):
+
+- **Conformance demo**: execute a small ERB program with loops, calls,
+  arithmetic, text input, single-character input (menu option 3), HTML choices, an external documentation link, a
+  real cropped title-image resource from the local game, and animated sprites (menu option 4: a script-built
+  `SPRITEANIMECREATE` animation and the game's CSV `ANIME` halo `30_BG1`).
+- **Bundled game**: execute the real `SYSTEM_TITLE` and display its menu.
   This is the default and starts automatically on page load (including development
-  reloads). The selected run mode is highlighted; clicking either run button
-  starts a fresh run. While the compatibility panel is open, only its button is
-  highlighted; closing it restores the current run mode's highlight.
+  reloads). The selected run mode is marked in the menu; choosing either run item
+  starts a fresh run. While the compatibility panel is open, only its item is
+  marked; closing it restores the current run mode's mark.
   Invalid menu choices return to the menu; Start Game reaches custom-character
   creation, but later setup and Continue are not yet supported end to end.
 - **Compatibility report**: inspect unsupported instruction names, directives,
   duplicate function/event definitions, and loader diagnostics.
 
-The interface uses a black background, white monospace text, scrollback, keyboard
-input, clickable choices, and adjustable font size. Each browser run has its own
+The interface uses the game's configured colors and font, scrollback, keyboard
+input, clickable choices, and a font-size slider in the menu. **Settings** edits the text,
+background and selected-text colors and the font name. Defaults come from the
+game's `emuera.config` (`文字色`, `背景色`, `選択中文字色`, `フォント名`); only
+your overrides (and the font size) are stored in this browser's localStorage,
+so each browser or user keeps its own preferences. Overrides are sent to the
+runtime with every request, so `GETDEFCOLOR`, `GETDEFBGCOLOR`, `GETFONT`,
+`RESETCOLOR` and `PRINTD` follow them. Color changes apply immediately; the
+runtime picks them up on the next input. Each browser run has its own
 runtime. Restarting a run resets its ordinary variables. `SAVEGLOBAL` persists
 `GLOBAL`, `GLOBALS`, and header variables declared with the `GLOBAL` modifier
 to the game's `.era-typescript/global.json`. This is a separate, versioned JSON
@@ -108,7 +125,11 @@ Clicked choices retain 70% brightness through
 This does not re-enable interaction. Typed input does not guess a matching choice.
 Only the latest screen has active choices. Rejected input leaves the current
 screen active. Line clearing and scrollback limits still operate on output lines
-across screen boundaries, not on the screen wrappers.
+across screen boundaries, not on the screen wrappers. When `CLEARLINE` removes
+output back into a retired screen (for example a "You simply can't enter." `WAIT`
+message that is cleared before the script re-asks the same `INPUT`), that screen
+becomes active again and its choices work. As in Emuera, those revived choices
+stay valid only until the script prints new choices; after that they are disabled.
 Game HTML `title` descriptions (including trait `<nonbutton>` tags) appear in
 immediate, multiline tooltips on hover or keyboard focus. Descriptions are plain
 text, not executable HTML. Tooltip targets have a `has-tooltip` class and a subtle
@@ -188,6 +209,10 @@ beyond the cache limits are processed normally.
 - Brace-delimited multiline statements are joined before comment processing,
   indexing, execution, and compatibility reporting. Diagnostics point to the
   first content row; quoted array values are not counted as instruction names.
+  Builtin functions written as statements (`SPRITECREATE "X", G`, `LIMIT A, 0, 9`)
+  count as recognised and store their value in `RESULT`/`RESULTS`, and repeated
+  `EVENT*` definitions are normal event dispatch rather than gaps. Assignment
+  lines with an extra left-hand comma (`VALUE ,= ,`) fail when executed, as in Emuera.
 - Literal `PRINT` / `PRINTFORM` arguments preserve layout whitespace after the
   single command separator, including leading, trailing and full-width spaces.
 - Indexed functions and labels; ordinary `CALL`, `JUMP`, `RETURN`, `GOTO`.
@@ -195,19 +220,26 @@ beyond the cache limits are processed normally.
   locals, clearing active loop bookkeeping and retaining the instruction budget.
   Numeric parameter targets such as `ARG:0` and private declared parameter
   targets, including default expressions and legacy comma-prefixed signatures.
-  `CALLF`, `CALLFORM`, `CALLFORMF`, `TRYCALLFORM` and `TRYCCALLFORM`/`CATCH`/
+  `CALLF`, `CALLFORM`, `CALLFORMF`, `TRYCALLF`, `TRYCALLFORMF`, `TRYCALLFORM` and `TRYCCALLFORM`/`CATCH`/
   `ENDCATCH` support dynamic dispatch; missing-target branches do not swallow
-  errors inside existing routines. Bounded recursion shares static locals and
+  errors inside existing routines. `CALLF`-style instructions discard the return
+  value. Expression functions may print (output appears before the caller's);
+  input inside them is an error. Bounded recursion shares static locals and
   creates fresh `DYNAMIC` locals. `#LOCALSIZE` and `#LOCALSSIZE` are respected.
 - `RESETDATA` resets ordinary and private state while preserving globals, constants
   and title/CSV metadata. `ADDCHARA` instantiates numbered character CSV templates;
   character variables have isolated storage and omitted character indices use
-  `TARGET`. `CHARADATA` header arrays and `REF` scalar/whole-array CALL parameters
-  are supported. `BEGIN FIRST` unwinds the caller and dispatches `EVENTFIRST`
+  `TARGET`. `CHARADATA` header variables (up to 2 dimensions per character, optionally
+  `SAVEDATA`) move with characters through `ADD`/`DEL`/`SWAP`/`COPY`/`PICKUPCHARA`,
+  saves and `SAVECHARA`. `REF` parameters (for CALL and expression functions) bind the
+  caller's whole array as in Emuera: an index on the argument is ignored, a sizeless
+  `REF` is 1-D, and constants, character variables, other types and other ranks are
+  rejected. `BEGIN FIRST` unwinds the caller and dispatches `EVENTFIRST`
   routines in `#PRI`/normal/`#LATER` order, respecting `#SINGLE`.
   `_Rename.csv` substitutions are applied before script indexing.
-- Character CSV queries (`EXISTCSV`, `CSVBASE`, `CSVABL`, `CSVTALENT`, `CSVEXP`,
-  `CSVRELATION`, `CSVFLAG`, `CSVCSTR`, `CSVNAME`, `CSVCALLNAME`), bounded `RAND:n`,
+- Character CSV queries (`EXISTCSV`, `CSVNAME`, `CSVCALLNAME`, `CSVNICKNAME`,
+  `CSVMASTERNAME`, `CSVBASE`, `CSVABL`, `CSVTALENT`, `CSVEXP`, `CSVRELATION`,
+  `CSVFLAG`, `CSVCFLAG`, `CSVMARK`, `CSVJUEL`, `CSVEQUIP`, `CSVCSTR`), bounded `RAND:n`,
   `FINDELEMENT`, `ARRAYREMOVE`, bit manipulation, FORM field padding,
   hexadecimal `TOSTR`, Unicode/string/HTML helpers support new-game setup.
   Character CSV numeric fields follow Emuera's leading-integer parsing, allowing
@@ -238,6 +270,14 @@ beyond the cache limits are processed normally.
   (`ABS`, `MIN`, `MAX`, `LIMIT`, `TOSTR`, `TOINT`, `STRLENU`, `MAXWIDTH`,
   `GETCOLOR`, `GETSTYLE`, `EXISTVAR`, `GETVARS`, `VARSIZE`, `GETNUM`).
   Bare array indices bind tightly; parenthesize computed indices.
+  Prefix and postfix `++`/`--` work inside expressions and computed assignment
+  indices (`ITEMS:(COUNT++) = 7`); each index is evaluated exactly once.
+- `ISNUMERIC` and `TOINT` follow Emuera's literal parser: `0x`/`0b` prefixes,
+  `e`/`p` exponents and an ignored `.digits` tail are accepted. Non-numeric
+  strings (including any full-width character) give `ISNUMERIC` 0 and `TOINT` 0.
+- Full-width spaces (U+3000) count as whitespace only when the config
+  `全角スペースをホワイトスペースに含める` is YES (Emuera's default). This game sets
+  it to NO, so leading/trailing U+3000 in values such as colored map rows is kept.
 - Sparse, bounds-checked numeric/string variables; one- to three-dimensional
   `#DIM`/`#DIMS`, constant initializers, ERH globals, static private variables,
   and per-call `DYNAMIC` private variables.
@@ -259,29 +299,62 @@ beyond the cache limits are processed normally.
   numeric compound assignment and increment/decrement. Numeric `=` and string
   `'=` batch assignments advance along the final array dimension without wrapping.
 - `@"..."` formatted string expressions, nested interpolation and lazy
-  `\@ condition ? true text # false text \@` FORM conditionals. Comments and
-  argument lists correctly handle nested quoted expressions inside FORM strings.
+  `\@ condition ? true text # false text \@` FORM conditionals. As in Emuera's
+  lexer, conditionals do not nest: inside an arm the next `\@` closes it (a
+  missing `#` arm is allowed), `"` is literal text and only `%…%`/`{…}` are
+  expressions. `\s`/`\S` are half/full-width spaces. Comments and argument lists
+  correctly handle nested quoted expressions inside FORM strings.
 - `MAP_CREATE`, `MAP_RELEASE`, `MAP_SET` and `MAP_EXIST`/`MAP_SIZE`/`MAP_HAS`/
   `MAP_GET`, backed by actual runtime maps. Flat `PRINTDATA`/`PRINTDATAL`/
   `PRINTDATAW` blocks choose randomly among `DATA`/`DATAFORM` entries.
-- `SPLIT`, bare-variable zero/empty `VARSET`, `STRCOUNT`, `REPLACE`,
-  `SUBSTRING`, `STRLENS`, `HTML_TOPLAINTEXT`, and `HTML_POPPRINTINGSTR` support
+- Array scans (`MATCH`, `MAXARRAY`, `MINARRAY`, `FINDELEMENT`, `FINDLASTELEMENT`,
+  `SUMARRAY`) and character scans (`CMATCH`, `MAXCARRAY`, `MINCARRAY`,
+  `SUMCARRAY`); value-filling and ranged `VARSET`; `__INT_MAX__`/`__INT_MIN__`.
+- String instructions (`STRLEN*`, `STRLENS*`, `SUBSTRING*`, `STRFIND*`,
+  `STRCOUNT`) store into `RESULT`/`RESULTS`; `TOFULL`/`TOHALF`.
+- `SPLIT` (optional count variable, default `RESULT`; truncates to the array),
+  `REPLACE`, `STRLENS`, `HTML_TOPLAINTEXT`, and `HTML_POPPRINTINGSTR` support
   the game's tip-wrapping helper. HTML-to-text parsing uses parse5; popped print
   text is removed from the browser before the wrapped replacement is rendered.
+- Timed input: `TINPUT`/`TINPUTS`/`TONEINPUT`/`TONEINPUTS` and `TWAIT`. The browser
+  runs the timer and calls `/api/timeout` on expiry; the runtime then prints the
+  timeout message (`時間切れ表示`, default 時間切れ), replacing the optional
+  "残り" countdown line, and echoes the default as the input. As in Emuera, an
+  empty Enter before expiry does not take the default, and `TWAIT` with a
+  nonzero flag cannot be skipped. Input made while an animation frame is loading
+  is sent once the frame is shown, so the animated colored map stays usable.
 - `INPUT`, `INPUTS`, `ONEINPUT`, `ONEINPUTS`, `WAIT`, `FORCEWAIT`, `PRINTBUTTON`/`PRINTBUTTONC`,
   `HTML_PRINT`, line drawing/clearing, RGB colors, alignment, `THROW`, `QUIT`.
   Output and input requests are structured events, independent of the browser.
-  `FONTSTYLE` carries bold/italic/underline styles; `REDRAW 0/1` uses the existing
+  `FONTSTYLE` carries bold (1), italic (2), strikeout (4) and underline (8);
+  `FONTBOLD`/`FONTITALIC`/`FONTREGULAR` adjust it. The `PRINT` family (including
+  `S`/`V`/`FORMS`, `C`/`LC` alignment, `K`/`D` modes, `PRINTSINGLE*`, `PRINTPLAIN*`),
+  `CUSTOMDRAWLINE`/`DRAWLINEFORM` are supported; `REDRAW 0/1` uses the existing
   snapshot buffering. Release-mode debug print instructions do not evaluate
   their arguments. `CLEARMEMORY` clears interpreter parser/compiler caches and
   requests V8 garbage collection when Node exposes it; it returns observed
   reclaimed heap bytes (possibly zero), not a promise to release native resources.
+- `CALLTRAIN`/`STOPCALLTRAIN` queue `SELECTCOM:1..n` train commands as in
+  Emuera: status/command list output is skipped during the run, each step prints
+  `＜コマンド連続実行：i/n＞`, unavailable commands go to `USERCOM`, and
+  `@CALLTRAINEND` runs at the end. While output is skipped, input instructions
+  are skipped too; `SKIPDISP` sets `RESULT`.
+- `PRINT_RECT`/`PRINT_SPACE` emit inline `<shape>` rectangles/spaces.
 - Resource CSV sprite rectangles and local PNG/WebP/JPEG/GIF/BMP serving.
   Named `<img src='SPRITENAME'>` images are cropped from sprite sheets.
   Basic HTML paragraphs, breaks, emphasis, fonts (color only), numeric choices,
   nonbuttons and HTTP(S) links are rebuilt as allowlisted DOM nodes.
   Unitless image dimensions use percentages of the terminal font size; `px`
   dimensions are supported too. Unsupported tags and missing images show errors.
+- Graphics (`GCREATE`, `GCREATEFROMFILE`, `GCLEAR`, `GSETBRUSH`, `GFILLRECTANGLE`,
+  `GSETCOLOR`, `GDRAWSPRITE`, `GDRAWG`, `GDRAWGWITHMASK`, `GDISPOSE`) build
+  display lists instead of pixels. As in Emuera, `SPRITECREATE` sprites reference
+  their G live: a disposed G makes them "not created". Color matrices are 5x5
+  integer array blocks scaled by 1/256. An html output that shows a runtime-made
+  sprite carries a snapshot of its picture, which the browser paints on a
+  `<canvas>`. `GGETCOLOR` cannot read pixels (it returns 0), `GSAVE`/`GLOAD`
+  are unsupported, and animated sprites draw nothing.
+  See [docs/sprites.md](docs/sprites.md) for how sprites are stored, sent and painted.
 - A presentation-only patch recognizes the title's exact 35-strip HTML sequence
   and contiguous resource rectangles, rendering one cropped image instead of
   35 images and metadata requests. ERB files, runtime output and `LINECOUNT`
@@ -301,13 +374,14 @@ APIs, and extensions that are not implemented yet.
 Not supported: native Emuera saves and game-slot persistence, `BEGIN` states other
 than `FIRST`, full character-management APIs, general random APIs, other event
 dispatch or overloaded functions, general macro expansion and replace tables,
-REF expression-function arguments, the full configuration and
-variable-size rules, graphics/audio APIs, arbitrary HTML/CSS, resource animations,
+the full configuration and
+variable-size rules, audio APIs, pixel read-back, arbitrary HTML/CSS, resource animations,
 or exact Emuera layout/line-measurement semantics. `MAXWIDTH()` uses terminal
 columns measured at browser run start (default 120 in direct/API runs); restart
 the run after resizing or changing font size. `STRLENS`/`SUBSTRING` approximate
 legacy display width, not every CP932 encoding edge case. Regex helpers use
-JavaScript regex syntax, not all .NET regex extensions. Only argument-free flat
+JavaScript regex syntax plus .NET inline options (`(?i)`, `(?m)`, `(?s)`), not
+all .NET regex extensions. Only argument-free flat
 print-data blocks, basic/padded FORM interpolation, and zero-padded/hexadecimal
 `TOSTR` formatting are supported; more complex forms still fail explicitly.
 The full data-table extension is not implemented: XML import/export and
@@ -322,7 +396,7 @@ Malformed function signatures are diagnosed during indexing and rejected if
 called. Unsupported directives remain visible in the inventory. Function-local
 unsupported directives stop execution when entering that function.
 
-Bundled-game execution is bounded to 1,000,000 instructions between input requests
+Bundled-game execution is bounded to 20,000,000 instructions between input requests
 to accommodate its real class/item/cast initialization (validated within that
 budget). Direct runtimes and the demo default to 50,000. All runs retain a 2 MB
 output limit between input

@@ -1,9 +1,55 @@
 import { readdir, readFile } from "node:fs/promises";
+import { closeSync, existsSync, openSync, readFileSync, readSync } from "node:fs";
 import path from "node:path";
-import { EraError, key, stripComment, splitArguments, type Diagnostic, type Line, type Routine } from "./model.js";
+import { EraError, key, allowsFullWidthSpace, stripComment, splitArguments, type Diagnostic, type Line, type Routine } from "./model.js";
 
 export const GAME_ROOT = path.resolve("anon-tw-anon-tw_eng-modding");
-export interface Sprite { file: string; x: number; y: number; width: number; height: number }
+/** A CSV sprite: a crop of a resource image. width/height 0 mean the whole image. */
+/** What a static renderer draws for a sprite: itself, or an animation's first frame (undefined while it has none). */
+export function stillFrame(sprite: Sprite): Sprite | undefined {
+  return sprite.animation ? sprite.animation.frames[0] : sprite;
+}
+export interface Sprite {
+  file: string; x: number; y: number; width: number; height: number; offsetX?: number; offsetY?: number;
+  /** Destination size (columns 10-11), when it differs from the crop. */
+  size?: { width: number; height: number };
+  /** Set by a `name,ANIME,w,h` declaration; its following rows with the same name are frames. */
+  animation?: { width: number; height: number; frames: (Sprite & { delay: number })[] };
+}
+/** Pixel size from a PNG, GIF, BMP, WebP or JPEG header; undefined if unreadable. */
+export function imageSize(file: string): { width: number; height: number } | undefined {
+  let header: Buffer;
+  try {
+    const fd = openSync(file, "r");
+    try {
+      header = Buffer.alloc(65536);
+      header = header.subarray(0, readSync(fd, header, 0, header.length, 0));
+    } finally { closeSync(fd); }
+  } catch { return undefined; }
+  const ascii = (start: number, end: number): string => header.toString("latin1", start, end);
+  if (ascii(1, 4) === "PNG" && header.length >= 24) return { width: header.readUInt32BE(16), height: header.readUInt32BE(20) };
+  if (ascii(0, 3) === "GIF" && header.length >= 10) return { width: header.readUInt16LE(6), height: header.readUInt16LE(8) };
+  if (ascii(0, 2) === "BM" && header.length >= 26) return { width: header.readInt32LE(18), height: Math.abs(header.readInt32LE(22)) };
+  if (ascii(0, 4) === "RIFF" && ascii(8, 12) === "WEBP" && header.length >= 30) {
+    const chunk = ascii(12, 16);
+    if (chunk === "VP8 ") return { width: header.readUInt16LE(26) & 0x3fff, height: header.readUInt16LE(28) & 0x3fff };
+    if (chunk === "VP8L") {
+      const bits = header.readUInt32LE(21);
+      return { width: (bits & 0x3fff) + 1, height: ((bits >> 14) & 0x3fff) + 1 };
+    }
+    if (chunk === "VP8X") return { width: header.readUIntLE(24, 3) + 1, height: header.readUIntLE(27, 3) + 1 };
+  }
+  if (header[0] === 0xff && header[1] === 0xd8) {
+    for (let i = 2; i + 9 < header.length;) {
+      if (header[i] !== 0xff) return undefined;
+      const marker = header[i + 1]!;
+      if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc)
+        return { width: header.readUInt16BE(i + 7), height: header.readUInt16BE(i + 5) };
+      i += 2 + header.readUInt16BE(i + 2);
+    }
+  }
+  return undefined;
+}
 export interface Game {
   root: string;
   routines: Map<string, Routine[]>;
@@ -14,10 +60,20 @@ export interface Game {
   diagnostics: Diagnostic[];
   scriptFiles: number;
   variableSizes: Map<string, number[]>;
+  /** ERH #DEFINE macros: name -> replacement text. */
+  macros: Map<string, string>;
   characters: Map<number, { file: string; rows: string[][] }>;
   renames: Map<string, string>;
   money: { label: string; first: boolean };
+  config: Map<string, string>;
+  /** Settings from CSV/_Replace.csv, keyed by their Japanese names. */
+  replacements: Map<string, string>;
+  /** CSV/VarExt*.csv: which MAP, XmlDocument and DataTable names are saved, global or static. */
+  containers: Record<ContainerScope, ContainerNames>;
 }
+export type ContainerScope = "SAVE" | "GLOBAL" | "STATIC";
+export interface ContainerNames { MAPS: Set<string>; XMLS: Set<string>; DTS: Set<string> }
+const containerNames = (): ContainerNames => ({ MAPS: new Set(), XMLS: new Set(), DTS: new Set() });
 export async function filesUnder(root: string): Promise<string[]> {
   const result: string[] = [];
   for (const entry of (await readdir(root, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name, "en"))) {
@@ -28,7 +84,17 @@ export async function filesUnder(root: string): Promise<string[]> {
   return result;
 }
 export async function readText(file: string): Promise<string> {
-  const buffer = await readFile(file);
+  return decodeText(await readFile(file));
+}
+/** Synchronous read for script-requested files; null when the file is missing. */
+export function readTextFileSync(file: string): string | null {
+  try { return decodeText(readFileSync(file)).replace(/^\uFEFF/, ""); }
+  catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT" || (error as NodeJS.ErrnoException).code === "EISDIR") return null;
+    throw error;
+  }
+}
+function decodeText(buffer: Buffer): string {
   if (buffer[0] === 0xff && buffer[1] === 0xfe) return new TextDecoder("utf-16le").decode(buffer);
   try { return new TextDecoder("utf-8", { fatal: true }).decode(buffer); }
   catch (error) {
@@ -56,7 +122,7 @@ export function csvRows(source: string): string[][] {
   });
 }
 export function emptyGame(root = ""): Game {
-  return { root, routines: new Map(), headers: [], tables: new Map(), names: new Map(), sprites: new Map(), diagnostics: [], scriptFiles: 0, variableSizes: new Map(), characters: new Map(), renames: new Map(), money: { label: "\u00a5", first: true } };
+  return { root, routines: new Map(), headers: [], tables: new Map(), names: new Map(), sprites: new Map(), diagnostics: [], scriptFiles: 0, variableSizes: new Map(), macros: new Map(), characters: new Map(), renames: new Map(), money: { label: "\u00a5", first: true }, config: new Map(), replacements: new Map(), containers: { SAVE: containerNames(), GLOBAL: containerNames(), STATIC: containerNames() } };
 }
 function* logicalLines(source: string, file: string): Generator<Line> {
   const rows = source.replace(/^\uFEFF/, "").split(/\r?\n/);
@@ -92,10 +158,11 @@ export function indexScript(game: Game, source: string, file: string, header = f
     key(/^#DEFINE\s+([^\s(]+)/i.exec(line.text)?.[1] ?? "") === key(name));
   const pushCondition = (active: boolean): void => { conditions.push({ active, matched: active, seenElse: false }); };
   let lastLine = 0;
+  const fullWidthSpace = allowsFullWidthSpace(game.config);
   for (const logical of logicalLines(source, file)) {
     lastLine = logical.line;
     // Emuera joins continuation rows before interpreting comments.
-    const content = stripComment(logical.text.replace(/\[\[([^\]]+)\]\]/g, (match, name: string) => game.renames.get(name) ?? match)).trimStart();
+    const content = stripComment(logical.text.replace(/\[\[([^\]]+)\]\]/g, (match, name: string) => game.renames.get(name) ?? match), fullWidthSpace).trimStart();
     const line: Line = { ...logical, text: content };
     if (content === "[SKIPSTART]") { skipBlock = true; continue; }
     if (content === "[SKIPEND]") { skipBlock = false; continue; }
@@ -131,7 +198,12 @@ export function indexScript(game: Game, source: string, file: string, header = f
       game.diagnostics.push({ ...line, message: `Unsupported preprocessor directive: ${content}` });
       // Retain it so executing this path also fails explicitly.
     }
-    if (header) { game.headers.push(line); continue; }
+    if (header) {
+      const define = /^#DEFINE\s+([^\s(]+)\s*(.*)$/i.exec(content);
+      if (define) game.macros.set(key(define[1]!), define[2]!.trim());
+      game.headers.push(line);
+      continue;
+    }
     if (content.startsWith("@")) {
       const match = /^@([^\s(,]+)\s*(.*)$/.exec(content)!;
       let args = match[2]!.trim();
@@ -145,7 +217,7 @@ export function indexScript(game: Game, source: string, file: string, header = f
         game.diagnostics.push({ ...line, message: `Unsupported function signature: ${content}` });
         directives.push({ ...line, text: "#UNSUPPORTED_SIGNATURE" });
       }
-      routine = { ...line, name: key(match[1]!), parameters, lines: [], directives };
+      routine = { ...line, name: key(match[1]!), label: match[1]!, parameters, lines: [], directives };
       const list = game.routines.get(routine.name) ?? [];
       list.push(routine);
       game.routines.set(routine.name, list);
@@ -158,6 +230,13 @@ export function indexScript(game: Game, source: string, file: string, header = f
 }
 export async function loadGame(root = GAME_ROOT): Promise<Game> {
   const game = emptyGame(root);
+  const configFile = path.join(root, "emuera.config");
+  if (existsSync(configFile)) {
+    for (const row of (await readText(configFile)).split(/\r?\n/)) {
+      const separator = row.indexOf(":");
+      if (separator > 0 && !row.startsWith(";")) game.config.set(row.slice(0, separator).trim(), row.slice(separator + 1).trim());
+    }
+  }
   const csvFiles = (await filesUnder(path.join(root, "CSV"))).filter((file) => /\.csv$/i.test(file));
   for (const file of csvFiles.filter((file) => path.basename(file).toUpperCase() === "_RENAME.CSV")) {
     for (const row of csvRows(await readText(file))) {
@@ -188,8 +267,17 @@ export async function loadGame(root = GAME_ROOT): Promise<Game> {
     const relative = path.relative(path.join(root, "CSV"), file).split(path.sep).join("/");
     const name = key(relative.replace(/\.csv$/i, ""));
     const rows = csvRows(await readText(file));
+    if (/^VAREXT/.test(path.basename(name))) {
+      for (const row of rows) {
+        const match = /^(SAVE|GLOBAL|STATIC)_(MAPS|XMLS|DTS)$/i.exec(row[0] ?? "");
+        if (!match) continue;
+        const names = game.containers[match[1]!.toUpperCase() as ContainerScope][match[2]!.toUpperCase() as keyof ContainerNames];
+        for (const id of row.slice(1)) names.add(id.trim());
+      }
+    }
     if (name === "_REPLACE") {
       for (const row of rows) {
+        if (row[0]) game.replacements.set(row[0].trim(), (row[1] ?? "").trim());
         if (row[0] === "お金の単位") game.money.label = row[1] ?? "";
         if (row[0] === "単位の位置") {
           if (row[1] !== "前" && row[1] !== "後") throw new EraError("Invalid money unit position", { file, line: 0 });
@@ -232,22 +320,71 @@ export async function loadGame(root = GAME_ROOT): Promise<Game> {
   }
   for (const file of await filesUnder(path.join(root, "resources"))) {
     if (!/\.csv$/i.test(file)) continue;
+    const warn = (message: string) => game.diagnostics.push({ file: path.relative(root, file), line: 0, message });
+    // Emuera AppContents.CreateFromCsv: unparseable optional numbers keep their defaults rather than rejecting the row.
+    const int = (value: string | undefined) => value !== undefined && /^\s*[+-]?\d+\s*$/.test(value) ? Number(value) : undefined;
+    const ints = (row: string[], from: number, count: number) => {
+      const values = row.slice(from, from + count).map(int);
+      return values.length === count && values.every((n) => n !== undefined) ? values as number[] : undefined;
+    };
+    let animation: { name: string; sprite: Sprite } | undefined;
     for (const row of csvRows(await readText(file))) {
-      if (!row[0] || !row[1]) continue;
-      if (!/\.(png|webp|jpe?g|gif|bmp)$/i.test(row[1])) {
-        game.diagnostics.push({ file: path.relative(root, file), line: 0, message: `Unsupported resource definition: ${row[0]}` });
+      if (row.length < 2 || !row[0] || !row[1]) continue;
+      const name = key(row[0]);
+      if (row[1].toUpperCase() === "ANIME") {
+        const size = ints(row, 2, 2);
+        if (!size || size.some((n) => n <= 0 || n > 8192)) { warn(`Invalid animation sprite size: ${row[0]}`); continue; }
+        const sprite: Sprite = { file: "", x: 0, y: 0, width: size[0]!, height: size[1]!, animation: { width: size[0]!, height: size[1]!, frames: [] } };
+        if (game.sprites.has(name)) { warn(`Sprite name already used: ${row[0]}`); animation = undefined; continue; }
+        game.sprites.set(name, sprite);
+        animation = { name, sprite };
         continue;
       }
-      const [x, y, width, height] = [2, 3, 4, 5].map((i) => row[i] ? Number(row[i]) : 0);
-      if (![x, y, width, height].every((n) => n !== undefined && Number.isSafeInteger(n) && n >= 0)) {
-        game.diagnostics.push({ file: path.relative(root, file), line: 0, message: `Invalid sprite rectangle: ${row[0]}` });
-        continue;
-      }
-      game.sprites.set(key(row[0]), {
+      if (!row[1].includes(".")) { warn(`Resource image has no file extension: ${row[0]}`); continue; }
+      const sprite: Sprite = {
         file: path.relative(path.join(root, "resources"), path.resolve(path.dirname(file), row[1].replaceAll("\\", "/"))),
-        x: x!, y: y!, width: width!, height: height!,
-      });
+        x: 0, y: 0, width: 0, height: 0,
+      };
+      let delay = 1000;
+      if (row.length >= 6) {
+        const rect = ints(row, 2, 4);
+        if (rect) {
+          if (rect[2]! <= 0 || rect[3]! <= 0) { warn(`Sprite size is not positive: ${row[0]}`); continue; }
+          [sprite.x, sprite.y, sprite.width, sprite.height] = rect as [number, number, number, number];
+        }
+        const offset = row.length >= 8 ? ints(row, 6, 2) : undefined;
+        if (offset) [sprite.offsetX, sprite.offsetY] = offset as [number, number];
+        if (row.length >= 9) {
+          const value = int(row[8]);
+          if (value !== undefined && value <= 0) { warn(`Animation frame time is not positive: ${row[0]}`); continue; }
+          delay = value ?? delay;
+          const size = row.length >= 11 ? ints(row, 9, 2) : undefined;
+          if (size) sprite.size = { width: size[0]!, height: size[1]! };
+        }
+      }
+      if (animation?.name === name) { animation.sprite.animation!.frames.push({ ...sprite, delay }); continue; }
+      animation = undefined;
+      if (game.sprites.has(name)) { warn(`Sprite name already used: ${row[0]}`); continue; }
+      game.sprites.set(name, sprite);
     }
   }
   return game;
+}
+
+export interface DisplaySettings { foreground: string; background: string; selection: string; font: string }
+
+function configColor(value: string | undefined, fallback: string): string {
+  const channels = value?.split(",").map((part) => Number(part.trim()));
+  if (!channels || channels.length !== 3 || channels.some((channel) => !Number.isInteger(channel) || channel < 0 || channel > 255)) return fallback;
+  return "#" + channels.map((channel) => channel.toString(16).padStart(2, "0")).join("");
+}
+
+/** Display defaults from emuera.config, with Emuera's built-in defaults as fallbacks. */
+export function displayDefaults(game: Game): DisplaySettings {
+  return {
+    foreground: configColor(game.config.get("文字色"), "#c0c0c0"),
+    background: configColor(game.config.get("背景色"), "#000000"),
+    selection: configColor(game.config.get("選択中文字色"), "#ffff00"),
+    font: game.config.get("フォント名") || "ＭＳ ゴシック",
+  };
 }

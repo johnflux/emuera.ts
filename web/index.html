@@ -3,20 +3,30 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>TypeScript Emuera</title>
+  <title>Emuera.ts</title>
   <link rel="stylesheet" href="/style.css">
   <script type="module" src="/app.js"></script>
 </head>
 <body>
   <header>
-    <h1>TypeScript Emuera <small>interpreter foundation</small></h1>
-    <nav aria-label="Interpreter controls">
-      <button id="demo" aria-pressed="false">Run conformance demo</button>
-      <button id="game" aria-pressed="true">Run bundled game</button>
-      <button id="report" aria-expanded="false" aria-controls="compatibility">Compatibility report</button>
-      <label>Font <input id="font-size" type="range" min="12" max="24" value="16"></label>
-    </nav>
+    <h1 class="brand"><span class="brand-mark" aria-hidden="true">壱</span><span>Emuera<span class="brand-ts">.ts</span></span></h1>
+    <span id="mode" class="mode" hidden></span>
+    <span id="activity" class="activity" hidden></span>
     <p id="status" role="status">Ready. Title and custom-character creation are supported; full gameplay is not yet implemented.</p>
+    <div class="menu">
+      <button id="menu-toggle" class="menu-toggle" aria-haspopup="true" aria-expanded="false" aria-controls="menu-panel" title="Menu">
+        <span aria-hidden="true">☰</span><span class="visually-hidden">Menu</span>
+      </button>
+      <nav id="menu-panel" class="menu-panel" aria-label="Interpreter controls" hidden>
+        <p class="menu-heading">Run</p>
+        <button id="game" aria-pressed="true">Bundled game</button>
+        <button id="demo" aria-pressed="false">Conformance demo</button>
+        <p class="menu-heading">Tools</p>
+        <button id="report" aria-expanded="false" aria-controls="compatibility">Compatibility report</button>
+        <button id="settings-toggle" aria-expanded="false" aria-controls="settings">Settings</button>
+        <label class="menu-font">Font size <input id="font-size" type="range" min="12" max="24" value="16"></label>
+      </nav>
+    </div>
   </header>
   <main>
     <section id="terminal" role="log" aria-label="Interpreter output" tabindex="0">
@@ -30,6 +40,17 @@
       <button id="submit" disabled>Send</button>
     </form>
     <aside id="compatibility" hidden aria-label="Compatibility report"></aside>
+    <aside id="settings" hidden aria-labelledby="settings-heading">
+      <h2 id="settings-heading">Settings</h2>
+      <p>Defaults come from the game's <code>emuera.config</code>. Your changes are saved in this browser only.</p>
+      <form id="settings-form">
+        <label>Text color <input name="foreground" type="color"></label>
+        <label>Background color <input name="background" type="color"></label>
+        <label>Selected text color <input name="selection" type="color"></label>
+        <label>Font name <input name="font" type="text" maxlength="100" spellcheck="false"></label>
+        <button type="button" id="settings-reset">Reset to game defaults</button>
+      </form>
+    </aside>
   </main>
   <div id="game-tooltip" role="tooltip" hidden></div>
 </body>

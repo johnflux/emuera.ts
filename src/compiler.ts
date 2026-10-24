@@ -1,22 +1,65 @@
-import { EraError, key, type Line, type Routine } from "./model.js";
+import { EraError, key, LITERAL_TEXT_INSTRUCTION, type Line, type Routine } from "./model.js";
 import { TABLE_OPERATIONS } from "./data-tables.js";
 
+const TRY_CATCH = new Set(["TRYCCALL", "TRYCJUMP", "TRYCCALLFORM", "TRYCJUMPFORM"]);
 export const SUPPORTED = new Set([
   ...TABLE_OPERATIONS,
   "PRINT", "PRINTL", "PRINTW", "PRINTFORM", "PRINTFORML", "PRINTFORMW",
   "PRINTPLAIN", "PRINTPLAINFORM",
+  "SAVEDATA", "LOADDATA", "DELDATA", "CHKDATA", "SAVECHARA", "LOADCHARA", "PUTFORM", "DOTRAIN", "RESET_STAIN",
+  "STRLEN", "STRLENU", "STRLENS", "STRLENSU", "STRLENFORM", "STRLENFORMU", "SUBSTRING", "SUBSTRINGU", "STRFIND", "STRFINDU", "STRCOUNT",
   "PRINTV", "PRINTVL", "PRINTVW", "PRINTS", "PRINTSL", "PRINTSW", "HTML_PRINT",
-  "PRINTBUTTON", "PRINTBUTTONC", "DRAWLINE", "CUSTOMDRAWLINE", "CLEARLINE",
+  "PRINTBUTTON", "PRINTBUTTONC", "PRINTBUTTONLC", "FORCEKANA", "DRAWLINE", "CUSTOMDRAWLINE", "DRAWLINEFORM", "CLEARLINE",
   "IF", "ELSEIF", "ELSE", "ENDIF", "SIF", "SELECTCASE", "CASE", "CASEELSE", "ENDSELECT",
   "FOR", "NEXT", "WHILE", "WEND", "DO", "LOOP", "REPEAT", "REND", "BREAK", "CONTINUE",
-  "CALL", "JUMP", "RETURN", "GOTO", "RESTART", "INPUT", "INPUTS", "ONEINPUT", "ONEINPUTS", "WAIT", "FORCEWAIT",
+  "CALL", "JUMP", "RETURN", "GOTO", "RESTART", "INPUT", "INPUTS", "ONEINPUT", "ONEINPUTS", "WAIT", "FORCEWAIT", "TWAIT",
+  "TINPUT", "TINPUTS", "TONEINPUT", "TONEINPUTS",
   "SETCOLOR", "RESETCOLOR", "SETBGCOLOR", "RESETBGCOLOR", "ALIGNMENT", "QUIT", "THROW",
-  "LOADGLOBAL", "SAVEGLOBAL", "CLEARMEMORY", "RETURNF", "FONTSTYLE", "REDRAW",
-  "MAP_RELEASE", "MAP_CREATE", "MAP_SET", "PRINTDATA", "PRINTDATAL", "PRINTDATAW", "DATA", "DATAFORM", "ENDDATA",
-  "DEBUGPRINT", "DEBUGPRINTL", "DEBUGPRINTFORM", "DEBUGPRINTFORML",
+  "LOADGLOBAL", "SAVEGLOBAL", "CLEARMEMORY", "RETURNF", "FONTSTYLE", "FONTBOLD", "FONTITALIC", "FONTREGULAR", "REDRAW",
+  "MAP_RELEASE", "MAP_CREATE", "MAP_SET", "STRDATA", "DATA", "DATAFORM", "DATALIST", "ENDLIST", "ENDDATA",
+  "DEBUGPRINT", "DEBUGPRINTL", "DEBUGPRINTFORM", "DEBUGPRINTFORML", "DEBUGCLEAR",
   "SPLIT", "VARSET", "ARRAYREMOVE", "SETBIT", "CLEARBIT", "INVERTBIT",
-  "RESETDATA", "ADDCHARA", "BEGIN", "CALLF", "CALLFORM", "CALLFORMF", "TRYCALLFORM", "TRYCCALLFORM", "CATCH", "ENDCATCH",
+  "BITMAP_CACHE_ENABLE", "SETFONT", "RESETDATA", "ADDCHARA", "DELCHARA", "DELALLCHARA", "COPYCHARA", "ADDCOPYCHARA", "SWAPCHARA", "PICKUPCHARA", "BEGIN", "CALLF", "TRYCALLF", "CALLFORM", "CALLFORMF", "TRYCALLFORM", "TRYCALLFORMF", "TRYCCALLFORM", "TRYCALL", "TRYJUMP", "TRYCCALL", "TRYCJUMP", "JUMPFORM", "TRYJUMPFORM", "TRYCJUMPFORM", "CATCH", "ENDCATCH",
+  "TIMES", "BAR", "BARL", "BARSTR", "SKIPDISP", "NOSKIP", "ENDNOSKIP", "ISSKIP", "MOUSESKIP", "REUSELASTLINE", "CVARSET",
+  "ARRAYSHIFT", "ARRAYSORT", "ARRAYCOPY", "SWAP", "POWER", "HTML_TAGSPLIT", "EXISTFUNCTION", "CLIENTWIDTH", "CLIENTHEIGHT", "FIND_CHARADATA", "EXISTFILE",
+  "SIGN", "ALLSAMES", "NOSAMES", "COLOR_FROMNAME", "COLOR_FROMRGB", "CHKFONT", "LINEISEMPTY", "HTML_GETPRINTEDSTR", "GETDOINGFUNCTION",
+  "MESSKIP", "GETKEY", "GETKEYTRIGGERED", "GETTEXTBOX", "REGEXPMATCH", "STRJOIN", "INRANGEARRAY", "INRANGECARRAY", "ENCODETOUNI", "CLEARMEMORY", "GETMEMORYUSAGE", "PRINT_RECT", "PRINT_SPACE", "CALLTRAIN", "STOPCALLTRAIN", "SETVAR", "VARSETEX", "SETCOLORBYNAME", "SETBGCOLORBYNAME",
+  "GETTIME", "GETMILLISECOND", "GETSECOND", "RANDOMIZE", "DUMPRAND", "INITRAND", "WAITANYKEY",
+  "AWAIT", "PLAYSOUND", "STOPSOUND", "SETANIMETIMER", "TOOLTIP_SETDELAY", "TOOLTIP_SETDURATION", "TOOLTIP_SETCOLOR",
 ]);
+export interface PrintVariant {
+  argument: "" | "V" | "S" | "FORM" | "FORMS";
+  single: boolean;
+  align: "" | "C" | "LC";
+  mode: "" | "K" | "D";
+  end: "" | "L" | "W";
+}
+const PRINT_PATTERN = /^PRINT(SINGLE)?(V|S|FORMS|FORM)?(C|LC)?([KD])?([LW])?$/;
+export const PRINTDATA_PATTERN = /^PRINTDATA([KD])?([LW])?$/;
+// PRINT(SINGLE)(|V|S|FORM|FORMS)(|C|LC)(|K|D)(|L|W), with Emuera's combination rules.
+const printVariants = new Map<string, PrintVariant | undefined>();
+// Memoized because the runtime classifies every executed instruction.
+export function printVariant(op: string): PrintVariant | undefined {
+  if (printVariants.has(op)) return printVariants.get(op);
+  const match = PRINT_PATTERN.exec(op);
+  let variant: PrintVariant | undefined;
+  if (match) {
+    const [, single, argument = "", align = "", mode = "", end = ""] = match;
+    if (!(single && (align || end)) && !(align && argument !== "" && argument !== "FORM"))
+      variant = { argument, single: !!single, align, mode, end } as PrintVariant;
+  }
+  printVariants.set(op, variant);
+  return variant;
+}
+const printData = new Map<string, boolean>();
+export function isPrintData(op: string): boolean {
+  let result = printData.get(op);
+  if (result === undefined) printData.set(op, result = PRINTDATA_PATTERN.test(op));
+  return result;
+}
+export function isSupported(op: string): boolean {
+  return SUPPORTED.has(op) || !!printVariant(op) || PRINTDATA_PATTERN.test(op);
+}
 export interface Instruction extends Line { op: string; args: string; target: number }
 export interface Compiled {
   code: Instruction[];
@@ -26,12 +69,14 @@ export interface Compiled {
 export function classify(line: Line): { op: string; args: string } {
   if (line.text.startsWith("$")) return { op: "LABEL", args: line.text.slice(1).trim() };
   // Literal PRINT arguments start after one separator; further spaces are output.
-  const print = /^((?:DEBUG)?PRINT(?:FORM)?[LW]?|PRINTPLAIN(?:FORM)?)(?:[ \t](.*))?$/i.exec(line.text);
-  if (print) return { op: key(print[1]!), args: print[2] ?? "" };
+  const print = /^(\S+?)(?:[ \t](.*))?$/.exec(line.text);
+  if (print && LITERAL_TEXT_INSTRUCTION.test(print[1]!)) return { op: key(print[1]!), args: print[2] ?? "" };
   const command = /^(\S+)\s*(.*)$/.exec(line.text)!;
   const op = key(command[1]!);
-  if (SUPPORTED.has(op) || /^(?:DEBUG)?PRINT/.test(op)) return { op, args: command[2]! };
-  if (/^[^\s=]+(?::.*?)?\s*(?:\+\+|--|(?:'|[+\-*/%&|^])?=)(?!=)/u.test(line.text))
+  // Instructions match whole identifiers: "printNum ++" assigns a variable, it is not a PRINT variant.
+  if (isSupported(op) || op.startsWith("DEBUGPRINT")) return { op, args: command[2]! };
+  // `VALUE ,= ,` is still an assignment line in Emuera (rejected for the extra left-hand comma).
+  if (/^[^\s=,]+(?::.*?)?(?:\s*,[\s\w]*)?\s*(?:\+\+|--|(?:'|[+\-*/%&|^])?=)(?!=)/u.test(line.text))
     return { op: "ASSIGN", args: line.text };
   return { op, args: command[2]! };
 }
@@ -49,18 +94,18 @@ export function compile(routine: Routine): Compiled {
     }
     if (["IF", "SELECTCASE", "FOR", "WHILE", "DO", "REPEAT"].includes(line.op))
       stack.push({ op: line.op, start: i, branches: [i] });
-    else if (line.op === "TRYCCALLFORM") stack.push({ op: line.op, start: i, branches: [i] });
+    else if (TRY_CATCH.has(line.op)) stack.push({ op: line.op, start: i, branches: [i] });
     else if (line.op === "CATCH") {
       const frame = stack.at(-1);
-      if (frame?.op !== "TRYCCALLFORM" || frame.branches.length !== 1) throw new EraError("Unmatched CATCH", line);
+      if (!frame || !TRY_CATCH.has(frame.op) || frame.branches.length !== 1) throw new EraError("Unmatched CATCH", line);
       frame.branches.push(i);
       code[frame.start]!.target = i;
     } else if (line.op === "ENDCATCH") {
       const frame = stack.pop();
-      if (frame?.op !== "TRYCCALLFORM" || frame.branches.length !== 2) throw new EraError("Unmatched ENDCATCH", line);
+      if (!frame || !TRY_CATCH.has(frame.op) || frame.branches.length !== 2) throw new EraError("Unmatched ENDCATCH", line);
       code[frame.branches[1]!]!.target = i;
     }
-    else if (["PRINTDATA", "PRINTDATAL", "PRINTDATAW"].includes(line.op))
+    else if (PRINTDATA_PATTERN.test(line.op) || line.op === "STRDATA")
       stack.push({ op: "PRINTDATA", start: i, branches: [i] });
     else if (line.op === "ENDDATA") {
       const frame = stack.pop();

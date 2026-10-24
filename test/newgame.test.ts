@@ -72,13 +72,13 @@ PRINTFORML {CSVBASE(7,0)} {CSVABL(7,1)} {EXISTCSV(7)} {EXISTCSV(8)}`,
   });
   assert.deepEqual(printed(result), ["2 Template 7", "2000 42 2000", "1 1140 1 Profile", "0 8 1000", "2000 2 1 0"]);
 });
-test("BEGIN FIRST unwinds callers and dispatches priority, regular and later events", () => {
+test("BEGIN returns like RETURN, the caller continues and the state changes when the system call ends", () => {
   const result = run(`@SYSTEM_TITLE
 CALL START
-THROW must not return to title
+PRINTL caller continues
 @START
 BEGIN FIRST
-THROW must not return to caller
+PRINTL not reached
 @EVENTFIRST
 PRINTL regular
 @EVENTFIRST
@@ -87,17 +87,22 @@ PRINTL later
 @EVENTFIRST
 #PRI
 PRINTL priority`);
-  assert.deepEqual(printed(result), ["priority", "regular", "later"]);
-  const unsupported = run("@SYSTEM_TITLE\nBEGIN SHOP");
-  assert.equal(unsupported.status, "error");
-  assert.match(unsupported.error!.message, /BEGIN SHOP/);
+  assert.deepEqual(printed(result), ["caller continues", "priority", "regular", "later"]);
+  const invalid = run("@SYSTEM_TITLE\nBEGIN NOWHERE");
+  assert.equal(invalid.status, "error");
+  assert.match(invalid.error!.message, /NOWHERE/);
 });
 test("dynamic calls, expression calls, omitted defaults and missing-target catch blocks execute correctly", () => {
   const result = run(`@SYSTEM_TITLE
+RESULT = 1
 CALLF DOUBLE(3)
-PRINTFORML {RESULT}
-CALLFORMF DOUBLE({4})
-PRINTFORML {RESULT}
+PRINTFORML {A} {RESULT}
+CALLFORMF DOU%"BLE"%(4)
+PRINTFORML {A} {RESULT}
+TRYCALLFORMF MISSING
+TRYCALLF MISSING_TOO(1)
+TRYCALLFORMF DOUBLE(5)
+PRINTFORML {A} {RESULT}
 CALLFORM SHOW(,8)
 TRYCCALLFORM MISSING
   THROW missing call must not run this branch
@@ -112,18 +117,23 @@ ENDCATCH
 TRYCALLFORM MISSING
 @DOUBLE(ARG)
 #FUNCTION
-RETURNF ARG * 2
+A = ARG * 2
+RETURNF A
 @SHOW(ARGS="default", ARG=0)
 PRINTFORML %ARGS% {ARG}`);
-  assert.deepEqual(printed(result), ["6", "8", "default 8", "caught missing", "found 9", "success"]);
+  assert.deepEqual(printed(result), ["6 1", "8 1", "10 1", "default 8", "caught missing", "found 9", "success"]);
   const failure = run("@SYSTEM_TITLE\nTRYCCALLFORM BAD\nCATCH\nPRINTL should not hide errors\nENDCATCH\n@BAD\nTHROW broken");
   assert.equal(failure.status, "error");
   assert.match(failure.error!.message, /broken/);
-  const printedFunction = run('@SYSTEM_TITLE\nCALLFORMF BAD()\n@BAD\n#FUNCTION\nPRINTL forbidden\nRETURNF 1');
-  assert.equal(printedFunction.status, "error");
-  assert.match(printedFunction.error!.message, /attempted output or input/);
+  const printedFunction = run('@SYSTEM_TITLE\nPRINTFORML [%COLORED("a", 0xFF0000) + COLORED("b", 0x00FF00)%]\n@COLORED(ARGS, ARG)\n#FUNCTIONS\nSETCOLOR ARG\nPRINTFORM %ARGS%\nRESETCOLOR\nRETURNF');
+  assert.equal(printedFunction.status, "halted", JSON.stringify(printedFunction.error));
+  assert.deepEqual(printedFunction.output.flatMap((item) => "text" in item ? [[item.text, item.style.color]] : []),
+    [["a", "#ff0000"], ["b", "#00ff00"], ["[]", "#c0c0c0"]]);
+  const waitingFunction = run('@SYSTEM_TITLE\nCALLFORMF BAD()\n@BAD\n#FUNCTION\nWAIT\nRETURNF 1');
+  assert.equal(waitingFunction.status, "error");
+  assert.match(waitingFunction.error!.message, /attempted input/);
 });
-test("REF array and scalar parameters mutate callers and validate types", () => {
+test("REF parameters bind whole arrays like Emuera and validate types", () => {
   const result = run(`@SYSTEM_TITLE
 #DIM DATA, 3
 #DIM INDEX
@@ -131,20 +141,29 @@ DATA:0 = 5,6,7
 INDEX = 1
 CALL CHANGE(DATA, DATA:INDEX)
 PRINTFORML {DATA:0} {DATA:1} {DATA:2}
-@CHANGE(ARRAY, SCALAR)
+CALL CLEAR_VALUE(DATA:2)
+PRINTFORML {DATA:0} {DATA:1} {DATA:2}
+@CHANGE(ARRAY, WHOLE)
 #DIM REF ARRAY, 0
-#DIM REF SCALAR
-SCALAR = 42
+#DIM REF WHOLE
+WHOLE = 42
 ARRAY:2 = 99
-PRINTFORML {VARSIZE("ARRAY")}
-CALL CLEAR_VALUE(SCALAR)
+PRINTFORML {VARSIZE("ARRAY")} {VARSIZE("WHOLE")}
 @CLEAR_VALUE(DEST)
 #DIM REF DEST
 VARSET DEST`);
-  assert.deepEqual(printed(result), ["3", "5 0 99"]);
-  const wrong = run('@SYSTEM_TITLE\nCALL BAD(A)\n@BAD(ARRAY)\n#DIMS REF ARRAY, 0');
-  assert.equal(wrong.status, "error");
-  assert.match(wrong.error!.message, /REF type or dimensions mismatch/);
+  // Emuera ignores the argument's index: a sizeless REF is a 1-D reference to the whole array.
+  assert.deepEqual(printed(result), ["3 3", "42 6 99", "0 0 0"]);
+  for (const [source, message] of [
+    ['@SYSTEM_TITLE\nCALL BAD(A)\n@BAD(ARRAY)\n#DIMS REF ARRAY, 0', /REF type mismatch/],
+    ['@SYSTEM_TITLE\n#DIM D2, 2, 2\nCALL BAD(D2)\n@BAD(ARRAY)\n#DIM REF ARRAY', /REF dimension mismatch/],
+    ['@SYSTEM_TITLE\nCALL BAD(CFLAG)\n@BAD(ARRAY)\n#DIM REF ARRAY', /character variable/],
+    ['@SYSTEM_TITLE\n#DIM CONST K = 1, 2\nCALL BAD(K)\n@BAD(ARRAY)\n#DIM REF ARRAY', /constant/],
+  ] as const) {
+    const wrong = run(source);
+    assert.equal(wrong.status, "error", source);
+    assert.match(wrong.error!.message, message);
+  }
 });
 test("sparse ARRAYREMOVE shifts values, zero-fills tails and supports string arrays", () => {
   const result = run(`@SYSTEM_TITLE

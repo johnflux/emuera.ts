@@ -115,11 +115,23 @@ test("bundled game renders its title and runs real custom-character creation", {
   const map = wideRuntime.input("0");
   assert.equal(map.status, "waiting", JSON.stringify(map.error));
   assert.ok(map.output.some((item) => "text" in item && item.text.includes("Select type of map")));
-  const nextSubsystem = wideRuntime.input("1");
-  assert.equal(nextSubsystem.status, "error", "Do not silently skip housing/map rendering");
-  assert.equal(nextSubsystem.error!.file, "ERB/COLOREDMAPS/DRAW_COLOREDMAP.ERB");
-  assert.equal(nextSubsystem.error!.line, 23);
-  assert.match(nextSubsystem.error!.message, /Unexpected ',' in expression/, JSON.stringify(nextSubsystem.error));
+  const housing = wideRuntime.input("1");
+  assert.equal(housing.status, "waiting", JSON.stringify(housing.error));
+  assert.ok(housing.output.some((item) => item.type === "html" && item.text.includes("<font face='ＭＳ ゴシック'>")), "Colored map renders");
+  assert.ok(housing.output.some((item) => "text" in item && item.text.includes("Select a place to stay.")));
+  const chosen = wideRuntime.input("1999");
+  assert.ok(chosen.output.some((item) => "text" in item && item.text.includes("Hakurei Shrine has been chosen.")), JSON.stringify(chosen.error));
+  wideRuntime.input("");
+  const rooms = wideRuntime.input("");
+  assert.equal(rooms.input?.kind, "integer", JSON.stringify(rooms.error));
+  const roomHint = rooms.output.filter((item) => "text" in item && ["This map has more than one ", "room choice", "."].includes(item.text));
+  assert.equal(roomHint.length, 3, "Output from an expression function precedes the calling PRINTFORML");
+  assert.notEqual(roomHint[1]!.style.color, roomHint[0]!.style.color);
+  const moved = wideRuntime.input("0");
+  assert.ok(moved.output.some((item) => "text" in item && item.text.includes("Moved into the Back Room.")), JSON.stringify(moved.error));
+  const settings = wideRuntime.input("");
+  assert.equal(settings.status, "waiting", JSON.stringify(settings.error));
+  assert.ok(settings.output.some((item) => item.type === "html" && item.text.includes("Re-customize yourself")));
   const tableProbe = { ...game, routines: new Map(game.routines) };
   indexScript(tableProbe, `@TABLE_PROBE
 CALL Name_Array_Set

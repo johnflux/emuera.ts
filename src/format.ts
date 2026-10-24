@@ -29,9 +29,11 @@ function readTemplate(source: string, start: number, stop = ""): Segment {
   const flush = (): void => {
     if (plain) { parts.push({ kind: "literal", value: plain }); plain = ""; }
   };
+  const inArm = stop === "#" || stop === "\\@";
   let i = start;
   for (; i < source.length;) {
-    if (stop && source.startsWith(stop, i) && !(stop === "\\@" && conditionalQuestion(source, i + 2) >= 0)) break;
+    // Emuera's AnalyseFormattedString: inside either conditional arm the next \@ closes it; arms never nest.
+    if (stop && source.startsWith(stop, i) || inArm && source.startsWith("\\@", i)) break;
     if (source.startsWith("\\@", i)) {
       flush();
       const conditional = readConditional(source, i);
@@ -50,11 +52,11 @@ function readTemplate(source: string, start: number, stop = ""): Segment {
     } else if (source[i] === "\\") {
       const next = source[i + 1];
       if (next === undefined) throw new EraError("Unterminated format escape");
-      plain += next === "n" ? "\n" : next === "t" ? "\t" : next;
+      plain += next === "n" ? "\n" : next === "t" ? "\t" : next === "s" ? " " : next === "S" ? "\u3000" : next;
       i += 2;
     } else { plain += source[i]; i++; }
   }
-  if (stop && !source.startsWith(stop, i)) throw new EraError(`Unclosed formatted string (expected ${stop})`);
+  if (stop && !source.startsWith(stop, i) && !(inArm && source.startsWith("\\@", i))) throw new EraError(`Unclosed formatted string (expected ${stop})`);
   flush();
   // Conditional FORM arms ignore separator padding.
   if (stop === "#" || stop === "\\@") {
@@ -69,6 +71,8 @@ export function readConditional(source: string, start: number): Segment {
   if (question < 0) throw new EraError("FORM conditional requires a condition and '?'");
   const condition = parseExpression(source.slice(start + 2, question).trim());
   const yes = readTemplate(source, question + 1, "#");
+  // A true arm closed by \@ has no false arm (Emuera warns and treats it as empty).
+  if (source.startsWith("\\@", yes.end)) return { expression: { kind: "conditional", condition, yes: yes.expression, no: { kind: "format", parts: [] } }, end: yes.end + 2 };
   const no = readTemplate(source, yes.end + 1, "\\@");
   return { expression: { kind: "conditional", condition, yes: yes.expression, no: no.expression }, end: no.end + 2 };
 }

@@ -5,10 +5,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { compatibility } from "./compatibility.js";
 import { demoGame } from "./demo.js";
-import { GAME_ROOT, loadGame, type Game } from "./loader.js";
+import { displayDefaults, GAME_ROOT, loadGame, stillFrame, type DisplaySettings, type Game } from "./loader.js";
 import { EraError, key } from "./model.js";
 import { GAME_INSTRUCTION_LIMIT, Runtime } from "./runtime.js";
-import { FileGlobalStore, MemoryGlobalStore, type GlobalStore } from "./storage.js";
+import { FileGlobalStore, FileSaveStore, MemoryGlobalStore, MemorySaveStore, type GlobalStore, type SaveStore } from "./storage.js";
 import { patchTitleImage } from "./render-patches.js";
 
 const WEB_ROOT = fileURLToPath(new URL("../web/", import.meta.url));
@@ -57,8 +57,25 @@ async function resourceFile(root: string, relative: string): Promise<string> {
   if (!(await stat(resolved)).isFile()) throw new HttpError(404, "Image file not found");
   return resolved;
 }
+function displaySettings(value: unknown): Partial<DisplaySettings> | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "object" || value === null || Array.isArray(value)) throw new HttpError(400, "display must be an object");
+  const result: Partial<DisplaySettings> = {};
+  for (const [name, setting] of Object.entries(value)) {
+    if (name === "foreground" || name === "background" || name === "selection") {
+      if (typeof setting !== "string" || !/^#[0-9a-f]{6}$/i.test(setting)) throw new HttpError(400, `display.${name} must be a #rrggbb color`);
+      result[name] = setting.toLowerCase();
+    } else if (name === "font") {
+      if (typeof setting !== "string" || setting.length > 100 || /["\\;{}<>]/.test(setting)) throw new HttpError(400, "display.font is not a valid font name");
+      result.font = setting;
+    } else throw new HttpError(400, `Unknown display setting: ${name}`);
+  }
+  return result;
+}
+
 export function createApp(game: Game, development = false, store: GlobalStore = game.root
-  ? new FileGlobalStore(path.join(game.root, ".era-typescript", "global.json")) : new MemoryGlobalStore()) {
+  ? new FileGlobalStore(path.join(game.root, ".era-typescript", "global.json")) : new MemoryGlobalStore(),
+  saves: SaveStore = game.root ? new FileSaveStore(path.join(game.root, ".era-typescript", "saves")) : new MemorySaveStore()) {
   const sessions = new Map<string, { runtime: Runtime; used: number }>();
   const report = compatibility(game);
   const instance = randomUUID();
@@ -74,13 +91,14 @@ export function createApp(game: Game, development = false, store: GlobalStore = 
       if (origin && origin !== `http://${host}`) throw new HttpError(403, "Cross-origin requests are not allowed");
       const url = new URL(request.url ?? "/", `http://${host}`);
       if (request.method === "GET" && url.pathname === "/api/runtime") {
-        json(response, { instance, development });
+        json(response, { instance, development, display: displayDefaults(game) });
         return;
       }
       if (request.method === "GET" && url.pathname === "/api/compatibility") { json(response, report); return; }
       if (request.method === "POST" && url.pathname === "/api/start") {
         const data = await body(request);
         if (data.mode !== "game" && data.mode !== "demo") throw new HttpError(400, "mode must be game or demo");
+        const display = displaySettings(data.display);
         if (data.columns !== undefined && (typeof data.columns !== "number" || !Number.isSafeInteger(data.columns) || data.columns < 20 || data.columns > 1000))
           throw new HttpError(400, "columns must be an integer from 20 to 1000");
         const now = Date.now();
@@ -91,7 +109,9 @@ export function createApp(game: Game, development = false, store: GlobalStore = 
         try {
           const runtime = new Runtime(data.mode === "demo" ? demoGame(game) : game, data.mode === "game" ? GAME_INSTRUCTION_LIMIT : 50_000, {
             store: data.mode === "game" ? store : new MemoryGlobalStore(),
+            saves: data.mode === "game" ? saves : new MemorySaveStore(),
             columns: typeof data.columns === "number" ? data.columns : 120,
+            ...(display ? { display } : {}),
           });
           const snapshot = runtime.start();
           if (snapshot.status === "waiting") sessions.set(id, { runtime, used: now });
@@ -102,17 +122,20 @@ export function createApp(game: Game, development = false, store: GlobalStore = 
         }
         return;
       }
-      if (request.method === "POST" && url.pathname === "/api/input") {
+      if (request.method === "POST" && (url.pathname === "/api/input" || url.pathname === "/api/timeout")) {
+        const timeout = url.pathname === "/api/timeout";
         const data = await body(request);
-        if (typeof data.session !== "string" || typeof data.value !== "string") throw new HttpError(400, "Expected session and value strings");
+        if (typeof data.session !== "string" || (!timeout && typeof data.value !== "string")) throw new HttpError(400, "Expected session and value strings");
         if (data.columns !== undefined && (typeof data.columns !== "number" || !Number.isSafeInteger(data.columns) || data.columns < 20 || data.columns > 1000))
           throw new HttpError(400, "columns must be an integer from 20 to 1000");
+        const display = displaySettings(data.display);
         const session = sessions.get(data.session);
         if (!session) throw new HttpError(404, "Session expired or does not exist; start a new run");
         session.used = Date.now();
         try {
           if (typeof data.columns === "number") session.runtime.setColumns(data.columns);
-          const snapshot = session.runtime.input(data.value);
+          if (display) session.runtime.setDisplay(display);
+          const snapshot = timeout ? session.runtime.timeout() : session.runtime.input(data.value as string);
           if (snapshot.status !== "waiting") sessions.delete(data.session);
           json(response, { session: data.session, ...patchTitleImage(game, snapshot) });
         } catch (error) {
@@ -123,8 +146,10 @@ export function createApp(game: Game, development = false, store: GlobalStore = 
       }
       if (request.method === "GET" && url.pathname === "/api/sprite") {
         const name = url.searchParams.get("name") ?? "";
-        const sprite = game.sprites.get(key(name));
-        if (!sprite) throw new HttpError(404, `Unknown sprite: ${name}`);
+        const definition = game.sprites.get(key(name));
+        if (!definition) throw new HttpError(404, `Unknown sprite: ${name}`);
+        const sprite = stillFrame(definition);
+        if (!sprite) throw new HttpError(404, `Animation sprite has no frames: ${name}`);
         // Validate before handing metadata to the browser.
         await resourceFile(path.join(game.root, "resources"), sprite.file);
         json(response, { ...sprite, url: `/resources/${sprite.file.split(path.sep).map(encodeURIComponent).join("/")}` });

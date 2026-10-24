@@ -91,7 +91,7 @@ test("formatted literals, nested string expressions and lazy FORM conditionals",
   const source = String.raw`@SYSTEM_TITLE
 LOCALS '= @"Version: \@ 1 ? %TOSTR(4,"000")% # %MISSING()% \@"
 PRINTFORML %LOCALS%
-LOCALS '= @"\@ 0 ? wrong # \@ 1 ? right # wrong \@ \@"
+LOCALS '= @"\@ 0 ? wrong # \@\@ 1 ? right # wrong \@"
 PRINTFORML %LOCALS%
 PRINTFORML \%literal\% \{braces\}
 PRINTSL @"Nested %TOSTR(3, "00")%, %@"inner {2}"%"`;
@@ -102,7 +102,7 @@ PRINTSL @"Nested %TOSTR(3, "00")%, %@"inner {2}"%"`;
   assert.equal(splitArguments(argumentsSource).length, 2);
   assert.equal(stripComment(argumentsSource + " ; outside"), argumentsSource);
 });
-test("expression functions bind omitted arguments, enforce types and cannot print", () => {
+test("expression functions bind omitted arguments, enforce types and cannot wait for input", () => {
   const result = new Runtime(game(`@SYSTEM_TITLE
 PRINTFORML {ADD(3,,5)} %LABEL()%
 RETURN
@@ -115,7 +115,7 @@ RETURNF ARGS`)).start();
   assert.equal(printed(result), "12 default");
   assert.equal(result.status, "halted", JSON.stringify(result.error));
   for (const [body, expected] of [
-    ['PRINTL forbidden\nRETURNF 1', /attempted output/],
+    ['WAIT\nRETURNF 1', /attempted input/],
     ['RETURNF "wrong"', /integer/],
   ] as const) {
     const invalid = new Runtime(game("@SYSTEM_TITLE\nA = FUNC()\nRETURN\n@FUNC\n#FUNCTION\n" + body)).start();
@@ -127,7 +127,7 @@ test("FORM conditionals can be string operands inside percent interpolation", ()
   const result = new Runtime(game(String.raw`@SYSTEM_TITLE
 LOCALS = first
 PRINTFORML %LOCALS + \@ STRLENS(LOCALS) ? %" "%#\@%second
-PRINTSL @"%LOCALS + \@ 0 ? %MISSING()% # \@ 1 ? , %TOSTR(2,"00")% # wrong \@ \@%"
+PRINTSL @"%LOCALS + \@ 0 ? %MISSING()% # , %TOSTR(2,"00")%\@%"
 #DIM A・B = 7
 PRINTFORML {A・B}`)).start();
   assert.equal(result.status, "halted", JSON.stringify(result.error));

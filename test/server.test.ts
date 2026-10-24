@@ -17,7 +17,17 @@ test("loader decodes legacy files and indexes CSV, sprites, headers and scripts"
       writeFile(path.join(root, "ERB", "Custom.ERD"), "0,first\n2,second"),
       writeFile(path.join(root, "CSV", "Flag.csv"), "0,zero\n7,score"),
       writeFile(path.join(root, "CSV", "_Replace.csv"), "お金の単位, coins\n単位の位置, 後"),
-      writeFile(path.join(root, "resources", "images.csv"), "TEST,picture.png,1,2,30,40"),
+      writeFile(path.join(root, "resources", "images.csv"), [
+        "TEST,picture.png,1,2,30,40",
+        "TEST,other.png,0,0,1,1",
+        "TYPO,picture.png,1,2,30,40]",
+        "MOVING,ANIME,20,10",
+        "MOVING,picture.png,0,0,20,10,1,2,400",
+        "MOVING,picture.png,20,0,20,10",
+        "EMPTY,ANIME,5,5",
+        "BADANIME,ANIME,0,5",
+        "NOEXT,picture",
+      ].join("\n")),
       writeFile(path.join(root, "legacy.txt"), Buffer.from([0x82, 0xa0])),
       writeFile(path.join(root, "utf16.txt"), Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from("hello", "utf16le")])),
     ]);
@@ -27,6 +37,14 @@ test("loader decodes legacy files and indexes CSV, sprites, headers and scripts"
     assert.equal(game.names.get("CUSTOM")?.get("SECOND"), 2);
     assert.deepEqual(game.money, { label: "coins", first: false });
     assert.equal(game.sprites.get("TEST")?.width, 30);
+    // Emuera keeps the first definition and treats an unparseable rectangle as the whole image.
+    assert.equal(game.sprites.get("TEST")?.file, "picture.png");
+    assert.deepEqual({ ...game.sprites.get("TYPO") }, { file: "picture.png", x: 0, y: 0, width: 0, height: 0 });
+    assert.deepEqual(game.sprites.get("MOVING")?.animation?.frames.map((frame) => [frame.x, frame.offsetX ?? 0, frame.delay]), [[0, 1, 400], [20, 0, 1000]]);
+    assert.deepEqual(game.sprites.get("EMPTY")?.animation?.frames, []);
+    assert.equal(game.sprites.has("BADANIME"), false);
+    assert.deepEqual(game.diagnostics.map((diagnostic) => diagnostic.message).sort(),
+      ["Invalid animation sprite size: BADANIME", "Resource image has no file extension: NOEXT", "Sprite name already used: TEST"]);
     assert.deepEqual(game.routines.get("SYSTEM_TITLE")![0]!.lines.map((line) => line.text), ["PRINTL hello"]);
     assert.equal(await readText(path.join(root, "legacy.txt")), "\u3042");
     assert.equal(await readText(path.join(root, "utf16.txt")), "hello");
@@ -55,7 +73,7 @@ test("HTTP UI, isolated sessions, real image bytes, sprite metadata, errors and 
       method: "POST", headers: { "Content-Type": "application/json", ...headers }, body: JSON.stringify(data),
     });
     const page = await fetch(base);
-    assert.match(await page.text(), /Run bundled game/);
+    assert.match(await page.text(), /id="game"[^>]*>Bundled game</);
     assert.match(page.headers.get("content-security-policy")!, /script-src 'self'/);
     const font = await fetch(base + "/fonts/BIZUDGothic-Regular.ttf");
     assert.equal(font.status, 200);
@@ -70,15 +88,20 @@ test("HTTP UI, isolated sessions, real image bytes, sprite metadata, errors and 
     assert.equal(runtimeInfo.development, false);
     assert.equal(typeof runtimeInfo.instance, "string");
     assert.equal((await (await fetch(base + "/api/runtime")).json()).instance, runtimeInfo.instance);
+    assert.deepEqual(runtimeInfo.display, { foreground: "#c0c0c0", background: "#000000", selection: "#ffff00", font: "ＭＳ ゴシック" });
+    for (const display of ["#fff", { foreground: "red" }, { font: 'a"b' }, { unknown: "#000000" }])
+      assert.equal((await post("/api/start", { mode: "game", display })).status, 400);
     const session = await (await post("/api/start", { mode: "game" })).json();
     assert.equal(session.status, "waiting");
     assert.equal((await post("/api/input", { session: session.session, value: "bad" })).status, 400);
+    assert.equal((await post("/api/timeout", { session: session.session })).status, 400);
     for (const columns of [0, 1001, 1.5, "120"]) {
       assert.equal((await post("/api/input", { session: session.session, value: "17", columns })).status, 400);
     }
-    const resumed = await (await post("/api/input", { session: session.session, value: "17", columns: 90 })).json();
+    const resumed = await (await post("/api/input", { session: session.session, value: "17", columns: 90, display: { foreground: "#ABCDEF" } })).json();
     assert.equal(resumed.status, "halted");
     assert.equal(resumed.output[0].text, "17");
+    assert.equal(resumed.output[0].style.color, "#abcdef");
     assert.equal(resumed.output[2].text, "-".repeat(90));
     assert.equal((await post("/api/input", { session: session.session, value: "0" })).status, 404);
     const sprite = await (await fetch(base + "/api/sprite?name=pixel")).json();

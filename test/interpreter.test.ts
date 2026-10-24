@@ -48,10 +48,10 @@ test("pre-parsed CASE, assignment, CALL and FORM forms reevaluate on each execut
   const result = runtime(`@SYSTEM_TITLE
 FOR A, 0, 6
   CALL CLASSIFY, A
-  CALL BUMP(FLAG:1, A)
-  CALL BUMP(FLAG:1, A)
+  CALL BUMP(FLAG, A)
+  CALL BUMP(FLAG, A)
 NEXT
-PRINTFORML total={FLAG:1}
+PRINTFORML total={FLAG:0}
 RETURN
 @CLASSIFY(V)
 #DIMS LABEL

@@ -3,9 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22.6" },
+  "engines": {
+    "node": ">=22.6"
+  },
   "dependencies": {
-    "parse5": "^8.0.0"
+    "@xmldom/xmldom": "^0.9.12",
+    "parse5": "^8.0.0",
+    "xpath": "^0.0.35"
   },
   "scripts": {
     "dev": "tsx watch --clear-screen=false --include 'web/**' --include 'anon-tw-anon-tw_eng-modding/ERB/**' --include 'anon-tw-anon-tw_eng-modding/CSV/**' --include 'anon-tw-anon-tw_eng-modding/resources/**' src/server.ts --dev",

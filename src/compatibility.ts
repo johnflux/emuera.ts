@@ -1,7 +1,9 @@
-import { classify, SUPPORTED } from "./compiler.js";
+import { classify, isSupported } from "./compiler.js";
+import { BUILTIN_FUNCTIONS } from "./runtime.js";
 import type { Game } from "./loader.js";
 import type { Diagnostic, Line } from "./model.js";
 
+const EVENT_FUNCTIONS = new Set(["EVENTFIRST", "EVENTTRAIN", "EVENTSHOP", "EVENTBUY", "EVENTCOM", "EVENTTURNEND", "EVENTCOMEND", "EVENTEND", "EVENTLOAD"]);
 export interface Gap { feature: string; count: number; examples: Diagnostic[] }
 export function compatibility(game: Game) {
   const gaps = new Map<string, Gap>();
@@ -13,16 +15,15 @@ export function compatibility(game: Game) {
     gaps.set(feature, gap);
   };
   for (const line of game.headers) {
-    if (!/^#DIMS?\s/i.test(line.text)) record(`Header directive: ${line.text.split(/\s/)[0]}`, line);
-    else if (/\b(?:REF|CHARADATA)\b/i.test(line.text)) record("REF/CHARADATA declarations", line);
+    if (!/^#(?:DIMS?|DEFINE)\s/i.test(line.text)) record(`Header directive: ${line.text.split(/\s/)[0]}`, line);
   }
-  for (const routines of game.routines.values()) {
-    if (routines.length > 1) record("Duplicate functions / event dispatch", { ...routines[0]!, text: "" });
+  for (const [name, routines] of game.routines) {
+    // Event functions may be defined repeatedly and are dispatched in #PRI/regular/#LATER order.
+    if (routines.length > 1 && !EVENT_FUNCTIONS.has(name)) record("Duplicate non-event functions", { ...routines[0]!, text: "" });
     for (const routine of routines) {
       functions++;
       for (const directive of routine.directives) {
-        if (!/^#DIMS?\s/i.test(directive.text) && !/^#FUNCTIONS?$/i.test(directive.text)) record(`Function directive: ${directive.text.split(/\s/)[0]}`, directive);
-        else if (/\b(?:REF|CHARADATA)\b/i.test(directive.text)) record("REF/CHARADATA private declarations", directive);
+        if (!/^#(?:DIMS?\s|(?:LOCAL|ARG)S?SIZE\s|(?:FUNCTIONS?|PRI|LATER|SINGLE|ONLY)$)/i.test(directive.text.trim())) record(`Function directive: ${directive.text.split(/\s/)[0]}`, directive);
       }
       for (const line of routine.lines) {
         if (line.text.startsWith("[")) {
@@ -32,7 +33,8 @@ export function compatibility(game: Game) {
         const { op } = classify(line);
         if (op === "LABEL") continue;
         instructions++;
-        if (op === "ASSIGN" || SUPPORTED.has(op)) supported++;
+        // Builtin functions written as statements store their value in RESULT/RESULTS.
+        if (op === "ASSIGN" || isSupported(op) || (BUILTIN_FUNCTIONS.has(op) && !game.routines.has(op))) supported++;
         else record(`Instruction: ${op}`, line);
       }
     }

@@ -28,7 +28,8 @@ test("data tables retain typed cells, stable IDs, nullable defaults and ordered 
   assert.equal(exec("DT_CELL_ISNULL", "t", 0n, "completed"), 1n);
   assert.equal(exec("DT_CELL_GET", "t", second, "completed", 1n), 2n);
   assert.deepEqual(tables.execute("DT_SELECT", ["t", "label = 'O''Brien'"]), { value: 2n, selected: [first, second] });
-  assert.deepEqual(tables.execute("DT_SELECT", ["t", "label = 'o''brien'"]), { value: 0n, selected: [] });
+  // .NET DataTable string comparisons are case-insensitive unless CaseSensitive is set.
+  assert.deepEqual(tables.execute("DT_SELECT", ["t", "label = 'o''brien'"]), { value: 2n, selected: [first, second] });
   assert.deepEqual(tables.execute("DT_SELECT", ["t", "completed = 2"]), { value: 1n, selected: [second] });
   assert.equal(exec("DT_CELL_SET", "t", first, "completed", -1n, 1n), 1n);
   assert.equal(exec("DT_CELL_GET", "t", 0n, "completed"), -1n);
@@ -71,9 +72,8 @@ test("data-table schema validation is atomic and integer columns clamp like Emue
   assert.equal(exec("DT_CELL_GET", "t", 0n, "small"), 127n);
   assert.equal(exec("DT_CELL_SET", "t", 0n, "id", 42n), 0n);
   assert.equal(exec("DT_CELL_GET", "t", 0n, "id"), id);
-  assert.throws(() => exec("DT_SELECT", "t", "small > 1"), /Unsupported DT_SELECT filter/);
+  assert.throws(() => exec("DT_SELECT", "t", "label = 'unterminated"), /./);
   assert.throws(() => exec("DT_SELECT", "t", "missing = 1"), /Unknown.*column/);
-  assert.throws(() => exec("DT_SELECT", "t", "", "label DESC"), /Unsupported arguments/);
   assert.equal(exec("DT_ROW_LENGTH", "absent"), -1n);
   assert.equal(exec("DT_CELL_GET", "absent", 0n, "x"), 0n);
   assert.equal(exec("DT_CELL_GETS", "absent", 0n, "x"), "");
