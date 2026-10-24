@@ -64,11 +64,16 @@ IF !SPRITECREATED("DEMO_LIGHTS")
     SPRITEANIMEADDFRAME "DEMO_LIGHTS", 900 + FRAME, 0, 0, 80, 20, 0, 0, FRAME == 0 ? 600 # 200
   NEXT
 ENDIF
+; Images draw over the lines below them, so reserve their height (2 lines) as Emuera scripts do.
 HTML_PRINT "<img src='DEMO_LIGHTS' height='200'>"
+PRINTL
 PRINTL
 IF SPRITECREATED("30_BG1")
   PRINTL resources CSV ANIME sprite 30_BG1 (2 frames):
   HTML_PRINT "<img src='30_BG1' height='600'>"
+  REPEAT 5
+    PRINTL
+  REND
 ELSE
   PRINTL The game's CSV animation 30_BG1 is not installed.
 ENDIF

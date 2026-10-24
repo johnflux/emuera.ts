@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { compatibility } from "./compatibility.js";
 import { demoGame } from "./demo.js";
-import { displayDefaults, GAME_ROOT, loadGame, stillFrame, type DisplaySettings, type Game } from "./loader.js";
+import { displayDefaults, displayMetrics, GAME_ROOT, loadGame, stillFrame, type DisplaySettings, type Game } from "./loader.js";
 import { EraError, key } from "./model.js";
 import { GAME_INSTRUCTION_LIMIT, Runtime } from "./runtime.js";
 import { FileGlobalStore, FileSaveStore, MemoryGlobalStore, MemorySaveStore, type GlobalStore, type SaveStore } from "./storage.js";
@@ -91,7 +91,7 @@ export function createApp(game: Game, development = false, store: GlobalStore = 
       if (origin && origin !== `http://${host}`) throw new HttpError(403, "Cross-origin requests are not allowed");
       const url = new URL(request.url ?? "/", `http://${host}`);
       if (request.method === "GET" && url.pathname === "/api/runtime") {
-        json(response, { instance, development, display: displayDefaults(game) });
+        json(response, { instance, development, display: displayDefaults(game), metrics: displayMetrics(game) });
         return;
       }
       if (request.method === "GET" && url.pathname === "/api/compatibility") { json(response, report); return; }

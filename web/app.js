@@ -20,6 +20,8 @@ let pendingImages = [];
 let generation = 0;
 const sprites = new Map();
 const SETTINGS_KEY = "era-typescript.settings";
+/** Emuera's configured font size and line height (emuera.config), the units game image layouts are written in. */
+let metrics = { fontSize: 18, lineHeight: 19 };
 let gameDefaults = { foreground: "#c0c0c0", background: "#000000", selection: "#ffff00", font: "ＭＳ ゴシック" };
 let settings = { ...gameDefaults };
 function savedSettings() {
@@ -56,7 +58,9 @@ const settingsLoaded = (async () => {
   settings = { ...gameDefaults, ...savedSettings() };
   applySettings();
   try {
-    gameDefaults = { ...gameDefaults, ...(await api("/api/runtime")).display };
+    const runtime = await api("/api/runtime");
+    gameDefaults = { ...gameDefaults, ...runtime.display };
+    if (runtime.metrics) metrics = runtime.metrics;
     settings = { ...gameDefaults, ...savedSettings() };
     applySettings();
   } catch { /* the development watcher reports connection errors */ }
@@ -370,12 +374,19 @@ function appendText(parent, value) {
   }
   parent.append(document.createTextNode(value.slice(start)));
 }
-function sizeAttribute(value, fallback) {
+/** CSS pixels per Emuera pixel: the game lays images out against its configured line height, so map that onto ours. */
+function imageScale() {
+  const style = getComputedStyle(terminal);
+  const lineHeight = Number.parseFloat(style.lineHeight);
+  return (Number.isFinite(lineHeight) ? lineHeight : Number.parseFloat(style.fontSize) * 1.25) / metrics.lineHeight;
+}
+function sizeAttribute(value, fallback, scale) {
   if (value === null) return fallback;
-  // Emuera unitless image dimensions are percentages of font size, not pixels.
-  if (/^\d+(?:\.\d+)?px$/.test(value)) return Math.min(4096, Number.parseFloat(value));
-  if (/^\d+(?:\.\d+)?$/.test(value)) return Math.min(4096, Number(value) / 100 * Number.parseFloat(getComputedStyle(terminal).fontSize));
-  throw new Error(`Unsupported image dimension: ${value}`);
+  // Emuera unitless image dimensions are percentages of the configured font size, not pixels.
+  const match = /^(-?\d+(?:\.\d+)?)(px)?$/.exec(value.trim());
+  if (!match) throw new Error(`Unsupported image dimension: ${value}`);
+  const size = (match[2] ? Number(match[1]) : Number(match[1]) * metrics.fontSize / 100) * scale;
+  return Math.max(-4096, Math.min(4096, size));
 }
 async function loadImage(img, url) {
   await new Promise((resolve, reject) => {
@@ -540,9 +551,15 @@ async function pictureCopy(picture) {
   copy.getContext("2d").drawImage(painted, 0, 0);
   return copy;
 }
-async function image(source, token, suppliedSprite) {
+/**
+ * Emuera draws an image from the top of its line (offset by ypos) without changing the line's height; scripts print
+ * blank lines to make room. So the holder only takes the image's width and the picture overflows downwards.
+ */
+async function image(source, token, suppliedSprite, scale = imageScale()) {
   const holder = document.createElement("span");
   holder.className = "sprite";
+  const clip = document.createElement("span");
+  clip.className = "sprite-clip";
   const name = source.getAttribute("src");
   if (!name) throw new Error("Image has no src");
   const draw = async () => {
@@ -576,23 +593,26 @@ async function image(source, token, suppliedSprite) {
       if (token !== generation) return;
       const width = sprite.width || naturalWidth;
       const height = sprite.height || naturalHeight;
-      const targetHeight = sizeAttribute(source.getAttribute("height"), Number.parseFloat(getComputedStyle(terminal).fontSize));
-      const targetWidth = sizeAttribute(source.getAttribute("width"), width / height * targetHeight);
+      const signedHeight = sizeAttribute(source.getAttribute("height") || null, metrics.fontSize * scale, scale) || metrics.fontSize * scale;
+      const signedWidth = sizeAttribute(source.getAttribute("width") || null, 0, scale) || width / height * Math.abs(signedHeight);
+      // Negative sizes flip the picture in place.
+      const targetHeight = Math.abs(signedHeight), targetWidth = Math.abs(signedWidth);
       holder.style.width = `${targetWidth}px`;
-      holder.style.height = `${targetHeight}px`;
+      Object.assign(clip.style, { top: `${sizeAttribute(source.getAttribute("ypos"), 0, scale)}px`, width: `${targetWidth}px`, height: `${targetHeight}px` });
+      if (signedWidth < 0 || signedHeight < 0) clip.style.transform = `scale(${Math.sign(signedWidth)}, ${Math.sign(signedHeight)})`;
+      holder.append(clip);
       for (const layer of layers.length ? layers : [img]) {
         layer.style.width = `${naturalWidth * targetWidth / width}px`;
         layer.style.height = `${naturalHeight * targetHeight / height}px`;
         layer.style.left = `${-sprite.x * targetWidth / width}px`;
         layer.style.top = `${-sprite.y * targetHeight / height}px`;
-        holder.append(layer);
+        clip.append(layer);
       }
       animate(name, holder, layers, sprite.frames?.map((frame) => frame.delay) ?? [], token);
     } catch (error) {
       if (token !== generation) return;
       holder.className = "missing";
       holder.textContent = `[Image ${name}: ${error.message}]`;
-      holder.closest(".line")?.classList.remove("image-line");
     }
   };
   pendingImages.push(draw());
@@ -788,7 +808,7 @@ async function renderSnapshot(snapshot, advanceScreen) {
       const target = line();
       applyStyle(target, output.style);
       applyAlignment(target, "center");
-      target.classList.add("image-line", "title-image");
+      target.classList.add("title-image");
       const lineHeight = Number.parseFloat(getComputedStyle(terminal).fontSize);
       target.dataset.logicalLines = String(output.lines);
       target.dataset.lineHeight = String(lineHeight);
@@ -796,7 +816,7 @@ async function renderSnapshot(snapshot, advanceScreen) {
       const source = document.createElement("span");
       source.setAttribute("src", "TW title");
       source.setAttribute("height", `${output.lines * lineHeight}px`);
-      target.append(await image(source, generation, output.sprite));
+      target.append(await image(source, generation, output.sprite, 1));
       currentLine = null;
       continue;
     }
@@ -824,7 +844,6 @@ async function renderSnapshot(snapshot, advanceScreen) {
     if (output.type === "html") {
       try {
         await renderHtml(output.text, span, output.sprites);
-        if (!span.textContent.trim() && span.querySelector(".sprite")) target.classList.add("image-line");
       }
       catch (error) {
         span.className = "missing";

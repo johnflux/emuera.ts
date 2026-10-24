@@ -75,11 +75,10 @@ main { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 1
 .title-image { overflow: hidden; }
 .line p { margin: 0; min-height: 1.25em; }
 .line.single-line { white-space: pre; overflow: hidden; }
-.image-line, .image-line p { min-height: 0; line-height: 0; }
+.title-image, .title-image p { min-height: 0; line-height: 0; }
 /* With line-height 0 an inline span still paints its background over a font-height box centred on the baseline,
-   half a line above the image, covering the previous line. Image-only lines have no text, so drop the font box. */
-.image-line .output-text { font-size: 0; }
-.image-line .sprite { vertical-align: top; }
+   half a line above the image, covering the previous line. The title strip has no text, so drop the font box. */
+.title-image .output-text { font-size: 0; }
 .line button.choice { font: inherit; background: transparent; color: inherit; border: 0; padding: 0; text-decoration: none; }
 .screen.is-active button.choice:enabled:hover, .screen.is-active button.choice:enabled:hover *, .screen.is-active button.choice:enabled:focus-visible, .screen.is-active button.choice:enabled:focus-visible * { color: var(--choice-hover-color, var(--selection-color)) !important; }
 .choice .interactive-label { text-decoration: underline; text-decoration-color: slategray; text-decoration-thickness: from-font; text-underline-offset: .15em; }
@@ -93,7 +92,9 @@ a { color: #8ddaff; }
 .has-tooltip:focus-visible { outline: 1px dotted #aaa; outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { .has-tooltip, .line button.choice.has-tooltip, .has-tooltip .interactive-label { transition: none; } }
 #game-tooltip { position: fixed; z-index: 10; max-width: min(480px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow: auto; padding: 10px 12px; border: 1px solid #777; background: #181818; color: #fff; font-size: 14px; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; pointer-events: none; box-shadow: 0 3px 12px #000; }
-.sprite { display: inline-block; position: relative; overflow: hidden; vertical-align: middle; }
+/* Emuera images don't size their line: the holder is zero-height at the line top and the picture overflows below. */
+.sprite { display: inline-block; position: relative; height: 0; vertical-align: top; }
+.sprite-clip { position: absolute; left: 0; overflow: hidden; }
 .sprite img, .sprite canvas { position: absolute; max-width: none; }
 .shape-rect { position: relative; height: 1em; vertical-align: text-top; }
 .shape-rect > span { position: absolute; background: currentColor; }
