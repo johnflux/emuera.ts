@@ -143,7 +143,313 @@ a { color: #8ddaff; }
 .era-palam-item .era-meter { width: 100%; }
 .era-palam-lv { color: #8a8a8a; }
 .era-palam-value, .era-palam-gain { text-align: right; }
+.era-palam-next { color: #6c7780; }
 .era-palam-gain { color: #d8b850; }
 .era-palam-item.era-zero { opacity: .45; }
 .era-palam-item.era-hot .era-palam-name { color: #ff0; }
 .era-palam-item.era-hot .era-meter > span { background: #d8c040; }
+/* Hotpatch boxes (<era-open>/<era-close>): the marker lines only delimit them. */
+.era-marker { display: none; }
+.era-box { --terminal-background: transparent; }
+.era-box .line, .era-box .output-text { background-color: transparent; }
+.era-box .line .era-section { margin: 0; }
+/* Main screen (hotpatch/MAIN_SCREEN*.ERB): header, then two rows of equal-height cards: occupants | character | you
+   (with a minimum height, so the screen keeps its shape when nobody is around), then the target's stats | actions |
+   menu. During a session the counters take a row under the actions, which then no longer reach down. */
+.era-main { display: grid; gap: 10px; max-width: 100cqi; margin: 4px 0; white-space: normal;
+  grid-template-columns: minmax(40ch, 44ch) minmax(0, 1fr) minmax(32ch, 38ch);
+  grid-template-rows: auto auto auto 1fr auto;
+  grid-template-areas: "header header header" "occupants center right" "left actions menu" "left counters menu" "last last last"; }
+.era-main > * { min-width: 0; align-self: start; }
+.era-main > .line { grid-column: 1 / -1; }
+.era-main-header { grid-area: header; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; padding: 8px 12px; border: 1px solid #2c3640; border-radius: 10px; background: linear-gradient(90deg, #12181e, #0d1014); }
+.era-main-when { flex: 1 1 32ch; min-width: 0; }
+/* The header's backdrop (HOTPATCH_SKY): sky for the hour, weather over it, the season's land along the bottom; under a
+   roof the sky is dimmer, underground there is none. The text sits on a translucent panel to stay readable. */
+.era-main-header { position: relative; overflow: hidden; isolation: isolate; }
+.era-main-header > * { position: relative; z-index: 1; }
+.era-main-header > .line:has(.era-sky), .era-main-header > .line > span:has(> .era-sky) { display: contents; }
+.era-sky { position: absolute; inset: 0; z-index: 0; overflow: hidden; border-radius: inherit; pointer-events: none; background: #0d1014; }
+.era-main-header > .era-main-when { flex: 0 1 auto; padding: 6px 12px; border-radius: 8px; background: #0a0e1428; box-shadow: 0 0 0 1px #ffffff14; backdrop-filter: blur(3px); }
+.era-main-header > .era-main-when + * { margin-left: auto; }
+.era-main-header .era-clock { border-radius: 50%; box-shadow: 0 0 0 3px #0a0e1466, 0 2px 8px #0008; }
+.era-sky-view, .era-sky-orb, .era-sky-clouds, .era-sky-landmark, .era-sky-fall, .era-sky-land { position: absolute; display: block; }
+.era-sky-view { inset: 0; overflow: hidden; }
+.era-sky-clouds, .era-sky-fall { inset: 0; }
+.era-sky-dawn .era-sky-view { background: linear-gradient(#1f2c55, #7a4e7c 55%, #f0956a); }
+.era-sky-morning .era-sky-view { background: linear-gradient(#4f8fd0, #9fd0f0 70%, #f4e2b8); }
+.era-sky-day .era-sky-view { background: linear-gradient(#2f78c4, #79b8e8); }
+.era-sky-evening .era-sky-view { background: linear-gradient(#2c2a5c, #a24a6e 50%, #f08a3c); }
+.era-sky-night .era-sky-view { background: radial-gradient(1px 1px at 62% 22%, #fff, transparent), radial-gradient(1px 1px at 74% 58%, #fffc, transparent),
+  radial-gradient(1.5px 1.5px at 83% 30%, #fff, transparent), radial-gradient(1px 1px at 91% 66%, #fffa, transparent), radial-gradient(1px 1px at 55% 70%, #fff8, transparent),
+  radial-gradient(1px 1px at 68% 12%, #fffb, transparent), radial-gradient(1.5px 1.5px at 96% 18%, #fff, transparent), linear-gradient(#060a1c, #18234a); }
+/* Sun or moon: high at midday, low in the morning and evening, a crescent at night. */
+.era-sky-orb { top: 12px; right: 24%; width: 30px; height: 30px; border-radius: 50%; background: radial-gradient(#fffbe0, #ffe27a 55%, #ffc94a); box-shadow: 0 0 22px 8px #ffe07a88; }
+.era-sky-dawn .era-sky-orb { top: 62%; right: 34%; background: radial-gradient(#fff2d8, #ffb27a); box-shadow: 0 0 26px 10px #ff9a6a77; }
+.era-sky-morning .era-sky-orb { top: 34%; right: 30%; }
+.era-sky-evening .era-sky-orb { top: 58%; right: 16%; width: 36px; height: 36px; background: radial-gradient(#ffe0b0, #ff8a3a); box-shadow: 0 0 30px 12px #ff7a3a88; }
+.era-sky-night .era-sky-orb { top: 14px; right: 20%; width: 24px; height: 24px; background: transparent; box-shadow: inset -7px 3px 0 0 #f4f0d0, 0 0 14px 2px #f4f0d033; }
+/* Weather: clouds dim or hide the sky, rain and snow fall. */
+.era-weather-fair .era-sky-clouds { background: radial-gradient(40px 12px at 70% 38%, #ffffffb0, transparent), radial-gradient(56px 14px at 86% 62%, #ffffff90, transparent), radial-gradient(34px 10px at 58% 72%, #ffffff70, transparent); }
+.era-sky-night.era-weather-fair .era-sky-clouds { opacity: .25; }
+:is(.era-weather-cloudy, .era-weather-rain, .era-weather-storm, .era-weather-fog, .era-weather-snow, .era-weather-blizzard) .era-sky-orb { opacity: .12; filter: blur(3px); }
+.era-weather-cloudy .era-sky-clouds { background: radial-gradient(80px 20px at 60% 30%, #cfd6dccc, transparent), radial-gradient(110px 24px at 85% 50%, #b8c0c8cc, transparent),
+  radial-gradient(70px 18px at 72% 80%, #a6aeb6aa, transparent), linear-gradient(#7d8790aa, #5d666e88); }
+:is(.era-weather-rain, .era-weather-storm) .era-sky-clouds { background: radial-gradient(120px 26px at 70% 22%, #4a525acc, transparent), linear-gradient(#3a424bdd, #2a3036bb); }
+:is(.era-weather-snow, .era-weather-blizzard) .era-sky-clouds { background: linear-gradient(#9aa6b2aa, #c8d2dc88); }
+.era-weather-fog .era-sky-clouds { background: repeating-linear-gradient(#e6ecf000 0 6px, #e6ecf055 10px, #e6ecf000 16px), linear-gradient(#b8c2ca99, #d8dee499); }
+.era-weather-rain .era-sky-fall { background: repeating-linear-gradient(105deg, transparent 0 9px, #b8d0f055 9px 10px); background-size: 40px 40px; animation: era-fall 0.7s linear infinite; }
+.era-weather-storm .era-sky-fall { background: repeating-linear-gradient(110deg, transparent 0 5px, #c8dcff77 5px 6px); background-size: 30px 30px; animation: era-fall 0.45s linear infinite, era-lightning 7s steps(1) infinite; }
+.era-weather-snow .era-sky-fall { background: radial-gradient(1.5px 1.5px at 20% 30%, #fff, transparent), radial-gradient(2px 2px at 60% 70%, #fffd, transparent), radial-gradient(1.5px 1.5px at 85% 15%, #fffc, transparent);
+  background-size: 46px 46px; animation: era-fall 3.5s linear infinite; }
+.era-weather-blizzard .era-sky-fall { background: radial-gradient(1.5px 1.5px at 20% 30%, #fff, transparent), radial-gradient(2px 2px at 60% 70%, #fff, transparent), repeating-linear-gradient(160deg, transparent 0 14px, #ffffff40 14px 15px);
+  background-size: 30px 30px; animation: era-blow 1.2s linear infinite; }
+.era-weather-strange .era-sky-clouds { box-shadow: inset 0 0 40px #ff70c055; }
+@keyframes era-fall { to { background-position: -10px 40px; } }
+@keyframes era-blow { to { background-position: -60px 30px; } }
+@keyframes era-lightning { 0%, 96%, 98% { filter: none; } 97%, 99% { filter: brightness(3); } }
+@media (prefers-reduced-motion: reduce) { .era-sky-fall { animation: none !important; } }
+/* The land: hills in the season's colours, darker at night. */
+.era-sky-land { left: 0; right: 0; bottom: 0; height: 20px; background: var(--land, #3d6e3a);
+  --hills: radial-gradient(22% 75% at 14% 100%, #000 98%, transparent), radial-gradient(30% 95% at 56% 100%, #000 98%, transparent),
+    radial-gradient(24% 65% at 92% 100%, #000 98%, transparent), linear-gradient(#000, #000) bottom / 100% 35% no-repeat;
+  -webkit-mask: var(--hills); mask: var(--hills); }
+.era-season-spring .era-sky-land { --land: radial-gradient(2px 2px at 30% 40%, #ffc8e0, transparent) 0 0 / 14px 10px, linear-gradient(#7aa85a, #557f3c); }
+.era-season-summer .era-sky-land { --land: linear-gradient(#3f8a3c, #276227); }
+.era-season-autumn .era-sky-land { --land: radial-gradient(2px 2px at 40% 50%, #ffb040, transparent) 0 0 / 12px 9px, linear-gradient(#b0642a, #7a3e1c); }
+.era-season-winter .era-sky-land { --land: linear-gradient(#eef4f8, #c4d2de); }
+:is(.era-sky-night, .era-sky-dawn) .era-sky-land { filter: brightness(.4) saturate(.7); }
+.era-sky-evening .era-sky-land { filter: brightness(.65) saturate(.9); }
+/* Indoors the sky is dimmer; underground there is only rock (and the area's cavern, if it has one). */
+.era-indoor .era-sky-view { filter: brightness(.7) saturate(.85); }
+.era-sky.era-underground { background: radial-gradient(60% 120% at 80% 120%, #3a2c22, transparent), linear-gradient(#1a1512, #0e0b09); }
+.era-underground .era-sky-view { background: none; }
+.era-underground .era-sky-view > :not(.era-sky-landmark) { display: none; }
+/* The area's landmark (web/areas/<map id>-<name>.svg) between the clock panel and the Time Stop button, standing on the
+   land; woods repeat along the header instead. Darker at night like the land. */
+.era-sky-landmark { display: none; right: 12%; bottom: 6px; width: min(360px, 40%); height: calc(100% - 10px); background: no-repeat right bottom / contain;
+  filter: url(#era-pixelate) var(--landmark-tint, ); }
+[class*="era-area-"] .era-sky-landmark { display: block; }
+.era-area-0 .era-sky-landmark { background-image: url(/areas/0-shrine.svg); }
+.era-area-1 .era-sky-landmark { background-image: url(/areas/1-temple.svg); }
+.era-area-2 .era-sky-landmark { background-image: url(/areas/2-village.svg); }
+.era-area-3 .era-sky-landmark { background-image: url(/areas/3-mansion.svg); }
+.era-area-4 .era-sky-landmark { background-image: url(/areas/4-bamboo.svg); }
+.era-area-5 .era-sky-landmark { background-image: url(/areas/5-forest.svg); }
+.era-area-6 .era-sky-landmark { background-image: url(/areas/6-netherworld.svg); }
+.era-area-7 .era-sky-landmark { background-image: url(/areas/7-foothills.svg); }
+.era-area-8 .era-sky-landmark { background-image: url(/areas/8-summit.svg); }
+.era-area-9 .era-sky-landmark { background-image: url(/areas/9-underworld.svg); }
+.era-area-10 .era-sky-landmark { background-image: url(/areas/10-moon.svg); }
+:is(.era-area-4, .era-area-5) .era-sky-landmark { left: 0; right: 0; width: auto; height: calc(100% - 4px); background-repeat: repeat-x; background-size: auto 100%;
+  -webkit-mask: linear-gradient(90deg, transparent 20%, #000 55%); mask: linear-gradient(90deg, transparent 20%, #000 55%); }
+.era-area-9 .era-sky-landmark { bottom: 0; height: 100%; }
+.era-area-5 .era-sky-landmark { background-size: auto 78%; background-position: left bottom; }
+:is(.era-sky-night, .era-sky-dawn) .era-sky-landmark { --landmark-tint: brightness(.5) saturate(.75); }
+.era-sky-evening .era-sky-landmark { --landmark-tint: brightness(.75) saturate(.9); }
+.era-underground .era-sky-landmark { --landmark-tint: ; left: 0; right: 0; width: auto; background-size: auto 100%; background-position: right bottom; }
+.era-main-occupants { grid-area: occupants; }
+.era-main-left { grid-area: left; display: flex; flex-direction: column; gap: 10px; }
+.era-main > :is(.era-main-occupants, .era-main-center, .era-main-right, .era-main-left) { align-self: stretch; display: flex; flex-direction: column; }
+.era-main > :is(.era-main-actions, .era-main-menu) { align-self: stretch; }
+.era-main:not(:has(> .era-counters)) > .era-main-actions { grid-row-end: span 2; }
+/* Nobody selected, so no stats: the actions take their column too. */
+.era-main:not(:has(.era-stats)) > .era-main-left { display: none; }
+.era-main:not(:has(.era-stats)) > .era-main-actions { grid-column: 1 / 3; }
+.era-main-left > .era-stats { flex: 1 0 auto; }
+/* PRINTed cards sit in a line and a span; letting those wrappers go lets the card itself fill the column. */
+.era-main-occupants > .line:has(.era-card), .era-main-occupants > .line > span:has(> .era-card),
+.era-alone > .line:has(.era-alone-message), .era-alone > .line > span:has(> .era-alone-message) { display: contents; }
+:is(.era-main-center, .era-main-right) > .era-card, .era-main-occupants .era-occupants { flex: 1 0 auto; }
+.era-main-center > .era-card { min-height: 290px; }
+.era-main-center { grid-area: center; }
+.era-main-right { grid-area: right; }
+.era-main-actions { grid-area: actions; }
+.era-counters { grid-area: counters; }
+.era-main-menu { grid-area: menu; }
+.era-main-last { grid-area: last; color: #888; }
+@container (max-width: 1100px) {
+  .era-main { grid-template-columns: minmax(40ch, 44ch) minmax(0, 1fr); grid-template-rows: none;
+    grid-template-areas: "header header" "occupants center" "left actions" "right menu" "counters counters" "last last"; }
+  .era-main:not(:has(> .era-counters)) > .era-main-actions { grid-row-end: auto; }
+}
+@container (max-width: 760px) {
+  .era-main { grid-template-columns: minmax(0, 1fr); grid-template-areas: "header" "occupants" "center" "actions" "left" "right" "menu" "counters" "last"; }
+  .era-main-center > .era-card { min-height: 0; }
+  .era-main:not(:has(.era-stats)) > .era-main-actions { grid-column: 1; }
+}
+.era-card { padding: 8px 10px; border: 1px solid #2a3138; border-radius: 10px; background: #111518; }
+.line .era-card { display: block; }
+.era-card-title { display: flex; align-items: baseline; gap: 1ch; margin-bottom: 6px; color: #8fc8ff; font-weight: bold; }
+.era-sub { margin-left: 1.75ch; color: #888; font-weight: normal; font-size: .85em; }
+.era-funds { margin-left: auto; color: #ffd866; font-weight: normal; font-variant-numeric: tabular-nums; cursor: help; }
+.era-empty { color: #777; font-style: italic; }
+.era-stats .era-section-title { display: none; }
+.era-stats .era-palam-grid { grid-template-columns: repeat(auto-fill, minmax(36ch, 1fr)); }
+.era-stats .era-palam-item { grid-template-columns: 6ch 4ch minmax(5ch, 1fr) 11ch 5ch; }
+/* Clock and faces sit in the flow (Emuera pictures overflow their line). */
+:is(.era-clock, .era-face) .sprite { height: auto; vertical-align: middle; }
+:is(.era-clock, .era-face) .sprite-clip { position: relative; display: block; }
+.era-clock { line-height: 0; }
+/* Time stop: the big control. */
+.era-timestop { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.line button.choice.era-timestop-button, .era-timestop-button { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; min-width: 18ch; padding: 8px 18px 7px; border: 2px solid #3aa8d8; border-radius: 10px; background: linear-gradient(#173445, #0f2230); color: #bfeaff; font-weight: bold; font-size: 1.15em; letter-spacing: .05em; cursor: pointer; }
+.line button.choice.era-timestop-button.era-stopped { border-color: #c070ff; background: linear-gradient(#3a1d52, #24123a); color: #f0d8ff; box-shadow: 0 0 14px #b060ff66; }
+.era-timestop-button .era-sub { margin: 2px 0 0; font-size: .7em; font-weight: normal; letter-spacing: 0; color: inherit; opacity: .75; }
+.era-timestop-gauge { display: flex; flex-direction: column; align-items: stretch; gap: 3px; align-self: stretch; margin-top: 6px; }
+.era-timestop-gauge .era-meter { width: 100%; height: 5px; border-radius: 3px; background: #0006; overflow: hidden; }
+.era-timestop-gauge .era-meter > span { background: #b070ff; border-radius: 3px; }
+.era-timestop-tsp { font-size: .62em; font-weight: normal; letter-spacing: .04em; opacity: .8; text-align: center; }
+.era-stopped .era-timestop-gauge .era-meter > span { background: #e0b0ff; box-shadow: 0 0 6px #d090ff; }
+.era-unavailable .era-timestop-gauge .era-meter > span { background: #666; }
+.era-timestop-button.era-unavailable { border-color: #444; background: #191919; color: #777; cursor: default; }
+.screen.is-active .line button.choice.era-timestop-button:enabled:is(:hover, :focus-visible) { filter: brightness(1.25); }
+.era-timestop .interactive-label, .era-bars .interactive-label, .era-player-status .interactive-label, .era-occupants .interactive-label, .era-toggles .interactive-label, .era-character .interactive-label { text-decoration-line: none; }
+/* Chips and toggles. */
+.line button.choice:is(.era-chip-button, .era-toggle, .era-star), .era-chip-button { display: inline-block; padding: 1px 9px; border: 1px solid #39434c; border-radius: 999px; background: #182027; color: #c9d4dc; cursor: pointer; }
+.line button.choice.era-toggle:not(.era-on) { border-style: dashed; background: transparent; color: #707a82; }
+.line button.choice.era-on { border-color: #5aa0c8; background: #1d3444; color: #e2f4ff; }
+.line button.choice.era-warn { border-color: #d88; color: #ffbcbc; }
+.era-chip-button.era-unavailable { color: #777; border-color: #333; cursor: default; }
+.line button.choice.era-star { padding: 1px 7px; color: #777; }
+.line button.choice.era-star.era-on { color: #ff0; border-color: #aa0; background: #2a2a10; }
+.era-toggles { display: inline-flex; flex-wrap: wrap; gap: 4px; font-weight: normal; }
+.era-settings { margin-top: 8px; padding-top: 8px; border-top: 1px solid #ffffff14; }
+.era-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.era-chip { padding: 0 8px; border-radius: 999px; background: #222; color: #ddd; font-size: .9em; }
+.era-chip.era-drunk { background: #3a2410; color: #ffb060; }
+.era-chip.era-erect { background: #3a1430; color: #ff9ad8; }
+.era-chip.era-afterglow { background: #3a1430; color: #ff9ad8; }
+.era-chip-label { margin-right: .6ch; opacity: .7; font-size: .8em; text-transform: uppercase; letter-spacing: .05em; }
+.era-player-status { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 0; margin-top: 6px; }
+.era-status-label { margin-right: 1ch; color: #8a949c; }
+.era-status + .era-status::before { content: "·"; margin: 0 .8ch; color: #5a646c; }
+.era-player-toggles { margin-top: 6px; }
+.era-strong { font-weight: bold; }
+.screen.is-active .line button.choice:is(.era-chip-button, .era-toggle, .era-star):enabled:is(:hover, :focus-visible) { border-color: #8ddaff; }
+/* Occupant list: a tab per character, the selected one highlighted. */
+.era-occupant-list { display: flex; flex-direction: column; gap: 4px; }
+.line button.choice.era-occupant, .era-occupant { display: flex; align-items: center; gap: 10px; width: 100%; padding: 4px 8px; border: 1px solid transparent; border-left: 3px solid transparent; border-radius: 8px; background: #161b20; text-align: left; cursor: pointer; }
+/* The occupants and the character card form one box: the list is a darker tab rail down its left side (taking the
+   grid gap, with no right border), and the selected tab has the card's own background and covers the card's left
+   border, so it opens into the card it is showing. Stacked on narrow screens, they are separate cards again. */
+.era-main > .era-main-occupants { position: relative; z-index: 2; margin-right: -10px; }
+.era-main-occupants .era-occupants { padding-right: 0; border-right: 0; border-radius: 10px 0 0 10px; background: #0c0f12; }
+.era-main-center > .era-character { border-radius: 0 10px 10px 0; }
+.era-occupants .era-card-title { padding-right: 10px; }
+.line button.choice.era-occupant:not(.era-selected) { margin-right: 8px; width: calc(100% - 8px); background: transparent; }
+.line button.choice.era-occupant.era-selected { width: calc(100% + 1px); margin-right: -1px; border-color: #2a3138; border-left-color: #66ffff; border-right: 0; border-radius: 8px 0 0 8px; background: #111518; }
+.era-main:has(.era-stopped) .line button.choice.era-occupant.era-selected { border-color: #7fb4e0aa; border-left-color: #bfe6ff; border-right: 0; background: #14223e; }
+@container (max-width: 760px) {
+  .era-main > .era-main-occupants { margin-right: 0; }
+  .era-main-occupants .era-occupants { padding-right: 10px; border-right: 1px solid #2a3138; border-radius: 10px; }
+  .era-main-center > .era-character { border-radius: 10px; }
+  .line button.choice.era-occupant:is(.era-selected, :not(.era-selected)) { width: 100%; margin-right: 0; border-right: 1px solid transparent; border-radius: 8px; }
+  .line button.choice.era-occupant.era-selected { border-right-color: #2a3138; }
+}
+.screen.is-active .line button.choice.era-occupant:enabled:is(:hover, :focus-visible):not(.era-selected) { background: #1e262d; }
+.era-occupant.era-request .era-occupant-state { color: #7f7; }
+.era-occupant.era-asleep .era-face { filter: brightness(.6) saturate(.5); }
+.era-occupant.era-occupant-none { border: 1px dashed #2c353d; background: transparent; cursor: default; }
+.era-occupant-none .era-face { border: 2px dashed #33414d; background: transparent; }
+.era-occupant-none .era-occupant-name { color: #9aa5ad; }
+.era-face { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 44px; height: 44px; overflow: hidden; border-radius: 50%; background: #222; }
+.era-face-letter { color: #aaa; font-weight: bold; font-size: 1.3em; }
+.era-occupant-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
+.era-occupant-name { color: #eee; font-weight: bold; }
+.era-occupant.era-selected .era-occupant-name { color: #66ffff; }
+.era-occupant-state { color: #8a949c; font-size: .85em; }
+/* The character card: name, portrait beside the facts and meters. */
+.era-character { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 14px; align-items: start; }
+.era-character > :is(.line, .era-scene) { grid-column: 1 / -1; }
+/* Nobody to show: a placeholder silhouette in the middle of the card, the room's look text under it. */
+.era-character.era-alone { display: flex; flex-direction: column; align-items: stretch; }
+.era-alone-message { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 16px 12px; text-align: center; }
+.era-alone-mark { position: relative; width: 84px; height: 84px; overflow: hidden; border: 2px dashed #33414d; border-radius: 50%; }
+.era-alone-mark::before, .era-alone-mark::after { content: ""; position: absolute; left: 50%; background: #26323c; }
+.era-alone-mark::before { top: 16px; width: 26px; height: 26px; margin-left: -13px; border-radius: 50%; }
+.era-alone-mark::after { top: 46px; width: 52px; height: 44px; margin-left: -26px; border-radius: 26px 26px 0 0; }
+.era-alone-title { color: #9fb3c2; font-size: 1.2em; font-weight: bold; }
+.era-alone-hint { color: #6c7780; font-size: .9em; }
+.era-character-name { font-size: 1.25em; color: #66ffff; }
+/* The place as the character card's title, with its furniture and cleanliness. */
+.era-place { flex-wrap: wrap; align-items: center; row-gap: 4px; }
+.era-place-name { color: #e6f2ff; font-size: 1.3em; letter-spacing: .02em; }
+.era-place-name::before { content: ""; display: inline-block; width: .55em; height: .55em; margin-right: .5em; border: 2px solid #66ffff; border-radius: 50% 50% 50% 0; transform: rotate(-45deg) translateY(-.1em); }
+.era-place-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-left: auto; font-size: .8em; font-weight: normal; }
+.era-portrait { min-width: 180px; }
+.screen.is-active .era-portrait button.choice.is-target .sprite-clip:not(.sprite-hover) { box-shadow: none; }
+.era-portrait .line:has(button.choice):not(:has(.sprite)) { display: none; }
+.era-character-info { min-width: 0; }
+.era-character-state { color: #bbb; }
+.era-facts { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 4px 0; }
+.era-fact-label { margin-right: .75ch; color: #8a949c; }
+.era-rank { font-weight: bold; }
+.era-tone-purple { color: #c080ff; } .era-tone-white { color: #fff; } .era-tone-pink { color: #ff80c0; } .era-tone-red { color: #ff5050; }
+.era-tone-orange { color: #ffa040; } .era-tone-yellow { color: #ff0; } .era-tone-green { color: #4f4; } .era-tone-aqua { color: #6ff; } .era-tone-gray { color: #888; }
+/* Meters. */
+.era-bars { margin: 4px 0; }
+.era-bar { display: grid; grid-template-columns: 5ch minmax(6ch, 1fr) 6ch; column-gap: 1ch; align-items: center; }
+.era-bar .era-meter { width: 100%; height: .6em; background: #1c2228; }
+.era-bar-label { color: #8a949c; }
+.era-bar-value { text-align: right; }
+.era-sta .era-meter > span { background: #40c060; }
+.era-sta.era-asleep .era-meter > span { background: #40d0e0; }
+.era-ene .era-meter > span { background: #4080e0; }
+.era-drnk .era-meter > span { background: #d05050; }
+.era-vig .era-meter > span { background: #d8c040; }
+.era-tsp .era-meter > span { background: #b070ff; }
+.era-mood .era-meter > span { background: #ff70b0; }
+.era-composure .era-meter > span { background: #e0a040; }
+.era-bar.era-low .era-meter > span { background: #e0c030; }
+.era-bar.era-critical .era-meter > span { background: #e03030; }
+.era-bar.era-low .era-bar-value { color: #ff0; }
+.era-bar.era-critical .era-bar-value { color: #f55; }
+/* Actions: each group's PRINTC items flow as chips; the whole chip is clickable. */
+.era-actions-header { flex-wrap: wrap; justify-content: space-between; }
+.era-actions-group { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin: 6px 0 2px; }
+.era-actions-group > .line { display: contents; }
+.era-actions-group:not(:has(button.choice)) { display: none; }
+.era-actions-group > .line > span:has(> .era-actions-title) { flex-basis: 100%; }
+.era-actions-title { color: #8a949c; font-size: .85em; text-transform: uppercase; letter-spacing: .06em; }
+.era-actions-group .print-cell { position: relative; white-space: normal; padding: 2px 10px; border: 1px solid #333c44; border-radius: 8px; background: #182027; }
+.era-actions-group .print-cell .choice { margin-left: .75ch; color: #6c7780 !important; font-size: .8em; }
+.era-actions-group .print-cell .choice::after { content: ""; position: absolute; inset: 0; }
+.era-actions-group .print-cell .interactive-label { text-decoration-line: none; }
+.screen.is-active .era-actions-group .print-cell:has(.choice:enabled:is(:hover, :focus-visible)) { border-color: #8ddaff; background: #1e2a33; }
+.era-main-menu .era-actions-group { margin-top: 0; }
+/* Filter kinds (HOTPATCH_ACTION_KIND): a filter toggle and the actions it shows share a tint. */
+.era-actions-group > .era-kind, .era-kind > .line { display: contents; }
+.era-kind-petting .print-cell { border-color: #6a3456; background: #2a1824; }
+.era-kind-chores .print-cell { border-color: #2f5e3c; background: #15251a; }
+.era-kind-dialogue .print-cell { border-color: #36527c; background: #161f31; }
+.line button.choice.era-toggle.era-kind-petting { border-color: #6a3456; color: #b07898; }
+.line button.choice.era-toggle.era-kind-chores { border-color: #2f5e3c; color: #78a884; }
+.line button.choice.era-toggle.era-kind-dialogue { border-color: #36527c; color: #7c98c4; }
+.line button.choice.era-toggle.era-kind-petting.era-on { border-color: #c0609a; background: #3a1c30; color: #ffd0ec; }
+.line button.choice.era-toggle.era-kind-chores.era-on { border-color: #4fa064; background: #1c3424; color: #d0ffd8; }
+.line button.choice.era-toggle.era-kind-dialogue.era-on { border-color: #5a86c8; background: #1c2a44; color: #d6e6ff; }
+/* The look text (clothes and what is happening) under the target's meters: no image toggles, no spacer lines. */
+.era-look { margin-top: 8px; }
+/* The room's chatter (others' talk, the radio, room descriptions) under the place title; gone when there is none. */
+.era-scene { margin: -2px 0 8px; color: #b8c4cc; font-style: italic; }
+.era-scene:not(:has(.line:not(.era-marker))) { display: none; }
+.era-look .line:has(button.choice[data-value="3003"]) { display: none; }
+/* Time stop: the world freezes. Cards frost over (an icy rim, rime in the corners, a faint crystal grain), colours
+   drain from meters and other people, and the clock ices up with a snowflake on it. You stay in colour. */
+.era-main:has(.era-stopped) :is(.era-card, .era-main-header) { position: relative; border-color: #7fb4e0aa;
+  background: linear-gradient(160deg, #152440, #0c1326 60%, #101c34); box-shadow: inset 0 0 22px #a8dcff1f, 0 0 10px #7fc4ff14; }
+.era-main:has(.era-stopped) :is(.era-card, .era-main-header)::before { content: ""; position: absolute; inset: 0; z-index: 0; border-radius: inherit; pointer-events: none;
+  background: radial-gradient(circle at 0 0, #e4f6ff30, transparent 26%), radial-gradient(circle at 100% 0, #e4f6ff1c, transparent 18%),
+    radial-gradient(circle at 100% 100%, #e4f6ff26, transparent 22%), radial-gradient(circle at 0 100%, #e4f6ff14, transparent 16%),
+    repeating-linear-gradient(60deg, #ffffff06 0 1px, transparent 1px 13px), repeating-linear-gradient(-60deg, #ffffff05 0 1px, transparent 1px 17px); }
+.era-main:has(.era-stopped) :is(.era-card, .era-main-header) > * { position: relative; z-index: 1; }
+.era-main:has(.era-stopped) .era-card-title { color: #bfe6ff; text-shadow: 0 0 6px #9fd8ff66; }
+.era-main:has(.era-stopped) :is(.era-character, .era-stats, .era-occupants) .era-meter > span { filter: saturate(.3) brightness(1.15); }
+.era-main:has(.era-stopped) .era-clock { position: relative; border-radius: 50%; box-shadow: 0 0 0 3px #bfe6ff55, 0 0 18px #9fd8ffaa; }
+.era-main:has(.era-stopped) .era-clock :is(img, canvas) { filter: grayscale(1) sepia(.4) hue-rotate(170deg) saturate(2.2) brightness(1.05); }
+.era-main:has(.era-stopped) .era-clock::after { content: "❄"; position: absolute; right: -6px; bottom: -4px; color: #e4f6ff; font-size: 22px; line-height: 1; text-shadow: 0 0 6px #9fd8ff; }
+.era-main:has(.era-stopped) .era-sky { filter: grayscale(.8) sepia(.25) hue-rotate(170deg) saturate(1.5) brightness(.8); }
+.era-main:has(.era-stopped) .era-sky * { animation-play-state: paused; }
+.era-main:has(.era-stopped) .era-main-header::before { z-index: 1; }
+.era-main:has(.era-stopped) .era-main-when { color: #cfe6f5; }

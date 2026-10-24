@@ -176,6 +176,16 @@ PRINTFORML {RESULT} {DT_CELL_GET("saveAchievements", RESULT:1, "claimed", 1)} {D
   assert.equal(grid.input?.kind, "integer");
   assert.ok(demo.input("405").output.some((output) => output.type === "text" && output.text.includes("Command 405 chosen.")));
   assert.equal(demo.input("0").status, "halted");
+  // Menu item 8 starts the game itself on its main screen, here with two people and time stopped.
+  const scene = new Runtime(demoGame(game), GAME_INSTRUCTION_LIMIT);
+  scene.start();
+  scene.input("8");
+  let step = scene.input("5");
+  for (let waits = 0; step.input?.kind === "wait" && waits < 40; waits++) step = scene.input("");
+  assert.equal(step.input?.kind, "integer", JSON.stringify(step.error));
+  const sceneText = step.output.map((item) => (item.type === "text" ? item.text : "")).join("");
+  assert.match(sceneText, /There's 2 people around/);
+  assert.match(sceneText, /Reimu/);
 });
 
 test("OBJ framework intrinsics return what the ERB framework returns", {

@@ -6,7 +6,7 @@ Game scripts, data, and images are read in place and are not bundled or copied.
 Bugs in the game itself (reproducible in real Emuera) are fixed in the game
 files and recorded, with a reapplicable patch, in
 [docs/game-patches.md](docs/game-patches.md). Presentation improvements, such
-as a browser-friendly Palam grid, are ERB hotpatches loaded from `hotpatch/`
+as a browser-friendly Palam grid and a paneled main screen, are ERB hotpatches loaded from `hotpatch/`
 that leave the game files untouched; see [docs/hotpatches.md](docs/hotpatches.md).
 
 **The real title and custom-character creation work. Full gameplay is not yet
@@ -27,7 +27,9 @@ The separate conformance demo is an original ERB program exercising the supporte
 subset; it is not the game's title screen. Its character-portraits page composites the
 game's highres sprites, swaps to a smile on hover (`srcb`), toggles face close-ups when the current
 target is clicked again, and redraws in place with `CLEARLINE`, the way the game's own menus do.
-Other pages cover click-to-continue dialogue and a `PRINTC` command grid.
+Other pages cover click-to-continue dialogue and a `PRINTC` command grid. Item 8 runs the bundled game
+itself straight into its main screen in prepared situations (alone, one person, two, a crowd, time stopped with
+and without company, a sleeping partner, exhaustion), for iterating on the main-screen hotpatches.
 
 ## Run
 
@@ -428,8 +430,8 @@ declarations and the expression evaluator. No single routine dominates.
   Named `<img src='SPRITENAME'>` images are cropped from sprite sheets.
   Basic HTML paragraphs, breaks, emphasis, fonts (color only), numeric choices,
   nonbuttons and HTTP(S) links are rebuilt as allowlisted DOM nodes.
-  Hotpatches may also use `<div>`, `<meter>` and `era-*` classes, which are not
-  Emuera features (see [docs/hotpatches.md](docs/hotpatches.md)).
+  Hotpatches may also use `<div>`, `<meter>`, `era-*` classes and
+  `<era-open>`/`<era-close>` box markers, which are not Emuera features (see [docs/hotpatches.md](docs/hotpatches.md)).
   As in Emuera, an image is drawn from the top of its line (shifted by `ypos`)
   and does not make the line taller. Scripts print blank lines to reserve its
   height, so the picture overlaps those lines rather than pushing them down.
@@ -500,7 +502,8 @@ unsupported directives stop execution when entering that function.
 
 Bundled-game execution is bounded to 20,000,000 instructions between input requests
 to accommodate its real class/item/cast initialization (validated within that
-budget). Direct runtimes and the demo default to 50,000. All runs retain a 2 MB
+budget); the server's demo shares that budget because its scenarios run the game. Direct runtimes default to
+50,000. All runs retain a 2 MB
 output limit between input
 requests, 128 call frames, 16 KB request bodies, and eight active sessions
 (30-minute idle expiry). This is a **local development tool**, not a hosted
@@ -518,7 +521,7 @@ symlinks). No game-supplied scripts or event attributes are attached to the DOM.
 - `src/compiler.ts`, `src/runtime.ts`: control-flow compilation and execution.
 - `src/compatibility.ts`: unsupported-feature inventory.
 - `src/server.ts`: HTTP/session/resource adapter.
-- `web/`: terminal renderer and input client.
+- `web/`: terminal renderer and input client; `web/areas/` holds the main screen's per-area header art (served at `/areas/*.svg`).
 - `test/`: conformance, HTTP, loader and bundled-game regression tests.
 
 Next work should follow the verified new-game path into housing's colored-map

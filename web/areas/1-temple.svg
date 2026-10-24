@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 100">
+  <!-- Myouren Temple: a five-storey pagoda and the main hall -->
+  <g fill="#3a2a1e"><rect x="17" y="62" width="6" height="38"/><rect x="326" y="58" width="7" height="42"/></g>
+  <g fill="#2e4630"><circle cx="10" cy="64" r="12"/><circle cx="30" cy="62" r="12"/><circle cx="20" cy="50" r="14"/><circle cx="318" cy="60" r="13"/><circle cx="338" cy="58" r="12"/><circle cx="329" cy="44" r="15"/></g>
+  <g fill="#44664a"><circle cx="15" cy="46" r="7"/><circle cx="324" cy="40" r="8"/></g>
+  <rect x="69" y="0" width="2" height="18" fill="#3b3f4a"/>
+  <g fill="#8a3a2a"><rect x="58" y="24" width="24" height="14"/><rect x="56" y="40" width="28" height="14"/><rect x="54" y="56" width="32" height="14"/><rect x="52" y="72" width="36" height="14"/><rect x="50" y="88" width="40" height="12"/></g>
+  <g fill="#3b3f4a">
+    <path d="M50 22 Q70 14 90 22 L96 26 H44 Z"/><path d="M48 38 H92 L99 42 H41 Z"/><path d="M46 54 H94 L102 58 H38 Z"/><path d="M44 70 H96 L105 74 H35 Z"/><path d="M42 86 H98 L108 90 H32 Z"/>
+  </g>
+  <rect x="166" y="58" width="128" height="34" fill="#9a7a56"/>
+  <g fill="#5e4630"><rect x="174" y="62" width="20" height="26"/><rect x="200" y="62" width="20" height="26"/><rect x="240" y="62" width="20" height="26"/><rect x="266" y="62" width="20" height="26"/></g>
+  <rect x="226" y="62" width="8" height="30" fill="#e0c060"/>
+  <path d="M150 60 Q166 54 172 36 H288 Q294 54 310 60 Z" fill="#3b3f4a"/>
+  <path d="M190 36 L204 24 H256 L270 36 Z" fill="#474c58"/>
+  <rect x="156" y="92" width="148" height="8" fill="#8a8478"/>
+</svg>

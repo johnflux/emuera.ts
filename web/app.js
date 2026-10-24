@@ -189,7 +189,8 @@ function screen() {
   return currentScreen;
 }
 function lastOutputLine() {
-  return terminal.lastElementChild?.lastElementChild;
+  const lines = terminal.lastElementChild?.querySelectorAll(".line:not(.era-marker)");
+  return lines?.[lines.length - 1];
 }
 function retireScreen(screen = currentScreen) {
   if (!screen) return;
@@ -297,9 +298,58 @@ function line() {
   if (!currentLine) {
     currentLine = document.createElement("div");
     currentLine.className = "line";
-    screen().append(currentLine);
+    container().append(currentLine);
   }
   return currentLine;
+}
+/**
+ * Hotpatch extension (not Emuera HTML): an HTML_PRINT of only <era-open class='era-…'> opens a box that takes the
+ * following lines until a matching <era-close>, so a patched screen can be laid out in panels. Boxes nest inside the
+ * screen in output order, so CLEARLINE still removes the last lines printed. Each marker is a hidden line because
+ * the runtime counts every HTML_PRINT as one.
+ */
+const boxMarker = /^\s*<era-(open|close)(?:\s+class\s*=\s*(?:'([^']*)'|"([^"]*)"))?\s*\/?>\s*$/i;
+/** The innermost box still open in the current screen, or the screen. */
+function container() {
+  let parent = screen();
+  for (let last = parent.lastElementChild; last?.classList.contains("era-box") && !last.dataset.closed; last = parent.lastElementChild)
+    parent = last;
+  return parent;
+}
+function boxLine(parent, closing, shared) {
+  const marker = document.createElement("div");
+  marker.className = closing ? "line era-marker era-close-line" : "line era-marker";
+  // HTML_PRINT ends an unfinished line, so a marker after PRINT text shares that text's logical line.
+  if (shared) marker.dataset.logicalLines = "0";
+  parent.append(marker);
+}
+function openBox(classes, shared) {
+  currentLine = null;
+  const names = classes.split(/\s+/).filter((name) => /^era-[a-z0-9-]+$/.test(name));
+  // A layout starts afresh: one left open by a restarted function (RESTART) must not swallow it.
+  if (names.includes("era-layout"))
+    for (let box = container(); box.classList.contains("era-box"); box = box.parentElement) box.dataset.closed = "forced";
+  const box = document.createElement("div");
+  box.classList.add("era-box", ...names);
+  container().append(box);
+  boxLine(box, false, shared);
+}
+function closeBox(shared) {
+  currentLine = null;
+  const box = container();
+  boxLine(box, true, shared);
+  if (box.classList.contains("era-box")) box.dataset.closed = "closed";
+}
+/** Removes a line and any boxes it leaves empty; removing a box's closing marker reopens it. */
+function removeLine(element) {
+  const parent = element.parentElement;
+  if (element.classList.contains("era-close-line")) delete parent.dataset.closed;
+  element.remove();
+  for (let box = parent; box?.classList.contains("era-box") && !box.querySelector(".line"); ) {
+    const up = box.parentElement;
+    box.remove();
+    box = up;
+  }
 }
 const colorContext = document.createElement("canvas").getContext("2d");
 function markTextColor(element, color) {
@@ -850,7 +900,7 @@ function markTarget(target) {
   if (!Number.isInteger(target) || target < 0) return;
   const value = String(TARGET_BUTTON_BASE + target);
   const pictures = [...outputRoot.querySelectorAll(".screen.is-active button.choice:has(.sprite)")]
-    .filter((button) => Math.floor(Number(button.dataset.value) / TARGET_BUTTON_BASE) === 1);
+    .filter((button) => Math.floor(Number(button.dataset.value) / TARGET_BUTTON_BASE) === 1 && !button.closest(".era-occupants"));
   // Layered pictures (effects drawn over the body) are further buttons with the same value; mark only the base.
   const selected = pictures.find((button) => button.dataset.value === value);
   if (!selected) return;
@@ -886,7 +936,7 @@ async function renderSnapshot(snapshot, advanceScreen) {
       let reachedHistory = false;
       while (remaining > 0 && outputRoot.lastElementChild) {
         const group = outputRoot.lastElementChild;
-        const last = group.lastElementChild;
+        const last = [...group.querySelectorAll(".line")].at(-1);
         if (!last) {
           group.remove();
           continue;
@@ -899,9 +949,9 @@ async function renderSnapshot(snapshot, advanceScreen) {
           last.style.height = `${retained * Number(last.dataset.lineHeight)}px`;
           break;
         }
-        last.remove();
+        removeLine(last);
         remaining -= lines;
-        if (!group.children.length) group.remove();
+        if (!group.querySelector(".line")) group.remove();
       }
       currentLine = null;
       const last = outputRoot.lastElementChild;
@@ -945,6 +995,14 @@ async function renderSnapshot(snapshot, advanceScreen) {
       if (output.newline) currentLine = null;
       continue;
     }
+    const marker = output.type === "html" && boxMarker.exec(output.text);
+    if (marker) {
+      const shared = target.childNodes.length > 0;
+      if (!shared) target.remove();
+      if (marker[1].toLowerCase() === "open") openBox(marker[2] ?? marker[3] ?? "", shared);
+      else closeBox(shared);
+      continue;
+    }
     const span = document.createElement("span");
     applyStyle(span, output.style);
     target.append(span);
@@ -985,12 +1043,12 @@ async function renderSnapshot(snapshot, advanceScreen) {
   } else message(snapshot.status !== "waiting" ? "Execution finished."
     : input.kind === "wait" ? "Click or press Enter to continue." : `Waiting for ${input.kind} input.`);
   // Keep DOM memory bounded during repeated demo / script runs.
-  const lines = [...outputRoot.querySelectorAll(".screen > .line")];
+  const lines = [...outputRoot.querySelectorAll(".screen .line")];
   if (lines.length > 5000) {
     for (const oldLine of lines.slice(0, lines.length - 4000)) {
-      const group = oldLine.parentElement;
-      oldLine.remove();
-      if (!group.children.length) group.remove();
+      const group = oldLine.closest(".screen");
+      removeLine(oldLine);
+      if (!group.querySelector(".line")) group.remove();
     }
     message("Older output was trimmed (4,000 displayed lines retained).");
   }

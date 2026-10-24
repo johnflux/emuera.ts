@@ -1,0 +1,872 @@
+;-------------------------------------------------------------------------------
+; Hotpatch for the main screen's status (ERB/ステータス表示関連/INFO.ERB @SHOW_STATUS). Together with
+; MAIN_SCREEN_COMMANDS.ERB (@SHOW_USERCOM) it lays the screen out in panels (<era-open>/<era-close> boxes, see
+; docs/hotpatches.md): a header with the clock, date, place and a large Time Stop button; the room occupants and the
+; target's stats on the left; the selected character's card (with the look text: clothes and what is happening to
+; them) in the middle; your card on the right; the actions below.
+;
+; SHOW_STATUS's logic up to the display is copied unchanged. The display calls the game's own printers for the
+; date, weather, situation, place, states and counters, and HOTPATCH_* rewrites of INFO_TARGET_BUTTON, INFO_BASE,
+; INFO_EMOTION, INFO_TARGET_SITUATION and INFO_TIMESTOP that keep their rules and side effects (TFLAG:102,
+; TFLAG:パンツ収奪, 押し倒され) but print HTML. Dropped: the clock's line-wrapping width, the [Status] collapse
+; toggle [3001] (always expanded) and [Abilities Display] [803] (in the menu as Abilities).
+;-------------------------------------------------------------------------------
+@SHOW_STATUS
+#DIM 天気非表示
+#DIM 元の天気
+VARSET LOCAL
+INFO_LINECOUNT = LINECOUNT
+IF STR:(8000 + (CFLAG:MASTER:現在位置)) == "" && AT_HOME(MASTER)
+	PRINTFORML The current position is invalid.（Currently＞{CFLAG:MASTER:現在位置}）
+	PRINTFORMW To avoid errors, you will be moved to %NAME_FROM_PLACE(CFLAG:MASTER:初期位置)%.
+	CFLAG:MASTER:現在位置 = CFLAG:MASTER:初期位置
+	CFLAG:MASTER:デート中 = MAIN_MAP
+ENDIF
+;Custom code, resets the used words array
+VARSET USED_WORDS
+USED_WORDS_I = 0
+
+nMoveAsked = 0 ;addition custom code, reset flag that prevents spam in case target goes out both to work and outside
+;-------------------------------------------------
+;TFLAG:調教中COMABLE管理表示制御
+;-------------------------------------------------
+TFLAG:調教中COMABLE管理 = TFLAG:調教自動実行管理
+SIF TFLAG:調教自動実行管理 == 1
+	TFLAG:調教中COMABLE管理 = 0
+SIF TFLAG:調教自動実行管理
+	TFLAG:調教自動実行管理 --
+;ウフフ中なら接触部位表示
+SIF TFLAG:102 == 2
+	CALL SHOW_TOUCH
+
+;-------------------------------------------------
+;料理の時間経過
+;-------------------------------------------------
+SIF DISH_NAME != ""
+	CALL DISH_FRESHNESS
+;-------------------------------------------------
+;畑の時間経過
+;-------------------------------------------------
+SIF TIME:5 >= 4
+	FLAG:803 = 0
+	FLAG:807 = 0
+
+;-------------------------------------------------
+;キャラの態度
+;-------------------------------------------------
+CALL CHARA_ATTITUDE
+
+;-------------------------------------------------
+;キャラの思考
+;-------------------------------------------------
+;CALL CHARA_MIND
+
+;-------------------------------------------------
+;時間経過、キャラの移動
+;-------------------------------------------------
+CALL INFO_TIME_PASSING
+
+;-------------------------------------------------
+;デート終了タイムアップ処理
+;-------------------------------------------------
+SIF CHK_DATENOW(CFLAG:MASTER:デート中)
+	CALL デート終了タイムアップ処理
+;-------------------------------------------------
+;TARGET関連のキャラ変数の更新
+;-------------------------------------------------
+CALL INFO_RENEW_TARGET
+
+;-------------------------------------------------
+;ウフフ終了TEQUIP処理
+;EQUIPの更新もここに仕込んでおく
+;-------------------------------------------------
+CALL INFO_RENEW_EQUIP
+
+;-------------------------------------------------
+;MASTERの同行フラグチェック
+;-------------------------------------------------
+SIF !同行人数()
+	CFLAG:MASTER:同行 = 0
+
+;-------------------------------------------------
+;背景色設定
+;-------------------------------------------------
+IF FLAG:時間停止
+	SETBGCOLOR 1, 24, 60
+ELSE
+	;(天候パッチ)時刻・天候に応じて背景色を変更
+	CALL SET_MAP_WEATHER_BGCOLOR
+ENDIF
+
+;-------------------------------------------------
+;情報表示
+;-------------------------------------------------
+PRINTL
+;天気の表示/非表示の更新
+;天界への行き来の際の天気の更新
+CALL INFO_CULC_WEATHER(天気非表示)
+
+;「一日が終わりました」表示と宴会関連の更新処理など
+CALL INFO_GO_NEXTDAY
+CALL CHANGE_TIMEZONE
+
+;子供の描写
+CALL CHILD_DESCRIPTION
+
+;帰宅時間等の予告通知
+CALL TIMEUP_NOTICE(FLAG:デート相手)
+
+IF MOREDATE
+	FOR LOCAL, 0, NumberOfDates
+		SIF LOCAL != FLAG:デート相手 ;don't call it twice
+			CALL TIMEUP_NOTICE(Datees:LOCAL)
+	NEXT
+ENDIF
+;-------------------------------------------------
+;情報表示 (hotpatch: the display below is laid out in panels)
+;-------------------------------------------------
+HTML_PRINT "<era-open class='era-layout era-main'>"
+HTML_PRINT "<era-open class='era-main-header'>"
+CALL HOTPATCH_SKY(天気非表示)
+HTML_PRINT @"<div class='era-clock'><img src='%GET_CLOCK_IMAGE_NAME(TIME)%' height='72px'></div>"
+HTML_PRINT "<era-open class='era-main-when'>"
+CALL INFO_TIME_WATCH
+SIF !天気非表示
+	CALL INFO_SHOW_WEATHER
+CALL INFO_現在の気温
+PRINTPLAIN
+CALL HOTPATCH_SITUATION
+HTML_PRINT "<era-close>"
+CALL HOTPATCH_TIMESTOP
+HTML_PRINT "<era-close>"
+
+VARSET LOCAL
+CALL HOTPATCH_TARGET_DATAGROUP
+
+HTML_PRINT "<era-open class='era-main-occupants'>"
+CALL HOTPATCH_OCCUPANTS
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-open class='era-main-left'>"
+IF TARGET > 0
+	HTML_PRINT "<era-open class='era-card era-stats'>"
+	HTML_PRINT @"<div class='era-card-title'>%HTML_ESCAPE(CALLNAME:TARGET)%'s Stats</div>"
+	CALL SHOW_INFO_PALAM
+	HTML_PRINT "<era-close>"
+ENDIF
+HTML_PRINT "<era-close>"
+
+HTML_PRINT "<era-open class='era-main-center'>"
+IF TARGET > 0
+	HTML_PRINT "<era-open class='era-card era-character'>"
+	CALL HOTPATCH_PLACE
+	HTML_PRINT "<era-open class='era-scene'>"
+	CALL HOTPATCH_SCENE
+	HTML_PRINT "<era-close>"
+	HTML_PRINT "<era-open class='era-portrait'>"
+	CALL HOTPATCH_PORTRAIT
+	HTML_PRINT "<era-close>"
+	HTML_PRINT "<era-open class='era-character-info'>"
+	CALL HOTPATCH_TARGET_SITUATION(FLAG:TARGETの情報表示モード)
+	CALL HOTPATCH_BASE(TARGET)
+	CALL HOTPATCH_EMOTION
+	LOCALS '= HOTPATCH_STAINS(TARGET)
+	SIF STRLENS(LOCALS)
+		HTML_PRINT @"<div class='era-player-status era-stains'><span class='era-status-label'>Stains:</span>%LOCALS%</div>"
+	CALL HOTPATCH_TARGET_STATUS
+	CALL SHOW_EQUIP_1
+	HTML_PRINT "<era-open class='era-look'>"
+	CALL HOTPATCH_LOOK
+	HTML_PRINT "<era-close>"
+	HTML_PRINT "<era-close>"
+	HTML_PRINT "<era-close>"
+ELSE
+	HTML_PRINT "<era-open class='era-card era-character era-alone'>"
+	CALL HOTPATCH_PLACE
+	HTML_PRINT "<era-open class='era-scene'>"
+	CALL HOTPATCH_SCENE
+	HTML_PRINT "<era-close>"
+	HTML_PRINT "<div class='era-alone-message'><span class='era-alone-mark'></span><span class='era-alone-title'>Nobody else is here</span><span class='era-alone-hint'>Move or go out to find someone, or wait for visitors.</span></div>"
+	CALL SHOW_EQUIP_1
+	HTML_PRINT "<era-close>"
+ENDIF
+HTML_PRINT "<era-close>"
+
+HTML_PRINT "<era-open class='era-main-right'>"
+HTML_PRINT "<era-open class='era-card era-player'>"
+LOCALS '= "Funds" + COND_STR(@"&#10;Charisma: %DIGIT_GROUP(MONEY:2)% CM", MONEY:2) + COND_STR(@"&#10;Bullet Money: %DIGIT_GROUP(MONEY:弾貨)% BM", MONEY:弾貨)
+HTML_PRINT @"<div class='era-card-title'>%HTML_ESCAPE(CALLNAME:MASTER)%<span class='era-sub'>You</span><span class='era-funds' title='%LOCALS%'>%HTML_ESCAPE(金額表示(MONEY))%</span></div>"
+CALL HOTPATCH_BASE(MASTER)
+CALL HOTPATCH_PLAYER_STATUS
+CALL SHOW_EQUIP_SP
+CALL SHOW_EQUIP_3
+CALL INFO_GAUGEGROUP
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-close>"
+
+IF !TARGET && TFLAG:抱きつきモード
+	TFLAG:抱きつきモード = 0
+	TFLAG:102 = 1
+ENDIF
+
+IF CFLAG:MASTER:うふふ == 2
+	HTML_PRINT "<era-open class='era-card era-counters'>"
+	CALL カウンター呼び出し処理
+	HTML_PRINT "<era-close>"
+ENDIF
+; The layout stays open for SHOW_USERCOM (hotpatch/MAIN_SCREEN_COMMANDS.ERB), which closes it.
+SIF REFRESH_STATUS() ;Custom code, cycle again if nRefreshStatus is set to 1.
+	RESTART
+
+;-------------------------------------------------------------------------------
+; INFO_TARGET_DATAGROUP without its display: the display moved to the occupant list and the character card.
+;-------------------------------------------------------------------------------
+@HOTPATCH_TARGET_DATAGROUP
+IF TARGET <= 0
+	TFLAG:102 = 0
+	TFLAG:パンツ収奪 = 0
+	RETURN
+ENDIF
+IF !CFLAG:睡眠
+	CALL 押し倒され
+ELSEIF CFLAG:イタズラ <= 1
+	;うふふ解除
+	CVARSET CFLAG, GETNUM(CFLAG, "うふふ"), 0
+ENDIF
+IF CFLAG:睡眠
+	IF CFLAG:イタズラ == 1
+		TFLAG:102 = 1
+	ELSEIF CFLAG:イタズラ == 2
+		CFLAG:TARGET:うふふ = 1
+		CFLAG:MASTER:うふふ = 1
+		TFLAG:102 = 2
+	ELSE
+		TFLAG:102 = 0
+	ENDIF
+ENDIF
+
+;-------------------------------------------------------------------------------
+; INFO_TARGET_BUTTON as a list: companions, the carried character and everyone in the room, each a button
+; (1000 + character) with a face, name and state. Counts TFLAG:パンツ収奪 as the original does.
+;-------------------------------------------------------------------------------
+@HOTPATCH_OCCUPANTS
+#DIM DYNAMIC nIndex
+#DIM DYNAMIC nChara
+#DIM DYNAMIC nCount
+#DIM DYNAMIC nColor
+#DIMS DYNAMIC sItems
+#DIMS DYNAMIC sClass
+#DIMS DYNAMIC sState
+TFLAG:パンツ収奪 = 0
+IF TARGET > 0
+	FOR nIndex, 1, GET_TARGETNUM() + 1
+		nChara = TARGET:nIndex
+		SIF nChara <= 0
+			CONTINUE
+		sClass '= ""
+		IF CFLAG:nChara:同行
+			IF !CHK_DATENOW(CFLAG:MASTER:デート中)
+				sState '= "Accompanying you"
+			ELSEIF TFLAG:泡風呂
+				sState '= "Giving service"
+			ELSE
+				sState '= "Dating"
+			ENDIF
+			sClass += " era-companion"
+		ELSEIF TFLAG:運搬 == nChara
+			sState '= "Being carried"
+		ELSEIF CFLAG:nChara:現在位置 != CFLAG:MASTER:現在位置
+			CONTINUE
+		ELSE
+			sState '= ""
+			RESETCOLOR
+			CALL QoL_HighlightRequestChara(nChara)
+			nColor = GETCOLOR()
+			RESETCOLOR
+			IF nColor != GETCOLOR()
+				sState '= "Has a request"
+				sClass += " era-request"
+			ENDIF
+			SIF FLAG:70 == 1 && EQUIP:nChara:0 && EQUIP:nChara:下半身下着２ != 0 && FLAG:700 >= 100 && GET_INT(nChara, "下半身下着_ずらし可能", EQUIP:nChara:下半身下着２, "コレクション表示可能")
+				TFLAG:パンツ収奪++
+		ENDIF
+		IF CFLAG:nChara:睡眠
+			sState '= STRLENS(sState) ? sState + " · Asleep" # "Asleep"
+			sClass += " era-asleep"
+		ENDIF
+		SIF !STRLENS(sState)
+			sState '= @"Favor %HOTPATCH_RANK(CFLAG:nChara:2, "MAX_50000")%"
+		SIF nChara == TARGET
+			sClass += " era-selected"
+		CALL HOTPATCH_FACE(nChara)
+		sItems += @"<button value='{1000 + nChara}' class='era-occupant%sClass%'><span class='era-face'>%RESULTS%</span>"
+		sItems += @"<span class='era-occupant-text'><span class='era-occupant-name'>%HTML_ESCAPE(CALLNAME:nChara)%</span>"
+		sItems += @"<span class='era-occupant-state'>%sState%</span></span></button>"
+		nCount++
+	NEXT
+	IF TFLAG:運搬 > 0 && FINDELEMENT(TARGET, TFLAG:運搬, 1) == -1
+		CALL HOTPATCH_FACE(TFLAG:運搬)
+		sItems += @"<span class='era-occupant'><span class='era-face'>%RESULTS%</span><span class='era-occupant-text'>"
+		sItems += @"<span class='era-occupant-name'>%HTML_ESCAPE(CALLNAME:(TFLAG:運搬))%</span><span class='era-occupant-state'>Being carried</span></span></span>"
+		nCount++
+	ENDIF
+ENDIF
+SIF !nCount
+	sItems '= "<span class='era-occupant era-occupant-none'><span class='era-face'></span><span class='era-occupant-text'><span class='era-occupant-name'>Just you</span><span class='era-occupant-state'>No one else is in the room</span></span></span>"
+HTML_PRINT @"<div class='era-card era-occupants'><div class='era-card-title'>Room Occupants</div><div class='era-occupant-list'>%sItems%</div></div>"
+
+; The character's face picture as an <img> in RESULTS (empty if the game has none), as LOAD_FACE_IMAGE gets it.
+@HOTPATCH_FACE(nChara)
+#DIM DYNAMIC nChara
+IF TALENT:nChara:行きずり && !GCREATED(CFLAG:nChara:モブ子素材CFLAG開始位置)
+	CALL モブ子生成(nChara, 0)
+	CALL モブ子生成(nChara, 1)
+ENDIF
+RESULT = 0
+CALL GET_BASE_RESOURCE(nChara, "顔絵", "服", "通常")
+SIF !RESULT || RESULT > 1
+	RESULTS = %GET_BASESTYLE(nChara, "顔絵")%_服_通常_{NO:nChara}
+IF SPRITECREATED(RESULTS)
+	RESULTS '= @"<img src='%RESULTS%' height='44px'>"
+ELSE
+	RESULTS '= @"<span class='era-face-letter'>%HTML_ESCAPE(SUBSTRINGU(CALLNAME:nChara, 0, 1))%</span>"
+ENDIF
+
+; The current target's picture (with its effect layers) from PRINT_TARGET_IMAGE, whatever the image settings.
+@HOTPATCH_PORTRAIT
+#DIM DYNAMIC nShown
+#DIM DYNAMIC nSettings
+nShown = FLAG:画像表示
+nSettings = FLAG:画像表示設定
+FLAG:画像表示 = 1
+FLAG:画像表示設定 = 0
+CALL PRINT_TARGET_IMAGE(TARGET)
+FLAG:画像表示 = nShown
+FLAG:画像表示設定 = nSettings
+
+;-------------------------------------------------------------------------------
+; INFO_TARGET_SITUATION: the target's state (SHOW_EQUIP_2), relationship and anger or sleep.
+;-------------------------------------------------------------------------------
+@HOTPATCH_TARGET_SITUATION(情報表示MODE = 0)
+#DIM 情報表示MODE ;0 = 全部ON, 1 = 簡易
+#DIMS DYNAMIC sHtml
+HTML_PRINT "<era-open class='era-character-state'>"
+CALL SHOW_EQUIP_2
+PRINTL
+HTML_PRINT "<era-close>"
+sHtml '= @"<span class='era-fact'><span class='era-fact-label'>Favor</span>%HOTPATCH_RANK(CFLAG:2, "MAX_50000")% {CFLAG:2}</span>"
+sHtml += @"<span class='era-fact'><span class='era-fact-label'>Trust</span>%HOTPATCH_RANK(CFLAG:信頼度, "MAX_20000")% {CFLAG:信頼度}</span>"
+SIF NOTICE_LUST(TARGET)
+	sHtml += @"<span class='era-fact'><span class='era-fact-label'>Frustration</span>{CFLAG:TARGET:溜まってる度 / 10}%</span>"
+IF 情報表示MODE == 0
+	sHtml += @"<span class='era-fact'><span class='era-fact-label'>Children</span>{CFLAG:TARGET:子供人数}</span>"
+	IF (!FLAG:CHILD_LIMIT_BYPASS && INRANGE(CFLAG:TARGET:出産経過日, 1, 59)) || TALENT:TARGET:妊娠 ;1で種付け不可
+		sHtml += "<span class='era-fact'><span class='era-fact-label'>Fertile</span>×</span>"
+	ELSE
+		sHtml += "<span class='era-fact'><span class='era-fact-label'>Fertile</span>〇</span>"
+	ENDIF
+ENDIF
+HTML_PRINT @"<div class='era-facts'>%sHtml%</div>"
+LOCAL = MIN(BASE:怒り / 200, 5)
+SIF BASE:怒り && LOCAL == 0 ;qol custom code, show anger sign if there's even a little bit of anger going
+	LOCAL = 1
+IF CFLAG:睡眠
+	IF CFLAG:ブチギレ
+		SETCOLOR 255,0,0
+		PRINT Angry
+		RESETCOLOR
+	ELSEIF CFLAG:MASTER:イタズラ == 2 || (CFLAG:MASTER:イタズラ && TCVAR:TARGET:睡眠薬強度) ;qol custom code, show sleep depth with sleep pills
+		SELECTCASE TCVAR:TARGET:睡眠深度
+			CASE 0 TO 500
+				SETCOLOR 255,0,0
+				PRINTFORM Sleep status: Can wake up any moment now
+			CASE 501 TO 1500
+				SETCOLOR 255,255,0
+				PRINTFORM Sleep status: Restless
+			CASE 1501 TO 3000
+				SETCOLOR 0,255,0
+				PRINTFORM Sleep status: Light
+			CASE 3001 TO 5000
+				SETCOLOR 0,255,255
+				PRINTFORM Sleep status: Asleep
+			CASE IS > 5000
+				SETCOLOR C_BLUE ;custom code, changed color
+				PRINTFORM Sleep status: Soundly asleep
+			CASEELSE
+		ENDSELECT
+		RESETCOLOR
+	ELSE
+		PRINTFORM Awoken:%"！" * LOCAL%
+	ENDIF
+ELSE
+	IF CFLAG:ブチギレ
+		IF TALENT:度胸 < 0
+			SETCOLOR C_BLUE
+			PRINT Sad
+		ELSE
+			SETCOLOR 255,0,0
+			PRINT Mad
+		ENDIF
+		RESETCOLOR
+	ELSEIF CFLAG:イタズラ || TCVAR:泥酔
+		PRINTFORM Awoken:%"！" * LOCAL%
+	ELSE
+		PRINTFORM Anger:%"！" * LOCAL%
+		PRINTFORM   %"　" * (5 - LOCAL)%
+		SELECTCASE CFLAG:TARGET:眠気覚まし
+			CASE IS > 240
+				PRINT <Sleep Res・Lots>
+			CASE IS > 180
+				PRINT <Sleep Res・Strong>
+			CASE IS > 120
+				PRINT <Sleep Res・Middle>
+			CASE IS > 0
+				PRINT <Sleep Res・Weak>
+			CASEELSE
+				PRINT
+		ENDSELECT
+	ENDIF
+ENDIF
+PRINTL 
+
+; PRINT_RANK as HTML: the rank letter coloured as PRINT_ALPHABET colours it.
+@HOTPATCH_RANK(nValue, sScale)
+#FUNCTIONS
+#DIM DYNAMIC nValue
+#DIMS DYNAMIC sScale
+#DIM DYNAMIC nRank
+#DIMS CONST sRank10, 10 = "Ex", "SS", "S", "A", "B", "C", "D", "E", "F", "G"
+#DIMS CONST sTone10, 10 = "purple", "white", "white", "pink", "red", "orange", "yellow", "green", "aqua", "gray"
+#DIMS CONST sRank7, 7 = "Ex", "S", "A", "B", "C", "D", "E"
+#DIMS CONST sTone7, 7 = "purple", "white", "pink", "red", "orange", "yellow", "gray"
+nRank = CALC_RANK_FUNCTION(nValue, sScale)
+SIF CALC_RANK_NUM_FUNCTION(nValue, sScale) == 7
+	RETURNF @"<span class='era-rank era-tone-%sTone7:nRank%'>%sRank7:nRank%</span>"
+RETURNF @"<span class='era-rank era-tone-%sTone10:nRank%'>%sRank10:nRank%</span>"
+
+;-------------------------------------------------------------------------------
+; INFO_BASE as meters: true stamina (above the 500 floor), energy, drunkenness, vigour, then the drunk face
+; and the erection state (INFO_SHOW_BOKKI). Low stamina and energy warn as BASE_BAR_2 does.
+;-------------------------------------------------------------------------------
+@HOTPATCH_BASE(nChara)
+#DIM DYNAMIC nChara
+#DIMS DYNAMIC sHtml
+#DIMS DYNAMIC sClass
+#DIMS DYNAMIC sState
+sClass '= "era-sta"
+SIF CFLAG:nChara:睡眠 && nChara != MASTER && !CFLAG:MASTER:313
+	sClass += " era-asleep"
+sHtml '= HOTPATCH_BAR("Sta", BASE:nChara:0 - 500, MAXBASE:nChara:0 - 500, sClass, "Stamina")
+sHtml += HOTPATCH_BAR("Ene", BASE:nChara:気力, MAXBASE:nChara:気力, "era-ene", "Energy")
+SIF nGlobalDrunk || BASE:nChara:15 ; ATW qol: option to hide the drunk bar if sober
+	sHtml += HOTPATCH_BAR("Drnk", BASE:nChara:酒気, MAXBASE:nChara:酒気, "era-drnk", "Drunkenness")
+SIF HAS_PENIS(nChara)
+	sHtml += HOTPATCH_BAR("Vig", BASE:nChara:精力, MAXBASE:nChara:精力, "era-vig", "Vigor")
+sState '= ALCOHOL_FACE_TR(nChara)
+SIF STRLENS(sState)
+	sState '= @"<span class='era-chip era-drunk'>%HTML_ESCAPE(sState)%</span>"
+; Your own arousal is on your Status line (HOTPATCH_PLAYER_STATUS).
+IF HAS_PENIS(nChara) && nChara != MASTER
+	IF BASE:nChara:勃起 >= 1500 ;qol custom code, account for unmatched
+		sState += "<span class='era-chip era-erect era-strong'><span class='era-chip-label'>Arousal</span>Erection!!</span>"
+	ELSEIF BASE:nChara:勃起 >= 1000
+		sState += "<span class='era-chip era-erect'><span class='era-chip-label'>Arousal</span>Hard</span>"
+	ELSEIF BASE:nChara:勃起 >= 500
+		sState += "<span class='era-chip era-erect'><span class='era-chip-label'>Arousal</span>Soft</span>"
+	ENDIF
+ENDIF
+SIF STRLENS(sState)
+	sHtml += @"<div class='era-chips'>%sState%</div>"
+HTML_PRINT @"<div class='era-bars'>%sHtml%</div>"
+
+; One labelled meter row, its tooltip giving the full name; "era-low"/"era-critical" are added below half and a
+; quarter for stamina and energy.
+@HOTPATCH_BAR(sLabel, nValue, nMax, sClass, sName)
+#FUNCTIONS
+#DIMS DYNAMIC sLabel
+#DIM DYNAMIC nValue
+#DIM DYNAMIC nMax
+#DIMS DYNAMIC sClass
+#DIMS DYNAMIC sName
+nValue = MAX(nValue, 0)
+nMax = MAX(nMax, 1)
+IF GROUPMATCH(sLabel, "Sta", "Ene")
+	IF nValue * 4 < nMax
+		sClass += " era-critical"
+	ELSEIF nValue * 2 < nMax
+		sClass += " era-low"
+	ENDIF
+ENDIF
+RETURNF @"<div class='era-bar %sClass%' title='%sName%: {nValue} / {nMax}'><span class='era-bar-label'>%sLabel%</span><meter value='{nValue}' max='{nMax}'></meter><span class='era-bar-value'>%HOTPATCH_SHORT_NUMBER(nValue)%</span></div>"
+
+;-------------------------------------------------------------------------------
+; INFO_EMOTION as meters: the target's mood (OverDrive!! at full on a date) and composure (LimitBreak!! at
+; zero on a date), and the afterglow hearts.
+;-------------------------------------------------------------------------------
+@HOTPATCH_EMOTION
+#DIMS DYNAMIC sHtml
+#DIMS DYNAMIC sValue
+#DIM DYNAMIC nLevel
+#DIM DYNAMIC nMax
+nMax = MAX(MAXBASE:TARGET:ムード, 1)
+IF BASE:TARGET:ムード == MAXBASE:TARGET:ムード && CHK_DATENOW(CFLAG:TARGET:デート中)
+	sValue '= "<span class='era-strong'>OverDrive!!</span>"
+ELSE
+	sValue '= HOTPATCH_SHORT_NUMBER(BASE:TARGET:ムード)
+ENDIF
+sHtml '= @"<div class='era-bar era-mood' title='Mood: {BASE:TARGET:ムード} / {nMax}&#10;The mood between you; a good mood helps advances succeed'><span class='era-bar-label'>Mood</span><meter value='{BASE:TARGET:ムード}' max='{nMax}'></meter><span class='era-bar-value'>%sValue%</span></div>"
+nMax = MAX(MAXBASE:TARGET:理性, 1)
+IF BASE:TARGET:理性 == 0 && CHK_DATENOW(CFLAG:TARGET:デート中)
+	sValue '= "<span class='era-strong'>LimitBreak!!</span>"
+ELSE
+	sValue '= HOTPATCH_SHORT_NUMBER(BASE:TARGET:理性)
+ENDIF
+sHtml += @"<div class='era-bar era-composure%(BASE:TARGET:理性 < 100 ? " era-low" # "")%' title='Composure: {BASE:TARGET:理性} / {nMax}&#10;Self-restraint (reason); the lower it is, the more advances succeed'><span class='era-bar-label'>Comp</span><meter value='{BASE:TARGET:理性}' max='{nMax}'></meter><span class='era-bar-value'>%sValue%</span></div>"
+nLevel = AFTERGLOW_LEVEL(BASE:TARGET:絶頂余韻)
+SIF nLevel >= 1
+	sHtml += @"<div class='era-chips'><span class='era-chip era-afterglow'>Afterglow %"♥" * nLevel%</span></div>"
+HTML_PRINT @"<div class='era-bars'>%sHtml%</div>"
+
+; The target part of INFO_STATUS after INFO_EMOTION: cycle, semen, hypnosis states.
+@HOTPATCH_TARGET_STATUS
+;SIF FLAG:生理周期可視化
+SIF NOTICE_CYCLE(TARGET); bugfix custom code
+	CALL CYCLE_PRINT(TARGET)
+SIF EX:TARGET:精液残量 > 0
+	PRINTFORM  Cum in Vagina: %DIGIT_GROUP(EX:TARGET:精液残量),5,LEFT%
+SIF EX:TARGET:アナル精液残量 > 0
+	PRINTFORM  Cum in Anus: %DIGIT_GROUP(EX:TARGET:アナル精液残量),5,LEFT%
+SIF TCVAR:MASTER:ゴム内 > 0 ;com custom code
+	PRINTFORM  Cum in Condom: %DIGIT_GROUP(TCVAR:MASTER:ゴム内),5,LEFT%
+;new player guide custom code
+	CALL NPG_CUMS(TARGET)
+IF TCVAR:Common_Sense_Alteration_Status ;custom code
+	SETCOLOR C_PINK
+	PRINTFORM  Common Sense Modified (PWR:{TCVAR:Common_Sense_Alteration_Status}
+	IF TCVAR:Common_Sense_Alteration_Status > 85
+		SIF NON_HYPNOTIZED_EYEWITNESSES()
+			SETCOLOR C_L_GRAY
+		PRINTFORM  - Free Use 
+		IF NON_HYPNOTIZED_EYEWITNESSES()
+			PRINTFORM Not Possible (Eyewitnesses Nearby))
+		ELSE
+			PRINTFORM Enabled)
+		ENDIF
+	ELSE
+		PRINTFORM )
+	ENDIF
+	RESETCOLOR
+ENDIF
+IF TCVAR:Exhibitionist_Nudist_Sense ;custom code
+	SETCOLOR C_PINK
+	IF TCVAR:Exhibitionist_Nudist_Sense == 1
+		PRINTFORM  Exhibitionist Sense Modified
+	ELSE
+		PRINTFORM  Nudist Sense Modified
+	ENDIF
+ENDIF
+PRINTL
+
+;-------------------------------------------------------------------------------
+; INFO_TIMESTOP as a large button: Time Stop [355] or Resume Time [999], unavailable when the original says so,
+; with the TSP meter. The cheat [2000] and hypnosis [666] buttons follow it.
+;-------------------------------------------------------------------------------
+@HOTPATCH_TIMESTOP
+#DIMS DYNAMIC sHtml
+#DIMS DYNAMIC sButton
+#DIMS DYNAMIC sGauge
+IF MAXBASE:MASTER:TSP
+	;The TSP gauge sits inside the button, under its label
+	sGauge '= @"<span class='era-timestop-gauge'><meter value='{MAX(BASE:MASTER:TSP, 0)}' max='{MAXBASE:MASTER:TSP}'></meter><span class='era-timestop-tsp'>TSP {MAX(BASE:MASTER:TSP, 0)} / {MAXBASE:MASTER:TSP}</span></span>"
+	IF BASE:MASTER:気力 <= 0 || BASE:MASTER:TSP <= 0 || (!FLAG:70 && (CFLAG:うふふ || CFLAG:イタズラ || CFLAG:添い寝中))
+		sButton '= "<span class='era-timestop-button era-unavailable'>Time Stop<span class='era-sub'>Not possible now</span>" + sGauge + "</span>"
+	ELSEIF !FLAG:70
+		IF TFLAG:妄想中 == 1
+			sButton '= "<span class='era-timestop-button era-unavailable'>Time Stop<span class='era-sub'>Under delusion</span>" + sGauge + "</span>"
+		ELSEIF CFLAG:MASTER:イタズラ
+			sButton '= "<span class='era-timestop-button era-unavailable'>Time Stop<span class='era-sub'>Not possible now</span>" + sGauge + "</span>"
+		ELSE
+			sButton '= "<button value='355' class='era-timestop-button'>Time Stop" + sGauge + "</button>"
+		ENDIF
+	ELSEIF CFLAG:うふふ
+		sButton '= "<button value='999' class='era-timestop-button era-stopped'>Resume Time<span class='era-sub'>Stopped while teasing</span>" + sGauge + "</button>"
+	ELSE
+		sButton '= "<button value='999' class='era-timestop-button era-stopped'>Resume Time<span class='era-sub'>Time is stopped</span>" + sGauge + "</button>"
+	ENDIF
+	sHtml '= sButton
+ENDIF
+IF FLAG:CHEATMENU
+	IF !FLAG:CHEATMENUCONFIRM
+		sHtml += "<button value='2000' class='era-chip-button'>Cheat</button>"
+	ELSE
+		sHtml += "<button value='2000' class='era-chip-button era-warn'>Really cheat?</button>"
+	ENDIF
+ENDIF
+;hypnosis patch
+IF FLAG:催眠on && MAXBASE:MASTER:TSP && TARGET
+	IF FLAG:70 || !SHIRAHU(TARGET) ;custom code, drunk/sleeping people can't be hypnotized
+		sHtml += "<span class='era-chip-button era-unavailable'>Hypnosis not possible</span>"
+	ELSEIF NON_HYPNOTIZED_EYEWITNESSES() ;custom code
+		sHtml += "<span class='era-chip-button era-unavailable'>Hypnosis not possible (eyewitnesses nearby)</span>"
+	ELSE
+		sHtml += @"<button value='666' class='era-chip-button%(FLAG:催眠強度 ? " era-on" # "")%'>Hypnosis</button>"
+	ENDIF
+ENDIF
+SIF STRLENS(sHtml)
+	HTML_PRINT @"<div class='era-timestop%(FLAG:70 ? " era-active" # "")%'>%sHtml%</div>"
+
+;-------------------------------------------------------------------------------
+; The header's backdrop, drawn by CSS from its classes: the sky for the hour (TIME), the weather (TIME:5, abnormal
+; weather FLAG:異常気象), the season's land (DAY:2), dimmer under a roof (!OUTROOF), or a cave where the game hides
+; the weather (underground); and the area's landmark (HOTPATCH_AREA, web/areas/*.svg). Decoration only: it prints one
+; HTML line.
+;-------------------------------------------------------------------------------
+@HOTPATCH_SKY(nNoWeather)
+#DIM DYNAMIC nNoWeather
+#DIM DYNAMIC nHour
+#DIMS DYNAMIC sClass
+#DIMS CONST sSeason, 5 = "spring", "spring", "summer", "autumn", "winter"
+nHour = (TIME / 60) % 24
+IF nHour >= 4 && nHour < 6
+	sClass '= "era-sky-dawn"
+ELSEIF nHour >= 6 && nHour < 10
+	sClass '= "era-sky-morning"
+ELSEIF nHour >= 10 && nHour < 16
+	sClass '= "era-sky-day"
+ELSEIF nHour >= 16 && nHour < 19
+	sClass '= "era-sky-evening"
+ELSE
+	sClass '= "era-sky-night"
+ENDIF
+SELECTCASE TIME:5
+	CASE 0
+		sClass += " era-weather-clear"
+	CASE 1
+		sClass += " era-weather-fair"
+	CASE 2, 3
+		sClass += " era-weather-cloudy"
+	CASE 4, 6
+		sClass += " era-weather-rain"
+	CASE 5, 13, 14, 15
+		sClass += " era-weather-storm"
+	CASE 7
+		sClass += " era-weather-fog"
+	CASE 9
+		sClass += " era-weather-blizzard"
+	CASEELSE
+		sClass += " era-weather-snow"
+ENDSELECT
+SIF FLAG:異常気象
+	sClass += " era-weather-strange"
+sClass += " era-season-" + sSeason:(LIMIT(DAY:2, 0, 4))
+IF nNoWeather
+	sClass += " era-underground"
+ELSEIF !OUTROOF(CFLAG:MASTER:現在位置)
+	sClass += " era-indoor"
+ENDIF
+SIF HOTPATCH_AREA() >= 0
+	sClass += @" era-area-{HOTPATCH_AREA()}"
+HTML_PRINT @"<div class='era-sky %sClass%'><span class='era-sky-view'><span class='era-sky-orb'></span><span class='era-sky-clouds'></span><span class='era-sky-landmark'></span><span class='era-sky-fall'></span><span class='era-sky-land'></span></span></div>"
+
+;-------------------------------------------------------------------------------
+; QOL_INFO_SITUATION for the header without your own state, which moved to your card (HOTPATCH_PLAYER_STATUS):
+; orgasm denial, the date notices and the insertion warnings, wrapped as the original wraps them.
+;-------------------------------------------------------------------------------
+@HOTPATCH_SITUATION
+SIF TEQUIP:焦らしモード
+	PRINT 　`[Orgasm Denial]`
+SIF CFLAG:Hypno_Orgasm_Denial
+	PRINT 　`[Hypno-Orgasm Denial]`
+IF FLAG:デート相手
+	IF MOREDATE && NumberOfDates > 1
+		CALL MOREDATES_HUD_INFO
+	ELSE
+		IF FLAG:守矢くじデート相手
+			CALL COLORMESSAGE(@"　<Moriya Date With %CALLNAME:(FLAG:守矢くじデート相手)%>",C_YELLOW)
+		ELSEIF FLAG:催眠デート相手
+			CALL COLORMESSAGE(@"　<Hypno-Date With %CALLNAME:(FLAG:催眠デート相手)%>",C_YELLOW)
+		ELSEIF CFLAG:(FLAG:デート相手):現在位置 == OMANEKIBEYA()
+			CALL COLORMESSAGE(@"　<\@ TFLAG:泡風呂 ? Getting Service In # Visiting \@ %CALLNAME:(FLAG:デート相手)%'s Room\@ TFLAG:泡風呂 - TIME:1 > 0 ? %" "%(%PRINT_PLUR("Minute", TFLAG:泡風呂 - TIME:1)% left)#\@>", 0xFF3399)
+		ELSE
+			CALL COLORMESSAGE(@"　<Dating %CALLNAME:(FLAG:デート相手)%", 0xFF3399)
+			SIF nDateScoreDisplay || nSpoilerMode
+				CALL COLORMESSAGE(@" - Score: {DateEvent_Checksum(FLAG:デート相手)}", 0xFF3399)
+			CALL COLORMESSAGE(@">", 0xFF3399)
+		ENDIF
+		SIF INRANGE(TIME, CFLAG:(FLAG:デート相手):就寝時間 - 60, CFLAG:(FLAG:デート相手):就寝時間)
+			CALL COLORMESSAGE(@"　<%CALLNAME:(FLAG:デート相手)% Looks Tired>", C_D_ORANGE)
+	ENDIF
+ENDIF
+CALL QOL_INSERTION_INFO
+CALL QOL_AUTOMATIC_HTML_LINEBREAK(HTML_POPPRINTINGSTR(),MAXWIDTH() - nClockCharacterLength, "`")
+
+;-------------------------------------------------------------------------------
+; Your own state as a plain "Status" line under your meters (not chips, so it doesn't read as buttons): arousal
+; (INFO_SHOW_BOKKI), hunger and bath (HUNGER, BATHED, in their colours), sleepiness and sleep resistance (from
+; QOL_INFO_SITUATION) and your body stains (STAIN_INFO, which replaces the Body Stains [801] command); then the
+; Pushdown Guard toggle (-9200, QOL_EXTRA_COMMAND_BUTTONS). Have a Meal and Relax in the Bath are in Go & Manage.
+;-------------------------------------------------------------------------------
+@HOTPATCH_PLAYER_STATUS
+#DIMS DYNAMIC sHtml
+#DIMS DYNAMIC sText
+IF HAS_PENIS(MASTER)
+	IF BASE:MASTER:勃起 >= 1500
+		sHtml '= HOTPATCH_STATUS_ITEM("Erection!!", 0xFF6AC8, "Arousal: at its peak")
+	ELSEIF BASE:MASTER:勃起 >= 1000
+		sHtml '= HOTPATCH_STATUS_ITEM("Hard", 0xFF9AD8, "Arousal: hard")
+	ELSEIF BASE:MASTER:勃起 >= 500
+		sHtml '= HOTPATCH_STATUS_ITEM("Soft", 0xD8A8C8, "Arousal: half hard")
+	ENDIF
+ENDIF
+RESETCOLOR
+sText '= HUNGER(MASTER)
+sHtml += HOTPATCH_STATUS_ITEM(sText, GETCOLOR(), (sText == "Can eat" ? "Hungry: you can eat again (Have a Meal, in Go &amp; Manage, when you have a dish)" # "Hunger: you ate recently"))
+RESETCOLOR
+sText '= BATHED(MASTER)
+sHtml += HOTPATCH_STATUS_ITEM(sText, GETCOLOR(), (sText == "Can bathe" ? "It has been a while since your last bath (Relax in the Bath, in Go &amp; Manage, where there is one)" # "Since your last bath"))
+RESETCOLOR
+IF CFLAG:MASTER:デート中 != MAIN_MAP && CFLAG:MASTER:現在位置 != OMANEKIBEYA()
+	SELECTCASE NEMUKE()
+		CASE IS > 690
+			sHtml += HOTPATCH_STATUS_ITEM("About to leave", C_D_ORANGE, "Sleepiness")
+		CASE IS > 660
+			sHtml += HOTPATCH_STATUS_ITEM("Very tired", C_YELLOW, "Sleepiness")
+		CASE IS > 600
+			sHtml += HOTPATCH_STATUS_ITEM("Tired", C_P_YELLOW, "Sleepiness")
+	ENDSELECT
+ELSEIF NEMUKE() >= 720
+	IF NEMUKE() > 960
+		sHtml += HOTPATCH_STATUS_ITEM("Need sleep", C_RED, "Sleepiness")
+	ELSEIF NEMUKE() > 840
+		sHtml += HOTPATCH_STATUS_ITEM("Sleeping possible", C_YELLOW, "Sleepiness")
+	ELSE
+		sHtml += HOTPATCH_STATUS_ITEM("Sleeping possible", C_P_YELLOW, "Sleepiness")
+	ENDIF
+ENDIF
+IF CFLAG:MASTER:眠気覚まし
+	SELECTCASE CFLAG:MASTER:眠気覚まし
+		CASE IS > 240
+			sText '= "Lots"
+		CASE IS > 180
+			sText '= "Strong"
+		CASE IS > 120
+			sText '= "Middle"
+		CASEELSE
+			sText '= "Weak"
+	ENDSELECT
+	sHtml += HOTPATCH_STATUS_ITEM("Sleep resistance: " + sText, GETDEFCOLOR(), "Keeps sleepiness away for a while")
+ENDIF
+sHtml += HOTPATCH_STAINS(MASTER)
+sHtml '= @"<div class='era-player-status'><span class='era-status-label'>Status:</span>%sHtml%</div><div class='era-player-toggles'>"
+sHtml += @"<button value='-9200' class='era-toggle%(FLAG:押し倒し ? " era-on" # "")%' title='Pushdown Guard: %(FLAG:押し倒し ? "on" # "off")%&#10;When on, someone only pushes you down if they are stronger than you (fighting ability and build, with shyness, seduction and forwardness); otherwise they just hug you.&#10;When off, anyone in the mood can push you down.'>Pushdown Guard</button>"
+HTML_PRINT sHtml + "</div>"
+
+; INFO_CHARA_STAIN as status entries, one per stained body part ("Hands: Semen, Love Juice"). A part's own fluid
+; (love juice on the vagina, the penis on itself, the anus on itself), which washing leaves, isn't listed.
+@HOTPATCH_STAINS(nChara)
+#FUNCTIONS
+#DIM DYNAMIC nChara
+#DIM DYNAMIC nPart
+#DIM DYNAMIC nType
+#DIM DYNAMIC nStain
+#DIMS DYNAMIC sText
+#DIMS DYNAMIC sHtml
+#DIMS CONST sPart = "Mouth", "Hands", "Penis", "Vagina", "Anus", "Breasts", "", "", "Armpit"
+#DIM CONST nNatural = 0, 0, 2, 1, 8, 0, 0, 0, 0
+#DIMS CONST sStain = "Love Juice", "Penis", "Semen", "Anus", "Milk", "Mucus", "Hymen Blood", "Chocolate"
+FOR nPart, 0, 9
+	SIF nPart == 6 || nPart == 7
+		CONTINUE
+	SIF nPart == 2 && !(TALENT:nChara:2 & 2)
+		CONTINUE
+	SIF (nPart == 3 || nPart == 5) && !(TALENT:nChara:2 & 1)
+		CONTINUE
+	nStain = STAIN:nChara:nPart & ~nNatural:nPart
+	SIF !nStain
+		CONTINUE
+	sText '= ""
+	FOR nType, 0, 8
+		SIF GETBIT(nStain, nType)
+			sText += (STRLENS(sText) ? ", " # "") + sStain:nType
+	NEXT
+	sHtml += HOTPATCH_STATUS_ITEM(sPart:nPart + ": " + sText, 0xE8B0C8, "Body stains (a bath washes them off)")
+NEXT
+RETURNF sHtml
+
+; One entry of the status line, in a game colour (the default colour adds none).
+@HOTPATCH_STATUS_ITEM(sText, nColor, sTitle)
+#FUNCTIONS
+#DIMS DYNAMIC sText
+#DIM DYNAMIC nColor
+#DIMS DYNAMIC sTitle
+#DIMS DYNAMIC sColor
+SIF nColor != GETDEFCOLOR()
+	sColor '= @" color='#%TOSTR(nColor, "X6")%'"
+RETURNF @"<span class='era-status'%sColor% title='%sTitle%'>%HTML_ESCAPE(sText)%</span>"
+
+; A state chip in a game colour (the default colour adds none), with a tooltip naming what it measures.
+@HOTPATCH_CHIP(sText, nColor, sClass, sTitle)
+#FUNCTIONS
+#DIMS DYNAMIC sText
+#DIM DYNAMIC nColor
+#DIMS DYNAMIC sClass
+#DIMS DYNAMIC sTitle
+#DIMS DYNAMIC sColor
+SIF nColor != GETDEFCOLOR()
+	sColor '= @" color='#%TOSTR(nColor, "X6")%'"
+RETURNF @"<span class='era-chip %sClass%'%sColor% title='%sTitle%'>%HTML_ESCAPE(sText)%</span>"
+
+;-------------------------------------------------------------------------------
+; INFO_GPS as the character card's title: where you are (or the date place and spot, or where you are heading), the
+; furniture there and the room's cleanliness (SEIKETU) as chips. The head count is the occupant list's.
+;-------------------------------------------------------------------------------
+@HOTPATCH_PLACE
+#DIMS DYNAMIC sName
+#DIMS DYNAMIC sSub
+#DIMS DYNAMIC sTags
+#DIMS DYNAMIC sText
+IF TFLAG:デート道中
+	sName '= "Heading to " + DATENAME_PLACE()
+	sSub '= @"arriving in {TFLAG:デート道中} min"
+ELSEIF CHK_DATENOW(CFLAG:MASTER:デート中) && CFLAG:MASTER:現在位置 != OMANEKIBEYA()
+	sName '= DATENAME_PLACE()
+	sSub '= CAPITALIZE(DATENAME_SPOT())
+ELSE
+	sName '= THE_CASE_SHIFT(NAME_FROM_PLACE(CFLAG:MASTER:現在位置))
+	SIF HOTPATCH_AREA() >= 0
+		sSub '= GET_MAPNAME(HOTPATCH_AREA())
+	SIF ITEM:ヒノキ風呂 && NEAR_BATH() == CFLAG:MASTER:現在位置
+		sTags += HOTPATCH_CHIP(@"Cypress Bath Lv{ITEM:ヒノキ風呂}", GETDEFCOLOR(), "era-furniture", "Furniture")
+	IF CFLAG:MASTER:現在位置 == CFLAG:MASTER:初期位置
+		SIF ITEM:キリのベッド
+			sTags += HOTPATCH_CHIP(@"Paulownia Bed Lv{ITEM:キリのベッド}", GETDEFCOLOR(), "era-furniture", "Furniture")
+		SIF ITEM:ケヤキの机椅子
+			sTags += HOTPATCH_CHIP(@"Zelkova Desk Lv{ITEM:ケヤキの机椅子}", GETDEFCOLOR(), "era-furniture", "Furniture")
+		SIF ITEM:ナラのソファー
+			sTags += HOTPATCH_CHIP(@"Oak Sofa Lv{ITEM:ナラのソファー}", GETDEFCOLOR(), "era-furniture", "Furniture")
+	ENDIF
+	SIF ITEM:イチョウのまな板 && KITCHEN(CFLAG:MASTER:現在位置)
+		sTags += HOTPATCH_CHIP(@"Ginkgo Cutting Board Lv{ITEM:イチョウのまな板}", GETDEFCOLOR(), "era-furniture", "Furniture")
+ENDIF
+IF !CFLAG:MASTER:うふふ && !FLAG:1002 && AT_HOME(MASTER) == 1
+	RESETCOLOR
+	sText '= SEIKETU(CFLAG:MASTER:現在位置)
+	sTags += HOTPATCH_CHIP(sText, GETCOLOR(), "era-clean", "How clean the room is")
+	RESETCOLOR
+ENDIF
+SIF STRLENS(sSub)
+	sSub '= @"<span class='era-sub'>%HTML_ESCAPE(sSub)%</span>"
+SIF STRLENS(sTags)
+	sTags '= @"<span class='era-place-tags'>%sTags%</span>"
+HTML_PRINT @"<div class='era-card-title era-place'><span class='era-place-name'>%HTML_ESCAPE(sName)%%sSub%</span>%sTags%</div>"
+
+;-------------------------------------------------------------------------------
+; The area (map) you are in, as GET_MAPNAME numbers them: a place's map is its id / 100 (home rooms, outing spots,
+; the gap and the guest room alike); on a date, the map you went to. -1 on the roads between maps (ids from 2000).
+;-------------------------------------------------------------------------------
+@HOTPATCH_AREA
+#FUNCTION
+SIF CHK_DATENOW(CFLAG:MASTER:デート中) && CFLAG:MASTER:現在位置 != OMANEKIBEYA()
+	RETURNF CFLAG:MASTER:デート中
+SIF INRANGE(CFLAG:MASTER:現在位置, 0, 1999)
+	RETURNF GET_MAPID(CFLAG:MASTER:現在位置)
+RETURNF -1

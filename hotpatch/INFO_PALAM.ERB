@@ -8,7 +8,8 @@
 ;
 ; Kept: the level (GETPALAMLV) and bar progress rules, the yellow highlight from EX:TARGET:20-24, Smooth.
 ; Dropped: the collapse toggle [3000] (always expanded) and the Bars/Numbers toggle [998]; each item shows its
-; value and gem gain, with exact figures in its tooltip.
+; value against the next level's threshold (value/next) and its gem gain, with exact figures and what it
+; measures in its tooltip.
 ;-------------------------------------------------------------------------------
 @SHOW_INFO_PALAM
 #DIM DYNAMIC nPalam
@@ -46,11 +47,16 @@ FOR nPalam, 0, 100
 		sShown '= "Smooth"
 	ELSE
 		sShown '= HOTPATCH_SHORT_NUMBER(PALAM:nPalam)
+		SIF nLv < 15
+			sShown += @"<span class='era-palam-next'>/%HOTPATCH_SHORT_NUMBER(PALAMLV:(nLv + 1))%</span>"
 	ENDIF
 	sName '= PALAM_TR(PALAMNAME:nPalam, "Palam")
-	sTip '= @"%sName%: {PALAM:nPalam}&#10;Level {nLv}"
-	SIF nLv < 15
-		sTip += @" (Lv {nLv + 1} at {PALAMLV:(nLv + 1)})"
+	sTip '= @"%sName%: {PALAM:nPalam}%HOTPATCH_PALAM_ABOUT(nPalam)%&#10;Level {nLv}"
+	IF nLv < 15
+		sTip += @"&#10;Next level at {PALAMLV:(nLv + 1)}"
+	ELSE
+		sTip += " (max)"
+	ENDIF
 	sGain '= ""
 	IF nPalam != 9
 		nGain = CALC_JUEL(PALAM:nPalam, nPalam)
@@ -66,6 +72,55 @@ FOR nPalam, 0, 100
 	sItems += @"<span class='era-palam-value'>%sShown%</span>%sGain%</div>"
 NEXT
 HTML_PRINT @"<div class='era-section era-palam'><div class='era-section-title'>Palam</div><div class='era-palam-grid'>%sItems%</div></div>"
+
+; What a parameter measures, as a line for its tooltip ("" if unknown).
+@HOTPATCH_PALAM_ABOUT(nPalam)
+#FUNCTIONS
+#DIM DYNAMIC nPalam
+#DIMS DYNAMIC sAbout
+SELECTCASE nPalam
+	CASE 0
+		sAbout '= "Clitoral (or penile) pleasure"
+	CASE 1
+		sAbout '= "Vaginal pleasure"
+	CASE 2
+		sAbout '= "Anal pleasure"
+	CASE 3
+		sAbout '= "Breast pleasure"
+	CASE 4
+		sAbout '= "Oral (mouth) pleasure"
+	CASE 9
+		sAbout '= "Lubrication: how wet she is; wetter makes insertion easier"
+	CASE 10
+		sAbout '= "Willingness to go along with you"
+	CASE 11
+		sAbout '= "Sexual desire, lust"
+	CASE 12
+		sAbout '= "Giving in to you"
+	CASE 13
+		sAbout '= "Technique picked up from what you do"
+	CASE 14
+		sAbout '= "Embarrassment"
+	CASE 15
+		sAbout '= "Physical pain"
+	CASE 16
+		sAbout '= "Fear of you"
+	CASE 20
+		sAbout '= "Goodwill toward you"
+	CASE 21
+		sAbout '= "Feeling of superiority over you"
+	CASE 30
+		sAbout '= "Resentment toward you"
+	CASE 31
+		sAbout '= "Unpleasantness of what is happening"
+	CASE 32
+		sAbout '= "Gloom, despair"
+	CASE 100
+		sAbout '= "Rejection of what you are doing"
+ENDSELECT
+SIF STRLENS(sAbout)
+	sAbout '= "&#10;" + sAbout
+RETURNF sAbout
 
 ; Up to 9999 as is, then three significant figures: 12.3k, 456k, 7.89M.
 @HOTPATCH_SHORT_NUMBER(nNumber)

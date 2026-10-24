@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 100">
+  <!-- Hakurei Shrine: the hall behind its trees, the red torii in front -->
+  <g fill="#3a2a1e"><rect x="201" y="56" width="7" height="44"/><rect x="314" y="58" width="6" height="42"/><path d="M204 76 L194 66 L197 64 L206 72 Z"/></g>
+  <g fill="#24402a"><circle cx="192" cy="58" r="15"/><circle cx="216" cy="56" r="16"/><circle cx="204" cy="40" r="18"/><circle cx="306" cy="58" r="14"/><circle cx="328" cy="56" r="13"/><circle cx="317" cy="42" r="16"/></g>
+  <g fill="#3a6040"><circle cx="198" cy="36" r="9"/><circle cx="188" cy="54" r="7"/><circle cx="312" cy="38" r="8"/></g>
+  <g fill="#2b4a2c"><circle cx="184" cy="96" r="8"/><circle cx="196" cy="94" r="9"/><circle cx="214" cy="96" r="7"/></g>
+  <path d="M222 62 L246 46 H310 L334 62 Z" fill="#3a3530"/>
+  <path d="M232 46 L252 34 H304 L324 46 Z" fill="#4a423a"/>
+  <rect x="236" y="62" width="82" height="32" fill="#a07a50"/>
+  <rect x="246" y="66" width="62" height="22" fill="#6e5236"/>
+  <rect x="270" y="70" width="14" height="24" fill="#d9c9a4"/>
+  <rect x="226" y="92" width="102" height="8" fill="#8a8478"/>
+  <path d="M50 14 Q100 22 150 14 L148 20 Q100 28 52 20 Z" fill="#241a18"/>
+  <g fill="#c8322a">
+    <path d="M56 21 Q100 29 144 21 L144 28 Q100 34 56 28 Z"/>
+    <rect x="62" y="40" width="76" height="6"/>
+    <rect x="96" y="28" width="8" height="12"/>
+    <path d="M70 28 H80 L82 96 H68 Z"/>
+    <path d="M120 28 H130 L132 96 H118 Z"/>
+  </g>
+  <rect x="66" y="92" width="18" height="6" fill="#241a18"/><rect x="116" y="92" width="18" height="6" fill="#241a18"/>
+</svg>

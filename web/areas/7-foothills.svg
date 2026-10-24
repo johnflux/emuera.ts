@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 100">
+  <!-- Youkai Mountain foothills: wooded slopes and a waterfall -->
+  <path d="M0 100 L70 30 Q90 14 110 30 L190 100 Z" fill="#3c5a44"/>
+  <path d="M120 100 L230 20 Q250 8 270 22 L340 70 V100 Z" fill="#48684e"/>
+  <path d="M236 30 Q240 60 232 100 H252 Q244 60 248 30 Z" fill="#cfe6f4"/>
+  <path d="M238 34 Q242 60 236 100" stroke="#ffffff" stroke-width="1.5" fill="none"/>
+  <g fill="#284230"><path d="M20 100 l10 -30 l10 30z"/><path d="M40 100 l9 -26 l9 26z"/><path d="M150 100 l11 -32 l11 32z"/><path d="M174 100 l9 -26 l9 26z"/><path d="M290 100 l10 -30 l10 30z"/><path d="M310 100 l9 -24 l9 24z"/></g>
+  <ellipse cx="242" cy="98" rx="20" ry="4" fill="#e8f4ff" opacity=".7"/>
+</svg>

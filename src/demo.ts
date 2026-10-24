@@ -1,4 +1,4 @@
-import { emptyGame, indexScript, type Game } from "./loader.js";
+import { indexScript, type Game } from "./loader.js";
 
 // Original conformance program, not a replacement implementation of the bundled game.
 const source = `
@@ -8,7 +8,7 @@ SETCOLOR 100, 220, 255
 PRINTL Emuera.ts - ERB interpreter conformance demo
 RESETCOLOR
 DRAWLINE
-PRINTL This demo executes ERB. The bundled game is a separate run.
+PRINTL This demo executes ERB. Item 8 opens the bundled game's main screen in prepared situations.
 HTML_PRINT "<p align='center'><b>HTML, sprite crops and clickable choices</b></p>"
 HTML_PRINT "<p align='center'><img src='TW_title000'></p>"
 HTML_PRINT "<a href='https://wiki.eragames.rip/index.php/Emuera'>Language reference</a>"
@@ -24,6 +24,7 @@ PRINTBUTTON " [4] Animated sprites ", 4
 PRINTBUTTON " [5] Character portraits ", 5
 PRINTBUTTON " [6] Dialogue (click to continue) ", 6
 PRINTBUTTON " [7] Command grid (PRINTC) ", 7
+PRINTBUTTON " [8] Main screen scenarios ", 8
 HTML_PRINT "<button value='0' title='End this demo'>[0] Quit</button>"
 INPUT
 SELECTCASE RESULT
@@ -68,13 +69,119 @@ SELECTCASE RESULT
     PRINTL
     INPUT
     PRINTFORML Command {RESULT} chosen.
+  CASE 8
+    CALL SCENARIOS
+    ; BEGIN returns only from SCENARIOS; the new state starts once the title program returns.
+    SIF DEMO_SCENARIO
+      RETURN
   CASE 0
     PRINTL Demo finished. Start another run using the toolbar.
     RETURN
   CASEELSE
-    PRINTL Choose a number from 0 to 7.
+    PRINTL Choose a number from 0 to 8.
 ENDSELECT
 GOTO MENU
+
+@SCENARIOS
+#DIMS SCENE, 10 = "", "Alone", "One person", "Two people", "Crowd (six people)", "Time stopped, two people", "Time stopped, alone", "Partner asleep", "Exhausted", "Outdoors at night, in the rain"
+#DIM I
+; RESETDATA resets static locals too.
+#DIM DYNAMIC CHOICE
+PRINTL Start the bundled game on its main screen in a prepared situation (Quicktest player, Hakurei Shrine back room).
+PRINTL Play continues normally from there; restart the demo to pick another scenario.
+FOR I, 1, 10
+  PRINTFORML [{I}] %SCENE:I%
+NEXT
+PRINTL [0] Back
+INPUT
+IF RESULT < 1 || RESULT > 9
+  RETURN 0
+ENDIF
+CHOICE = RESULT
+; The game's own Quicktest (TITLE.ERB option 99) without its option prompts.
+RESETDATA
+DEMO_SCENARIO = CHOICE
+DevTest = 1
+VARSET DevTestOptions
+DevTestOptions:10 = -1
+CALL Name_Array_Set
+CALL ADDCHARA_INIT(0)
+; A home lets NEWGAME skip the home picker; the back room is where a new player starts.
+CFLAG:0:自宅位置 = 40
+CFLAG:0:初期位置 = 53
+BEGIN FIRST
+
+@EVENTFIRST
+#LATER
+; Overrides SYSTEM.ERB's BEGIN SHOP so the day starts at once (like choosing [100]).
+SIF DEMO_SCENARIO
+  BEGIN TRAIN
+
+; Wraps the game's main screen: the scene is arranged right before it is first drawn, so arrival greetings wait for the next turn.
+@SHOW_STATUS
+SIF DEMO_SCENARIO
+  CALL ARRANGE_SCENE
+CALL GAME_SHOW_STATUS
+
+@ARRANGE_SCENE
+#DIM CHARA, 6 = 1, 11, 120, 57, 10, 21
+#DIM COUNT
+#DIM C
+#DIM N
+#DIM ROOM
+DevTest = 0
+SELECTCASE DEMO_SCENARIO
+  CASE 2, 7, 8, 9
+    COUNT = 1
+  CASE 3, 5
+    COUNT = 2
+  CASE 4
+    COUNT = 6
+ENDSELECT
+ROOM = CFLAG:MASTER:現在位置
+IF DEMO_SCENARIO == 9
+  ; The first open-air place at home, late in the evening, raining.
+  FOR C, 1, 100
+    IF IN_HOME(C) == 1 && OUTROOF(C) && STRLENS(STR:(8000 + C))
+      ROOM = C
+      BREAK
+    ENDIF
+  NEXT
+  CFLAG:MASTER:現在位置 = ROOM
+  CFLAG:MASTER:前ターン位置 = ROOM
+  TIME = 22 * 60
+  TIME:5 = 4
+ENDIF
+FOR C, 1, CHARANUM
+  SIF CFLAG:C:現在位置 == ROOM
+    CFLAG:C:現在位置 = ENTRANCE
+NEXT
+; Already met, greeted and present last turn, so no arrival or first-meeting events interrupt the screen.
+FOR C, 0, COUNT
+  N = GETCHARA(CHARA:C)
+  CFLAG:N:現在位置 = ROOM
+  CFLAG:N:前ターン位置 = CFLAG:MASTER:前ターン位置
+  CFLAG:N:面識 = 1
+  TCVAR:N:今日会ったか = 1
+  TCVAR:N:GREETED_NOW = 1
+  CFLAG:N:同室 = 1
+  CALL SET_SLEEP(0, N, 0)
+NEXT
+CALL SET_SLEEP(0, MASTER, 0)
+SIF COUNT
+  TARGET = GETCHARA(CHARA)
+SELECTCASE DEMO_SCENARIO
+  CASE 5, 6
+    CALL COM355
+  CASE 7
+    CFLAG:TARGET:睡眠 = 1
+  CASE 8
+    BASE:MASTER:体力 = MAXBASE:MASTER:体力 / 10
+    BASE:MASTER:気力 = MAXBASE:MASTER:気力 / 8
+    BASE:TARGET:体力 = MAXBASE:TARGET:体力 / 6
+    BASE:TARGET:気力 = MAXBASE:TARGET:気力 / 12
+ENDSELECT
+DEMO_SCENARIO = 0
 
 @ANIMATIONS
 #DIM FRAME
@@ -236,11 +343,18 @@ RETURNF OUT
 @CALCULATE(ARG:0, ARG:1)
 RETURN ARG:0 * ARG:1
 `;
+// Stand-ins for the debug item grants that the game's Quicktest always runs (an SIF there guards only the first CALL); one opens an item menu.
+const quicktestItemGrants = ["100", "101", "102", "103", "104", "105", "106", "107", "108", "110", "200", "201", "202", "203"].map((n) => `DEBUG_MENU_RESULT_2_${n}`);
+const header = "#DIM DEMO_SCENARIO\n";
+/** The demo overlays the (hotpatched) game: its own title program replaces SYSTEM_TITLE, and the scenarios start the game's real main screen. */
 export function demoGame(game: Game): Game {
-  const demo = emptyGame(game.root);
-  demo.sprites = game.sprites;
-  // The client lays out pictures with the game's font and line height, so the demo reads the same config.
-  demo.config = game.config;
-  indexScript(demo, source, "<foundation-demo>");
+  const demo: Game = { ...game, routines: new Map(game.routines), headers: [...game.headers], diagnostics: [] };
+  for (const name of ["SYSTEM_TITLE", ...quicktestItemGrants]) demo.routines.delete(name);
+  // Event handler lists are appended to, so copy the one the demo extends.
+  demo.routines.set("EVENTFIRST", [...(demo.routines.get("EVENTFIRST") ?? [])]);
+  demo.routines.set("GAME_SHOW_STATUS", (demo.routines.get("SHOW_STATUS") ?? []).map((routine) => ({ ...routine, name: "GAME_SHOW_STATUS", label: "GAME_SHOW_STATUS" })));
+  demo.routines.delete("SHOW_STATUS");
+  indexScript(demo, header, "<foundation-demo>.ERH", true);
+  indexScript(demo, source + quicktestItemGrants.map((name) => `\n@${name}\n`).join(""), "<foundation-demo>");
   return demo;
 }

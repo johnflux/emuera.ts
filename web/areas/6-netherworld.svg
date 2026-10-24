@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 100">
+  <!-- Sanzu River～Netherworld: the river with the ferry, the great cherry tree and phantoms -->
+  <rect x="0" y="84" width="340" height="16" fill="#3a5a72"/>
+  <path d="M0 88 h40 M70 92 h60 M170 89 h50 M260 93 h70" stroke="#9ab8d0" stroke-width="1.5" opacity=".6"/>
+  <path d="M30 84 Q60 92 96 84 L92 80 H34 Z" fill="#5a3e28"/><rect x="62" y="56" width="2" height="26" fill="#3a2a1c"/>
+  <path d="M60 60 q-4 6 -2 10 h6 q2 -4 -4 -10z" fill="#3a3a40"/>
+  <path d="M244 84 V52 Q236 40 220 36 M248 52 Q256 38 276 32 M246 60 Q262 54 284 56" stroke="#3a2a22" stroke-width="5" fill="none"/>
+  <rect x="242" y="50" width="9" height="36" fill="#3a2a22"/>
+  <g fill="#f4b8d0"><circle cx="220" cy="32" r="14"/><circle cx="240" cy="24" r="16"/><circle cx="262" cy="22" r="15"/><circle cx="282" cy="30" r="14"/><circle cx="290" cy="48" r="11"/><circle cx="208" cy="44" r="10"/></g>
+  <g fill="#f8d4e4"><circle cx="232" cy="30" r="8"/><circle cx="268" cy="30" r="9"/></g>
+  <g fill="#e8f4ff" opacity=".7"><path d="M140 48 a6 6 0 1 1 6 6 q-6 6 -14 4 q6 -2 8 -10z"/><path d="M176 30 a5 5 0 1 1 5 5 q-5 5 -11 3 q5 -2 6 -8z"/></g>
+</svg>

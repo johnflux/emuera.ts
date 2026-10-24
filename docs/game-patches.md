@@ -13,6 +13,7 @@ of this document. Re-apply it after updating or reinstalling the game.
 |---|---------|-------|-------|
 | 1 | "Ego alert! Biten has Relation towards herself!" on every load | Typo in Biten's CSV: her affinity for Ubame uses Biten's number | `CSV/Chara/Chara153 美天.csv`, `ERB/TRANSLATION/Addition/Add_Relation.ERB` |
 | 2 | After "You simply can't enter." the map's bottom row (`[C] - Change Display Mode`, `Change Map`, `Return`) disappears | `CLEARLINE 2` assumes the typed input is on its own line, but it shares the last menu row | `ERB/コマンド関連/COMF/日常系/COMF400 移動.ERB` |
+| 3 | Play A Game: after picking a game, "Add a wager?" answers every choice with "Invalid input" and never lets you continue | Off-by-one in the bet-choice check (`RESULT < LOCAL-1`) | `ERB/TRANSLATION/Addition/Custom_Commands/Add_CUSTOM_COM0 Play Game.ERB` |
 
 ## 1. Biten's self-relation ("Ego alert!")
 
@@ -103,6 +104,29 @@ Verified headlessly: after Move then `54`, the output is
 `…[C] - Change Display Mode`, `54`, `You simply can't enter.`, `<<clear 2>>`,
 and the menu row survives.
 
+## 3. "Add a wager?" rejects every choice
+
+### Symptom
+
+Choose Play A Game `[9000]` and pick a game, for example `[1] - Shogi`. The game
+asks "Add a wager?" and lists `[0] - No wager`. Entering `0` prints
+"Invalid input", and so does every other number. The prompt never ends.
+
+### Cause
+
+- `@ADD_CUSTOM_COM0` lists the bets with `FOR LOCAL, 0, 20`, which `BREAK`s at
+  the first empty entry. The bet strings end in `/` (`ADD_GAME_STANDARD_BETS`
+  returns `NONE/`, plus `MONEY/` and `CHARISMA/` when you can afford them), so
+  `SPLIT` leaves an empty entry right after the last bet. `LOCAL` therefore ends
+  up equal to the number of bets shown.
+- The input loop accepts `RESULT >= 0 && RESULT < LOCAL-1`. That is one too few.
+  With only "No wager" it accepts nothing, and `DO … LOOP 1` asks again forever.
+  With more bets, the last one listed can never be chosen.
+
+### Fix
+
+Accept `RESULT < LOCAL`, so every listed bet, and only those, can be chosen.
+
 ## Patch
 
 Apply from inside `anon-tw-anon-tw_eng-modding` with `git apply -p1` or
@@ -150,4 +174,16 @@ diff -ru a/ERB/コマンド関連/COMF/日常系/COMF400 移動.ERB b/ERB/コマ
  
  DO
  	;Map Animation Code
+diff -ru a/ERB/TRANSLATION/Addition/Custom_Commands/Add_CUSTOM_COM0 Play Game.ERB b/ERB/TRANSLATION/Addition/Custom_Commands/Add_CUSTOM_COM0 Play Game.ERB
+--- a/ERB/TRANSLATION/Addition/Custom_Commands/Add_CUSTOM_COM0 Play Game.ERB
++++ b/ERB/TRANSLATION/Addition/Custom_Commands/Add_CUSTOM_COM0 Play Game.ERB
+@@ -130,7 +130,7 @@
+ 	NEXT
+ 	DO
+ 		INPUT
+-		SIF RESULT >= 0 && RESULT < LOCAL-1
++		SIF RESULT >= 0 && RESULT < LOCAL ;Patch: LOCAL is already the number of bets listed (was LOCAL-1, so a lone "No wager" could never be chosen)
+ 			BREAK
+ 		REUSELASTLINE Invalid input
+ 		CONTINUE
 ```

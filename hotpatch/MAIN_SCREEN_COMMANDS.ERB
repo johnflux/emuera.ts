@@ -1,0 +1,698 @@
+;-------------------------------------------------------------------------------
+; Hotpatch for the main screen's commands (ERB/コマンド関連/USERCOM_コマンド表示処理.ERB @SHOW_USERCOM), the second
+; half of MAIN_SCREEN.ERB's panel layout, which it closes. The command rules are copied unchanged; the display:
+; - the actions card: the filter toggles as chips, the commands grouped by number range instead of line breaks
+;   (those a filter controls tinted like its toggle), the custom (9000+) commands, and the time stop/mischief/sleeping commands, moved up from the menu;
+; - the "Go & Manage" card with the menu commands and the settings buttons of QOL_EXTRA_COMMAND_BUTTONS as chips.
+; Dropped: the [Commands] collapse toggle [3002] (always expanded) and the line-filling "=" padding.
+;-------------------------------------------------------------------------------
+@SHOW_USERCOM
+#DIM DYNAMIC printKojoCom
+#DIMS DYNAMIC COM_NAME
+#DIM HIGHLIGHT_SCOM ;qol custom code
+#DIM DYNAMIC nGroup
+#DIM DYNAMIC nNewGroup
+#DIMS DYNAMIC sKind
+#DIM DYNAMIC nSelfCare, 2
+#DIM DYNAMIC nSelfCareCount
+#DIM DYNAMIC nAble, 800
+#DIM DYNAMIC nAbleCount
+#DIM DYNAMIC nIndex
+#DIM DYNAMIC nBit
+#DIM DYNAMIC nOld
+#DIM DYNAMIC nShown, 800
+#DIM DYNAMIC nFilters
+TFLAG:100 = !TFLAG:101
+VARSET LOCAL
+;前ターンのMASTERが射精した相手をLOCAL:1へセット
+IF TCVAR:MASTER:112 == 1
+	;V
+	LOCAL:1 = MASTER_POSE(SET_V,SET_P,1)
+ELSEIF TCVAR:MASTER:112 == 2
+	;A
+	LOCAL:1 = MASTER_POSE(SET_A,SET_P,1)
+ENDIF
+
+
+HTML_PRINT "<era-open class='era-card era-main-actions'>"
+nAbleCount = 0
+
+;コマンド表示 (the usable commands first, so the filters can leave out toggles that would change nothing)
+FOR LOCAL,0,800
+	SIF QOL_BLOCKED_COM_HIDDEN_SEX(LOCAL) ;qol custom code
+		CONTINUE
+	;qol custom code
+	IF TARGET
+		CALL KOJO_CHECK(TARGET, "COM_BLOCKED",,LOCAL)
+		SIF RESULT
+			CONTINUE
+	ENDIF
+
+	SIF LOCAL == 355 && (!FLAG:70 || CFLAG:TARGET:344 == 1)
+		CONTINUE
+	SIF GLOBAL_COMABLE2(LOCAL)
+		CONTINUE
+	SIF GROUPMATCH(LOCAL,400,405,604)
+		CONTINUE
+	SIF TRAINNAME:LOCAL == "" && !IS_COM_KOJO(LOCAL)
+		CONTINUE
+	SIF LOCAL == ADD_CUSTOM_COM ;addition custom code, don't display general custom com command, handled elsewhere
+		CONTINUE
+	RESULT = 0
+	;現状で対象コマンドが使用可能かどうか判定
+	TRYCALLFORM COM_ABLE{LOCAL}
+	IF RESULT
+		nAble:nAbleCount = LOCAL
+		nAbleCount ++
+	ENDIF
+NEXT
+; A filter toggle is shown only if flipping it would show or hide one of them (QUICKFILTER with its flag flipped,
+; so per-command COM*_FILTER rules count too).
+nFilters = 0
+FOR nIndex, 0, nAbleCount
+	nShown:nIndex = QUICKFILTER(nAble:nIndex) != 0
+NEXT
+FOR nBit, 0, 9
+	nOld = HOTPATCH_FILTER_SET(nBit, 0)
+	CALL HOTPATCH_FILTER_SET(nBit, !nOld)
+	FOR nIndex, 0, nAbleCount
+		IF (QUICKFILTER(nAble:nIndex) != 0) != nShown:nIndex
+			SETBIT nFilters, nBit
+			BREAK
+		ENDIF
+	NEXT
+	CALL HOTPATCH_FILTER_SET(nBit, nOld)
+NEXT
+CALL HOTPATCH_FILTERS(nFilters)
+nGroup = -1
+FOR nIndex, 0, nAbleCount
+	LOCAL = nAble:nIndex
+	SIF !QUICKFILTER(LOCAL)
+		CONTINUE
+	IF GROUPMATCH(LOCAL, 414, 431)
+		nSelfCare:nSelfCareCount = LOCAL
+		nSelfCareCount ++
+		CONTINUE
+	ENDIF
+	nNewGroup = HOTPATCH_ACTION_GROUP(LOCAL)
+	IF nNewGroup != nGroup
+		SIF nGroup >= 0
+			HTML_PRINT "<era-close>"
+		HTML_PRINT "<era-open class='era-actions-group'>"
+		HTML_PRINT @"<div class='era-actions-title'>%HOTPATCH_ACTION_GROUP_NAME(nNewGroup)%</div>"
+		nGroup = nNewGroup
+	ENDIF
+	sKind '= HOTPATCH_ACTION_KIND(LOCAL)
+	SIF STRLENS(sKind)
+		HTML_PRINT @"<era-open class='era-kind era-kind-%sKind%'>"
+	SIF HOTPATCH_PRINT_COM(LOCAL)
+		printKojoCom = 1
+	SIF STRLENS(sKind)
+		HTML_PRINT "<era-close>"
+NEXT
+;addition custom code
+SIF nGroup >= 0
+	HTML_PRINT "<era-close>"
+HTML_PRINT "<era-open class='era-actions-group era-actions-more'>"
+HTML_PRINT "<div class='era-actions-title'>More</div>"
+CALL Add_Custom_List_COMS
+HTML_PRINT "<era-close>"
+CALL ADD_TOUCH_SET_OLD_FIELDS(1)
+RESULT = 0
+IF TFLAG:100
+	HTML_PRINT "<era-open class='era-actions-group era-actions-situation'>"
+	HTML_PRINT @"<div class='era-actions-title'>%(FLAG:70 ? "While time is stopped" # "Right now")%</div>"
+	IF FLAG:70 == 1 && CFLAG:TARGET:344 == 0
+		SIF EQUIP:0 && TARGET && CFLAG:うふふ
+			PRINTC Remove Clothes[820]
+		IF EQUIP:0 && TARGET && EQUIP:TARGET:下半身下着２ != 0 && GET_INT(TARGET, "下半身下着_ずらし可能", EQUIP:TARGET:下半身下着２, "コレクション表示可能") ;addition custom code, only if collectable
+			IF !PANTS_ALREADY_COLLECTED()
+				FONTBOLD
+				SETCOLOR COLOR("PINK")
+				PRINT  
+			ENDIF
+				SIF !GETBIT (FLAG:USERCOMフィルタ, 60) ;com custom code
+					PRINTC Pilfer Panties[821]
+				RESETCOLOR
+				FONTREGULAR
+		ENDIF
+		IF (TEQUIP:5 == 0 || EQUIP:TARGET:上半身下着１) && CFLAG:うふふ
+			SIF EQUIP:0 && TARGET && EQUIP:TARGET:上半身下着１ != 0 && (EQUIP:TARGET:着物 != 0 || EQUIP:TARGET:上半身上着２ != 0 || EQUIP:TARGET:ボディースーツ == 3)
+				PRINTC Remove Top & Bottom[822]
+		ENDIF
+		IF TEQUIP:5 == 0 && CFLAG:うふふ
+			SIF EQUIP:0 && TARGET && (EQUIP:TARGET:上半身下着１ || EQUIP:TARGET:上半身下着２ || EQUIP:TARGET:下半身下着１ || EQUIP:TARGET:下半身下着２ || EQUIP:TARGET:レオタード || EQUIP:TARGET:ボディースーツ) && (EQUIP:TARGET:上半身上着１ || EQUIP:TARGET:上半身上着２ || EQUIP:TARGET:ワンピース || EQUIP:TARGET:着物 || EQUIP:TARGET:外衣)
+				PRINTC Strip To Underwear[823]
+		ENDIF
+		;addition custom code
+		SIF CFLAG:うふふ || CFLAG:MASTER:イタズラ == 2
+			PRINTC Undress[892]
+		IF (MEASUREMENTCHECK(CFLAG:TARGET:現在位置) || MEASURE_DEBUG) ;custom code
+			IF CFLAG:TARGET:身体測定 != 2
+				PRINTC Measure Body[824]
+			ELSE
+				PRINTC Finish Body Measuring[824]
+			ENDIF
+		ENDIF
+		SIF TFLAG:パンツ収奪 && !GETBIT (FLAG:USERCOMフィルタ, 61) ;com custom code
+			PRINTC Take Panties[825]
+		IF TARGET && !CFLAG:Hypno_Orgasm_Denial ;custom code
+			IF TEQUIP:焦らしモード
+				PRINTC End Denial[826]
+			ELSE
+				PRINTC Denial Mode[826]
+			ENDIF
+		ENDIF
+		IF CFLAG:うふふ
+			PRINTC Stop Mischief[999]
+		ELSE
+			PRINTC Resume Time[999]
+		ENDIF
+	ELSEIF FLAG:70 == 1 && CFLAG:TARGET:344 == 1
+			PRINTC Resume Time[999]
+		IF CFLAG:うふふ
+			SIF EQUIP:0 && TARGET
+				PRINTC Strip Clothes[820]
+			;addition custom code
+			SIF CFLAG:うふふ
+				PRINTC Undress[892]
+
+			IF CFLAG:うふふ == 2
+				IF TFLAG:抱きつきモード
+					PRINTC Shake Off[850]
+				ELSE
+					PRINTC Slip Out[850]
+				ENDIF
+				IF !CFLAG:Hypno_Orgasm_Denial ;custom code
+					IF TEQUIP:焦らしモード
+						PRINTC End Denial[826]
+					ELSE
+						PRINTC Denial Mode[826]
+					ENDIF
+				ENDIF
+			ELSE
+				PRINTC End Session[999]
+			ENDIF
+		ENDIF
+	ELSEIF (CFLAG:うふふ && !CFLAG:イタズラ) || FREE_USE_ACTIVE() ;custom code, enable stripping clothes when in Free Use mode
+		SIF EQUIP:0 && TARGET && (!(TFLAG:102 == 3 && TFLAG:抱きつきモード) || FREE_USE_ACTIVE()) ;custom code, enable stripping clothes when in Free Use mode
+			PRINTC Strip Clothes[820]
+			;addition custom code
+			SIF CFLAG:うふふ
+				PRINTC Undress[892]
+			IF TARGET && !CFLAG:Hypno_Orgasm_Denial ;custom code
+				IF TEQUIP:焦らしモード
+					PRINTC End Denial[826]
+				ELSE
+					PRINTC Denial Mode[826]
+				ENDIF
+			ENDIF
+		IF FLAG:70 == 1 && CFLAG:TARGET:344 == 0
+			PRINTC Resume Time[999]
+		ELSEIF CFLAG:うふふ == 2
+			IF TFLAG:抱きつきモード
+				PRINTC Shake Off[850]
+			ELSE
+				PRINTC Slip Out[850]
+			ENDIF
+		ELSEIF CFLAG:うふふ == 1
+			PRINTC End Session[999]
+		ENDIF
+	ENDIF
+
+	IF CFLAG:イタズラ
+		SIF CFLAG:イタズラ < 2 && (EXP:TARGET:睡眠姦経験 > 100 || TCVAR:睡眠薬強度 || TCVAR:睡眠深度 > 2000)
+			PRINTC Unbutton Clothes[830]
+		;addition custom code
+		SIF CFLAG:うふふ
+			PRINTC Undress[892]
+		IF CFLAG:イタズラ < 2
+			PRINTC Stop Mischief[999]
+			IF EQUIP:0 && TARGET && EQUIP:TARGET:下半身下着２ != 0 && GET_INT(TARGET, "下半身下着_ずらし可能", EQUIP:TARGET:下半身下着２, "コレクション表示可能") ;addition custom code, only if collectable ;bug fix
+				IF !PANTS_ALREADY_COLLECTED()
+					FONTBOLD
+					SETCOLOR COLOR("PINK")
+					PRINT  
+				ENDIF
+				SIF !GETBIT (FLAG:USERCOMフィルタ, 60) ;com custom code
+					PRINTC Pilfer Panties[821]
+				RESETCOLOR
+				FONTREGULAR
+			ENDIF
+		ENDIF
+		SIF CFLAG:イタズラ > 1
+		PRINTC Stop Sleep Rape[999]
+	ENDIF
+	IF CFLAG:添い寝中
+		PRINTC Stop Sleeping Together[999]
+	ENDIF
+	IF CHK_DATENOW(CFLAG:MASTER:デート中) && (!FLAG:70 || CFLAG:TARGET:344 == 1) && !CFLAG:MASTER:うふふ && CFLAG:MASTER:現在位置 != OMANEKIBEYA() && TFLAG:妄想中 != 1
+		IF !FLAG:デート相手 && GETBIT(FLAG:瞬間移動, AT_HOME(MASTER)) && QOL_RETURN_HOME_TIME_REQUIRED() * 3 < BASE:MASTER:TSP
+				SETCOLOR 0x5090FF
+			PRINTFORMC Return Home({QOL_RETURN_HOME_TIME_REQUIRED() * 3}TSP)[999]
+			RESETCOLOR
+		ELSE
+			SIF QOL_RETURN_HOME_TIME_REQUIRED() < 10
+				SETCOLOR 100, 250, 140
+			;custom code
+			PRINTFORMC \@ FLAG:デート相手 ? Finish Date # Return Home \@({QOL_RETURN_HOME_TIME_REQUIRED()}min)[999]
+			RESETCOLOR
+		ENDIF
+	ENDIF
+	HTML_PRINT "<era-close>"
+ENDIF
+HTML_PRINT "<era-close>"
+;自動実行中なら下記表示をスキップ
+SIF !TFLAG:100
+	GOTO SKIP
+HTML_PRINT "<era-open class='era-card era-main-menu'>"
+HTML_PRINT "<div class='era-card-title'>Go &amp; Manage</div>"
+IF nSelfCareCount
+	HTML_PRINT "<era-open class='era-actions-group era-self-care'>"
+	HTML_PRINT "<div class='era-actions-title'>Look after yourself</div>"
+	FOR LOCAL, 0, nSelfCareCount
+		CALL HOTPATCH_PRINT_COM(nSelfCare:LOCAL)
+	NEXT
+	HTML_PRINT "<era-close>"
+ENDIF
+HTML_PRINT "<era-open class='era-actions-group'>"
+[SKIPSTART]
+PRINTPLAIN  == 
+CALL PRINTBUTTON_EX("[Config]",809)
+PRINTPLAIN =
+IF TARGET != MASTER
+	SELECTCASE CFLAG:オート喘ぎ
+		CASE 0
+			LOCALS = Auto-moan: No
+		CASE 1
+			LOCALS = Auto-moan: Yes
+		CASE 2
+			LOCALS = Auto-moan: Yes (Ahegao)
+		CASEELSE
+			LOCALS = Auto-moan: Invalid
+	ENDSELECT
+	SIF ITEM:コンドーム < 1
+		SETCOLOR C_D_RED
+	CALL PRINTBUTTON_EX("[Auto-condom]",838,!FLAG:自動ゴム)
+	RESETCOLOR
+	PRINTPLAIN =
+	CALL PRINTBUTTON_EX(@"[%LOCALS%]",4000,!CFLAG:オート喘ぎ)
+	PRINTPLAIN =
+ENDIF
+HTML_POPPRINTINGSTR
+HTML_PRINT RESULTS + @"%"=" * MAX(MAXWIDTH() - HTML_STRINGLEN(RESULTS), 0)%"
+[SKIPEND]
+;SIF !GETBIT (FLAG:USERCOMフィルタ, 12)
+;	PRINTC 履歴表示[800]
+IF GETBIT(FLAG:瞬間移動, 1) && !CFLAG:MASTER:同行
+	SETCOLOR 0x5090FF
+ELSE
+	SETCOLOR C_GREEN
+ENDIF
+RESULT = 0
+CALL COM_ABLE400
+SIF RESULT
+	PRINTC Move[400]
+RESULT = 0
+RESETCOLOR
+CALL COM_ABLE405
+IF RESULT
+	IF CFLAG:TARGET:同行 && TARGET
+		PRINTC Date[405]
+	ELSE 
+		PRINTC Go Out[405]
+	ENDIF
+ENDIF
+RESULT = 0
+
+IF GETBIT(FLAG:瞬間移動, 0) && !FLAG:デート相手
+	SETCOLOR 0x5090FF
+ELSE
+	SETCOLOR C_GREEN
+ENDIF
+RESULT = 0
+CALL COM_ABLE604
+SIF RESULT
+	PRINTC Explore[604]
+RESETCOLOR
+SIF !CFLAG:添い寝中 && GET_TARGETNUM() > 1 && !GETBIT (FLAG:USERCOMフィルタ, 1)
+	PRINTC Change Partner[802]
+SIF !GETBIT (FLAG:USERCOMフィルタ, 2)
+	PRINTC Abilities[803]
+SIF !GETBIT (FLAG:USERCOMフィルタ, 3)
+	PRINTC Abilities (Master)[804]
+SIF !GETBIT (FLAG:USERCOMフィルタ, 4)
+	PRINTC Item List[805]
+SIF FLAG:1005
+	PRINTC Config[810]
+SIF TALENT:MASTER:居場所察知 && (GETBIT(TALENT:MASTER:居場所察知, 1) || !(CFLAG:うふふ || CFLAG:イタズラ || CFLAG:添い寝中)) ;at_home check removed
+	PRINTC Whereabouts Sense[811]
+SIF TALENT:MASTER:汚部屋察知 && AT_HOME(MASTER) && !(CFLAG:うふふ || CFLAG:イタズラ || CFLAG:添い寝中)
+	PRINTC Cleanliness Sense[812]
+SIF GETBIT(TALENT:MASTER:劣情察知, 1) && !CFLAG:うふふ && !CFLAG:添い寝中 && !CFLAG:MASTER:イタズラ
+	PRINTC Lust Detector[813]
+IF FLAG:70 && CFLAG:TARGET:344 == 0 && !CFLAG:TARGET:睡眠 && AT_HOME(MASTER) == 1 && TARGET > 0 && !CFLAG:うふふ && CFLAG:行動 != 5 ;disallow while they're working
+	IF TFLAG:運搬 == 0 || TFLAG:運搬 != TARGET
+		PRINTC Carry[815]
+	ELSE 
+		PRINTC Put Down[815]
+	ENDIF
+ENDIF
+SIF FLAG:70 && TALENT:MASTER:集合 && AT_HOME(MASTER) == 1 && !CFLAG:うふふ
+	PRINTC Gather[817]
+SIF GATHERING_SPOT(CFLAG:MASTER:現在位置) != 0
+	PRINTC Foraging List[818]
+[SKIPSTART]
+	;Custom code, moved below.
+IF CAN_DATE(TARGET) && !CFLAG:TARGET:神社在住
+	SIF TIME_REQUIRED(MAIN_MAP,CFLAG:MASTER:デート中) < 10
+		SETCOLOR 100, 250, 140
+	PRINTFORMC Invite to %GET_MAPNAME(MAIN_MAP)% ({TIME_REQUIRED(MAIN_MAP,CFLAG:MASTER:デート中)} minutes)[990]
+	RESETCOLOR
+ENDIF
+[SKIPEND]
+	
+;custom code
+SIF FISHING_SPOT(CFLAG:MASTER:現在位置) != 0 && ABL:MASTER:教養 >= 3
+	PRINTC Fishing List[890]
+
+;addition custom code
+IF PLACE_SENTO(CFLAG:MASTER:現在位置) == 9 && CFLAG:64:現在位置 != CFLAG:MASTER:現在位置 && !FIRSTTIME("YuugiBath", 1, 64)
+	SETCOLOR 100, 250, 140
+	PRINTC Call Yuugi[891]
+	RESETCOLOR
+ENDIF
+
+;addition custom code
+SIF TALENT:MASTER:パンティーセンス && !CFLAG:うふふ && !CFLAG:添い寝中 && !CFLAG:MASTER:イタズラ
+	PRINTC Panty Sense[892]
+
+;addition custom code, from KR version
+IF CFLAG:MASTER:初期位置 == CFLAG:MASTER:現在位置 || (CFLAG:MASTER:現在位置 == CFLAG:TARGET:初期位置 && (IS_FALLEN(TARGET) || !SHIRAHU(TARGET)))
+	IF !FLAG:自室施錠
+		PRINTC Lock The Door[991]
+	ELSE
+		SETCOLOR 100, 250, 140
+		PRINTC Unlock The Door[991]
+	ENDIF
+	RESETCOLOR
+ENDIF
+	
+SIF CAN_DATE(TARGET)
+	PRINTC Invite On A Date[992]
+SIF CFLAG:MASTER:現在位置 == CFLAG:MASTER:初期位置
+	PRINTC Calendar[993]
+SIF FLAG:パンツ輸送
+	PRINTC Check Pilfered Panties[994]
+IF AT_HOME(MASTER) && GETBIT(FLAG:瞬間移動, 1)
+	SETCOLOR 0x5090FF
+ELSEIF !AT_HOME(MASTER) && GETBIT(FLAG:瞬間移動, 0)
+	SETCOLOR 0x5090FF
+ENDIF
+SIF !GETBIT(FLAG:USERCOMフィルタ, 13)
+	PRINTC Auto-TSP Movement[995]
+RESETCOLOR
+
+;自動掃除
+IF AT_HOME(MASTER) && GETBIT(FLAG:自動掃除, 1)
+	SETCOLOR 0x5090FF
+ELSEIF !AT_HOME(MASTER) && GETBIT(FLAG:自動掃除, 0)
+	SETCOLOR 0x5090FF
+ENDIF
+SIF !GETBIT(FLAG:USERCOMフィルタ, 14) & AT_HOME(MASTER) && !CFLAG:うふふ && !CFLAG:添い寝中 && !CFLAG:MASTER:イタズラ ;bug fix
+	PRINTC Auto-Clean[996]
+RESETCOLOR
+
+PRINTL
+;custom, moved to its own line due to length
+IF CAN_DATE(TARGET)
+	LOCAL = QOL_RETURN_HOME_TIME_REQUIRED() ;qol custom code
+	LOCALS = ({LOCAL}min)
+	SIF LOCAL < 10
+		SETCOLOR 100, 250, 140
+	;ugly but this gets super long otherwise. perhaps move it to its own dedicated line instead?
+	;PRINTFORMC %SUBSTRING(@"Invite To %GET_MAPNAME(MAIN_MAP)%", 0, GETCONFIG("PRINTCの文字数") - (5 + STRLENS(LOCALS)) )%%LOCALS%[990]
+	PRINTFORMC Invite To %GET_MAPNAME(MAIN_MAP)%%LOCALS%[990]
+	RESETCOLOR
+ENDIF
+HTML_PRINT "<era-close>"
+CALL HOTPATCH_SETTINGS
+SIF FLAG:QUICKCHEAT_ENABLED ;qol custom code
+	CALL QOL_PRINT_QUICKCHEATS
+HTML_PRINT "<era-close>"
+
+$SKIP
+HTML_PRINT "<era-open class='era-main-last'>"
+IF PREVCOM >= 0
+	IF TFLAG:151
+		STR:0 = %STR_TR(1500 + TFLAG:151)%
+	ELSE
+		STR:0 = %TRAINNAME_TR(PREVCOM)%
+	ENDIF
+	;addition custom code, custom commands
+	IF TFLAG:151 == ADD_CUSTOM_SCOM
+		STR:0 '= Add_Custom_SCOM_Name(ADD_PREV_SELECTED_SCOM)
+	ELSEIF PREVCOM == ADD_CUSTOM_COM
+		STR:0 '= Add_Custom_COM_Name(ADD_PREVCUSTOMCOM)
+	ENDIF
+ENDIF
+SIF PREVCOM == 304 && CFLAG:TARGET:350 == 49 && TALENT:TARGET:酒耐性 != -2
+	STR:0 = Share Drink
+SIF PREVCOM == 304 && CFLAG:TARGET:350 == 49 && (TALENT:TARGET:酒耐性 == -2 || CFLAG:TARGET:妊娠自覚状態 == 1)
+	STR:0 = Serve Dish
+SIF PREVCOM == 304 && CFLAG:TARGET:350 == 51
+	STR:0 = Look After
+;kojo com
+IF INRANGE(PREVCOM, 270, 299)
+	CALL KOJO_MESSAGE_SEND("COM", 0, TARGET, PREVCOM - 270)
+	STR:0 '= RESULTS
+ENDIF
+IF PREVCOM >= 0 && PREVCOM < 300
+	PRINTFORML <Last Training Command: %STR:0%%COND_STR("(助手)", TFLAG:150)%>
+ELSE
+	PRINTFORML <Last Command: %STR:0%>
+ENDIF
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-close>" ; the era-main layout
+CALL FORCE_COMMAND() ;Custom code, force any commands set through nForceCommand.
+
+;-------------------------------------------------------------------------------
+; Action groups by command number (Train.csv's ranges).
+;-------------------------------------------------------------------------------
+@HOTPATCH_ACTION_GROUP(nCommand)
+#FUNCTION
+#DIM DYNAMIC nCommand
+SIF nCommand < 200
+	RETURNF 0
+SIF nCommand < 270
+	RETURNF 1
+SIF nCommand < 300
+	RETURNF 2
+SIF nCommand < 350
+	RETURNF 3
+SIF nCommand < 400
+	RETURNF 4
+SIF nCommand < 600
+	RETURNF 5
+RETURNF 6
+
+;-------------------------------------------------------------------------------
+; A command's button, named as SHOW_USERCOM names it (alternative names, colours, kojo and 606 sub-commands).
+; Returns 1 for a kojo command.
+;-------------------------------------------------------------------------------
+@HOTPATCH_PRINT_COM(nCom)
+#FUNCTION
+#DIM DYNAMIC nCom
+#DIM DYNAMIC nKojo
+#DIMS DYNAMIC COM_NAME
+VARSET COM_DISPLAY_COLOR
+VARSET COM_DISPLAY_BEHAVIOR
+CALL COM_DISPLAY_TR(nCom) ;Custom code, control alternative command names.
+COM_NAME '= RESULTS
+IF !GROUPMATCH(COM_NAME, "Null", "")
+	SIF COM_DISPLAY_COLOR
+		SETCOLOR COM_DISPLAY_COLOR
+	IF COM_DISPLAY_BEHAVIOR == -1
+		PRINTFORMC %COM_NAME%[...]
+	ELSE
+		PRINTFORMC %COM_NAME%[{nCom,3}]
+	ENDIF
+	RESETCOLOR
+ELSEIF nCom >= 270 && nCom < 300
+	;kojo com
+	CALL KOJO_MESSAGE_SEND("COM", 0, TARGET, nCom - 270)
+	PRINTFORMC %RESULTS%[{nCom,3}]
+	nKojo = 1
+ELSEIF nCom == 606 ;addition custom code
+	LOCAL:1 = 0
+	FOR LOCAL:2,0,1000
+		RESULT = 0
+		TRYCALLFORM TSC_ABLE{LOCAL:2}()
+		IF LOCAL:1 > 1
+			LOCALS = %TRAINNAME_TR(606)%[{606,3}]
+			BREAK
+		ELSEIF RESULT == 2
+			CALLFORM TSC_NAME{LOCAL:2}
+			LOCALS = %RESULTS%[{606,3}]
+			LOCAL:1 ++
+		ENDIF
+	NEXT
+	PRINTFORMC %LOCALS%
+ELSEIF nCom == 414 && CFLAG:MASTER:うふふ ;qol custom code
+	PRINTFORMC Meal Break[{nCom,3}]
+;Custom code
+ELSEIF STRLENS(TRAINNAME_TR(nCom))
+	;custom code
+	SIF nCom == 401 ;highlight collection
+		SETCOLOR 100, 250, 140
+	PRINTFORMC %TRAINNAME_TR(nCom)%[{nCom,3}]
+	RESETCOLOR
+ENDIF
+RETURNF nKojo
+
+; Which filter toggle shows a command (QUICKFILTER's rules), so both share a tint: petting, housekeeping
+; ("chores") or the character's own dialogue topics; "" for the rest.
+@HOTPATCH_ACTION_KIND(nCommand)
+#FUNCTIONS
+#DIM DYNAMIC nCommand
+SIF IS_COM_SEKUHARA(nCommand) && TARGET
+	RETURNF "petting"
+SIF IS_COM_KAJI(nCommand)
+	RETURNF "chores"
+SIF IS_COM_KOJO(nCommand)
+	RETURNF "dialogue"
+RETURNF ""
+
+@HOTPATCH_ACTION_GROUP_NAME(nGroup)
+#FUNCTIONS
+#DIM DYNAMIC nGroup
+#DIMS CONST sName, 7 = "Intimate", "Special", "Their Topics", "Talk &amp; Touch", "Advances", "Activities", "Outing"
+RETURNF sName:nGroup
+
+;-------------------------------------------------------------------------------
+; フィルタ表示 as chips: which command groups are shown (a dim chip is filtered out), and the stalking star. Only the
+; toggles in nFilters (bits as HOTPATCH_FILTER_SET numbers them) are shown: those that would change the actions now.
+;-------------------------------------------------------------------------------
+@HOTPATCH_FILTERS(nFilters)
+#DIM DYNAMIC nFilters
+#DIMS DYNAMIC sHtml
+#DIMS DYNAMIC sTitle
+IF TARGET > 0 && TARGET != MASTER
+	sTitle '= @"Interact with %HTML_ESCAPE(CALLNAME:TARGET)%"
+ELSE
+	sTitle '= "Actions"
+ENDIF
+IF TARGET <= 0
+	sHtml '= ""
+ELSEIF STALKED == TARGET
+	sHtml '= @"<button value='{TARGET + 4000}' class='era-star era-on' title='Following %HTML_ESCAPE(CALLNAME:TARGET)%&#10;When they leave, the Follow %HTML_ESCAPE(CALLNAME:TARGET)% action takes you to wherever they are at home.&#10;Click to stop.'>★</button>"
+ELSE
+	sHtml '= @"<button value='{TARGET + 4000}' class='era-star' title='Follow %HTML_ESCAPE(CALLNAME:TARGET)%&#10;Mark them as the one you follow: when they leave, a Follow %HTML_ESCAPE(CALLNAME:TARGET)% action takes you to wherever they are at home.'>★</button>"
+ENDIF
+IF (TARGET != MASTER && FREE_USE_ACTIVE()) || CFLAG:うふふ || CFLAG:MASTER:イタズラ == 2
+	SIF GETBIT(nFilters, 0)
+		sHtml += HOTPATCH_TOGGLE("V", 831, CFLAG:TARGET:Ｖアンフィルタ)
+	SIF GETBIT(nFilters, 1)
+		sHtml += HOTPATCH_TOGGLE("A", 832, CFLAG:TARGET:Ａアンフィルタ)
+	SIF GETBIT(nFilters, 2)
+		sHtml += HOTPATCH_TOGGLE("Rev Sex", -9121, CFLAG:TARGET:RevSexFilter)
+	SIF GETBIT(nFilters, 3)
+		sHtml += HOTPATCH_TOGGLE("SM", 836, CFLAG:TARGET:ＳＭアンフィルタ)
+	SIF GETBIT(nFilters, 4)
+		sHtml += HOTPATCH_TOGGLE("Service", 835, CFLAG:TARGET:奉仕アンフィルタ)
+	SIF GETBIT(nFilters, 5)
+		sHtml += HOTPATCH_TOGGLE("Rev Service", -9120, CFLAG:TARGET:RevServiceFilter)
+ENDIF
+IF !GETBIT(nFilters, 6)
+ELSEIF FLAG:70 && CFLAG:TARGET:344 != 1
+	sHtml += HOTPATCH_TOGGLE("Petting", 837, CFLAG:TARGET:セクハラアンフィルタ, "petting", "Show the petting actions (pink): touching she may not welcome, from pinching her cheek to pushing her down (the game&#39;s セクハラ, harassment, tag)&#10;While time is stopped most are shown anyway, as she can&#39;t react; Fingering and Anal Caress still follow this filter")
+ELSE
+	sHtml += HOTPATCH_TOGGLE("Petting", 837, CFLAG:TARGET:セクハラアンフィルタ, "petting", "Show the petting actions (pink): touching she may not welcome, from pinching her cheek to pushing her down (the game&#39;s セクハラ, harassment, tag)")
+ENDIF
+SIF GETBIT(nFilters, 7)
+	sHtml += HOTPATCH_TOGGLE("Housekeeping", 840, FLAG:家事アンフィルタ, "chores", "Show the housekeeping actions (green)")
+SIF GETBIT(nFilters, 8)
+	sHtml += HOTPATCH_TOGGLE("Dialogue", 839, !CFLAG:TARGET:hideKojoCom, "dialogue", "Show their own dialogue topics (blue)")
+HTML_PRINT @"<div class='era-card-title era-actions-header'><span>%sTitle%</span><span class='era-toggles'>%sHtml%</span></div>"
+
+;-------------------------------------------------------------------------------
+; Sets filter flag nBit (the HOTPATCH_FILTERS order: V, A, Rev Sex, SM, Service, Rev Service, Petting, Housekeeping,
+; hidden Dialogue) to nValue and returns what it was, so SHOW_USERCOM can try each toggle flipped and put it back.
+;-------------------------------------------------------------------------------
+@HOTPATCH_FILTER_SET(nBit, nValue)
+#FUNCTION
+#DIM DYNAMIC nBit
+#DIM DYNAMIC nValue
+#DIM DYNAMIC nOld
+SELECTCASE nBit
+	CASE 0
+		nOld = CFLAG:TARGET:Ｖアンフィルタ
+		CFLAG:TARGET:Ｖアンフィルタ = nValue
+	CASE 1
+		nOld = CFLAG:TARGET:Ａアンフィルタ
+		CFLAG:TARGET:Ａアンフィルタ = nValue
+	CASE 2
+		nOld = CFLAG:TARGET:RevSexFilter
+		CFLAG:TARGET:RevSexFilter = nValue
+	CASE 3
+		nOld = CFLAG:TARGET:ＳＭアンフィルタ
+		CFLAG:TARGET:ＳＭアンフィルタ = nValue
+	CASE 4
+		nOld = CFLAG:TARGET:奉仕アンフィルタ
+		CFLAG:TARGET:奉仕アンフィルタ = nValue
+	CASE 5
+		nOld = CFLAG:TARGET:RevServiceFilter
+		CFLAG:TARGET:RevServiceFilter = nValue
+	CASE 6
+		nOld = CFLAG:TARGET:セクハラアンフィルタ
+		CFLAG:TARGET:セクハラアンフィルタ = nValue
+	CASE 7
+		nOld = FLAG:家事アンフィルタ
+		FLAG:家事アンフィルタ = nValue
+	CASE 8
+		nOld = CFLAG:TARGET:hideKojoCom
+		CFLAG:TARGET:hideKojoCom = nValue
+ENDSELECT
+RETURNF nOld
+
+; A toggle chip: lit when on; a filter's kind tints it like the actions it shows (HOTPATCH_ACTION_KIND).
+@HOTPATCH_TOGGLE(sLabel, nValue, nOn, sKind, sTitle)
+#FUNCTIONS
+#DIMS DYNAMIC sLabel
+#DIM DYNAMIC nValue
+#DIM DYNAMIC nOn
+#DIMS DYNAMIC sKind
+#DIMS DYNAMIC sTitle
+#DIMS DYNAMIC sClass
+SIF STRLENS(sKind)
+	sClass '= " era-kind-" + sKind
+SIF STRLENS(sTitle)
+	sTitle '= @" title='%sLabel%: %(nOn ? "on" # "off")%&#10;%sTitle%'"
+RETURNF @"<button value='{nValue}' class='era-toggle%sClass%%(nOn ? " era-on" # "")%'%sTitle%>%sLabel%</button>"
+
+;-------------------------------------------------------------------------------
+; QOL_EXTRA_COMMAND_BUTTONS as toggle chips, each only when it can matter: the sex settings (condom, moaning,
+; standing) once something sexual can happen: a session, mischief, free use or stopped time. The original shows them
+; whenever the target is not you, alone included. Pushdown Guard is on your card (MAIN_SCREEN.ERB).
+;-------------------------------------------------------------------------------
+@HOTPATCH_SETTINGS
+#DIMS DYNAMIC sHtml
+#DIMS DYNAMIC sMoan
+sHtml '= "<button value='809' class='era-chip-button'>Config</button>"
+sHtml += "<button value='-9201' class='era-chip-button'>Auto Items</button>"
+IF TARGET > 0 && TARGET != MASTER && (CFLAG:MASTER:うふふ || CFLAG:TARGET:うふふ || CFLAG:MASTER:イタズラ || CFLAG:TARGET:イタズラ || FLAG:70 || FREE_USE_ACTIVE())
+	sHtml += HOTPATCH_TOGGLE("Automatic Condom", 838, FLAG:自動ゴム)
+	SELECTCASE CFLAG:オート喘ぎ
+		CASE 0
+			sMoan '= "Auto-moan: No"
+		CASE 1
+			sMoan '= "Auto-moan: Yes"
+		CASE 2
+			sMoan '= "Auto-moan: Yes (Ahegao)"
+		CASEELSE
+			sMoan '= "Invalid Option"
+	ENDSELECT
+	sHtml += HOTPATCH_TOGGLE(sMoan, 4000, CFLAG:オート喘ぎ)
+	sHtml += HOTPATCH_TOGGLE("Standing", -9122, CFLAG:STANDING_TOGGLE)
+ENDIF
+HTML_PRINT @"<div class='era-toggles era-settings'>%sHtml%</div>"

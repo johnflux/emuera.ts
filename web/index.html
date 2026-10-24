@@ -53,5 +53,12 @@
     </aside>
   </main>
   <div id="game-tooltip" role="tooltip" hidden></div>
+  <!-- Pixel-art filter for the main screen's sky (.era-sky-view): keeps the colour at the centre of each 4x4 px block. -->
+  <svg width="0" height="0" style="position: absolute" aria-hidden="true">
+    <filter id="era-pixelate" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">
+      <feFlood x="2" y="2" width="1" height="1"/><feComposite width="4" height="4"/><feTile result="grid"/>
+      <feComposite in="SourceGraphic" in2="grid" operator="in"/><feMorphology operator="dilate" radius="2"/>
+    </filter>
+  </svg>
 </body>
 </html>

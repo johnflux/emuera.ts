@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 100">
+  <!-- Underworld: the cavern roof and the lantern-lit Former Capital -->
+  <path d="M0 0 H340 V8 L326 30 L314 8 L296 20 L280 8 L262 36 L246 8 L224 16 L206 8 L190 28 L176 8 L150 18 L130 8 L116 32 L100 8 L80 14 L60 8 L44 26 L30 8 L12 20 L0 8 Z" fill="#2a221c"/>
+  <rect x="0" y="90" width="340" height="10" fill="#2a221c"/>
+  <path d="M120 70 L150 54 L180 70 Z" fill="#3a2a22"/><rect x="128" y="70" width="44" height="22" fill="#5a3a2a"/>
+  <path d="M184 64 L222 44 L260 64 Z" fill="#3a2a22"/><rect x="192" y="64" width="60" height="28" fill="#5a3a2a"/>
+  <path d="M264 72 L290 58 L316 72 Z" fill="#3a2a22"/><rect x="270" y="72" width="40" height="20" fill="#5a3a2a"/>
+  <g fill="#ffb050"><rect x="136" y="76" width="10" height="8"/><rect x="200" y="70" width="12" height="9"/><rect x="230" y="70" width="12" height="9"/><rect x="280" y="78" width="10" height="7"/></g>
+  <g fill="#ff6a3a"><ellipse cx="176" cy="66" rx="4" ry="5"/><ellipse cx="262" cy="68" rx="4" ry="5"/><ellipse cx="318" cy="74" rx="3.5" ry="4.5"/></g>
+</svg>

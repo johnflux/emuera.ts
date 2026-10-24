@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 100">
+  <!-- Bamboo Forest of the Lost: one tile of stalks, repeated along the header -->
+  <g fill="#3f7a3a"><rect x="8" y="0" width="7" height="100"/><rect x="52" y="0" width="9" height="100"/><rect x="94" y="0" width="6" height="100"/></g>
+  <g fill="#5a9a4a"><rect x="28" y="0" width="6" height="100"/><rect x="74" y="0" width="7" height="100"/><rect x="110" y="0" width="5" height="100"/></g>
+  <g fill="#244a24">
+    <rect x="7" y="22" width="9" height="2"/><rect x="7" y="58" width="9" height="2"/><rect x="51" y="34" width="11" height="2"/><rect x="51" y="74" width="11" height="2"/><rect x="93" y="14" width="8" height="2"/><rect x="93" y="50" width="8" height="2"/>
+    <rect x="27" y="40" width="8" height="2"/><rect x="27" y="80" width="8" height="2"/><rect x="73" y="18" width="9" height="2"/><rect x="73" y="62" width="9" height="2"/><rect x="109" y="30" width="7" height="2"/><rect x="109" y="70" width="7" height="2"/>
+  </g>
+  <g fill="#4e8a3e"><path d="M15 22 q12 -6 20 -2 q-10 2 -20 2z"/><path d="M61 34 q10 -8 18 -6 q-8 4 -18 6z"/><path d="M93 50 q-12 -6 -20 -2 q10 2 20 2z"/><path d="M34 40 q10 -4 16 0 q-8 0 -16 0z"/></g>
+</svg>

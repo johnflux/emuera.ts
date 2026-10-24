@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 100">
+  <!-- Dream World～Moon: the full moon over the Lunar Capital -->
+  <circle cx="250" cy="38" r="30" fill="#f4f0dc" opacity=".9"/><circle cx="240" cy="30" r="6" fill="#dcd6bc"/><circle cx="262" cy="48" r="8" fill="#dcd6bc"/><circle cx="258" cy="24" r="3" fill="#dcd6bc"/>
+  <rect x="0" y="88" width="340" height="12" fill="#b8bcd0"/>
+  <path d="M66 64 L90 50 L114 64 Z" fill="#5a6a9a"/><path d="M60 70 Q90 62 120 70 L114 64 H66 Z" fill="#4a5a8a"/><rect x="70" y="70" width="40" height="18" fill="#e8e8f4"/>
+  <path d="M138 54 L170 34 L202 54 Z" fill="#5a6a9a"/><path d="M130 62 Q170 52 210 62 L202 54 H138 Z" fill="#4a5a8a"/><rect x="142" y="62" width="56" height="26" fill="#e8e8f4"/>
+  <rect x="160" y="70" width="20" height="18" fill="#c8323a"/>
+  <path d="M220 74 Q244 68 268 74 L262 68 H226 Z" fill="#4a5a8a"/><rect x="228" y="74" width="32" height="14" fill="#e8e8f4"/>
+</svg>

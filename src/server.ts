@@ -16,7 +16,7 @@ const mime: Record<string, string> = {
   ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
   ".css": "text/css; charset=utf-8", ".png": "image/png", ".webp": "image/webp",
   ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".bmp": "image/bmp",
-  ".ttf": "font/ttf", ".txt": "text/plain; charset=utf-8",
+  ".ttf": "font/ttf", ".txt": "text/plain; charset=utf-8", ".svg": "image/svg+xml",
 };
 class HttpError extends Error {
   constructor(public status: number, message: string) { super(message); }
@@ -78,6 +78,7 @@ export function createApp(game: Game, development = false, store: GlobalStore = 
   saves: SaveStore = game.root ? new FileSaveStore(path.join(game.root, ".era-typescript", "saves")) : new MemorySaveStore()) {
   const sessions = new Map<string, { runtime: Runtime; used: number }>();
   const report = compatibility(game);
+  const demo = demoGame(game);
   const instance = randomUUID();
   return createServer((request, response) => {
     void (async () => {
@@ -107,7 +108,7 @@ export function createApp(game: Game, development = false, store: GlobalStore = 
         if (sessions.size >= 8) throw new HttpError(429, "Too many sessions; restart the server or wait for expiry");
         const id = randomUUID();
         try {
-          const runtime = new Runtime(data.mode === "demo" ? demoGame(game) : game, data.mode === "game" ? GAME_INSTRUCTION_LIMIT : 50_000, {
+          const runtime = new Runtime(data.mode === "demo" ? demo : game, GAME_INSTRUCTION_LIMIT, {
             store: data.mode === "game" ? store : new MemoryGlobalStore(),
             saves: data.mode === "game" ? saves : new MemorySaveStore(),
             columns: typeof data.columns === "number" ? data.columns : 120,
@@ -181,10 +182,12 @@ export function createApp(game: Game, development = false, store: GlobalStore = 
         "/fonts/BIZUDGothic-Regular.ttf": "fonts/BIZUDGothic-Regular.ttf",
         "/fonts/OFL.txt": "fonts/OFL.txt",
       };
-      const page = pages[url.pathname];
+      // The main screen's per-area header art (web/areas/<map id>-<name>.svg).
+      const page = pages[url.pathname] ?? (/^\/areas\/\d+-[a-z]+\.svg$/.test(url.pathname) ? url.pathname.slice(1) : undefined);
       if (request.method === "GET" && page) {
+        const body = await readFile(path.join(WEB_ROOT, page)).catch(() => { throw new HttpError(404, "Not found"); });
         response.writeHead(200, { "Content-Type": mime[path.extname(page)]! });
-        response.end(await readFile(path.join(WEB_ROOT, page)));
+        response.end(body);
         return;
       }
       throw new HttpError(404, "Not found");

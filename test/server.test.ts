@@ -84,6 +84,11 @@ test("HTTP UI, isolated sessions, real image bytes, sprite metadata, errors and 
     assert.equal(license.status, 200);
     assert.match(await license.text(), /SIL OPEN FONT LICENSE/);
     assert.equal((await fetch(base + "/fonts/not-a-font.ttf")).status, 404);
+    const area = await fetch(base + "/areas/0-shrine.svg");
+    assert.equal(area.status, 200);
+    assert.equal(area.headers.get("content-type"), "image/svg+xml");
+    assert.match(await area.text(), /^<svg /);
+    assert.equal((await fetch(base + "/areas/99-nowhere.svg")).status, 404);
     const runtimeInfo = await (await fetch(base + "/api/runtime")).json();
     assert.equal(runtimeInfo.development, false);
     assert.equal(typeof runtimeInfo.instance, "string");

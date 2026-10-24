@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 100">
+  <!-- Youkai Mountain summit: snowy peaks and the Moriya Shrine by its lake -->
+  <path d="M0 100 L90 10 L150 60 L200 20 L300 100 Z" fill="#5a6672"/>
+  <path d="M90 10 L72 28 L84 26 L94 32 L104 24 L112 32 Z" fill="#f4f8fc"/><path d="M200 20 L186 34 L198 32 L206 38 L214 32 Z" fill="#f4f8fc"/>
+  <path d="M220 100 L290 46 L340 80 V100 Z" fill="#6e7a84"/>
+  <ellipse cx="96" cy="96" rx="70" ry="6" fill="#7aa8c8"/>
+  <g fill="#c8322a"><rect x="232" y="72" width="40" height="3"/><rect x="236" y="78" width="32" height="2"/><rect x="238" y="72" width="3" height="26"/><rect x="263" y="72" width="3" height="26"/></g>
+  <path d="M284 84 L300 74 L316 84 Z" fill="#3a3530"/><rect x="288" y="84" width="24" height="14" fill="#a07a50"/>
+  <g fill="#8a6a40"><rect x="278" y="62" width="2" height="36"/><rect x="320" y="62" width="2" height="36"/></g>
+</svg>
