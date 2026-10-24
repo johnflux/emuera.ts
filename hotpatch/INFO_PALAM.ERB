@@ -1,0 +1,96 @@
+;-------------------------------------------------------------------------------
+; Hotpatch for @SHOW_INFO_PALAM (ERB/ステータス表示関連/INFO.ERB): the training parameters on the main screen.
+;
+; The original prints each parameter as a dozen PRINTs (name, eight coloured ▄ cells, value) and ends a row
+; every MAXWIDTH()/25 items, though an item is 26 columns wide, so rows overflow in a wider window. This prints
+; the section as one HTML_PRINT: a grid the browser wraps to its width. It is still one logical line, so
+; LINECOUNT and CLEARLINE stay consistent.
+;
+; Kept: the level (GETPALAMLV) and bar progress rules, the yellow highlight from EX:TARGET:20-24, Smooth.
+; Dropped: the collapse toggle [3000] (always expanded) and the Bars/Numbers toggle [998]; each item shows its
+; value and gem gain, with exact figures in its tooltip.
+;-------------------------------------------------------------------------------
+@SHOW_INFO_PALAM
+#DIM DYNAMIC nPalam
+#DIM DYNAMIC nLv
+#DIM DYNAMIC nValue
+#DIM DYNAMIC nMax
+#DIM DYNAMIC nGain
+#DIMS DYNAMIC sItems
+#DIMS DYNAMIC sClass
+#DIMS DYNAMIC sShown
+#DIMS DYNAMIC sGain
+#DIMS DYNAMIC sTip
+#DIMS DYNAMIC sName
+FOR nPalam, 0, 100
+	SIF !STRLENS(PALAMNAME:nPalam)
+		CONTINUE
+	nLv = GETPALAMLV(PALAM:nPalam, 15)
+	; The bar: full from Lv 15, absolute up to 10000 for the first four, otherwise progress within the level.
+	IF nLv >= 15
+		nValue = 1
+		nMax = 1
+	ELSEIF nPalam < 4
+		nValue = PALAM:nPalam
+		nMax = 10000
+	ELSE
+		nValue = PALAM:nPalam - PALAMLV:nLv
+		nMax = PALAMLV:(nLv + 1) - PALAMLV:nLv
+	ENDIF
+	sClass '= ""
+	SIF nPalam <= 4 && EX:TARGET:(nPalam + 20)
+		sClass += " era-hot"
+	SIF PALAM:nPalam == 0
+		sClass += " era-zero"
+	IF nPalam == 9 && PALAM:nPalam >= 100000
+		sShown '= "Smooth"
+	ELSE
+		sShown '= HOTPATCH_SHORT_NUMBER(PALAM:nPalam)
+	ENDIF
+	sName '= PALAM_TR(PALAMNAME:nPalam, "Palam")
+	sTip '= @"%sName%: {PALAM:nPalam}&#10;Level {nLv}"
+	SIF nLv < 15
+		sTip += @" (Lv {nLv + 1} at {PALAMLV:(nLv + 1)})"
+	sGain '= ""
+	IF nPalam != 9
+		nGain = CALC_JUEL(PALAM:nPalam, nPalam)
+		IF nGain > 0
+			sGain '= @"<span class='era-palam-gain'>+%HOTPATCH_SHORT_NUMBER(nGain)%</span>"
+			sTip += @"&#10;+{nGain} gems when training ends"
+		ENDIF
+	ENDIF
+	sItems += @"<div class='era-palam-item%sClass%' title='%HOTPATCH_ATTRIBUTE(sTip)%'>"
+	sName '= HTML_ESCAPE(PALAM_TR(PALAMNAME:nPalam, "PalamSh"))
+	sItems += @"<span class='era-palam-name'>%sName%</span>"
+	sItems += @"<span class='era-palam-lv'>Lv{nLv}</span><meter value='{nValue}' max='{nMax}'></meter>"
+	sItems += @"<span class='era-palam-value'>%sShown%</span>%sGain%</div>"
+NEXT
+HTML_PRINT @"<div class='era-section era-palam'><div class='era-section-title'>Palam</div><div class='era-palam-grid'>%sItems%</div></div>"
+
+; Up to 9999 as is, then three significant figures: 12.3k, 456k, 7.89M.
+@HOTPATCH_SHORT_NUMBER(nNumber)
+#FUNCTIONS
+#DIM DYNAMIC nNumber
+#DIM DYNAMIC nUnit
+#DIM DYNAMIC nDivisor
+#DIMS DYNAMIC sUnits = "", "k", "M", "G", "T", "P"
+#DIMS DYNAMIC sFraction
+SIF nNumber < 10000
+	RETURNF TOSTR(nNumber)
+nDivisor = 1
+WHILE nNumber / nDivisor >= 1000 && nUnit < 5
+	nDivisor *= 1000
+	nUnit++
+WEND
+SIF nNumber / nDivisor >= 100
+	RETURNF @"{nNumber / nDivisor}%sUnits:nUnit%"
+SIF nNumber / nDivisor >= 10
+	RETURNF @"{nNumber / nDivisor}.{nNumber / (nDivisor / 10) % 10}%sUnits:nUnit%"
+sFraction '= TOSTR(nNumber / (nDivisor / 100) % 100, "00")
+RETURNF @"{nNumber / nDivisor}.%sFraction%%sUnits:nUnit%"
+
+; Text for a single-quoted attribute: HTML_ESCAPE leaves ' alone. Entities already in the text (&#10;) are kept.
+@HOTPATCH_ATTRIBUTE(sText)
+#FUNCTIONS
+#DIMS DYNAMIC sText
+RETURNF REPLACE(REPLACE(sText, "'", "&#39;"), "<", "&lt;")

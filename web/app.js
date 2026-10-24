@@ -664,7 +664,33 @@ async function image(source, token, suppliedSprite, scale = imageScale(), suppli
   pendingImages.push(draw());
   return holder;
 }
-const allowedTags = new Set(["P", "BR", "B", "STRONG", "I", "EM", "U", "S", "SPAN", "NOBR", "FONT", "NONBUTTON"]);
+const allowedTags = new Set(["P", "BR", "B", "STRONG", "I", "EM", "U", "S", "SPAN", "NOBR", "FONT", "NONBUTTON", "DIV"]);
+/**
+ * Hotpatch extension (not Emuera HTML): era-* classes are styled by style.css; other class names are ignored so
+ * game markup can't pick up the client's own classes.
+ */
+function applyClasses(element, node) {
+  for (const name of (node.getAttribute("class") ?? "").split(/\s+/)) if (/^era-[a-z0-9-]+$/.test(name)) element.classList.add(name);
+}
+/** Hotpatch extension: <meter value max [min]> is a bar filled to (value - min) / (max - min). */
+function meter(node) {
+  const number = (name, fallback) => {
+    const value = Number(node.getAttribute(name) ?? fallback);
+    if (!Number.isFinite(value)) throw new Error(`Unsupported meter ${name}: ${node.getAttribute(name)}`);
+    return value;
+  };
+  const min = number("min", 0), max = number("max", 1), value = number("value", 0);
+  const element = document.createElement("span");
+  element.className = "era-meter";
+  element.setAttribute("role", "meter");
+  element.setAttribute("aria-valuemin", String(min));
+  element.setAttribute("aria-valuemax", String(max));
+  element.setAttribute("aria-valuenow", String(value));
+  const fill = document.createElement("span");
+  fill.style.width = `${max > min ? Math.max(0, Math.min(1, (value - min) / (max - min))) * 100 : 0}%`;
+  element.append(fill);
+  return element;
+}
 async function renderHtml(markup, parent, sprites) {
   // Parse inertly, then rebuild an allowlisted DOM. Never attach game HTML directly.
   const documentNode = new DOMParser().parseFromString(markup, "text/html");
@@ -699,6 +725,7 @@ async function renderHtml(markup, parent, sprites) {
         element.append(fill);
       } else throw new Error(`Unsupported HTML shape: ${type} ${node.getAttribute("param")}`);
     }
+    else if (node.tagName === "METER") element = meter(node);
     else if (node.tagName === "BUTTON") {
       const value = node.getAttribute("value");
       if (value !== null) element = choice("", value, node.getAttribute("title") ?? "");
@@ -725,17 +752,18 @@ async function renderHtml(markup, parent, sprites) {
         markTextColor(element, color);
       }
     } else throw new Error(`Unsupported HTML tag: <${node.tagName.toLowerCase()}>`);
+    applyClasses(element, node);
     const title = node.getAttribute("title");
     if (title && !element.dataset.tooltip) describe(element, title);
     destination.append(element);
-    if (node.tagName !== "IMG") for (const child of node.childNodes) await copy(child, node.tagName === "SHAPE" ? destination : element);
+    if (node.tagName !== "IMG" && node.tagName !== "METER") for (const child of node.childNodes) await copy(child, node.tagName === "SHAPE" ? destination : element);
   }
   for (const child of documentNode.body.childNodes) await copy(child, parent);
   parent.querySelectorAll("button.choice, .has-tooltip").forEach(decorateLabel);
 }
-async function render(snapshot, advanceScreen = false, fresh = false, keepFocus = false) {
+async function render(snapshot, advanceScreen = false, fresh = false, keepFocus = false, toBottom = fresh) {
   const scrollTop = terminal.scrollTop;
-  const followBottom = terminal.scrollHeight - terminal.clientHeight - scrollTop < 2;
+  const followBottom = toBottom || terminal.scrollHeight - terminal.clientHeight - scrollTop < 2;
   const staged = document.createElement("div");
   // Keep a visual copy on screen while the original nodes (and their listeners)
   // are updated off-screen. Commit only after HTML and new images are ready.
@@ -761,7 +789,7 @@ async function render(snapshot, advanceScreen = false, fresh = false, keepFocus 
     pendingImages = [];
     terminal.removeAttribute("aria-busy");
     updateControls();
-    if (fresh || followBottom) lastOutputLine()?.scrollIntoView({ block: "nearest" });
+    if (followBottom) terminal.scrollTop = terminal.scrollHeight;
     else terminal.scrollTop = scrollTop;
     scheduleTimedWait();
   }
@@ -1056,7 +1084,8 @@ async function submit(value, selectedChoice = null) {
     activityResponded();
     selectedChoice?.classList.add("is-selected");
     command.value = "";
-    await render(snapshot, waiting ? "continue" : true);
+    // Anything the player sends (typed or clicked) jumps to the newest output.
+    await render(snapshot, waiting ? "continue" : true, false, false, true);
   } catch (error) { message(error.message, true); }
   finally {
     busy = false;

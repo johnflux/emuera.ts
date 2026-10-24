@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { compatibility } from "./compatibility.js";
 import { demoGame } from "./demo.js";
-import { displayDefaults, displayMetrics, GAME_ROOT, loadGame, stillFrame, type DisplaySettings, type Game } from "./loader.js";
+import { applyHotpatches, displayDefaults, displayMetrics, GAME_ROOT, loadGame, stillFrame, type DisplaySettings, type Game } from "./loader.js";
 import { EraError, key } from "./model.js";
 import { GAME_INSTRUCTION_LIMIT, Runtime } from "./runtime.js";
 import { FileGlobalStore, FileSaveStore, MemoryGlobalStore, MemorySaveStore, type GlobalStore, type SaveStore } from "./storage.js";
@@ -205,6 +205,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     if (!/^\d+$/.test(rawPort) || port < 1 || port > 65535) throw new Error("PORT must be an integer from 1 to 65535");
     console.log(`Loading ${GAME_ROOT} ...`);
     const game = await loadGame();
+    const patched = await applyHotpatches(game);
+    if (patched.length) console.log(`Hotpatched ${patched.map((name) => `@${name}`).join(", ")}`);
     const development = process.argv.includes("--dev");
     const app = createApp(game, development);
     app.on("error", (error) => { console.error(error); process.exitCode = 1; });

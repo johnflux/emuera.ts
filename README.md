@@ -5,7 +5,9 @@ The local game directory `anon-tw-anon-tw_eng-modding` is the default target.
 Game scripts, data, and images are read in place and are not bundled or copied.
 Bugs in the game itself (reproducible in real Emuera) are fixed in the game
 files and recorded, with a reapplicable patch, in
-[docs/game-patches.md](docs/game-patches.md).
+[docs/game-patches.md](docs/game-patches.md). Presentation improvements, such
+as a browser-friendly Palam grid, are ERB hotpatches loaded from `hotpatch/`
+that leave the game files untouched; see [docs/hotpatches.md](docs/hotpatches.md).
 
 **The real title and custom-character creation work. Full gameplay is not yet
 supported.** The unmodified `@SYSTEM_TITLE` executes its startup calls, builds
@@ -426,6 +428,8 @@ declarations and the expression evaluator. No single routine dominates.
   Named `<img src='SPRITENAME'>` images are cropped from sprite sheets.
   Basic HTML paragraphs, breaks, emphasis, fonts (color only), numeric choices,
   nonbuttons and HTTP(S) links are rebuilt as allowlisted DOM nodes.
+  Hotpatches may also use `<div>`, `<meter>` and `era-*` classes, which are not
+  Emuera features (see [docs/hotpatches.md](docs/hotpatches.md)).
   As in Emuera, an image is drawn from the top of its line (shifted by `ypos`)
   and does not make the line taller. Scripts print blank lines to reserve its
   height, so the picture overlaps those lines rather than pushing them down.

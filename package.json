@@ -12,7 +12,7 @@
     "xpath": "^0.0.35"
   },
   "scripts": {
-    "dev": "tsx watch --clear-screen=false --include 'web/**' --include 'anon-tw-anon-tw_eng-modding/ERB/**' --include 'anon-tw-anon-tw_eng-modding/CSV/**' --include 'anon-tw-anon-tw_eng-modding/resources/**' src/server.ts --dev",
+    "dev": "tsx watch --clear-screen=false --include 'web/**' --include 'hotpatch/**' --include 'anon-tw-anon-tw_eng-modding/ERB/**' --include 'anon-tw-anon-tw_eng-modding/CSV/**' --include 'anon-tw-anon-tw_eng-modding/resources/**' src/server.ts --dev",
     "build": "tsc",
     "start": "npm run dev",
     "start:prod": "node dist/server.js",

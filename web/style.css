@@ -50,7 +50,7 @@ button:disabled { color: #666; cursor: default; }
 #status.error { color: #ff9d9d; }
 main { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 16px 20px; color: var(--terminal-foreground); background: var(--terminal-background); }
 #terminal, #input-form { font-family: var(--terminal-font); }
-#terminal { flex: 1; min-height: 0; display: flex; flex-direction: column; font-size: var(--font-size); line-height: 1.25; overflow: auto; scrollbar-gutter: stable; }
+#terminal { flex: 1; min-height: 0; display: flex; flex-direction: column; font-size: var(--font-size); line-height: 1.25; overflow: auto; scrollbar-gutter: stable; container-type: inline-size; }
 #terminal::before { content: ""; margin-top: auto; }
 #terminal > * { flex-shrink: 0; min-width: var(--logical-width, 0); }
 #terminal.is-waiting { cursor: pointer; }
@@ -129,3 +129,21 @@ a { color: #8ddaff; }
 #command { flex: 1; min-width: 0; background: transparent; border: 0; padding: 0; line-height: inherit; outline: none; }
 #submit { font-size: 12px; padding: 2px 8px; }
 @media (max-width: 600px) { header, main { padding-left: 10px; padding-right: 10px; } .mode { display: none; } }
+/* Hotpatch sections (hotpatch/*.ERB): one HTML_PRINT, so one logical line, laid out as a block. */
+/* Lines are at least the game's logical width; sections wrap to the visible terminal instead. */
+.line .era-section { display: block; max-width: 100cqi; white-space: normal; margin: 2px 0 4px; }
+.era-section-title { display: flex; align-items: center; gap: 1ch; color: #8fc8ff; }
+.era-section-title::after { content: ""; flex: 1; border-top: 1px solid #ffffff2e; }
+.era-section .interactive-label { text-decoration-line: none; }
+.era-meter { position: relative; display: inline-block; height: .5em; overflow: hidden; border-radius: 2px; background: #202050; vertical-align: middle; }
+.era-meter > span { position: absolute; inset: 0 auto 0 0; border-radius: inherit; background: #7070c0; }
+/* Palam: as many fixed-width columns as fit, so items line up and wrap whole. */
+.era-palam-grid { display: grid; grid-template-columns: repeat(auto-fill, 37ch); column-gap: 2ch; }
+.era-palam-item { display: grid; grid-template-columns: 6ch 4ch 12ch 6ch 5ch; column-gap: .75ch; align-items: center; padding: 0 .5ch; border-radius: 3px; white-space: pre; }
+.era-palam-item .era-meter { width: 100%; }
+.era-palam-lv { color: #8a8a8a; }
+.era-palam-value, .era-palam-gain { text-align: right; }
+.era-palam-gain { color: #d8b850; }
+.era-palam-item.era-zero { opacity: .45; }
+.era-palam-item.era-hot .era-palam-name { color: #ff0; }
+.era-palam-item.era-hot .era-meter > span { background: #d8c040; }

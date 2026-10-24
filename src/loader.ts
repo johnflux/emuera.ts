@@ -4,6 +4,8 @@ import path from "node:path";
 import { EraError, key, allowsFullWidthSpace, stripComment, splitArguments, type Diagnostic, type Line, type Routine } from "./model.js";
 
 export const GAME_ROOT = path.resolve("anon-tw-anon-tw_eng-modding");
+/** Browser-presentation ERB layered over the bundled game without editing its files (see docs/hotpatches.md). */
+export const HOTPATCH_ROOT = path.resolve("hotpatch");
 /** A CSV sprite: a crop of a resource image. width/height 0 mean the whole image. */
 /** What a static renderer draws for a sprite: itself, or an animation's first frame (undefined while it has none). */
 export function stillFrame(sprite: Sprite): Sprite | undefined {
@@ -227,6 +229,27 @@ export function indexScript(game: Game, source: string, file: string, header = f
     } else game.diagnostics.push({ ...line, message: "Content outside a function" });
   }
   if (conditions.length || skipBlock) game.diagnostics.push({ file, line: lastLine, message: "Unclosed preprocessor block" });
+}
+/**
+ * Indexes every .ERB under dir and replaces the game's functions of the same name; functions the game lacks
+ * (patch helpers) are added. A patch for a function the game doesn't define is rejected, so a renamed or
+ * removed original surfaces at startup instead of leaving a dead patch. Returns the replaced function labels.
+ */
+export async function applyHotpatches(game: Game, dir = HOTPATCH_ROOT): Promise<string[]> {
+  if (!existsSync(dir)) return [];
+  const patch: Game = { ...game, routines: new Map(), diagnostics: [] };
+  for (const file of (await filesUnder(dir)).filter((file) => /\.erb$/i.test(file)).sort())
+    indexScript(patch, await readText(file), path.relative(path.dirname(dir), file).split(path.sep).join("/"));
+  game.diagnostics.push(...patch.diagnostics);
+  const replaced: string[] = [];
+  for (const [name, routines] of patch.routines) {
+    const label = routines[0]!.label ?? name;
+    if (!game.routines.has(name) && !/^HOTPATCH_/i.test(name))
+      throw new EraError(`Hotpatch replaces @${label}, which the game does not define (patch helpers are named HOTPATCH_*)`, routines[0]!);
+    if (game.routines.has(name)) replaced.push(label);
+    game.routines.set(name, routines);
+  }
+  return replaced;
 }
 export async function loadGame(root = GAME_ROOT): Promise<Game> {
   const game = emptyGame(root);
