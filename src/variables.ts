@@ -6,8 +6,42 @@ interface Variable {
   string: boolean;
   constant: boolean;
   dimensions: number[];
-  values: Map<string, Value>;
+  /** Elements keyed by row-major linear index; save files use the "i:j:k" address form instead. */
+  values: Map<number, Value>;
   character?: boolean;
+  strides?: number[];
+}
+// Strides ignore dimensions[0], so a character variable's layout survives adding or removing characters.
+function strides(variable: Variable): number[] {
+  if (variable.strides) return variable.strides;
+  const result = new Array<number>(variable.dimensions.length);
+  let stride = 1;
+  for (let i = variable.dimensions.length - 1; i >= 0; i--) {
+    result[i] = stride;
+    if (i > 0) stride *= variable.dimensions[i]!;
+  }
+  // Leave room for 2^20 characters (or first-dimension elements) without losing integer precision.
+  if (stride > 2 ** 32) throw new EraError("Variable is too large");
+  return variable.strides = result;
+}
+function decode(variable: Variable, index: number): number[] {
+  return strides(variable).map((stride, i) => i ? Math.floor(index / stride) % variable.dimensions[i]! : Math.floor(index / stride));
+}
+function addressText(variable: Variable, index: number): string {
+  return decode(variable, index).join(":");
+}
+/** Linear index of a saved "i:j:k" address, or undefined when it does not fit the variable's current shape. */
+function parseAddress(variable: Variable, address: string): number | undefined {
+  const parts = address.split(":");
+  if (parts.length !== variable.dimensions.length) return undefined;
+  const stride = strides(variable);
+  let index = 0;
+  for (let i = 0; i < parts.length; i++) {
+    const n = Number(parts[i]);
+    if (!Number.isSafeInteger(n) || n < 0 || n >= variable.dimensions[i]!) return undefined;
+    index += n * stride[i]!;
+  }
+  return index;
 }
 // EM ConstantData.GetKeywordDictionary: variables that index by another CSV's names.
 const SYMBOL_ALIASES: Record<string, string> = {
@@ -28,15 +62,38 @@ export type GlobalData = Record<string, Record<string, string>>;
 export interface SaveData { characters: number; variables: GlobalData }
 // Built-ins that Emuera does not write to save files (STR comes from Str.csv; CHARANUM is derived).
 const UNSAVED = new Set(["STR", "RESULTS", "GLOBAL", "GLOBALS", "WINDOW_TITLE", "CHARANUM", "LOCAL", "LOCALS", "ARG", "ARGS"]);
+export interface Resolved { name: string; variable: Variable; symbols: Map<string, number> | undefined }
+// Bumped whenever any scope's name table changes, invalidating every scope's resolution cache.
+// Exported as an object so compiled routines can check it without a call.
+export const GENERATION = { value: 0 };
 export class Variables {
   private values = new Map<string, Variable>();
+  /** Resolutions by name as written, valid while `cacheGeneration` matches `GENERATION.value`. */
+  private resolved = new Map<string, Resolved>();
+  private known = new Map<string, boolean>();
+  private cacheGeneration = -1;
   private declarations = new Map<string, Line>();
   private initializing = new Set<string>();
-  constructor(private game: Game, public parent?: Variables) {}
+  private hasChildren = false;
+  /** Counts this scope's own name-table changes; with GENERATION it tells holders of resolutions when to re-resolve. */
+  stamp = 0;
+  /** A per-call scope of DYNAMIC and REF variables over a routine's static scope. */
+  transient = false;
+  constructor(private game: Game, public parent?: Variables) {
+    if (parent) parent.hasChildren = true;
+  }
+  /** Name-table changes only affect lookups through this scope, so childless scopes flush just their own cache. */
+  private invalidate(): void {
+    this.stamp++;
+    if (this.hasChildren) GENERATION.value++;
+    else { this.resolved.clear(); this.known.clear(); }
+  }
   define(name: string, string = false, dimensions = [1000], constant = false): void {
+    this.invalidate();
     this.values.set(key(name), { string, dimensions, constant, values: new Map() });
   }
   defineCharacter(name: string, string = false, dimensions: number[] = []): void {
+    this.invalidate();
     this.values.set(key(name), { string, dimensions: [0, ...dimensions], constant: false, character: true, values: new Map() });
   }
   addCharacter(): number {
@@ -53,17 +110,17 @@ export class Variables {
   rearrangeCharacters(count: number, source: (index: number) => number): void {
     for (const variable of this.values.values()) {
       if (!variable.character) continue;
-      const byCharacter = new Map<number, [string, Value][]>();
-      for (const [address, value] of variable.values) {
-        const separator = address.indexOf(":");
-        const character = Number(separator < 0 ? address : address.slice(0, separator));
+      const stride = strides(variable)[0]!;
+      const byCharacter = new Map<number, [number, Value][]>();
+      for (const [index, value] of variable.values) {
+        const character = Math.floor(index / stride);
         let list = byCharacter.get(character);
         if (!list) byCharacter.set(character, list = []);
-        list.push([separator < 0 ? "" : address.slice(separator), value]);
+        list.push([index - character * stride, value]);
       }
       variable.values = new Map();
       for (let i = 0; i < count; i++)
-        for (const [rest, value] of byCharacter.get(source(i)) ?? []) variable.values.set(`${i}${rest}`, value);
+        for (const [rest, value] of byCharacter.get(source(i)) ?? []) variable.values.set(i * stride + rest, value);
       variable.dimensions[0] = count;
     }
   }
@@ -75,7 +132,7 @@ export class Variables {
     const preserved = new Set(this.globalNames());
     for (const [name, variable] of this.values) {
       if (variable.constant || preserved.has(name) || name.startsWith("GAMEBASE_") || name === "WINDOW_TITLE") continue;
-      if (this.declarations.has(name)) this.values.delete(name);
+      if (this.declarations.has(name)) { this.values.delete(name); this.invalidate(); }
       else variable.values.clear();
       if (variable.character) variable.dimensions[0] = 0;
     }
@@ -86,6 +143,7 @@ export class Variables {
     const name = key(match[3]!);
     if (this.values.has(name) || this.declarations.has(name)) throw new EraError(`Duplicate variable: ${name}`, line);
     this.declarations.set(name, line);
+    this.invalidate();
   }
   bindReference(name: string, source: Variables, sourceName: string, indices: Expr[], context: EvaluationContext): void {
     name = key(name);
@@ -103,9 +161,18 @@ export class Variables {
     if (variable.string !== !!match[1]) throw new EraError(`REF type mismatch (${sourceName}): ${name}`, declaration);
     if (variable.dimensions.length !== rank) throw new EraError(`REF dimension mismatch (${sourceName} has ${variable.dimensions.length}, ${name} expects ${rank})`, declaration);
     this.values.set(name, variable);
+    this.invalidate();
+  }
+  /** Whether this scope itself (not a parent) declares or holds the name. */
+  owns(written: string): boolean {
+    const name = key(written);
+    return this.values.has(name) || this.declarations.has(name);
   }
   has(name: string): boolean {
-    return this.hasKey(key(name));
+    if (this.cacheGeneration !== GENERATION.value) { this.resolved.clear(); this.known.clear(); this.cacheGeneration = GENERATION.value; }
+    let known = this.known.get(name);
+    if (known === undefined) this.known.set(name, known = this.hasKey(key(name)));
+    return known;
   }
   private hasKey(name: string): boolean {
     return this.values.has(name) || this.declarations.has(name) || !!this.parent?.hasKey(name);
@@ -132,14 +199,14 @@ export class Variables {
     if (variable.constant) throw new EraError(`Cannot assign constant: ${name}`);
     const fill = value ?? (variable.string ? "" : 0n);
     if ((typeof fill === "string") !== variable.string) throw new EraError(`Assignment type mismatch: ${name}`);
-    let prefix = "";
+    let base = 0;
     let dimensions = variable.dimensions;
     if (variable.character) {
       const character = indices.length
-        ? Number(this.address(name, indices, context).address.split(":")[0])
+        ? Math.floor(this.address(name, indices, context) / strides(variable)[0]!)
         : Number(integer(context.get("TARGET", [])));
       if (!Number.isSafeInteger(character) || character < 0 || character >= dimensions[0]!) throw new EraError(`Character index ${character} out of range for ${name}`);
-      prefix = `${character}:`;
+      base = character * strides(variable)[0]!;
       dimensions = dimensions.slice(1);
     }
     let start = 0, end = dimensions[0]!;
@@ -150,23 +217,13 @@ export class Variables {
         throw new EraError(`Invalid VARSET range ${start}-${end} for ${name}`);
     }
     const isDefault = fill === (variable.string ? "" : 0n);
-    if (isDefault && !prefix && start === 0 && end === dimensions[0]) { variable.values.clear(); return; }
-    const write = (address: string): void => {
-      if (isDefault) variable.values.delete(address);
-      else variable.values.set(address, fill);
-    };
-    if (dimensions.length === 1) {
-      for (let i = start; i < end; i++) write(prefix + i);
-      return;
+    if (isDefault && !variable.character && start === 0 && end === dimensions[0]) { variable.values.clear(); return; }
+    if (!dimensions.length) return;
+    if (dimensions.length > 1) { start = 0; end = dimensions.reduce((a, b) => a * b, 1); }
+    for (let i = base + start; i < base + end; i++) {
+      if (isDefault) variable.values.delete(i);
+      else variable.values.set(i, fill);
     }
-    const visit = (address: string, dimension: number): void => {
-      for (let i = 0; i < dimensions[dimension]!; i++) {
-        const next = address + (dimension ? ":" : "") + i;
-        if (dimension === dimensions.length - 1) write(next);
-        else visit(next, dimension + 1);
-      }
-    };
-    visit(prefix, 0);
   }
   /** Elements along the last dimension selected by `indices` (trailing index ignored; implicit TARGET for character data). */
   row(name: string, indices: Expr[], context: EvaluationContext): { size: number; string: boolean; get(i: number): Value; set(i: number, value: Value): void } {
@@ -174,17 +231,16 @@ export class Variables {
     const variable = this.resolve(name, context);
     const full = variable.dimensions.length;
     const base = indices.length === full || (variable.character && indices.length === full - 1) ? indices.slice(0, -1) : indices;
-    const { address } = this.address(name, [...base, { kind: "literal", value: 0n }], context);
-    const prefix = address.slice(0, address.lastIndexOf(":") + 1);
+    const index = this.address(name, [...base, { kind: "literal", value: 0n }], context);
     const size = variable.dimensions.at(-1)!;
     const empty: Value = variable.string ? "" : 0n;
     return {
       size, string: variable.string,
-      get: (i) => variable.values.get(prefix + i) ?? empty,
+      get: (i) => variable.values.get(index + i) ?? empty,
       set: (i, value) => {
         if (variable.constant) throw new EraError(`Cannot modify constant: ${name}`);
         if ((typeof value === "string") !== variable.string) throw new EraError(`Assignment type mismatch: ${name}`);
-        variable.values.set(prefix + i, value);
+        variable.values.set(index + i, value);
       },
     };
   }
@@ -195,9 +251,13 @@ export class Variables {
     if (from.string !== to.string || from.dimensions.length !== to.dimensions.length) throw new EraError(`ARRAYCOPY: ${fromName} and ${toName} differ in type or dimensions`);
     if (to.constant) throw new EraError(`Cannot modify constant: ${toName}`);
     const limits = from.dimensions.map((n, i) => Math.min(n, to.dimensions[i]!));
-    const inside = (address: string) => address.split(":").every((part, i) => Number(part) < limits[i]!);
-    for (const address of [...to.values.keys()]) if (inside(address)) to.values.delete(address);
-    for (const [address, value] of from.values) if (inside(address)) to.values.set(address, value);
+    const inside = (coordinates: number[]) => coordinates.every((n, i) => n < limits[i]!);
+    for (const index of [...to.values.keys()]) if (inside(decode(to, index))) to.values.delete(index);
+    const target = strides(to);
+    for (const [index, value] of from.values) {
+      const coordinates = decode(from, index);
+      if (inside(coordinates)) to.values.set(coordinates.reduce((sum, n, i) => sum + n * target[i]!, 0), value);
+    }
   }
   /** Reorders the first dimension so new index i holds old index order[i]; later indices are untouched. */
   permute(name: string, order: number[], context: EvaluationContext): boolean {
@@ -205,30 +265,31 @@ export class Variables {
     if (variable.character) throw new EraError(`Cannot reorder character variable: ${name}`);
     if (variable.dimensions[0]! < order.length) return false;
     const inverse = new Map(order.map((old, i) => [old, i]));
-    const values = new Map<string, Value>();
-    for (const [address, value] of variable.values) {
-      const separator = address.indexOf(":");
-      const first = Number(separator < 0 ? address : address.slice(0, separator));
-      if (first >= order.length) { values.set(address, value); continue; }
+    const stride = strides(variable)[0]!;
+    const values = new Map<number, Value>();
+    for (const [index, value] of variable.values) {
+      const first = Math.floor(index / stride);
+      if (first >= order.length) { values.set(index, value); continue; }
       const moved = inverse.get(first);
-      if (moved !== undefined) values.set(`${moved}${separator < 0 ? "" : address.slice(separator)}`, value);
+      if (moved !== undefined) values.set(moved * stride + index - first * stride, value);
     }
     variable.values = values;
     return true;
   }
   remove(name: string, indices: Expr[], start: number, count: number, context: EvaluationContext): void {
-    const { variable, address } = this.address(key(name), [...indices, { kind: "literal", value: BigInt(start) }], context);
+    const first = this.address(name, [...indices, { kind: "literal", value: BigInt(start) }], context);
+    const variable = this.addressed;
     if (variable.constant) throw new EraError(`Cannot modify constant: ${name}`);
     const size = variable.dimensions.at(-1)!;
     if (!Number.isSafeInteger(count) || count < 0 || start + count > size) throw new EraError("Invalid ARRAYREMOVE range");
-    const prefix = address.slice(0, address.lastIndexOf(":") + 1);
-    const moved = new Map<string, Value>();
+    const base = first - start;
+    const moved = new Map<number, Value>();
     for (const [address, value] of variable.values) {
-      if (!address.startsWith(prefix)) continue;
-      const index = Number(address.slice(prefix.length));
+      if (address < base || address >= base + size) continue;
+      const index = address - base;
       if (index < start) continue;
       variable.values.delete(address);
-      if (index >= start + count) moved.set(prefix + (index - count), value);
+      if (index >= start + count) moved.set(base + index - count, value);
     }
     for (const [address, value] of moved) variable.values.set(address, value);
   }
@@ -240,27 +301,28 @@ export class Variables {
     const result: GlobalData = {};
     for (const name of this.globalNames()) {
       if (!this.has(name)) continue;
-      result[name] = Object.fromEntries([...this.resolve(key(name), context).values].map(([address, value]) => [address, String(value)]));
+      const variable = this.resolve(key(name), context);
+      result[name] = Object.fromEntries([...variable.values].map(([index, value]) => [addressText(variable, index), String(value)]));
     }
     return result;
   }
   importGlobals(data: GlobalData, context: EvaluationContext): void {
-    const updates: { variable: Variable; values: Map<string, Value> }[] = [];
+    const updates: { variable: Variable; values: Map<number, Value> }[] = [];
     for (const name of this.globalNames()) {
       if (!this.has(name)) continue;
       const variable = this.resolve(key(name), context);
-      const values = new Map<string, Value>();
+      const values = new Map<number, Value>();
       const saved = data[name];
       if (saved) for (const [address, raw] of Object.entries(saved)) {
         const indices = address.split(":").map((n) => {
           if (!/^\d+$/.test(n)) throw new EraError(`Invalid saved global index: ${name}:${address}`);
           return { kind: "literal", value: BigInt(n) } satisfies Expr;
         });
-        this.address(key(name), indices, context);
+        const index = this.address(name, indices, context);
         if (!variable.string && !/^-?\d+$/.test(raw)) throw new EraError(`Invalid saved integer: ${name}:${address}`);
         const value = variable.string ? raw : BigInt(raw);
         if (typeof value === "bigint" && BigInt.asIntN(64, value) !== value) throw new EraError(`Saved integer out of range: ${name}`);
-        values.set(address, value);
+        values.set(index, value);
       }
       // Missing variables retain their declared initial values.
       if (saved) updates.push({ variable, values });
@@ -282,7 +344,7 @@ export class Variables {
     const variables: GlobalData = {};
     for (const name of this.savedNames(context)) {
       const variable = this.values.get(name)!;
-      if (variable.values.size) variables[name] = Object.fromEntries([...variable.values].map(([address, value]) => [address, String(value)]));
+      if (variable.values.size) variables[name] = Object.fromEntries([...variable.values].map(([index, value]) => [addressText(variable, index), String(value)]));
     }
     return { characters: this.characterCount(), variables };
   }
@@ -294,7 +356,13 @@ export class Variables {
     for (const [name, values] of Object.entries(data.variables)) {
       if (!names.has(name)) continue;
       const variable = this.values.get(name)!;
-      variable.values = new Map(Object.entries(values).map(([address, raw]) => [address, this.parseSaved(variable, name, address, raw)]));
+      variable.values = new Map();
+      for (const [address, raw] of Object.entries(values)) {
+        const value = this.parseSaved(variable, name, address, raw);
+        // Elements outside the current VariableSize shape are unreachable, so they are dropped.
+        const index = parseAddress(variable, address);
+        if (index !== undefined) variable.values.set(index, value);
+      }
     }
   }
   /** Character variables of the given characters, each as variable name → address within the character → value. */
@@ -304,11 +372,11 @@ export class Variables {
     for (const name of this.savedNames(context)) {
       const variable = this.values.get(name)!;
       if (!variable.character) continue;
-      for (const [address, value] of variable.values) {
-        const separator = address.indexOf(":");
-        const i = position.get(Number(separator < 0 ? address : address.slice(0, separator)));
+      const stride = strides(variable)[0]!;
+      for (const [index, value] of variable.values) {
+        const i = position.get(Math.floor(index / stride));
         if (i === undefined) continue;
-        (result[i]![name] ??= {})[separator < 0 ? "" : address.slice(separator + 1)] = String(value);
+        (result[i]![name] ??= {})[decode(variable, index).slice(1).join(":")] = String(value);
       }
     }
     return result;
@@ -323,7 +391,9 @@ export class Variables {
         if (!variable.character) continue;
         for (const [rest, raw] of Object.entries(values)) {
           const address = rest ? `${index}:${rest}` : String(index);
-          variable.values.set(address, this.parseSaved(variable, name, address, raw));
+          const value = this.parseSaved(variable, name, address, raw);
+          const linear = parseAddress(variable, address);
+          if (linear !== undefined) variable.values.set(linear, value);
         }
       }
     }
@@ -370,65 +440,170 @@ export class Variables {
       };
       initial.forEach((value, i) => {
         if ((typeof value === "string") !== variable.string) throw new EraError(`Initializer type mismatch: ${name}`, line);
-        variable.values.set(String(i), value);
+        variable.values.set(i, value);
       });
       this.values.set(name, variable);
       return variable;
     } finally { this.initializing.delete(name); }
   }
-  private address(name: string, indices: Expr[], context: EvaluationContext): { variable: Variable; address: string } {
-    const variable = this.resolve(name, context);
-    const symbols = indices.length ? this.game.names.get(symbolTable(name)) : undefined;
-    const values = indices.map((expr) => {
-      if (expr.kind === "variable" && !expr.indices.length && symbols?.has(expr.name) && !this.has(expr.name))
-        return symbols.get(expr.name)!;
-      const value = evaluate(expr, context);
-      if (typeof value === "string") {
-        const index = symbols?.get(key(value));
-        if (index === undefined) throw new EraError(`Unknown ${name} CSV index: ${value}`);
-        return index;
+  /** Resolves a name as written to its variable, CSV symbol table and key; throws for unknown names. */
+  slot(written: string, context: EvaluationContext): Resolved { return this.lookup(written, context); }
+  private lookup(written: string, context: EvaluationContext): Resolved {
+    if (this.cacheGeneration !== GENERATION.value) { this.resolved.clear(); this.known.clear(); this.cacheGeneration = GENERATION.value; }
+    let entry = this.resolved.get(written);
+    if (!entry) {
+      const name = key(written);
+      const variable = this.resolve(name, context);
+      // Resolving may lazily create a declared variable, which bumps the generation; cache under the new one.
+      if (this.cacheGeneration !== GENERATION.value) { this.resolved.clear(); this.known.clear(); this.cacheGeneration = GENERATION.value; }
+      entry = { name, variable, symbols: this.game.names.get(symbolTable(name)) };
+      this.resolved.set(written, entry);
+    }
+    return entry;
+  }
+  /** The variable resolved by the latest `address` call; avoids allocating a result object per access. */
+  private addressed!: Variable;
+  private address(written: string, indices: Expr[], context: EvaluationContext): number {
+    const { name, variable, symbols: table } = this.lookup(written, context);
+    const count = indices.length;
+    const dimensions = variable.dimensions;
+    const rank = dimensions.length;
+    const stride = variable.strides ?? strides(variable);
+    if (!count) {
+      let index = 0;
+      if (variable.character) {
+        const target = Number(integer(context.get("TARGET", [])));
+        if (target < 0 || target >= dimensions[0]!) throw new EraError(`Index ${target} out of range for ${name} dimension 1`);
+        for (let d = 1; d < rank; d++) if (dimensions[d]! <= 0) throw new EraError(`Index 0 out of range for ${name} dimension ${d + 1}`);
+        index = target * stride[0]!;
+      } else {
+        if (rank !== 1) throw new EraError(`Expected ${rank} indices for ${name}, received 1`);
+        if (dimensions[0]! <= 0) throw new EraError(`Index 0 out of range for ${name} dimension 1`);
       }
-      const n = Number(integer(value));
-      if (!Number.isSafeInteger(n)) throw new EraError(`Invalid array index: ${value}`);
-      return n;
-    });
-    if (variable.character && values.length === variable.dimensions.length - 1)
-      values.unshift(Number(integer(context.get("TARGET", []))));
-    else if (variable.character && !values.length)
-      values.push(Number(integer(context.get("TARGET", []))), ...variable.dimensions.slice(1).map(() => 0));
-    if (!values.length) values.push(0);
-    if (values.length !== variable.dimensions.length) throw new EraError(`Expected ${variable.dimensions.length} indices for ${name}, received ${values.length}`);
-    values.forEach((n, i) => {
-      if (n < 0 || n >= variable.dimensions[i]!) throw new EraError(`Index ${n} out of range for ${name} dimension ${i + 1}`);
-    });
-    return { variable, address: values.join(":") };
+      this.addressed = variable;
+      return index;
+    }
+    // Character data indexed without its character dimension implicitly uses TARGET.
+    const offset = variable.character && count === rank - 1 ? 1 : 0;
+    let index = 0, bad = -1, badValue = 0;
+    for (let i = 0; i < count; i++) {
+      const expr = indices[i]!;
+      let n: number;
+      if (expr.kind === "literal" && typeof expr.value === "bigint") {
+        n = Number(expr.value);
+        if (!Number.isSafeInteger(n)) throw new EraError(`Invalid array index: ${expr.value}`);
+      } else if (expr.kind === "variable" && !expr.indices.length && table?.has(expr.name) && !this.has(expr.name)) {
+        n = table.get(expr.name)!;
+      } else {
+        const value = evaluate(expr, context);
+        if (typeof value === "string") {
+          const symbol = table?.get(key(value));
+          if (symbol === undefined) throw new EraError(`Unknown ${name} CSV index: ${value}`);
+          n = symbol;
+        } else {
+          n = Number(integer(value));
+          if (!Number.isSafeInteger(n)) throw new EraError(`Invalid array index: ${value}`);
+        }
+      }
+      const d = i + offset;
+      if (d >= rank) continue;
+      if (n < 0 || n >= dimensions[d]!) { if (bad < 0) { bad = d; badValue = n; } }
+      else index += n * stride[d]!;
+    }
+    if (offset) {
+      const target = Number(integer(context.get("TARGET", [])));
+      if (target < 0 || target >= dimensions[0]!) throw new EraError(`Index ${target} out of range for ${name} dimension 1`);
+      index += target * stride[0]!;
+    }
+    if (count + offset !== rank) throw new EraError(`Expected ${rank} indices for ${name}, received ${count + offset}`);
+    if (bad >= 0) throw new EraError(`Index ${badValue} out of range for ${name} dimension ${bad + 1}`);
+    this.addressed = variable;
+    return index;
   }
   get(name: string, indices: Expr[], context: EvaluationContext): Value {
-    const { variable, address } = this.address(key(name), indices, context);
-    return variable.values.get(address) ?? (variable.string ? "" : 0n);
+    const index = this.address(name, indices, context);
+    const variable = this.addressed;
+    return variable.values.get(index) ?? (variable.string ? "" : 0n);
   }
-  isString(name: string, context: EvaluationContext): boolean { return this.resolve(key(name), context).string; }
-  isConstant(name: string, context: EvaluationContext): boolean { return !!this.resolve(key(name), context).constant; }
+  isString(name: string, context: EvaluationContext): boolean { return this.lookup(name, context).variable.string; }
+  isConstant(name: string, context: EvaluationContext): boolean { return !!this.lookup(name, context).variable.constant; }
   set(name: string, indices: Expr[], value: Value, context: EvaluationContext): void {
     this.setMany(name, indices, [value], context);
   }
   setMany(name: string, indices: Expr[], values: Value[], context: EvaluationContext): void {
     name = key(name);
-    const { variable, address } = this.address(name, indices, context);
+    const index = this.address(name, indices, context);
+    const variable = this.addressed;
     if (variable.constant) throw new EraError(`Cannot assign constant: ${name}`);
-    if (values.some((value) => (typeof value === "string") !== variable.string)) throw new EraError(`Assignment type mismatch: ${name}`);
-    const coordinates = address.split(":");
-    const last = coordinates.length - 1;
-    const start = Number(coordinates[last]);
+    for (const value of values) if ((typeof value === "string") !== variable.string) throw new EraError(`Assignment type mismatch: ${name}`);
+    const last = variable.dimensions.length - 1;
+    // The last dimension has stride 1, so consecutive values fill consecutive elements of that row.
+    const start = last ? index % variable.dimensions[last]! : index;
     if (start + values.length > variable.dimensions[last]!) throw new EraError(`Batch assignment out of range for ${name} dimension ${last + 1}`);
-    values.forEach((value, i) => {
-      coordinates[last] = String(start + i);
-      variable.values.set(coordinates.join(":"), value);
-    });
+    for (let i = 0; i < values.length; i++) variable.values.set(index + i, values[i]!);
   }
   seed(name: string, index: number, value: Value): void {
     const variable = this.values.get(key(name));
     if (!variable) throw new EraError(`Cannot seed unknown variable: ${name}`);
-    variable.values.set(String(index), value);
+    variable.values.set(index, value);
   }
 }
+
+/** An index value as `address` converts it: CSV names through the variable's symbol table, integers as safe numbers. */
+export function indexNumber(slot: Resolved, value: Value): number {
+  if (typeof value === "string") {
+    const symbol = slot.symbols?.get(key(value));
+    if (symbol === undefined) throw new EraError(`Unknown ${slot.name} CSV index: ${value}`);
+    return symbol;
+  }
+  const n = Number(value);
+  if (!Number.isSafeInteger(n)) throw new EraError(`Invalid array index: ${value}`);
+  return n;
+}
+/** `Variables.address` for up to three already-converted indices: implicit TARGET, rank and range checks in its order. */
+export function locate(slot: Resolved, context: EvaluationContext, count: number, n0: number, n1: number, n2: number): number {
+  const { name, variable } = slot;
+  const dimensions = variable.dimensions;
+  const rank = dimensions.length;
+  const stride = variable.strides ?? strides(variable);
+  if (!count) {
+    if (variable.character) {
+      const target = Number(integer(context.get("TARGET", [])));
+      if (target < 0 || target >= dimensions[0]!) throw new EraError(`Index ${target} out of range for ${name} dimension 1`);
+      for (let d = 1; d < rank; d++) if (dimensions[d]! <= 0) throw new EraError(`Index 0 out of range for ${name} dimension ${d + 1}`);
+      return target * stride[0]!;
+    }
+    if (rank !== 1) throw new EraError(`Expected ${rank} indices for ${name}, received 1`);
+    if (dimensions[0]! <= 0) throw new EraError(`Index 0 out of range for ${name} dimension 1`);
+    return 0;
+  }
+  const offset = variable.character && count === rank - 1 ? 1 : 0;
+  let index = 0, bad = -1, badValue = 0;
+  for (let i = 0; i < count; i++) {
+    const n = i === 0 ? n0 : i === 1 ? n1 : n2;
+    const d = i + offset;
+    if (d >= rank) continue;
+    if (n < 0 || n >= dimensions[d]!) { if (bad < 0) { bad = d; badValue = n; } }
+    else index += n * stride[d]!;
+  }
+  if (offset) {
+    const target = Number(integer(context.get("TARGET", [])));
+    if (target < 0 || target >= dimensions[0]!) throw new EraError(`Index ${target} out of range for ${name} dimension 1`);
+    index += target * stride[0]!;
+  }
+  if (count + offset !== rank) throw new EraError(`Expected ${rank} indices for ${name}, received ${count + offset}`);
+  if (bad >= 0) throw new EraError(`Index ${badValue} out of range for ${name} dimension ${bad + 1}`);
+  return index;
+}
+export function readElement(slot: Resolved, index: number): Value {
+  const variable = slot.variable;
+  return variable.values.get(index) ?? (variable.string ? "" : 0n);
+}
+/** A single-value `setMany`: constant and type checks, then the store. */
+export function writeElement(slot: Resolved, index: number, value: Value): void {
+  const variable = slot.variable;
+  if (variable.constant) throw new EraError(`Cannot assign constant: ${slot.name}`);
+  if ((typeof value === "string") !== variable.string) throw new EraError(`Assignment type mismatch: ${slot.name}`);
+  variable.values.set(index, value);
+}
+export function slotIsString(slot: Resolved): boolean { return slot.variable.string; }

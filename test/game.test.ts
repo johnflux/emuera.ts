@@ -159,3 +159,34 @@ PRINTFORML {RESULT} {DT_CELL_GET("saveAchievements", RESULT:1, "claimed", 1)} {D
   const demo = new Runtime(demoGame(game)).start();
   assert.equal(demo.status, "waiting", JSON.stringify(demo.error));
 });
+
+test("OBJ framework intrinsics return what the ERB framework returns", {
+  skip: !existsSync(GAME_ROOT),
+}, async () => {
+  const game = await loadGame();
+  type Call = (name: string, args: unknown[]) => unknown;
+  const runtimes = [true, false].map((intrinsics) => {
+    const runtime = new Runtime(game, GAME_INSTRUCTION_LIMIT, { intrinsics });
+    runtime.start();
+    assert.equal(runtime.input("0").status, "waiting");
+    return { runtime, call: ((runtime as unknown as { expressionFunction: Call }).expressionFunction).bind(runtime) as Call };
+  });
+  assert.equal(runtimes[0]!.runtime.enabledIntrinsics.length, 1);
+  assert.equal(runtimes[1]!.runtime.enabledIntrinsics.length, 0);
+  const results = runtimes.map(({ call: raw }) => {
+    const call = (name: string, args: unknown[]): unknown => {
+      try { return raw(name, args); } catch (error) { return (error as Error).message; }
+    };
+    const values: unknown[] = [];
+    for (const className of ["衣装セット", "下半身下着_ずらし不可", "上半身下着_はだけ可能", "キャラデータ", "酒データ", "存在しないクラス"])
+      for (let id = -1n; id < 40n; id++)
+        for (const field of ["名前", "描写", "着せ替え可能", "ズボン", "普段着"]) {
+          values.push(call("GET_STR", [0n, className, id, field]), call("GET_INT", [0n, className, id, field]));
+          if (className !== "存在しないクラス") values.push(call("GET_EXIST", [className, id < 0n ? 0n : id]));
+        }
+    for (const name of ["パジャマ（ズボン）セット", "女装セット", "存在しない衣装"]) values.push(call("OBJNAME_TO_ID", [0n, "GET", "衣装セット", name]));
+    values.push(call("TEMP_STOCK", ["GET_TOTAL"]));
+    return values;
+  });
+  assert.deepEqual(results[0], results[1]);
+});

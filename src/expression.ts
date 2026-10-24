@@ -161,32 +161,38 @@ export function settleIndices(target: VariableExpr, context: EvaluationContext):
   return { kind: "variable", name: target.name, indices: target.indices.map((index): Expr =>
     index.kind === "literal" || index.kind === "variable" && !index.indices.length ? index : { kind: "literal", value: evaluate(index, context) }) };
 }
+const COMPARISONS = new Set(["==", "!=", "<", ">", "<=", ">="]);
 export function evaluate(expr: Expr, context: EvaluationContext): Value {
-  const ev = (node: Expr): Value => evaluate(node, context);
   switch (expr.kind) {
     case "literal": return expr.value;
     case "variable": return context.get(expr.name, expr.indices);
-    case "call": return context.referenceCall?.(expr.name, expr.args) ?? context.call(expr.name, expr.args.map((arg) => arg.kind === "omitted" ? undefined : ev(arg)));
+    case "call": {
+      const result = context.referenceCall?.(expr.name, expr.args);
+      if (result !== undefined) return result;
+      const args = new Array<Value | undefined>(expr.args.length);
+      for (let i = 0; i < args.length; i++) { const arg = expr.args[i]!; args[i] = arg.kind === "omitted" ? undefined : evaluate(arg, context); }
+      return context.call(expr.name, args);
+    }
     case "omitted": throw new EraError("Omitted argument outside a function call");
     case "format": {
       let value = "";
       for (const part of expr.parts) {
-        value += text(ev(part));
+        value += text(evaluate(part, context));
         if (value.length > 1_000_000) throw new EraError("Formatted string exceeds limit");
       }
       return value;
     }
     case "interpolation": {
-      const value = ev(expr.expression);
+      const value = evaluate(expr.expression, context);
       const result = expr.string ? text(value) : integer(value).toString();
       if (!expr.width) return result;
-      const width = integer(ev(expr.width));
+      const width = integer(evaluate(expr.width, context));
       if (width < 0n || width > 1_000_000n) throw new EraError("FORM width out of range");
       const measured = stringWidth(result);
       const padding = " ".repeat(Math.max(0, Number(width) - measured));
       return expr.left ? result + padding : padding + result;
     }
-    case "conditional": return ev(integer(ev(expr.condition)) !== 0n ? expr.yes : expr.no);
+    case "conditional": return evaluate(integer(evaluate(expr.condition, context)) !== 0n ? expr.yes : expr.no, context);
     case "increment": {
       if (!context.set) throw new EraError("Increment is not allowed in this expression");
       // Evaluate computed indices once; bare names stay symbolic so CSV index names still resolve.
@@ -197,7 +203,7 @@ export function evaluate(expr: Expr, context: EvaluationContext): Value {
       return expr.postfix ? before : after;
     }
     case "unary": {
-      const value = integer(ev(expr.operand));
+      const value = integer(evaluate(expr.operand, context));
       switch (expr.op) {
         case "!": return value === 0n ? 1n : 0n;
         case "~": return BigInt.asIntN(64, ~value);
@@ -206,17 +212,17 @@ export function evaluate(expr: Expr, context: EvaluationContext): Value {
       }
     }
     case "binary": {
-      const a = ev(expr.left);
+      const a = evaluate(expr.left, context);
       if (expr.op === "&&" && integer(a) === 0n) return 0n;
       if (expr.op === "||" && integer(a) !== 0n) return 1n;
-      const b = ev(expr.right);
+      const b = evaluate(expr.right, context);
       if (expr.op === "+" && typeof a === "string") return a + text(b);
       if (expr.op === "*" && typeof a === "string") {
         const count = integer(b);
         if (count < 0n || count * BigInt(a.length) > 1_000_000n) throw new EraError("String repetition exceeds limit");
         return a.repeat(Number(count));
       }
-      if (["==", "!=", "<", ">", "<=", ">="].includes(expr.op)) {
+      if (COMPARISONS.has(expr.op)) {
         if (typeof a !== typeof b) throw new EraError("Cannot compare strings and integers");
         const yes = expr.op === "==" ? a === b : expr.op === "!=" ? a !== b : expr.op === "<" ? a < b
           : expr.op === ">" ? a > b : expr.op === "<=" ? a <= b : a >= b;

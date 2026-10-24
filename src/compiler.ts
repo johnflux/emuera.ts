@@ -1,5 +1,6 @@
 import { EraError, key, LITERAL_TEXT_INSTRUCTION, type Line, type Routine } from "./model.js";
 import { TABLE_OPERATIONS } from "./data-tables.js";
+import type { Expr } from "./expression.js";
 
 const TRY_CATCH = new Set(["TRYCCALL", "TRYCJUMP", "TRYCCALLFORM", "TRYCJUMPFORM"]);
 export const SUPPORTED = new Set([
@@ -60,11 +61,17 @@ export function isPrintData(op: string): boolean {
 export function isSupported(op: string): boolean {
   return SUPPORTED.has(op) || !!printVariant(op) || PRINTDATA_PATTERN.test(op);
 }
-export interface Instruction extends Line { op: string; args: string; target: number }
+export interface Instruction extends Line {
+  op: string; args: string; target: number;
+  /** Runtime parse caches; parsing is deterministic, so they live as long as the compiled routine. */
+  parsed?: Expr; assignment?: unknown; values?: Expr[]; cases?: unknown[];
+}
 export interface Compiled {
   code: Instruction[];
   labels: Map<string, number>;
   loops: { start: number; end: number }[];
+  /** JIT state (see jit.ts): calls so far, then the compiled routine or null when it cannot be compiled. */
+  calls?: number; jit?: import("./jit.js").JitEntry | null;
 }
 export function classify(line: Line): { op: string; args: string } {
   if (line.text.startsWith("$")) return { op: "LABEL", args: line.text.slice(1).trim() };

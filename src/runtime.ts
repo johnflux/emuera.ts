@@ -14,6 +14,8 @@ import { DataTables, TABLE_OPERATIONS } from "./data-tables.js";
 import { CONFIG_ITEMS } from "./config-items.js";
 import type { Document as XmlDocument } from "@xmldom/xmldom";
 import { addNode, nodeOutput, parseXml, removeNode, selectNodes, serializeXml } from "./xml.js";
+import { DECLINE, loadIntrinsics, type Intrinsic } from "./intrinsics.js";
+import { ASYNC, Jit, type CallAnalysis } from "./jit.js";
 
 export interface Style { color: string; background: string; alignment: "left" | "center" | "right"; fontStyle: number; font?: string }
 type Rect = [x: number, y: number, width: number, height: number];
@@ -91,6 +93,17 @@ type CaseTest =
   | { kind: "range"; from: string; to: string }
   | { kind: "compare"; op: string; operand: string }
   | { kind: "value"; source: string };
+function argInt(args: (Value | undefined)[], name: string, i: number): bigint {
+  const value = args[i];
+  if (value === undefined) throw new EraError(`Missing argument for ${name}`);
+  return integer(value);
+}
+function argText(args: (Value | undefined)[], name: string, i: number): string {
+  const value = args[i];
+  if (value === undefined) throw new EraError(`Missing argument for ${name}`);
+  return text(value);
+}
+interface Evaluators { ev(source: string): Value; num(source: string): bigint; lineNum(instruction: Instruction): bigint }
 interface Assignment { reference: Extract<Expr, { kind: "variable" }>; operator: string; value: string }
 interface CallTarget { name: string; parameters: string }
 const NO_VARIABLES: EvaluationContext = {
@@ -99,6 +112,13 @@ const NO_VARIABLES: EvaluationContext = {
 };
 interface Frame { variables: Variables; compiled: Compiled; context: EvaluationContext; returnType?: "integer" | "string" }
 interface LoopState { variable: Expr; end: bigint; step: bigint }
+// Single-stepped instructions never touch loop state; compiled routines keep their own.
+/**
+ * Compiled (and JIT-compiled) routines depend only on the routine and on which routines the game defines, so every
+ * runtime of a game shares them.
+ */
+const COMPILED = new WeakMap<Game, { compiled: Map<Routine, Compiled>; analysis: CallAnalysis }>();
+const NO_LOOP_STATES = new Map<number, LoopState>();
 interface ReferenceArgument { variables: Variables; name: string; indices: Expr[]; context: EvaluationContext }
 type Argument = Value | undefined | ReferenceArgument;
 /** Thrown once a system-level call returns after BEGIN; unwinds to the state loop. */
@@ -109,6 +129,8 @@ class StateChange {
 class LoadTransition {}
 class Halt {}
 const BEGIN_STATES = new Set(["SHOP", "TRAIN", "AFTERTRAIN", "ABLUP", "TURNEND", "FIRST", "TITLE"]);
+// Executed most often; they skip the PRINT/DATA/table prefix checks and sit at the head of runFrame's switch.
+const HOT_OPS = new Set(["ASSIGN", "SIF", "RETURNF", "IF", "ELSEIF", "ELSE", "ENDIF", "FOR", "REPEAT", "NEXT", "REND", "SELECTCASE", "CASE", "CASEELSE", "ENDSELECT", "LABEL"]);
 const SKIPPED_INPUTS = new Set(["INPUT", "INPUTS", "ONEINPUT", "ONEINPUTS", "TINPUT", "TINPUTS", "TONEINPUT", "TONEINPUTS"]);
 /** Variables that start a new turn of training at zero. */
 const TRAIN_RESET = { global: ["TFLAG", "TSTR"], character: ["GOTJUEL", "TEQUIP", "EX", "PALAM", "SOURCE", "TCVAR"] };
@@ -225,7 +247,13 @@ export const BUILTIN_FUNCTIONS: ReadonlySet<string> = new Set([
   ...Object.keys(BUILTIN_ARITIES), ...Object.keys(CSV_FIELDS), ...RAW_FUNCTIONS, ...ARRAY_SCANS, ...CHARACTER_SCANS,
   ...XML_FUNCTIONS, ...TABLE_REFERENCE_OPERATIONS, ...TABLE_OPERATIONS,
 ]);
-export interface RuntimeOptions { store?: GlobalStore; saves?: SaveStore; columns?: number; display?: Partial<DisplaySettings> }
+export interface RuntimeOptions {
+  store?: GlobalStore; saves?: SaveStore; columns?: number; display?: Partial<DisplaySettings>;
+  /** Native replacements for recognised game routines (default on); see src/intrinsics.ts. */
+  intrinsics?: boolean;
+  /** Compiles hot routines to JavaScript (default on); see src/jit.ts. */
+  jit?: boolean;
+}
 export const GAME_INSTRUCTION_LIMIT = 20_000_000;
 
 /** Emuera computes POWER with Math.Pow on doubles and rejects NaN, infinities and results outside Int64. */
@@ -246,7 +274,7 @@ export class Runtime {
   private xmlDocuments = new Map<string, XmlDocument>();
   private globals: Variables;
   private statics = new Map<Routine, Variables>();
-  private compiled = new Map<Routine, Compiled>();
+  private compiled: Map<Routine, Compiled>;
   private routineInfo = new Map<Routine, RoutineInfo>();
   private contexts = new WeakMap<Variables, EvaluationContext>();
   private iterator: Generator<Yield, Value | undefined, string> | undefined;
@@ -266,6 +294,13 @@ export class Runtime {
   private style: Style;
   private finished = false;
   private expressionCache = new Map<string, Expr>();
+  /** Names that resolved to a user function without REF parameters, so later calls skip builtin dispatch. */
+  private userFunctions = new Set<string>();
+  private intrinsics = new Map<string, Intrinsic>();
+  private jit: Jit | undefined;
+  /** Descriptions of the intrinsic groups whose ERB sources matched. */
+  readonly enabledIntrinsics: string[] = [];
+  private evaluatorCache = new WeakMap<EvaluationContext, Evaluators>();
   private directoryCache = new Map<string, string[]>();
   private argumentCache = new Map<string, readonly string[]>();
   private formatCache = new Map<string, Expr>();
@@ -311,6 +346,9 @@ export class Runtime {
   private spriteSizes = new Map<string, SpriteInfo>();
   constructor(public game: Game, private maxSteps = 50_000, options: RuntimeOptions = {}) {
     this.fullWidthSpace = allowsFullWidthSpace(game.config);
+    let shared = COMPILED.get(game);
+    if (!shared) COMPILED.set(game, shared = { compiled: new Map(), analysis: { suspends: new Map(), targets: new Map() } });
+    this.compiled = shared.compiled;
     this.store = options.store ?? new MemoryGlobalStore();
     this.columns = 120;
     const printCLength = Number(game.config.get("PRINTCの文字数") ?? 25);
@@ -367,6 +405,32 @@ export class Runtime {
     this.autoToStr = this.configValue("ユーザー関数の引数に自動的にTOSTRを補完する") === 1n;
     this.saves = options.saves ?? new MemorySaveStore();
     this.seedDefaults();
+    if (options.intrinsics !== false) {
+      const { functions, enabled } = loadIntrinsics({
+        routines: game.routines,
+        call: (name, args, native = true) => this.expressionFunction(name, args as Argument[], native),
+        statics: (name) => { const routine = game.routines.get(name)?.[0]; return routine && this.statics.get(routine); },
+        context: (variables) => this.context(variables),
+        global: (name, indices = []) => this.globals.get(name, indices.map((i) => literal(BigInt(i))), this.context(this.globals)),
+        characterCount: () => this.globals.characterCount(),
+      });
+      this.intrinsics = functions;
+      this.enabledIntrinsics.push(...enabled);
+    }
+    if (options.jit !== false) this.jit = new Jit({
+      parse: (source) => this.parse(source),
+      arguments: (source) => this.arguments(source),
+      assignment: (source) => this.assignment(source) as ReturnType<ConstructorParameters<typeof Jit>[0]["assignment"]>,
+      caseTests: (source) => this.caseTests(source),
+      callTarget: (source) => this.callTarget(source),
+      references: (name) => { const routine = this.game.routines.get(name)?.[0]; return routine && this.info(routine).references; },
+      routine: (name) => this.game.routines.has(name),
+      callable: (name) => this.game.routines.has(key(name)) || key(name) in BUILTIN_ARITIES,
+      formNameEnd,
+      targets: (name) => this.game.routines.get(name) ?? [],
+      names: () => this.game.routines.keys(),
+      analysis: shared.analysis,
+    });
   }
   /** Config.DrawableWidth: WindowX less the shape shift used by every drawing mode except WINAPI. */
   private drawableWidth(): number {
@@ -969,6 +1033,7 @@ export class Runtime {
       while (true) {
         const next = this.iterator.next(input);
         input = "";
+        for (const item of this.deferred) bytes += JSON.stringify(item).length;
         output.push(...this.deferred);
         this.deferred = [];
         if (next.done) {
@@ -1149,6 +1214,7 @@ export class Runtime {
       },
       set: (name, indices, value) => { variables.set(name, indices, value, context); },
       referenceCall: (name, args) => {
+        if (this.userFunctions.has(name)) return this.expressionFunction(name, args.map((arg) => arg.kind === "omitted" ? undefined : evaluate(arg, context)));
         const routine = this.game.routines.get(name)?.[0];
         if (routine && this.info(routine).references.some(Boolean)) {
           const references = this.info(routine).references;
@@ -1159,7 +1225,6 @@ export class Runtime {
             return { variables, name: arg.name, indices: arg.indices, context };
           }));
         }
-        const optional = (expr: Expr | undefined, fallback: number): number => optionalInteger(expr, fallback, context);
         if (ARRAY_SCANS.has(name)) {
           // One-dimensional array scans; a character array scans one character's elements.
           const valued = name === "MATCH" || name.startsWith("FIND");
@@ -1170,16 +1235,21 @@ export class Runtime {
           if (dimensions.length !== 1) throw new EraError(`${name} requires a one-dimensional array`);
           const prefix = reference.indices.length > 1 ? reference.indices.slice(0, -1) : [];
           const sought = valued ? evaluate(rest.shift() ?? { kind: "omitted" }, context) : undefined;
-          const from = optional(rest[0], 0), to = optional(rest[1], dimensions[0]!);
+          const from = optionalInteger(rest[0], 0, context), to = optionalInteger(rest[1], dimensions[0]!, context);
           if (!Number.isSafeInteger(from) || !Number.isSafeInteger(to) || from < 0 || to < from || to > dimensions[0]!) throw new EraError(`Invalid ${name} range`);
-          const element = (i: number): Value => variables.get(reference.name, [...prefix, literal(BigInt(i))], context);
+          let row: ReturnType<Variables["row"]> | undefined;
+          const element = (i: number): Value => (row ??= variables.row(reference.name, [...prefix, literal(0n)], context)).get(i);
           if (name.startsWith("FIND")) {
-            const full = optional(rest[2], 0) !== 0;
-            const regex = typeof sought === "string" ? this.regex(full ? `^(?:${sought})$` : sought) : null;
-            const matches = (value: Value): boolean => {
-              if (regex) regex.lastIndex = 0;
-              return regex && typeof value === "string" ? regex.test(value) : value === sought;
-            };
+            const full = optionalInteger(rest[2], 0, context) !== 0;
+            // A pattern without metacharacters matches literally, which avoids a regex test per element.
+            const plain = typeof sought === "string" && !/[\\^$.|?*+()[\]{}]/.test(sought);
+            const regex = typeof sought === "string" && !plain ? this.regex(full ? `^(?:${sought})$` : sought) : null;
+            const matches = plain
+              ? (value: Value): boolean => typeof value === "string" && (full ? value === sought : value.includes(sought as string))
+              : (value: Value): boolean => {
+                if (regex) regex.lastIndex = 0;
+                return regex && typeof value === "string" ? regex.test(value) : value === sought;
+              };
             if (name === "FINDELEMENT") { for (let i = from; i < to; i++) if (matches(element(i))) return BigInt(i); }
             else for (let i = to - 1; i >= from; i--) if (matches(element(i))) return BigInt(i);
             return -1n;
@@ -1197,7 +1267,7 @@ export class Runtime {
           while (indices.length < rank) indices.push(literal(0n));
           const sought = valued ? evaluate(rest.shift() ?? { kind: "omitted" }, context) : undefined;
           const characters = Number(integer(context.get("CHARANUM", [])));
-          const from = optional(rest[0], 0), to = optional(rest[1], characters);
+          const from = optionalInteger(rest[0], 0, context), to = optionalInteger(rest[1], characters, context);
           if (!Number.isSafeInteger(from) || !Number.isSafeInteger(to) || from < 0 || to < from || to > characters) throw new EraError(`Invalid ${name} character range`);
           const element = (i: number): Value => variables.get(reference.name, [literal(BigInt(i)), ...indices], context);
           return this.reduceElements(name, element, from, to, sought);
@@ -1222,7 +1292,7 @@ export class Runtime {
             limit = dimensions.at(-1)!;
             element = (i) => variables.get(reference.name, [...prefix, literal(BigInt(i))], context);
           }
-          const from = optional(startExpr, 0), to = optional(endExpr, limit);
+          const from = optionalInteger(startExpr, 0, context), to = optionalInteger(endExpr, limit, context);
           if (from < 0 || from > limit || to < 0 || to > limit || from > to) throw new EraError(`Invalid ${name} range ${from} to ${to}`);
           let count = 0n;
           for (let i = from; i < to; i++) { const value = integer(element(i)); if (value >= min && value < max) count++; }
@@ -1235,7 +1305,7 @@ export class Runtime {
           const last = dimensions.at(-1)!;
           const prefix = reference.indices.length >= dimensions.length ? reference.indices.slice(0, -1) : [...reference.indices];
           const delimiter = delimiterExpr && delimiterExpr.kind !== "omitted" ? text(evaluate(delimiterExpr, context)) : ",";
-          const from = optional(startExpr, 0), count = optional(countExpr, last - from);
+          const from = optionalInteger(startExpr, 0, context), count = optionalInteger(countExpr, last - from, context);
           if (count < 0) throw new EraError(`STRJOIN: argument 4 (${count}) must not be negative`);
           if (from < 0 || from + count > last) throw new EraError(`Invalid STRJOIN range ${from} to ${from + count}`);
           return Array.from({ length: count }, (_, i) => String(variables.get(reference.name, [...prefix, literal(BigInt(from + i))], context))).join(delimiter);
@@ -1260,7 +1330,7 @@ export class Runtime {
           const sought = evaluate(soughtExpr, context);
           if ((typeof sought === "string") !== variables.isString(reference.name, context)) throw new EraError(`${name} value type does not match ${reference.name}`);
           const characters = Number(integer(context.get("CHARANUM", [])));
-          const from = optional(fromExpr, 0), to = optional(toExpr, characters);
+          const from = optionalInteger(fromExpr, 0, context), to = optionalInteger(toExpr, characters, context);
           if (!characters) return -1n;
           if (from < 0 || from >= characters) throw new EraError(`${name}: start ${from} is outside the character range`);
           if (to < 0 || to > characters) throw new EraError(`${name}: end ${to} is outside the character range`);
@@ -1322,34 +1392,32 @@ export class Runtime {
         const arity = BUILTIN_ARITIES[name];
         if (arity && (args.length < arity[0] || args.length > arity[1]))
           throw new EraError(`Invalid number of arguments for ${name}`);
-        const n = (i: number): bigint => integer(args[i] ?? (() => { throw new EraError(`Missing argument for ${name}`); })());
-        const s = (i: number): string => text(args[i] ?? (() => { throw new EraError(`Missing argument for ${name}`); })());
         switch (name) {
-          case "EXISTCSV": return this.game.characters.has(Number(n(0))) ? 1n : 0n;
+          case "EXISTCSV": return this.game.characters.has(Number(argInt(args, name, 0))) ? 1n : 0n;
           case "ISSKIP": return this.skipDisplay ? 1n : 0n;
           case "GETPALAMLV": case "GETEXPLV": {
             // The first level whose next threshold exceeds the value, capped at the maximum.
-            const table = name === "GETPALAMLV" ? "PALAMLV" : "EXPLV", value = n(0), maximum = n(1);
+            const table = name === "GETPALAMLV" ? "PALAMLV" : "EXPLV", value = argInt(args, name, 0), maximum = argInt(args, name, 1);
             for (let i = 0n; i < maximum; i++) if (value < integer(this.globals.get(table, [literal(i + 1n)], context))) return i;
             return maximum;
           }
           case "MOUSESKIP": return 0n;
           case "RAND": {
-            const [low, high] = args.length === 1 ? [0n, n(0)] : [n(0), n(1)];
+            const [low, high] = args.length === 1 ? [0n, argInt(args, name, 0)] : [argInt(args, name, 0), argInt(args, name, 1)];
             if (high <= low) throw new EraError("RAND maximum must exceed its minimum");
             return low + this.random(high - low);
           }
           case "GETCHARA": {
-            const sought = n(0), count = this.globals.characterCount();
+            const sought = argInt(args, name, 0), count = this.globals.characterCount();
             for (let i = 0; i < count; i++) if (this.globals.get("NO", [literal(BigInt(i))], context) === sought) return BigInt(i);
             return -1n;
           }
           case "CSVNAME": case "CSVCALLNAME": case "CSVNICKNAME": case "CSVMASTERNAME": {
             const field = ({ CSVNAME: "名前", CSVCALLNAME: "呼び名", CSVNICKNAME: "あだ名", CSVMASTERNAME: "主人の呼び方" } as Record<string, string>)[name]!;
-            return this.characterTemplate(n(0)).rows.find((r) => r[0] === field)?.[1] ?? "";
+            return this.characterTemplate(argInt(args, name, 0)).rows.find((r) => r[0] === field)?.[1] ?? "";
           }
-          case "INRANGE": return n(0) >= n(1) && n(0) <= n(2) ? 1n : 0n;
-          case "SIGN": return n(0) > 0n ? 1n : n(0) < 0n ? -1n : 0n;
+          case "INRANGE": return argInt(args, name, 0) >= argInt(args, name, 1) && argInt(args, name, 0) <= argInt(args, name, 2) ? 1n : 0n;
+          case "SIGN": return argInt(args, name, 0) > 0n ? 1n : argInt(args, name, 0) < 0n ? -1n : 0n;
           case "ALLSAMES": case "NOSAMES": {
             if (!args.length) throw new EraError(`${name} requires arguments`);
             if (args.some((value) => typeof value !== typeof args[0])) throw new EraError(`${name}: arguments must all have the type of the first`);
@@ -1357,27 +1425,27 @@ export class Runtime {
             return new Set(args).size === args.length ? 1n : 0n;
           }
           case "COLOR_FROMNAME": {
-            if (key(s(0)) === "TRANSPARENT") throw new EraError("COLOR_FROMNAME: Transparent is not supported");
-            const color = KNOWN_COLORS[key(s(0))];
+            if (key(argText(args, name, 0)) === "TRANSPARENT") throw new EraError("COLOR_FROMNAME: Transparent is not supported");
+            const color = KNOWN_COLORS[key(argText(args, name, 0))];
             return color === undefined ? -1n : BigInt("0x" + color.slice(1));
           }
           case "COLOR_FROMRGB": {
-            for (let i = 0; i < 3; i++) if (n(i) < 0n || n(i) > 255n) throw new EraError(`COLOR_FROMRGB: argument ${i + 1} (${n(i)}) must be between 0 and 255`);
-            return (n(0) << 16n) + (n(1) << 8n) + n(2);
+            for (let i = 0; i < 3; i++) if (argInt(args, name, i) < 0n || argInt(args, name, i) > 255n) throw new EraError(`COLOR_FROMRGB: argument ${i + 1} (${argInt(args, name, i)}) must be between 0 and 255`);
+            return (argInt(args, name, 0) << 16n) + (argInt(args, name, 1) << 8n) + argInt(args, name, 2);
           }
           case "ENCODETOUNI": {
-            const source = s(0);
+            const source = argText(args, name, 0);
             if (!source.length) return -1n;
-            const position = args[1] === undefined ? 0 : Number(n(1));
+            const position = args[1] === undefined ? 0 : Number(argInt(args, name, 1));
             if (position < 0) throw new EraError(`ENCODETOUNI: argument 2 (${position}) must not be negative`);
             if (position >= source.length) throw new EraError(`ENCODETOUNI: position ${position} is beyond the end of "${source}"`);
             return BigInt(source.codePointAt(position)!);
           }
           // Only the configured font is known to exist in the browser; scripts fall back to it otherwise.
-          case "CHKFONT": return key(s(0)) === key(this.display.font) ? 1n : 0n;
+          case "CHKFONT": return key(argText(args, name, 0)) === key(this.display.font) ? 1n : 0n;
           case "LINEISEMPTY": return this.printedLine === "" && this.printingHtml === "" ? 1n : 0n;
           case "HTML_GETPRINTEDSTR": {
-            const lineNo = args[0] === undefined ? 0 : Number(n(0));
+            const lineNo = args[0] === undefined ? 0 : Number(argInt(args, name, 0));
             if (lineNo < 0) throw new EraError(`HTML_GETPRINTEDSTR: argument 1 (${lineNo}) must not be negative`);
             return this.printedLines[this.printedLines.length - 1 - lineNo] ?? "";
           }
@@ -1395,50 +1463,50 @@ export class Runtime {
           case "MOUSEB": return "";
           // The text box is emptied when input is accepted, so scripts always observe an empty box.
           case "GETTEXTBOX": return "";
-          case "ESCAPE": return s(0).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-          case "ISNUMERIC": return numericString(s(0)) === undefined ? 0n : 1n;
+          case "ESCAPE": return argText(args, name, 0).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          case "ISNUMERIC": return numericString(argText(args, name, 0)) === undefined ? 0n : 1n;
           case "GROUPMATCH": return BigInt(args.slice(1).filter((value) => value === args[0]).length);
-          case "TOLOWER": return s(0).toLowerCase();
-          case "TOUPPER": return s(0).toUpperCase();
-          case "TOFULL": return toFullWidth(s(0));
-          case "TOHALF": return toHalfWidth(s(0));
+          case "TOLOWER": return argText(args, name, 0).toLowerCase();
+          case "TOUPPER": return argText(args, name, 0).toUpperCase();
+          case "TOFULL": return toFullWidth(argText(args, name, 0));
+          case "TOHALF": return toHalfWidth(argText(args, name, 0));
           case "UNICODE": {
-            const code = Number(n(0));
+            const code = Number(argInt(args, name, 0));
             if (code < 0 || code > 0x10ffff || code >= 0xd800 && code <= 0xdfff) throw new EraError("Invalid Unicode code point");
             return String.fromCodePoint(code);
           }
           case "GETBIT":
-            if (n(1) < 0n || n(1) > 63n) throw new EraError("Bit index must be between 0 and 63");
-            return (n(0) >> n(1)) & 1n;
+            if (argInt(args, name, 1) < 0n || argInt(args, name, 1) > 63n) throw new EraError("Bit index must be between 0 and 63");
+            return (argInt(args, name, 0) >> argInt(args, name, 1)) & 1n;
           case "CSVCSTR": case "CSVABL": case "CSVTALENT": case "CSVBASE": case "CSVEXP": case "CSVRELATION": case "CSVFLAG": case "CSVCFLAG":
           case "CSVMARK": case "CSVJUEL": case "CSVEQUIP": {
-            const template = this.characterTemplate(n(0));
+            const template = this.characterTemplate(argInt(args, name, 0));
             const [field, table] = CSV_FIELDS[name]!;
-            const row = template.rows.find((r) => r[0] === field && (/^\d+$/.test(r[1] ?? "") ? Number(r[1]) : this.game.names.get(table)?.get(key(r[1] ?? ""))) === Number(n(1)));
+            const row = template.rows.find((r) => r[0] === field && (/^\d+$/.test(r[1] ?? "") ? Number(r[1]) : this.game.names.get(table)?.get(key(r[1] ?? ""))) === Number(argInt(args, name, 1)));
             if (name === "CSVCSTR") return row?.[2] ?? "";
             return row ? this.characterNumber(row[2] ?? "", template.file) : 0n;
           }
-          case "ABS": return BigInt.asIntN(64, n(0) < 0n ? -n(0) : n(0));
+          case "ABS": return BigInt.asIntN(64, argInt(args, name, 0) < 0n ? -argInt(args, name, 0) : argInt(args, name, 0));
           case "SQRT": case "CBRT": {
-            if (n(0) < 0n) throw new EraError(`${name}: argument 1 is negative (${n(0)})`);
-            return BigInt(Math.trunc(name === "SQRT" ? Math.sqrt(Number(n(0))) : Math.pow(Number(n(0)), 1 / 3)));
+            if (argInt(args, name, 0) < 0n) throw new EraError(`${name}: argument 1 is negative (${argInt(args, name, 0)})`);
+            return BigInt(Math.trunc(name === "SQRT" ? Math.sqrt(Number(argInt(args, name, 0))) : Math.pow(Number(argInt(args, name, 0)), 1 / 3)));
           }
           case "LOG": case "LOG10": case "EXPONENT": {
-            if (name !== "EXPONENT" && n(0) <= 0n) throw new EraError(`${name}: argument 1 must be positive (${n(0)})`);
-            const x = Number(n(0));
+            if (name !== "EXPONENT" && argInt(args, name, 0) <= 0n) throw new EraError(`${name}: argument 1 must be positive (${argInt(args, name, 0)})`);
+            const x = Number(argInt(args, name, 0));
             return doubleToInt64(name, name === "LOG" ? Math.log(x) : name === "LOG10" ? Math.log10(x) : Math.exp(x));
           }
           case "MIN": case "MAX":
             if (!args.length) throw new EraError(`${name} requires arguments`);
-            return args.map((_, i) => n(i)).reduce((a, b) => name === "MIN" ? (a < b ? a : b) : (a > b ? a : b));
+            return args.map((_, i) => argInt(args, name, i)).reduce((a, b) => name === "MIN" ? (a < b ? a : b) : (a > b ? a : b));
           case "LIMIT":
-            if (n(1) > n(2)) throw new EraError("LIMIT minimum exceeds maximum");
-            return n(0) < n(1) ? n(1) : n(0) > n(2) ? n(2) : n(0);
+            if (argInt(args, name, 1) > argInt(args, name, 2)) throw new EraError("LIMIT minimum exceeds maximum");
+            return argInt(args, name, 0) < argInt(args, name, 1) ? argInt(args, name, 1) : argInt(args, name, 0) > argInt(args, name, 2) ? argInt(args, name, 2) : argInt(args, name, 0);
           case "MONEYSTR": {
-            const value = n(0);
+            const value = argInt(args, name, 0);
             let formatted = value.toString();
             if (args[1] !== undefined) {
-              const format = s(1);
+              const format = argText(args, name, 1);
               if (format === "#,##0") formatted = formatted.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
               else if (/^0{1,100}$/.test(format))
                 formatted = (value < 0n ? "-" : "") + (value < 0n ? -value : value).toString().padStart(format.length, "0");
@@ -1447,153 +1515,153 @@ export class Runtime {
             return this.game.money.first ? this.game.money.label + formatted : formatted + this.game.money.label;
           }
           case "TOSTR": {
-            const value = n(0).toString();
+            const value = argInt(args, name, 0).toString();
             if (args.length < 2) return value;
-            const format = s(1);
-            const result = format.length <= 100 ? formatInteger(n(0), format) : undefined;
+            const format = argText(args, name, 1);
+            const result = format.length <= 100 ? formatInteger(argInt(args, name, 0), format) : undefined;
             if (result === undefined) throw new EraError(`Unsupported TOSTR format: ${format}`);
             return result;
           }
           case "TOINT": {
-            return numericString(s(0)) ?? 0n;
+            return numericString(argText(args, name, 0)) ?? 0n;
           }
-          case "STRLENU": return BigInt([...s(0)].length);
-          case "STRLENSU": return BigInt(s(0).length);
+          case "STRLENU": return BigInt([...argText(args, name, 0)].length);
+          case "STRLENSU": return BigInt(argText(args, name, 0).length);
           case "MAXWIDTH": return BigInt(this.columns);
           case "CURRENTREDRAW": return this.redraw;
           // Graphics are display lists painted by the browser; pixels are never read back here.
-          case "SPRITECREATED": return this.sprite(s(0)) ? 1n : 0n;
-          case "SPRITEWIDTH": return BigInt(this.sprite(s(0))?.width ?? 0);
-          case "SPRITEHEIGHT": return BigInt(this.sprite(s(0))?.height ?? 0);
-          case "SPRITEPOSX": return BigInt(this.sprite(s(0))?.x ?? 0);
-          case "SPRITEPOSY": return BigInt(this.sprite(s(0))?.y ?? 0);
+          case "SPRITECREATED": return this.sprite(argText(args, name, 0)) ? 1n : 0n;
+          case "SPRITEWIDTH": return BigInt(this.sprite(argText(args, name, 0))?.width ?? 0);
+          case "SPRITEHEIGHT": return BigInt(this.sprite(argText(args, name, 0))?.height ?? 0);
+          case "SPRITEPOSX": return BigInt(this.sprite(argText(args, name, 0))?.x ?? 0);
+          case "SPRITEPOSY": return BigInt(this.sprite(argText(args, name, 0))?.y ?? 0);
           case "SPRITESETPOS": case "SPRITEMOVE": {
-            const sprite = this.sprite(s(0));
+            const sprite = this.sprite(argText(args, name, 0));
             if (!sprite) return 0n;
-            sprite.x = Number(n(1)) + (name === "SPRITEMOVE" ? sprite.x : 0);
-            sprite.y = Number(n(2)) + (name === "SPRITEMOVE" ? sprite.y : 0);
+            sprite.x = Number(argInt(args, name, 1)) + (name === "SPRITEMOVE" ? sprite.x : 0);
+            sprite.y = Number(argInt(args, name, 2)) + (name === "SPRITEMOVE" ? sprite.y : 0);
             return 1n;
           }
           case "SPRITECREATE": {
-            const graphics = this.graphics.get(n(1));
-            if (!s(0) || this.sprite(s(0)) || !graphics) return 0n;
-            const rect: Rect = args.length === 6 ? [Number(n(2)), Number(n(3)), Number(n(4)), Number(n(5))] : [0, 0, graphics.width, graphics.height];
+            const graphics = this.graphics.get(argInt(args, name, 1));
+            if (!argText(args, name, 0) || this.sprite(argText(args, name, 0)) || !graphics) return 0n;
+            const rect: Rect = args.length === 6 ? [Number(argInt(args, name, 2)), Number(argInt(args, name, 3)), Number(argInt(args, name, 4)), Number(argInt(args, name, 5))] : [0, 0, graphics.width, graphics.height];
             if (args.length !== 2 && args.length !== 6) throw new EraError("SPRITECREATE expects a name and a G id, optionally followed by x, y, width and height");
             // Emuera allows negative sizes (mirroring) but the rectangle must overlap the G.
             const [x, y, width, height] = rect, left = Math.min(x, x + width), top = Math.min(y, y + height);
             if (!width || !height || left >= graphics.width || top >= graphics.height || left + Math.abs(width) <= 0 || top + Math.abs(height) <= 0)
               throw new EraError("SPRITECREATE rectangle is outside the graphics");
-            this.dynamicSprites.set(key(s(0)), { width, height, x: 0, y: 0, graphics: n(1), rect });
+            this.dynamicSprites.set(key(argText(args, name, 0)), { width, height, x: 0, y: 0, graphics: argInt(args, name, 1), rect });
             return 1n;
           }
           case "SPRITEANIMECREATE": {
-            if (!s(0) || this.sprite(s(0))) return 0n;
-            const [width, height] = [Number(n(1)), Number(n(2))];
+            if (!argText(args, name, 0) || this.sprite(argText(args, name, 0))) return 0n;
+            const [width, height] = [Number(argInt(args, name, 1)), Number(argInt(args, name, 2))];
             if (width <= 0 || height <= 0) throw new EraError(`${name}: the size must be positive`);
             if (width > 8192 || height > 8192) throw new EraError(`${name}: the size must be at most 8192`);
-            this.dynamicSprites.set(key(s(0)), { width, height, x: 0, y: 0, frames: [] });
+            this.dynamicSprites.set(key(argText(args, name, 0)), { width, height, x: 0, y: 0, frames: [] });
             return 1n;
           }
           case "SPRITEANIMEADDFRAME": {
-            const sprite = s(0) ? this.sprite(s(0)) : undefined;
-            const graphics = this.graphics.get(n(1));
+            const sprite = argText(args, name, 0) ? this.sprite(argText(args, name, 0)) : undefined;
+            const graphics = this.graphics.get(argInt(args, name, 1));
             if (!sprite?.frames || !graphics) return 0n;
-            const [x, y, width, height, delay] = [2, 3, 4, 5, 8].map((i) => Number(n(i))) as [number, number, number, number, number];
+            const [x, y, width, height, delay] = [2, 3, 4, 5, 8].map((i) => Number(argInt(args, name, i))) as [number, number, number, number, number];
             if (width <= 0 || height <= 0 || x < 0 || y < 0 || x + width > graphics.width || y + height > graphics.height) return 0n;
             if (delay <= 0 || delay > 0x7fff_ffff) return 0n;
-            sprite.frames.push(animationFrame({ graphics: n(1), delay }, [x, y, width, height], [Number(n(6)), Number(n(7))], sprite.width, sprite.height));
+            sprite.frames.push(animationFrame({ graphics: argInt(args, name, 1), delay }, [x, y, width, height], [Number(argInt(args, name, 6)), Number(argInt(args, name, 7))], sprite.width, sprite.height));
             return 1n;
           }
-          case "SPRITEDISPOSE": return this.dynamicSprites.delete(key(s(0))) ? 1n : 0n;
+          case "SPRITEDISPOSE": return this.dynamicSprites.delete(key(argText(args, name, 0))) ? 1n : 0n;
           case "GCREATE": {
-            if (this.graphics.has(n(0))) return 0n;
-            const width = Number(n(1)), height = Number(n(2));
+            if (this.graphics.has(argInt(args, name, 0))) return 0n;
+            const width = Number(argInt(args, name, 1)), height = Number(argInt(args, name, 2));
             if (width <= 0 || height <= 0 || width > 8192 || height > 8192) throw new EraError("GCREATE size must be between 1 and 8192");
-            this.graphics.set(n(0), { width, height, ops: [] });
+            this.graphics.set(argInt(args, name, 0), { width, height, ops: [] });
             return 1n;
           }
           case "GCREATEFROMFILE": {
-            if (this.graphics.has(n(0)) || !this.game.root) return 0n;
+            if (this.graphics.has(argInt(args, name, 0)) || !this.game.root) return 0n;
             const resources = path.resolve(this.game.root, "resources");
-            const file = path.resolve(resources, s(1).replaceAll("\\", "/"));
+            const file = path.resolve(resources, argText(args, name, 1).replaceAll("\\", "/"));
             if (!file.startsWith(resources + path.sep)) return 0n;
             const size = imageSize(file);
             if (!size) return 0n;
             const whole: Rect = [0, 0, size.width, size.height];
-            this.graphics.set(n(0), { ...size, ops: [{ op: "image", url: resourceUrl(path.relative(resources, file)), src: whole, dest: whole }] });
+            this.graphics.set(argInt(args, name, 0), { ...size, ops: [{ op: "image", url: resourceUrl(path.relative(resources, file)), src: whole, dest: whole }] });
             return 1n;
           }
-          case "GCREATED": return this.graphics.has(n(0)) ? 1n : 0n;
-          case "GWIDTH": return BigInt(this.graphics.get(n(0))?.width ?? 0);
-          case "GHEIGHT": return BigInt(this.graphics.get(n(0))?.height ?? 0);
-          case "GDISPOSE": return this.graphics.delete(n(0)) ? 1n : 0n;
-          case "GGETCOLOR": return this.graphics.has(n(0)) ? 0n : -1n;
+          case "GCREATED": return this.graphics.has(argInt(args, name, 0)) ? 1n : 0n;
+          case "GWIDTH": return BigInt(this.graphics.get(argInt(args, name, 0))?.width ?? 0);
+          case "GHEIGHT": return BigInt(this.graphics.get(argInt(args, name, 0))?.height ?? 0);
+          case "GDISPOSE": return this.graphics.delete(argInt(args, name, 0)) ? 1n : 0n;
+          case "GGETCOLOR": return this.graphics.has(argInt(args, name, 0)) ? 0n : -1n;
           case "GDRAWSPRITE": case "GDRAWG": return this.draw(name, args);
           case "GDRAWGWITHMASK": {
-            const canvas = this.graphics.get(n(0)), source = this.picture(n(1)), mask = this.picture(n(2));
+            const canvas = this.graphics.get(argInt(args, name, 0)), source = this.picture(argInt(args, name, 1)), mask = this.picture(argInt(args, name, 2));
             if (!canvas || !source || !mask || source.width !== mask.width || source.height !== mask.height) return 0n;
-            const x = Number(n(3)), y = Number(n(4));
+            const x = Number(argInt(args, name, 3)), y = Number(argInt(args, name, 4));
             if (x + source.width > canvas.width || y + source.height > canvas.height) return 0n;
             canvas.ops.push({ op: "mask", source, mask, x, y });
             return 1n;
           }
           case "GCLEAR": {
             if (args.length !== 2 && args.length !== 6) throw new EraError("GCLEAR takes 2 or 6 arguments");
-            const canvas = this.graphics.get(n(0));
+            const canvas = this.graphics.get(argInt(args, name, 0));
             if (!canvas) return 0n;
-            const color = argbColor(n(1), name);
-            if (args.length >= 6) canvas.ops.push({ op: "fill", color, rect: [Number(n(2)), Number(n(3)), Number(n(4)), Number(n(5))], replace: true });
-            else canvas.ops = n(1) >> 24n ? [{ op: "fill", color, rect: [0, 0, canvas.width, canvas.height], replace: true }] : [];
+            const color = argbColor(argInt(args, name, 1), name);
+            if (args.length >= 6) canvas.ops.push({ op: "fill", color, rect: [Number(argInt(args, name, 2)), Number(argInt(args, name, 3)), Number(argInt(args, name, 4)), Number(argInt(args, name, 5))], replace: true });
+            else canvas.ops = argInt(args, name, 1) >> 24n ? [{ op: "fill", color, rect: [0, 0, canvas.width, canvas.height], replace: true }] : [];
             return 1n;
           }
           case "GSETCOLOR": {
-            const canvas = this.graphics.get(n(0));
+            const canvas = this.graphics.get(argInt(args, name, 0));
             if (!canvas) return 0n;
-            const x = Number(n(2)), y = Number(n(3));
+            const x = Number(argInt(args, name, 2)), y = Number(argInt(args, name, 3));
             if (x < 0 || y < 0 || x >= canvas.width || y >= canvas.height) throw new EraError("GSETCOLOR position is outside the graphics");
-            canvas.ops.push({ op: "fill", color: argbColor(n(1), name), rect: [x, y, 1, 1], replace: true });
+            canvas.ops.push({ op: "fill", color: argbColor(argInt(args, name, 1), name), rect: [x, y, 1, 1], replace: true });
             return 1n;
           }
           case "GSETBRUSH": {
-            const canvas = this.graphics.get(n(0));
+            const canvas = this.graphics.get(argInt(args, name, 0));
             if (!canvas) return 0n;
-            canvas.brush = argbColor(n(1), name);
+            canvas.brush = argbColor(argInt(args, name, 1), name);
             return 1n;
           }
           case "GFILLRECTANGLE": {
-            const canvas = this.graphics.get(n(0));
+            const canvas = this.graphics.get(argInt(args, name, 0));
             if (!canvas) return 0n;
-            canvas.ops.push({ op: "fill", color: canvas.brush ?? this.display.background, rect: [Number(n(1)), Number(n(2)), Number(n(3)), Number(n(4))] });
+            canvas.ops.push({ op: "fill", color: canvas.brush ?? this.display.background, rect: [Number(argInt(args, name, 1)), Number(argInt(args, name, 2)), Number(argInt(args, name, 3)), Number(argInt(args, name, 4))] });
             return 1n;
           }
           case "GSETPEN": case "GSETFONT":
-            return this.graphics.has(n(0)) ? 1n : 0n;
+            return this.graphics.has(argInt(args, name, 0)) ? 1n : 0n;
           case "GSAVE": case "GLOAD": return 0n;
           case "GETCOLOR": return BigInt("0x" + this.style.color.slice(1));
-          case "POWER": return power(n(0), n(1));
+          case "POWER": return power(argInt(args, name, 0), argInt(args, name, 1));
           case "EXISTFUNCTION": {
             // 1: ordinary function, 2: #FUNCTION, 3: #FUNCTIONS; built-ins and undefined names give 0.
-            const routines = this.game.routines.get(key(s(0)));
+            const routines = this.game.routines.get(key(argText(args, name, 0)));
             if (!routines?.length) return 0n;
             const returnType = this.info(routines[0]!).returnType;
             return returnType === "string" ? 3n : returnType === "integer" ? 2n : 1n;
           }
           case "GETMETH": case "GETMETHS": {
             // Calls a #FUNCTION/#FUNCTIONS by name; the second argument is returned when it is not defined.
-            const target = key(s(0)), wanted = name === "GETMETHS" ? "string" : "integer";
+            const target = key(argText(args, name, 0)), wanted = name === "GETMETHS" ? "string" : "integer";
             const routines = this.game.routines.get(target);
             const returnType = routines?.length === 1 ? this.info(routines[0]!).returnType : undefined;
             if (!returnType) {
-              if (args[1] === undefined) throw new EraError(`${name}: ${s(0)} is not a defined expression function`);
-              return wanted === "string" ? s(1) : n(1);
+              if (args[1] === undefined) throw new EraError(`${name}: ${argText(args, name, 0)} is not a defined expression function`);
+              return wanted === "string" ? argText(args, name, 1) : argInt(args, name, 1);
             }
-            if (returnType !== wanted) throw new EraError(`${name}: ${s(0)} does not return ${wanted === "string" ? "a string" : "an integer"}`);
+            if (returnType !== wanted) throw new EraError(`${name}: ${argText(args, name, 0)} does not return ${wanted === "string" ? "a string" : "an integer"}`);
             return this.expressionFunction(target, args.slice(2));
           }
           case "GETCONFIG": case "GETCONFIGS": {
-            const value = this.configValue(s(0));
+            const value = this.configValue(argText(args, name, 0));
             if ((typeof value === "string") !== (name === "GETCONFIGS"))
-              throw new EraError(`${name}: ${s(0)} is ${typeof value === "string" ? "a string; use GETCONFIGS" : "an integer; use GETCONFIG"}`);
+              throw new EraError(`${name}: ${argText(args, name, 0)} is ${typeof value === "string" ? "a string; use GETCONFIGS" : "an integer; use GETCONFIG"}`);
             return value;
           }
           case "GETSTYLE": return BigInt(this.style.fontStyle);
@@ -1606,28 +1674,28 @@ export class Runtime {
           case "GETMILLISECOND": return BigInt(Date.now()) + EPOCH_OFFSET_MS;
           case "GETSECOND": return (BigInt(Date.now()) + EPOCH_OFFSET_MS) / 1000n;
           case "CONVERT": {
-            const base = n(1);
+            const base = argInt(args, name, 1);
             if (base !== 2n && base !== 8n && base !== 10n && base !== 16n) throw new EraError("CONVERT base must be 2, 8, 10 or 16");
             // Like .NET Convert.ToString(long, base): two's complement for non-decimal bases.
-            return base === 10n ? n(0).toString() : BigInt.asUintN(64, n(0)).toString(Number(base));
+            return base === 10n ? argInt(args, name, 0).toString() : BigInt.asUintN(64, argInt(args, name, 0)).toString(Number(base));
           }
           case "SUBSTRINGU": {
-            const source = s(0);
-            const start = Number(n(1));
-            let length = args[2] === undefined ? -1 : Number(n(2));
+            const source = argText(args, name, 0);
+            const start = Number(argInt(args, name, 1));
+            let length = args[2] === undefined ? -1 : Number(argInt(args, name, 2));
             if (start >= source.length || length === 0) return "";
             if (length < 0 || length > source.length) length = source.length;
             const from = Math.max(0, start);
             return source.slice(from, Math.min(source.length, from + length));
           }
           case "CHARATU": {
-            const position = Number(n(1));
-            return position < 0 || position >= s(0).length ? "" : s(0)[position]!;
+            const position = Number(argInt(args, name, 1));
+            return position < 0 || position >= argText(args, name, 0).length ? "" : argText(args, name, 0)[position]!;
           }
-          case "EXISTFILE": return this.gameFile(s(0)) ? 1n : 0n;
+          case "EXISTFILE": return this.gameFile(argText(args, name, 0)) ? 1n : 0n;
           case "FIND_CHARADATA": {
             // Directory.GetFiles("chara_<pattern>.dat"): * and ? wildcards, case-insensitive; the empty name never matches.
-            const pattern = args[0] === undefined ? "*" : s(0);
+            const pattern = args[0] === undefined ? "*" : argText(args, name, 0);
             const glob = new RegExp(`^${[...pattern].map((c) => c === "*" ? ".*" : c === "?" ? "." : c.replace(/[\\^$.+()[\]{}|]/g, "\\$&")).join("")}$`, "isu");
             const names = this.saves.list().flatMap((file) => {
               const match = /^chara-([A-Za-z0-9_-]+)\.json$/.exec(file);
@@ -1639,14 +1707,14 @@ export class Runtime {
             return BigInt(names.length);
           }
           case "CHKCHARADATA": {
-            const result = this.checkSave(this.charaFile(s(0)));
+            const result = this.checkSave(this.charaFile(argText(args, name, 0)));
             this.globals.set("RESULTS", [], result.message, context);
             return result.state;
           }
           case "SAVETEXT": {
             const file = this.textFile(args[1]!);
             if (!file) return 0n;
-            this.saves.write(file.store, s(0));
+            this.saves.write(file.store, argText(args, name, 0));
             return 1n;
           }
           case "LOADTEXT": {
@@ -1657,31 +1725,31 @@ export class Runtime {
           }
           case "EXISTVAR": {
             // Bit flags: 1 integer, 2 string, 4 constant, 8 two-dimensional, 16 three-dimensional.
-            const name = s(0);
-            if (!variables.has(name)) return 0n;
-            const rank = variables.dimensions(name, context).length;
-            return (variables.isString(name, context) ? 2n : 1n) | (variables.isConstant(name, context) ? 4n : 0n) | (rank === 2 ? 8n : rank === 3 ? 16n : 0n);
+            const target = argText(args, name, 0);
+            if (!variables.has(target)) return 0n;
+            const rank = variables.dimensions(target, context).length;
+            return (variables.isString(target, context) ? 2n : 1n) | (variables.isConstant(target, context) ? 4n : 0n) | (rank === 2 ? 8n : rank === 3 ? 16n : 0n);
           }
           case "GETVAR": case "GETVARS": {
-            const reference = this.parse(s(0));
+            const reference = this.parse(argText(args, name, 0));
             if (reference.kind !== "variable") throw new EraError(`${name} requires a variable reference string`);
             const value = evaluate(reference, context);
-            if ((typeof value === "string") !== (name === "GETVARS")) throw new EraError(`${name} variable type mismatch: ${s(0)}`);
+            if ((typeof value === "string") !== (name === "GETVARS")) throw new EraError(`${name} variable type mismatch: ${argText(args, name, 0)}`);
             return value;
           }
           case "VARSIZE": {
-            const variable = key(s(0));
+            const variable = key(argText(args, name, 0));
             const dimensions = variables.has(variable) ? variables.dimensions(variable, context) : this.game.variableSizes.get(variable);
             if (!dimensions) throw new EraError(`Unknown variable for VARSIZE: ${variable}`);
-            const dimension = args.length === 2 ? Number(n(1)) : 0;
+            const dimension = args.length === 2 ? Number(argInt(args, name, 1)) : 0;
             const size = dimensions[dimension];
             if (size === undefined) throw new EraError(`Invalid VARSIZE dimension: ${dimension}`);
             return BigInt(size);
           }
-          case "MAP_EXIST": return this.maps.has(s(0)) ? 1n : 0n;
-          case "MAP_SIZE": return BigInt(this.map(s(0)).size);
-          case "MAP_HAS": return this.maps.get(s(0))?.has(s(1)) ? 1n : 0n;
-          case "MAP_GET": return this.map(s(0)).get(s(1)) ?? "";
+          case "MAP_EXIST": return this.maps.has(argText(args, name, 0)) ? 1n : 0n;
+          case "MAP_SIZE": return BigInt(this.map(argText(args, name, 0)).size);
+          case "MAP_HAS": return this.maps.get(argText(args, name, 0))?.has(argText(args, name, 1)) ? 1n : 0n;
+          case "MAP_GET": return this.map(argText(args, name, 0)).get(argText(args, name, 1)) ?? "";
           case "HTML_POPPRINTINGSTR": {
             const html = this.printingHtml;
             if (html) this.deferred.push({ type: "clear", count: 1 });
@@ -1689,35 +1757,35 @@ export class Runtime {
             this.printedLine = "";
             return html;
           }
-          case "HTML_TOPLAINTEXT": return plainHtml(s(0));
+          case "HTML_TOPLAINTEXT": return plainHtml(argText(args, name, 0));
           case "HTML_STRINGLEN": {
             const fontSize = Number(this.configValue("フォントサイズ"));
-            const measured = htmlWidth(s(0), fontSize, (id) => this.sprite(id));
+            const measured = htmlWidth(argText(args, name, 0), fontSize, (id) => this.sprite(id));
             // Without <nobr> the first line wraps at Config.DrawableWidth.
             const pixels = measured.nobr ? measured.pixels : Math.min(measured.pixels, this.drawableWidth());
-            return args[1] !== undefined && n(1) !== 0n ? BigInt(Math.round(pixels)) : BigInt(Math.ceil(pixels / (fontSize / 2)));
+            return args[1] !== undefined && argInt(args, name, 1) !== 0n ? BigInt(Math.round(pixels)) : BigInt(Math.ceil(pixels / (fontSize / 2)));
           }
-          case "HTML_ESCAPE": return escapeHtml(s(0));
+          case "HTML_ESCAPE": return escapeHtml(argText(args, name, 0));
           // EM sizes the drawing area to WindowX by WindowY less the input box (one line high).
           case "CLIENTWIDTH": return integer(this.configValue("WindowX"));
           case "CLIENTHEIGHT": return integer(this.configValue("WindowY")) - integer(this.configValue("LineHeight"));
-          case "STRLENS": return BigInt(stringWidth(s(0)));
+          case "STRLENS": return BigInt(stringWidth(argText(args, name, 0)));
           case "STRCOUNT": {
-            const matches = this.regex(s(1));
-            return BigInt([...s(0).matchAll(matches)].length);
+            const matches = this.regex(argText(args, name, 1));
+            return BigInt([...argText(args, name, 0).matchAll(matches)].length);
           }
           case "REGEXPMATCH": {
-            const result = this.regexpMatch(s(0), s(1));
-            if (args[2] !== undefined && n(2) !== 0n) {
+            const result = this.regexpMatch(argText(args, name, 0), argText(args, name, 1));
+            if (args[2] !== undefined && argInt(args, name, 2) !== 0n) {
               this.globals.set("RESULT", [literal(1n)], BigInt(result.groups), context);
               if (result.count) this.writeArray(this.globals, context, { kind: "variable", name: "RESULTS", indices: [] }, result.values);
             }
             return BigInt(result.count);
           }
-          case "REPLACE": return s(0).replace(this.regex(s(1)), s(2));
+          case "REPLACE": return argText(args, name, 0).replace(this.regex(argText(args, name, 1)), argText(args, name, 2));
           case "STRFIND": case "STRFINDU": {
-            const source = s(0), sought = s(1);
-            let start = args[2] === undefined ? 0 : Number(n(2));
+            const source = argText(args, name, 0), sought = argText(args, name, 1);
+            let start = args[2] === undefined ? 0 : Number(argInt(args, name, 2));
             if (!Number.isSafeInteger(start) || start < 0) throw new EraError(`Invalid ${name} start index`);
             if (name === "STRFINDU") return start > source.length ? -1n : BigInt(source.indexOf(sought, start));
             // STRFIND counts full-width characters as two positions.
@@ -1727,13 +1795,13 @@ export class Runtime {
             return found < 0 ? -1n : BigInt(stringWidth(source.slice(0, found)));
           }
           case "SUBSTRING": {
-            const start = Number(n(1));
-            const length = args[2] === undefined ? -1 : Number(n(2));
+            const start = Number(argInt(args, name, 1));
+            const length = args[2] === undefined ? -1 : Number(argInt(args, name, 2));
             if (!Number.isSafeInteger(start) || start < 0 || !Number.isSafeInteger(length))
               throw new EraError("Invalid SUBSTRING range");
             // Positions inside a full-width character move to the following character boundary.
             let offset = 0, result = "";
-            for (const c of s(0)) {
+            for (const c of argText(args, name, 0)) {
               const width = stringWidth(c);
               if (offset >= start && (length < 0 || offset < start + length)) result += c;
               offset += width;
@@ -1742,6 +1810,7 @@ export class Runtime {
           }
           default: {
             if (!this.game.routines.has(name)) throw new EraError(`Unsupported expression function: ${name}`);
+            if (!BUILTIN_ARITIES[name] && !TABLE_OPERATIONS.has(name)) this.userFunctions.add(name);
             return this.expressionFunction(name, args);
           }
         }
@@ -1769,10 +1838,49 @@ export class Runtime {
     }
     return result;
   }
-  private expressionFunction(name: string, args: Argument[]): Value {
+  private expressionFunction(name: string, args: Argument[], native = true): Value {
+    if (native) {
+      const intrinsic = this.intrinsics.get(name);
+      if (intrinsic) {
+        const value = intrinsic(args);
+        if (value !== DECLINE) return value;
+      }
+    }
     const source = this.currentSource;
-    const generator = this.execute(name, args, true);
+    if (++this.depth > 128) { this.depth--; throw new EraError("Call depth limit exceeded", this.currentSource); }
+    let generator: Generator<Yield, Value | undefined, string> | undefined;
+    let pushed = false;
     try {
+      const routines = this.game.routines.get(name);
+      if (!routines?.length) throw new EraError(`Undefined function: ${name}`, this.currentSource);
+      if (routines.length !== 1) throw new EraError(`${name} has multiple definitions and cannot be used as an expression function`, this.currentSource);
+      const { frame, routine } = this.prepare(name, args, true, routines[0]!);
+      this.doing.push(routine);
+      pushed = true;
+      const code = frame.compiled.code;
+      // A body that is a single RETURNF needs no generator; this mirrors runFrame's handling of that instruction.
+      if (code.length === 1 && code[0]!.op === "RETURNF" && code[0]!.args && !this.finished) {
+        const line = code[0]!;
+        this.currentSource = line;
+        try {
+          if (++this.steps > this.maxSteps) throw new EraError("Instruction limit exceeded between inputs", line);
+          const value = evaluate(line.parsed ??= this.parse(line.args), frame.context);
+          return frame.returnType === "string" ? text(value) : integer(value);
+        } catch (error) {
+          if (error instanceof EraError) {
+            if (!error.source) error.source = line;
+            else if (error.source !== line && error.trace.length < 30) error.trace.push(line);
+          }
+          throw error;
+        }
+      }
+      const entry = this.jit?.entry(frame.compiled);
+      if (entry && !entry.generator) {
+        const value = (entry.run(this, frame) as Value | undefined) ?? (frame.returnType === "string" ? "" : frame.returnType ? 0n : undefined);
+        if (value === undefined) throw new EraError(`Expression function ${name} did not return a value`);
+        return value;
+      }
+      generator = this.runFrame(frame);
       let result = generator.next();
       // Output is allowed and precedes the calling instruction's own output; input is not.
       while (!result.done) {
@@ -1780,10 +1888,14 @@ export class Runtime {
         this.deferred.push(result.value.output);
         result = generator.next();
       }
-      if (result.value === undefined) throw new EraError(`Expression function ${name} did not return a value`);
-      return result.value;
+      // runFrame returns nothing when the body ends without RETURNF; execute substitutes the type's default.
+      const value = result.value ?? (frame.returnType === "string" ? "" : frame.returnType ? 0n : undefined);
+      if (value === undefined) throw new EraError(`Expression function ${name} did not return a value`);
+      return value;
     } finally {
-      generator.return(undefined);
+      generator?.return(undefined);
+      if (pushed) this.doing.pop();
+      this.depth--;
       this.currentSource = source;
     }
   }
@@ -2049,6 +2161,50 @@ export class Runtime {
       return { variables: frame.variables, name: reference.name, indices: reference.indices, context: frame.context };
     });
   }
+  /**
+   * Runs an instruction or call that cannot wait for input (see Jit.suspends) without suspending its caller: output
+   * is deferred exactly as `advance` would have collected it, and waits skipped by SKIPDISP pass.
+   */
+  private drive(generator: Generator<Yield, Value | undefined, string>): Value | undefined {
+    let done = false;
+    try {
+      let result = generator.next();
+      while (!result.done) {
+        const value = result.value;
+        if ("input" in value) {
+          if (!this.skipDisplay) throw new EraError("Internal error: compiled code requested input", this.currentSource);
+          if (value.input.kind !== "wait") throw new EraError("Input was requested while SKIPDISP is hiding output; wrap it in NOSKIP...ENDNOSKIP", this.currentSource);
+        } else if (value !== SKIPPED) this.deferred.push(value.output);
+        result = generator.next("");
+      }
+      done = true;
+      return result.value;
+    } finally {
+      if (!done) generator.return(undefined);
+    }
+  }
+  /** A call from compiled code to routines that cannot wait for input. */
+  private callSync(name: string, args: Argument[]): Value | undefined {
+    const result = this.callCompiled(name, args);
+    return result === ASYNC ? this.drive(this.execute(name, args)) : result;
+  }
+  /** `execute` for a routine already compiled to a plain function, with no generators; ASYNC when that is not the case. */
+  private callCompiled(name: string, args: Argument[]): Value | undefined | typeof ASYNC {
+    const routines = this.game.routines.get(name);
+    if (routines?.length !== 1) return ASYNC;
+    const entry = this.compiled.get(routines[0]!)?.jit;
+    if (!entry || entry.generator) return ASYNC;
+    if (++this.depth > 128) throw new EraError("Call depth limit exceeded", this.currentSource);
+    try {
+      const { frame, routine, info } = this.prepare(name, args, false, routines[0]!);
+      this.doing.push(routine);
+      let result: Value | undefined;
+      try { result = entry.run(this, frame) as Value | undefined; }
+      finally { this.doing.pop(); }
+      if (info.returnType && result === undefined) return frame.returnType === "string" ? "" : 0n;
+      return result;
+    } finally { this.depth--; }
+  }
   private *execute(name: string, args: Argument[], expression = false, selected?: Routine): Generator<Yield, Value | undefined, string> {
     if (++this.depth > 128) throw new EraError("Call depth limit exceeded", this.currentSource);
     try {
@@ -2059,56 +2215,7 @@ export class Runtime {
         yield* this.dispatch(name, args);
         return undefined;
       }
-      const routine = selected ?? routines[0]!;
-      const info = this.info(routine);
-      if (expression && !info.returnType) throw new EraError(`${name} is not declared #FUNCTION or #FUNCTIONS`, routine);
-      let compiled = this.compiled.get(routine);
-      if (!compiled) { compiled = compile(routine); this.compiled.set(routine, compiled); }
-      let variables = this.statics.get(routine);
-      if (!variables) {
-        variables = new Variables(this.game, this.globals);
-        for (const variable of ["LOCAL", "ARG", "LOCALS", "ARGS"]) {
-          const pattern = new RegExp(`^#${variable}SIZE\\s+(.+)$`, "i");
-          const size = routine.directives.find((d) => pattern.test(d.text.trim()));
-          const dimensions = size ? [Number(integer(evaluate(this.parse(pattern.exec(size.text.trim())![1]!), this.context(this.globals))))] : this.game.variableSizes.get(variable) ?? [1000];
-          if (dimensions.some((n) => !Number.isSafeInteger(n) || n < 1 || n > 1_000_000)) throw new EraError(`Invalid ${variable} size`, size);
-          variables.define(variable, variable.endsWith("S"), dimensions);
-        }
-        for (const directive of routine.directives) {
-          if (/^#FUNCTIONS?$/i.test(directive.text)) continue;
-          if (/^#(?:LOCAL|LOCALS|ARG|ARGS)SIZE\s/i.test(directive.text)) continue;
-          // Event ordering keywords only affect dispatch; Emuera ignores them on directly called functions.
-          if (/^#(?:PRI|LATER|SINGLE|ONLY)$/i.test(directive.text.trim())) continue;
-          if (!/^#DIMS?\s/i.test(directive.text)) throw new EraError(`Unsupported function directive: ${directive.text}`, directive);
-          if (/\b(?:DYNAMIC|REF)\b/i.test(directive.text)) continue;
-          variables.declare(directive);
-        }
-        this.statics.set(routine, variables);
-      }
-      if (info.dynamic.length) {
-        variables = new Variables(this.game, variables);
-        for (const declaration of info.dynamic) variables.declare(declaration);
-      }
-      const context = this.context(variables);
-      const frame: Frame = { variables, compiled, context };
-      if (info.returnType) frame.returnType = info.returnType;
-      if (args.length > info.parameters.length) throw new EraError(`Too many arguments for ${name}`, routine);
-      for (let i = 0; i < info.parameters.length; i++) {
-        const { target: reference, defaultSource } = info.parameters[i]!;
-        const argument = args[i];
-        if (typeof argument === "object") {
-          variables.bindReference(reference.name, argument.variables, argument.name, argument.indices, argument.context);
-          continue;
-        }
-        const string = variables.isString(reference.name, context);
-        let value = argument ?? (defaultSource !== undefined ? evaluate(this.parse(defaultSource), context) : string ? "" : 0n);
-        if (argument !== undefined && string !== (typeof value === "string")) {
-          if (!string) throw new EraError(`${name}: argument ${i + 1} cannot convert a string to an integer`, this.currentSource);
-          if (!this.autoToStr) throw new EraError(`${name}: argument ${i + 1} cannot convert an integer to a string (enable ユーザー関数の引数に自動的にTOSTRを補完する)`, this.currentSource);
-          value = String(value);
-        }
-        this.assign(frame, reference, value);
-      }
+      const { frame, routine, info } = this.prepare(name, args, expression, selected ?? routines[0]!);
       this.doing.push(routine);
       let result: Value | undefined;
       try { result = yield* this.runFrame(frame); }
@@ -2117,26 +2224,106 @@ export class Runtime {
       return result;
     } finally { this.depth--; }
   }
-  private *runFrame(frame: Frame): Generator<Yield, Value | undefined, string> {
+  private compiledRoutine(routine: Routine): Compiled {
+    let compiled = this.compiled.get(routine);
+    if (!compiled) { compiled = compile(routine); this.compiled.set(routine, compiled); }
+    return compiled;
+  }
+  /** Sets up a routine's frame: static and dynamic variables plus bound parameters. */
+  private prepare(name: string, args: Argument[], expression: boolean, routine: Routine): { frame: Frame; routine: Routine; info: RoutineInfo } {
+    const info = this.info(routine);
+    if (expression && !info.returnType) throw new EraError(`${name} is not declared #FUNCTION or #FUNCTIONS`, routine);
+    const compiled = this.compiledRoutine(routine);
+    let variables = this.statics.get(routine);
+    if (!variables) {
+      variables = new Variables(this.game, this.globals);
+      for (const variable of ["LOCAL", "ARG", "LOCALS", "ARGS"]) {
+        const pattern = new RegExp(`^#${variable}SIZE\\s+(.+)$`, "i");
+        const size = routine.directives.find((d) => pattern.test(d.text.trim()));
+        const dimensions = size ? [Number(integer(evaluate(this.parse(pattern.exec(size.text.trim())![1]!), this.context(this.globals))))] : this.game.variableSizes.get(variable) ?? [1000];
+        if (dimensions.some((n) => !Number.isSafeInteger(n) || n < 1 || n > 1_000_000)) throw new EraError(`Invalid ${variable} size`, size);
+        variables.define(variable, variable.endsWith("S"), dimensions);
+      }
+      for (const directive of routine.directives) {
+        if (/^#FUNCTIONS?$/i.test(directive.text)) continue;
+        if (/^#(?:LOCAL|LOCALS|ARG|ARGS)SIZE\s/i.test(directive.text)) continue;
+        // Event ordering keywords only affect dispatch; Emuera ignores them on directly called functions.
+        if (/^#(?:PRI|LATER|SINGLE|ONLY)$/i.test(directive.text.trim())) continue;
+        if (!/^#DIMS?\s/i.test(directive.text)) throw new EraError(`Unsupported function directive: ${directive.text}`, directive);
+        if (/\b(?:DYNAMIC|REF)\b/i.test(directive.text)) continue;
+        variables.declare(directive);
+      }
+      this.statics.set(routine, variables);
+    }
+    if (info.dynamic.length) {
+      variables = new Variables(this.game, variables);
+      variables.transient = true;
+      for (const declaration of info.dynamic) variables.declare(declaration);
+    }
+    const context = this.context(variables);
+    const frame: Frame = { variables, compiled, context };
+    if (info.returnType) frame.returnType = info.returnType;
+    if (args.length > info.parameters.length) throw new EraError(`Too many arguments for ${name}`, routine);
+    for (let i = 0; i < info.parameters.length; i++) {
+      const { target: reference, defaultSource } = info.parameters[i]!;
+      const argument = args[i];
+      if (typeof argument === "object") {
+        variables.bindReference(reference.name, argument.variables, argument.name, argument.indices, argument.context);
+        continue;
+      }
+      const string = variables.isString(reference.name, context);
+      let value = argument ?? (defaultSource !== undefined ? evaluate(this.parse(defaultSource), context) : string ? "" : 0n);
+      if (argument !== undefined && string !== (typeof value === "string")) {
+        if (!string) throw new EraError(`${name}: argument ${i + 1} cannot convert a string to an integer`, this.currentSource);
+        if (!this.autoToStr) throw new EraError(`${name}: argument ${i + 1} cannot convert an integer to a string (enable ユーザー関数の引数に自動的にTOSTRを補完する)`, this.currentSource);
+        value = String(value);
+      }
+      this.assign(frame, reference, value);
+    }
+    return { frame, routine, info };
+  }
+  /** Per-context evaluation helpers, reused across calls instead of allocating closures for every frame. */
+  private evaluators(context: EvaluationContext): Evaluators {
+    let helpers = this.evaluatorCache.get(context);
+    if (!helpers) {
+      const ev = (source: string): Value => evaluate(this.parse(source), context);
+      helpers = {
+        ev,
+        num: (source) => integer(ev(source)),
+        lineNum: (instruction) => integer(evaluate(instruction.parsed ??= this.parse(instruction.args), context)),
+      };
+      this.evaluatorCache.set(context, helpers);
+    }
+    return helpers;
+  }
+  /**
+   * Runs a frame from `start`. With `single`, runs one instruction and stores the next pc there (-1 when the frame
+   * returned); compiled routines use this for instructions they leave to the interpreter.
+   */
+  private *runFrame(frame: Frame, start = 0, single?: { next: number }): Generator<Yield, Value | undefined, string> {
+    if (!single) {
+      const entry = this.jit?.entry(frame.compiled);
+      if (entry) return entry.generator ? yield* entry.run(this, frame) as Generator<Yield, Value | undefined, string> : entry.run(this, frame) as Value | undefined;
+    } else single.next = -1;
     const { code, labels, loops } = frame.compiled;
-    const ev = (source: string): Value => evaluate(this.parse(source), frame.context);
-    const num = (source: string): bigint => integer(ev(source));
-    const loopStates = new Map<number, LoopState>();
-    for (let pc = 0; pc < code.length && !this.finished;) {
+    const { ev, num, lineNum } = this.evaluators(frame.context);
+    const loopStates = single ? NO_LOOP_STATES : new Map<number, LoopState>();
+    for (let pc = start; pc < code.length && !this.finished;) {
       const line = code[pc]!;
       this.currentSource = line;
       if (++this.steps > this.maxSteps) throw new EraError("Instruction limit exceeded between inputs", line);
       let next = pc + 1;
       try {
         const { op, args, target } = line;
-        if (op.startsWith("DEBUGPRINT") || op === "DEBUGCLEAR") {
+        const special = !HOT_OPS.has(op);
+        if (special && (op.startsWith("DEBUGPRINT") || op === "DEBUGCLEAR")) {
           // The loader runs release mode; debug output is not evaluated.
-        } else if (this.skipDisplay && SKIPPED_INPUTS.has(op)) {
+        } else if (special && this.skipDisplay && SKIPPED_INPUTS.has(op)) {
           // Emuera skips input instructions while output is skipped, but a script's own SKIPDISP makes that an error.
           if (this.userSkip) throw new EraError("SKIPDISP中にユーザー入力が求められました。NOSKIP～ENDNOSKIPで囲ってください");
-        } else if (op === "PRINTPLAIN" || op === "PRINTPLAINFORM") {
+        } else if (special && (op === "PRINTPLAIN" || op === "PRINTPLAINFORM")) {
           yield this.emit("text", op === "PRINTPLAINFORM" ? this.formatted(args, frame) : args, false, true);
-        } else if (op.startsWith("PRINT") && printVariant(op)) {
+        } else if (special && op.startsWith("PRINT") && printVariant(op)) {
           const variant = printVariant(op)!;
           const raw = variant.argument === "FORM" ? this.formatted(args, frame)
             : variant.argument === "FORMS" ? this.formatted(text(ev(args)), frame)
@@ -2146,7 +2333,7 @@ export class Runtime {
           const value = this.kana(this.printC(raw, variant.align), variant.mode);
           yield this.emit("text", value, variant.single || variant.end !== "", false, { style: this.printStyle(variant.mode), single: variant.single });
           if (variant.end === "W") yield { input: { kind: "wait" } };
-        } else if (op === "STRDATA" || op.startsWith("PRINTDATA") && isPrintData(op)) {
+        } else if (special && (op === "STRDATA" || op.startsWith("PRINTDATA") && isPrintData(op))) {
           const groups: Instruction[][] = [];
           for (let i = pc + 1; i < target; i++) {
             const row = code[i]!;
@@ -2174,12 +2361,86 @@ export class Runtime {
               if (end === "W") yield { input: { kind: "wait" } };
             }
           }
-        } else if (TABLE_OPERATIONS.has(op) && !TABLE_REFERENCE_OPERATIONS.has(op)) {
+        } else if (special && TABLE_OPERATIONS.has(op) && !TABLE_REFERENCE_OPERATIONS.has(op)) {
           const parts = this.arguments(args).slice();
           if (parts.at(-1) === "" && op === "DT_ROW_ADD") parts.pop();
           const value = this.tableOperation(op, parts.map((part) => part ? ev(part) : undefined), frame.context);
           this.globals.set(typeof value === "string" ? "RESULTS" : "RESULT", [], value, frame.context);
         } else switch (op) {
+          case "LABEL": case "ENDIF": case "ENDSELECT": break;
+          case "ASSIGN": {
+            const assignment = (line.assignment ??= this.assignment(args)) as Assignment;
+            const { operator, value: source } = assignment;
+            const reference = settleIndices(assignment.reference, frame.context);
+            const string = frame.variables.isString(reference.name, frame.context);
+            if (operator === "'=" || (operator === "=" && !string)) {
+              let parsed = line.values;
+              if (!parsed) {
+                const parts = this.arguments(source).slice();
+                if (parts.at(-1) === "") parts.pop();
+                if (!parts.length) throw new EraError("Assignment requires a value");
+                parsed = line.values = parts.map((part) => this.parse(part));
+              }
+              const values = parsed.map((expr) => evaluate(expr, frame.context));
+              frame.variables.setMany(reference.name, reference.indices, values, frame.context);
+              break;
+            }
+            const rhs = operator === "++" || operator === "--" ? 1n : operator === "=" && string
+              ? this.formatted(source, frame) : ev(source);
+            if ((operator === "++" || operator === "--") && source) throw new EraError("Unexpected text after increment/decrement");
+            const value = operator === "=" || operator === "'=" ? rhs : evaluate({
+              kind: "binary", op: operator === "++" ? "+" : operator === "--" ? "-" : operator[0]!,
+              left: literal(evaluate(reference, frame.context)), right: literal(rhs),
+            }, frame.context);
+            this.assign(frame, reference, value);
+            break;
+          }
+          case "IF": {
+            let branch = pc;
+            while ((code[branch]!.op === "IF" || code[branch]!.op === "ELSEIF") && lineNum(code[branch]!) === 0n)
+              branch = code[branch]!.target;
+            next = branch + 1;
+            break;
+          }
+          case "ELSE": case "ELSEIF": next = this.blockEnd(code, pc) + 1; break;
+          case "SIF": if (lineNum(line) === 0n) next++; break;
+          case "SELECTCASE": {
+            const value = evaluate(line.parsed ??= this.parse(args), frame.context);
+            let branch = target;
+            while (code[branch]!.op !== "ENDSELECT") {
+              const candidate = code[branch]!;
+              if (candidate.op === "CASEELSE" || ((candidate.cases ??= this.caseTests(candidate.args)) as CaseTest[]).some((test) => this.matchesCase(value, test, ev))) break;
+              branch = candidate.target;
+            }
+            next = branch + 1;
+            break;
+          }
+          case "CASE": case "CASEELSE": next = this.blockEnd(code, pc) + 1; break;
+          case "FOR": case "REPEAT": {
+            const parts = op === "FOR" ? this.arguments(args) : ["COUNT", "0", args];
+            if (parts.length < 3 || parts.length > 4) throw new EraError("FOR expects variable, start, end[, step]");
+            let state = loopStates.get(pc);
+            if (!state) {
+              state = { variable: this.parse(parts[0]!), end: num(parts[2]!), step: parts[3] ? num(parts[3]) : 1n };
+              if (state.step === 0n) throw new EraError("FOR step cannot be zero");
+              loopStates.set(pc, state);
+              this.assign(frame, state.variable, num(parts[1]!));
+            }
+            const value = integer(evaluate(state.variable, frame.context));
+            if (state.step > 0n ? value >= state.end : value <= state.end) { loopStates.delete(pc); next = target + 1; }
+            break;
+          }
+          case "NEXT": case "REND": {
+            const state = loopStates.get(target);
+            if (!state) throw new EraError("Loop state missing");
+            this.assign(frame, state.variable, BigInt.asIntN(64, integer(evaluate(state.variable, frame.context)) + state.step));
+            next = target; break;
+          }
+          case "RETURNF": {
+            if (!frame.returnType) throw new EraError("RETURNF outside an expression function");
+            const value = args ? evaluate(line.parsed ??= this.parse(args), frame.context) : frame.returnType === "string" ? "" : 0n;
+            return frame.returnType === "string" ? text(value) : integer(value);
+          }
           case "ARRAYREMOVE": {
             const parts = this.arguments(args);
             const reference = this.parse(parts[0] ?? "");
@@ -2338,7 +2599,6 @@ export class Runtime {
             this.assignmentCache.clear();
             this.callCache.clear();
             this.caseCache.clear();
-            this.compiled.clear();
             this.routineInfo.clear();
             if (global.gc) global.gc();
             const freed = Math.max(0, before - process.memoryUsage().heapUsed);
@@ -2390,30 +2650,6 @@ export class Runtime {
             this.style.fontStyle = Number(style);
             break;
           }
-          case "LABEL": case "ENDIF": case "ENDSELECT": break;
-          case "ASSIGN": {
-            const assignment = this.assignment(args);
-            const { operator, value: source } = assignment;
-            const reference = settleIndices(assignment.reference, frame.context);
-            const string = frame.variables.isString(reference.name, frame.context);
-            if (operator === "'=" || (operator === "=" && !string)) {
-              const parts = this.arguments(source).slice();
-              if (parts.at(-1) === "") parts.pop();
-              if (!parts.length) throw new EraError("Assignment requires a value");
-              const values = parts.map(ev);
-              frame.variables.setMany(reference.name, reference.indices, values, frame.context);
-              break;
-            }
-            const rhs = operator === "++" || operator === "--" ? 1n : operator === "=" && string
-              ? this.formatted(source, frame) : ev(source);
-            if ((operator === "++" || operator === "--") && source) throw new EraError("Unexpected text after increment/decrement");
-            const value = operator === "=" || operator === "'=" ? rhs : evaluate({
-              kind: "binary", op: operator === "++" ? "+" : operator === "--" ? "-" : operator[0]!,
-              left: literal(evaluate(reference, frame.context)), right: literal(rhs),
-            }, frame.context);
-            this.assign(frame, reference, value);
-            break;
-          }
           case "HTML_PRINT": yield this.emit("html", text(ev(args)), true); break;
           case "PRINT_RECT": case "PRINT_SPACE": {
             // ConsoleShapePart's alt text: params are percentages of the font size, drawn in the current color.
@@ -2445,47 +2681,6 @@ export class Runtime {
             if (count) { this.printingHtml = ""; this.printedLine = ""; this.temporaryLine = false; }
             yield { output: { type: "clear", count } };
             break;
-          }
-          case "IF": {
-            let branch = pc;
-            while (["IF", "ELSEIF"].includes(code[branch]!.op) && num(code[branch]!.args) === 0n)
-              branch = code[branch]!.target;
-            next = branch + 1;
-            break;
-          }
-          case "ELSE": case "ELSEIF": next = this.blockEnd(code, pc) + 1; break;
-          case "SIF": if (num(args) === 0n) next++; break;
-          case "SELECTCASE": {
-            const value = ev(args);
-            let branch = target;
-            while (code[branch]!.op !== "ENDSELECT") {
-              const candidate = code[branch]!;
-              if (candidate.op === "CASEELSE" || this.caseTests(candidate.args).some((test) => this.matchesCase(value, test, ev))) break;
-              branch = candidate.target;
-            }
-            next = branch + 1;
-            break;
-          }
-          case "CASE": case "CASEELSE": next = this.blockEnd(code, pc) + 1; break;
-          case "FOR": case "REPEAT": {
-            const parts = op === "FOR" ? this.arguments(args) : ["COUNT", "0", args];
-            if (parts.length < 3 || parts.length > 4) throw new EraError("FOR expects variable, start, end[, step]");
-            let state = loopStates.get(pc);
-            if (!state) {
-              state = { variable: this.parse(parts[0]!), end: num(parts[2]!), step: parts[3] ? num(parts[3]) : 1n };
-              if (state.step === 0n) throw new EraError("FOR step cannot be zero");
-              loopStates.set(pc, state);
-              this.assign(frame, state.variable, num(parts[1]!));
-            }
-            const value = integer(evaluate(state.variable, frame.context));
-            if (state.step > 0n ? value >= state.end : value <= state.end) { loopStates.delete(pc); next = target + 1; }
-            break;
-          }
-          case "NEXT": case "REND": {
-            const state = loopStates.get(target);
-            if (!state) throw new EraError("Loop state missing");
-            this.assign(frame, state.variable, BigInt.asIntN(64, integer(evaluate(state.variable, frame.context)) + state.step));
-            next = target; break;
           }
           case "WHILE": if (num(args) === 0n) next = target + 1; break;
           case "WEND": next = target; break;
@@ -2576,11 +2771,6 @@ export class Runtime {
             if (pieces) this.writeArray(frame.variables, frame.context, { kind: "variable", name: output.name, indices: [] }, pieces);
             this.assign(frame, count, BigInt(pieces?.length ?? -1));
             break;
-          }
-          case "RETURNF": {
-            if (!frame.returnType) throw new EraError("RETURNF outside an expression function");
-            const value = args ? ev(args) : frame.returnType === "string" ? "" : 0n;
-            return frame.returnType === "string" ? text(value) : integer(value);
           }
           case "QUIT": this.finished = true; return;
           case "INPUT": case "INPUTS": case "ONEINPUT": case "ONEINPUTS": {
@@ -2879,6 +3069,7 @@ export class Runtime {
         throw error;
       }
       pc = next;
+      if (single) { single.next = next; return undefined; }
     }
   }
   private blockEnd(code: Instruction[], start: number): number {

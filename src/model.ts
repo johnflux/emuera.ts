@@ -29,7 +29,8 @@ export function key(name: string): string {
   if (cached !== undefined) return cached;
   const normalized = name.normalize("NFC").toUpperCase();
   if (name.length <= 256) {
-    if (keyCache.size >= 65_536) keyCache.delete(keyCache.keys().next().value!);
+    // Clear wholesale: evicting the oldest entry one by one makes V8 rescan deleted slots on every miss.
+    if (keyCache.size >= 65_536) keyCache.clear();
     keyCache.set(name, normalized);
   }
   return normalized;

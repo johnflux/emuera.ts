@@ -202,6 +202,48 @@ declarations reuse their evaluation context. Only lexical results are reused:
 expressions are evaluated against current state on every execution. Inputs
 beyond the cache limits are processed normally.
 
+Execution hot paths are tuned for the game's call-heavy daily processing:
+variable elements are stored in integer-keyed maps by row-major index (save
+files keep the `i:j:k` address form); each scope caches name resolution
+through its parent chain, invalidated when a scope with children changes its
+declarations or references; compiled instructions keep their parsed
+expressions, assignments and `CASE` tests; the most frequent instructions
+(assignment, `IF`/`SIF`, loops, `SELECTCASE`, `RETURNF`) dispatch first; user
+functions bypass builtin lookup once resolved; a function whose body is a
+single `RETURNF` is evaluated without a generator; and literal `FINDELEMENT`
+patterns skip the regex engine. Hot paths also avoid allocating closures per
+call, which matters under `tsx` (`npm run dev`) because its esbuild
+`keepNames` transform makes each closure creation expensive.
+
+Two further layers can be switched off with the `Runtime` options
+`intrinsics: false` and `jit: false`. Both are on by default.
+
+- **Intrinsics** (`src/intrinsics.ts`) are native replacements for known game
+  routines. Currently this covers the eraTW OBJ framework (`GET_INT`/`GET_STR`/`GET_OBJ`/
+  `OBJNAME_TO_ID`/`GET_EXIST`/`MAKE_INT`/`MAKE_STR`), which otherwise
+  dispatches through `CALLFORMF` and a name table on every lookup.
+  Replacements are enabled only when the SHA-256 hash of the routine
+  sources matches the version they were written against. Any edit to
+  those routines falls back to the ERB.
+- **JIT** (`src/jit.ts`) compiles a routine to a JavaScript function on its
+  second call. Unsupported constructs fall back to single-stepping
+  the interpreter for that line, or for the whole routine.
+  - Compiled code is cached per loaded game and shared across `Runtime`
+    instances, such as Start Game resets and test runs.
+  - A static call-graph analysis over the raw routine lines (`FORM` call names
+    are matched as globs) finds which routines can reach an input or wait.
+    Only those routines run as generators.
+  - Everything else, including calls into non-waiting routines, runs as plain
+    synchronous JavaScript. Output is buffered in order.
+  - If compiled synchronous code unexpectedly requests input, the runtime
+    raises an internal error rather than losing the request.
+
+On the "Wake up" flow (about 580k ERB lines), steady-state time is about 1.5×
+faster than the interpreter (≈0.8s vs ≈1.2s). The first run is about the same
+as the interpreter, because it pays ≈0.5s of compilation and analysis. The
+remaining cost is spread across per-call overhead: scope setup, `DYNAMIC`
+declarations and the expression evaluator. No single routine dominates.
+
 - Recursive, deterministic ERB/ERH, ERD name-index and CSV discovery; UTF-8/BOM, UTF-16LE BOM,
   and strict Shift-JIS decoding. Source filenames and original line numbers
   survive indexing. Release-mode `[IF_DEBUG]`, `[IF_NDEBUG]`, `[ELSE]`,
