@@ -113,8 +113,8 @@ async function api(url, data) {
   if (!response.ok) throw new Error(result.error ?? `HTTP ${response.status}`);
   return result;
 }
-// Activity feedback: the cursor changes at once; the progress bar and timer appear
-// only if the step is slow, so fast steps don't flicker.
+// Activity feedback: the cursor changes at once; the progress bar and timer fade in
+// (style.css) only if the step is slow, so fast steps don't flicker.
 const activityChip = document.querySelector("#activity");
 const activity = { start: 0, response: 0, delay: null, tick: null };
 function seconds(ms) { return `${(ms / 1000).toFixed(ms < 10000 ? 1 : 0)}s`; }
@@ -124,10 +124,11 @@ function beginActivity() {
   activity.start = performance.now();
   activity.response = 0;
   document.body.classList.add("is-busy");
-  activityChip.classList.remove("is-done", "is-slow");
-  activityChip.removeAttribute("title");
+  // The previous duration stays (fading out via CSS) until the running display starts.
   activity.delay = setTimeout(() => {
     document.body.classList.add("is-busy-visible");
+    activityChip.classList.remove("is-done", "is-slow");
+    activityChip.removeAttribute("title");
     activityChip.hidden = false;
     const update = () => {
       activityChip.textContent = `${activity.response ? "Rendering" : "Running"} ${seconds(performance.now() - activity.start)}`;

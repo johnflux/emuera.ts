@@ -9,11 +9,15 @@ header { flex-shrink: 0; position: relative; z-index: 5; display: flex; align-it
 .mode { flex-shrink: 0; padding: 1px 7px; border: 1px solid #3a4a55; border-radius: 9px; color: #8ddaff; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
 .mode[hidden] { display: none; }
 #status { flex: 1; min-width: 0; margin: 0; color: #9a9a9a; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-header::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; opacity: 0; background: linear-gradient(90deg, transparent, #8ddaff, #ffd34d, transparent) 0 0 / 40% 100% no-repeat; transition: opacity 150ms; }
-.is-busy-visible header::after { opacity: 1; animation: busy-sweep 1.1s linear infinite; }
+header::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; opacity: 0; background: linear-gradient(90deg, transparent, #8ddaff, #ffd34d, transparent) 0 0 / 40% 100% no-repeat; transition: opacity 200ms; animation: busy-sweep 1.1s linear infinite paused; }
+/* Busy indicators fade in slowly (ease-in), so a short step barely shows them, and fade out quickly. */
+.is-busy-visible header::after { opacity: 1; animation-play-state: running; transition: opacity 700ms ease-in; }
 @keyframes busy-sweep { from { background-position: -70% 0; } to { background-position: 170% 0; } }
 .is-busy, .is-busy #terminal, .is-busy .choice { cursor: progress !important; }
-.activity { flex-shrink: 0; order: 1; color: #8ddaff; font-size: 11px; font-variant-numeric: tabular-nums; }
+.activity { flex-shrink: 0; order: 1; color: #8ddaff; font-size: 11px; font-variant-numeric: tabular-nums; opacity: 1; transition: opacity 250ms ease-out; }
+@starting-style { .activity { opacity: 0; } }
+.is-busy .activity { opacity: 0; transition: opacity 150ms ease-out; }
+.is-busy-visible .activity { opacity: 1; transition: opacity 700ms ease-in; }
 .activity::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 6px; border: 2px solid #8ddaff; border-right-color: transparent; border-radius: 50%; vertical-align: -1px; animation: spin .8s linear infinite; }
 .activity.is-done { color: #666; cursor: help; }
 .activity.is-done::before { display: none; }
@@ -24,7 +28,7 @@ header::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px
 .screen.is-active .choice.is-pending, .screen.is-active .choice.is-pending * { color: var(--choice-hover-color, var(--selection-color)) !important; }
 .screen.is-active .choice.is-pending { animation: pending-pulse 1s ease-in-out infinite alternate; }
 @keyframes pending-pulse { to { opacity: .45; } }
-@media (prefers-reduced-motion: reduce) { .is-busy-visible header::after { animation: none; background-size: 100% 100%; } .activity::before, .screen.is-active .choice.is-pending { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .is-busy-visible header::after { animation: none; background-size: 100% 100%; } header::after, .activity { transition: none !important; } .activity::before, .screen.is-active .choice.is-pending { animation: none; } }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 small { color: #aaa; font-size: 12px; }
 button, input { font: inherit; color: inherit; }

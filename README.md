@@ -3,6 +3,9 @@
 A TypeScript/Node.js interpreter for Emuera/eramaker ERB, with a browser terminal.
 The local game directory `anon-tw-anon-tw_eng-modding` is the default target.
 Game scripts, data, and images are read in place and are not bundled or copied.
+Bugs in the game itself (reproducible in real Emuera) are fixed in the game
+files and recorded, with a reapplicable patch, in
+[docs/game-patches.md](docs/game-patches.md).
 
 **The real title and custom-character creation work. Full gameplay is not yet
 supported.** The unmodified `@SYSTEM_TITLE` executes its startup calls, builds
@@ -47,7 +50,8 @@ non-watching server, stop that process once, then use `npm start` instead.
 The header shows the app name, the current run mode (Game or Demo) and the
 interpreter status. While a step runs, the clicked (or typed) choice is
 highlighted and the cursor changes immediately; if the step takes more than
-~0.1s, a progress bar sweeps under the header and a live timer counts up. When
+~0.1s, a progress bar under the header and a spinner with a live timer slowly
+fade in (so very short steps barely register). When
 it finishes, the timer stays as the last step's duration (amber when 1s or
 longer); hover it for the split between script time (server) and render time
 (browser). Every control is in the **☰ menu** at the top right
