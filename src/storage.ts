@@ -113,3 +113,61 @@ export class FileSaveStore implements SaveStore {
     }
   }
 }
+
+/**
+ * Wraps the stores so writes can be held back: while staging, writes are kept in memory (and seen by reads) until
+ * commit() passes them on, or discard() drops them. Runtime.prefetch uses this so running ahead of a
+ * click-to-continue only persists anything once the player actually continues.
+ */
+export class StagedStores {
+  private files: Map<string, string | null> | null = null;
+  private global: GlobalData | undefined;
+  readonly saves: SaveStore;
+  readonly store: GlobalStore;
+  constructor(private readonly innerSaves: SaveStore, private readonly innerStore: GlobalStore) {
+    this.saves = {
+      read: (name) => {
+        const file = this.files?.get(checkSaveName(name));
+        return file !== undefined ? file : innerSaves.read(name);
+      },
+      write: (name, data) => {
+        if (this.files) this.files.set(checkSaveName(name), data);
+        else innerSaves.write(name, data);
+      },
+      remove: (name) => {
+        if (this.files) this.files.set(checkSaveName(name), null);
+        else innerSaves.remove(name);
+      },
+      list: () => {
+        const names = new Set(innerSaves.list());
+        for (const [name, data] of this.files ?? []) {
+          if (data === null) names.delete(name);
+          else names.add(name);
+        }
+        return [...names];
+      },
+    };
+    this.store = {
+      load: () => this.global ? structuredClone(this.global) : innerStore.load(),
+      save: (data) => {
+        if (this.files) this.global = structuredClone(data);
+        else innerStore.save(data);
+      },
+    };
+  }
+  get staging(): boolean { return this.files !== null; }
+  stage(): void { this.files ??= new Map(); }
+  commit(): void {
+    const files = this.files, global = this.global;
+    this.discard();
+    for (const [name, data] of files ?? []) {
+      if (data === null) this.innerSaves.remove(name);
+      else this.innerSaves.write(name, data);
+    }
+    if (global) this.innerStore.save(global);
+  }
+  discard(): void {
+    this.files = null;
+    this.global = undefined;
+  }
+}

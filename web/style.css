@@ -52,7 +52,7 @@ main { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 1
 #terminal, #input-form { font-family: var(--terminal-font); }
 #terminal { flex: 1; min-height: 0; display: flex; flex-direction: column; font-size: var(--font-size); line-height: 1.25; overflow: auto; scrollbar-gutter: stable; }
 #terminal::before { content: ""; margin-top: auto; }
-#terminal > * { flex-shrink: 0; }
+#terminal > * { flex-shrink: 0; min-width: var(--logical-width, 0); }
 #terminal.is-waiting { cursor: pointer; }
 .screen.is-history { filter: grayscale(1); opacity: .4; pointer-events: none; }
 .screen.is-history:has(.choice.is-selected) { opacity: 1; }
@@ -88,6 +88,9 @@ a { color: #8ddaff; }
 .has-tooltip, .line button.choice.has-tooltip { cursor: help; text-decoration: none; transition: background-color 180ms ease; }
 .has-tooltip .interactive-label { text-decoration-line: underline; text-decoration-style: dashed; text-decoration-color: #777; text-decoration-thickness: 1px; text-underline-offset: .2em; transition: text-decoration-color 180ms ease, text-shadow 180ms ease; }
 .screen.is-active .has-tooltip:hover, .screen.is-active .has-tooltip:focus-visible { background-color: #ffffff12; }
+/* A picture button highlights its picture rather than the line it hangs from. */
+.screen.is-active .has-tooltip:has(.sprite-clip):is(:hover, :focus-visible), .screen.is-active button.choice:has(.sprite-clip):is(:hover, :focus-visible) { background-color: transparent; }
+.screen.is-active :is(.has-tooltip, button.choice):is(:hover, :focus-visible) .sprite-clip { background-color: #ffffff12; }
 .screen.is-active .has-tooltip:hover .interactive-label, .screen.is-active .has-tooltip:focus-visible .interactive-label { text-decoration-color: #ddd; text-shadow: 0 0 4px currentColor; }
 .has-tooltip:focus-visible { outline: 1px dotted #aaa; outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { .has-tooltip, .line button.choice.has-tooltip, .has-tooltip .interactive-label { transition: none; } }

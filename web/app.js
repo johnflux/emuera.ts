@@ -21,7 +21,7 @@ let generation = 0;
 const sprites = new Map();
 const SETTINGS_KEY = "era-typescript.settings";
 /** Emuera's configured font size and line height (emuera.config), the units game image layouts are written in. */
-let metrics = { fontSize: 18, lineHeight: 19 };
+let metrics = { fontSize: 18, lineHeight: 19, columns: 20 };
 let gameDefaults = { foreground: "#c0c0c0", background: "#000000", selection: "#ffff00", font: "ＭＳ ゴシック" };
 let settings = { ...gameDefaults };
 function savedSettings() {
@@ -45,6 +45,7 @@ function applySettings() {
   const form = document.querySelector("#settings-form");
   for (const name of ["foreground", "background", "selection", "font"])
     if (form.elements[name] !== document.activeElement) form.elements[name].value = settings[name];
+  terminalColumns();
 }
 function updateSetting(name, value) {
   const saved = savedSettings();
@@ -63,6 +64,8 @@ const settingsLoaded = (async () => {
     if (runtime.metrics) metrics = runtime.metrics;
     settings = { ...gameDefaults, ...savedSettings() };
     applySettings();
+    await document.fonts.ready;
+    terminalColumns();
   } catch { /* the development watcher reports connection errors */ }
 })();
 new ResizeObserver(() => {
@@ -245,6 +248,16 @@ function hideTooltip() {
   tooltip.hidden = true;
   tooltip.textContent = "";
 }
+/** An element's box including any pictures inside it, which overflow their zero-height line. */
+function visibleBox(element) {
+  let { left, top, right, bottom } = element.getBoundingClientRect();
+  for (const clip of element.querySelectorAll(".sprite-clip")) {
+    const box = clip.getBoundingClientRect();
+    left = Math.min(left, box.left); top = Math.min(top, box.top);
+    right = Math.max(right, box.right); bottom = Math.max(bottom, box.bottom);
+  }
+  return { left, top, right, bottom };
+}
 function describe(element, description) {
   element.classList.add("has-tooltip");
   element.dataset.tooltip = description;
@@ -256,7 +269,7 @@ function describe(element, description) {
     tooltip.textContent = description;
     tooltip.hidden = false;
     element.setAttribute("aria-describedby", tooltip.id);
-    const anchor = element.getBoundingClientRect();
+    const anchor = visibleBox(element);
     const box = tooltip.getBoundingClientRect();
     const margin = 12;
     tooltip.style.left = `${Math.max(margin, Math.min(anchor.left, innerWidth - box.width - margin))}px`;
@@ -695,6 +708,11 @@ async function render(snapshot, advanceScreen = false, fresh = false, keepFocus 
   // are updated off-screen. Commit only after HTML and new images are ready.
   if (!fresh) {
     const visible = terminal.cloneNode(true);
+    // Cloned canvases are blank; copy their pixels so pictures don't blink out while the update is prepared.
+    const originals = terminal.querySelectorAll("canvas");
+    visible.querySelectorAll("canvas").forEach((copy, i) => {
+      if (originals[i].width && originals[i].height) copy.getContext("2d").drawImage(originals[i], 0, 0);
+    });
     staged.append(...terminal.childNodes);
     terminal.replaceChildren(...visible.childNodes);
   }
@@ -895,11 +913,14 @@ function showReport(visible) {
 function terminalColumns() {
   const probe = document.createElement("span");
   probe.textContent = "0".repeat(100);
-  probe.style.cssText = "position:absolute;visibility:hidden;white-space:pre";
+  probe.style.cssText = "position:absolute;visibility:hidden;white-space:pre;min-width:0";
   terminal.append(probe);
   const cellWidth = probe.getBoundingClientRect().width / 100;
   probe.remove();
-  return Math.max(20, Math.min(1000, Math.floor(terminal.clientWidth / cellWidth)));
+  // The game's configured window width is the narrowest layout; a thinner browser scrolls sideways instead.
+  const minimum = Math.max(20, Math.min(1000, metrics.columns));
+  terminal.style.setProperty("--logical-width", `${Math.ceil(minimum * cellWidth)}px`);
+  return Math.max(minimum, Math.min(1000, Math.floor(terminal.clientWidth / cellWidth)));
 }
 /**
  * A click (or Enter) made while a step is running continues the next wait, so clicking ahead isn't lost.
@@ -913,7 +934,12 @@ function queueContinue() {
 function runQueuedContinue() {
   const queued = continueQueued;
   continueQueued = false;
-  if (queued && !busy && input?.kind === "wait" && !input.blocking) void submit("");
+  if (busy || input?.kind !== "wait" || input.blocking) return;
+  if (queued) void submit("");
+  else if (input.timeout == null) {
+    // Let the server run the next step while the player reads, so the click is answered at once.
+    void fetch("/api/prefetch", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ session }) }).catch(() => {});
+  }
 }
 async function start(mode) {
   if (busy) return;

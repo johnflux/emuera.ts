@@ -144,6 +144,15 @@ export function createApp(game: Game, development = false, store: GlobalStore = 
         }
         return;
       }
+      if (request.method === "POST" && url.pathname === "/api/prefetch") {
+        // Sent by the client once a click-to-continue screen is shown (and its images fetched): run the next step
+        // now, while the player reads, so their click is answered at once.
+        const data = await body(request);
+        if (typeof data.session !== "string") throw new HttpError(400, "Expected a session string");
+        const session = sessions.get(data.session);
+        json(response, { prefetched: session?.runtime.prefetch() ?? false });
+        return;
+      }
       if (request.method === "GET" && url.pathname === "/api/sprite") {
         const name = url.searchParams.get("name") ?? "";
         const definition = game.sprites.get(key(name));

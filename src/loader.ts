@@ -380,12 +380,15 @@ function configColor(value: string | undefined, fallback: string): string {
 }
 
 /** Emuera's configured font size and line height in pixels; game image layouts (sizes, ypos, reserved lines) use these units. */
-export function displayMetrics(game: Game): { fontSize: number; lineHeight: number } {
+export function displayMetrics(game: Game): { fontSize: number; lineHeight: number; columns: number } {
   const pixels = (name: string, fallback: number) => {
     const value = Number(game.config.get(name)?.trim());
     return Number.isInteger(value) && value > 0 ? value : fallback;
   };
-  return { fontSize: pixels("フォントサイズ", 18), lineHeight: pixels("一行の高さ", 19) };
+  const fontSize = pixels("フォントサイズ", 18);
+  // Emuera's drawable width (Config.DrawableWidth) in half-width cells, as DRAWLINESTR measures it.
+  const drawable = pixels("ウィンドウ幅", 760) - Math.max(2, Math.floor(fontSize / 6));
+  return { fontSize, lineHeight: pixels("一行の高さ", 19), columns: Math.max(1, Math.floor(drawable / (fontSize / 2))) };
 }
 
 /** Display defaults from emuera.config, with Emuera's built-in defaults as fallbacks. */

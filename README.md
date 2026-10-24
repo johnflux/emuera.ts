@@ -105,6 +105,10 @@ MS Gothic or a pixel-identical recreation of native Emuera. The font is served
 locally, with no external requests, and startup waits for it before measuring
 terminal columns; font-load failure is reported rather than silently measuring a
 fallback. Customize `--terminal-font` in `web/style.css` to change the font stack.
+The game's configured window width (`ウィンドウ幅`, less Emuera's shape shift, in
+half-width cells of `フォントサイズ`; 149 columns for this game) is the minimum
+layout width: a narrower browser keeps that layout and scrolls the terminal
+sideways instead of squeezing lines the game expects to fit.
 
 Browser snapshots are buffered: the previous completed display remains visible
 while clears, HTML and image decoding are prepared off-screen, then the finished
@@ -125,6 +129,15 @@ Enter or the Continue button). Links and text-selection clicks do not advance.
 A terminal click (or Enter) made while a step is still running is remembered:
 if that step ends at a click-to-continue wait, it continues straight away.
 Only one is kept, and it is discarded if the step ends at any other input.
+Once a click-to-continue screen is shown (and its images loaded), the browser
+asks the server to run ahead (`POST /api/prefetch`, `Runtime.prefetch()`): the
+next step runs while the player reads, so the click is answered at once. The
+value given to a wait is ignored, so the click just takes that result. Save and
+global writes made while running ahead are staged (`StagedStores` in
+`src/storage.ts`) and only persisted when the player continues; abandoned runs
+drop them. Timed and blocking waits (`TWAIT`, `TINPUT`) are not run ahead.
+Clock functions read while running ahead see the earlier time, and text laid
+out ahead uses the columns from the previous request.
 Each accepted input retires its output screen: earlier screens are grayscale and
 dimmed, with choices disabled and links removed from keyboard/pointer interaction.
 Clicked choices retain 70% brightness through
@@ -399,7 +412,9 @@ declarations and the expression evaluator. No single routine dominates.
   Image sizes and offsets are in the game's units: unitless values are
   percentages of the configured font size (`フォントサイズ`) and `px` values are
   pixels. Both are scaled from the configured line height (`一行の高さ`) to the
-  terminal's line height. Negative sizes flip the image. Unsupported tags and
+  terminal's line height. Negative sizes flip the image. A picture inside a
+  button or tooltip element highlights the whole picture on hover, and its
+  tooltip opens below the picture. Unsupported tags and
   missing images show errors.
 - Graphics (`GCREATE`, `GCREATEFROMFILE`, `GCLEAR`, `GSETBRUSH`, `GFILLRECTANGLE`,
   `GSETCOLOR`, `GDRAWSPRITE`, `GDRAWG`, `GDRAWGWITHMASK`, `GDISPOSE`) build
@@ -432,7 +447,8 @@ dispatch or overloaded functions, general macro expansion and replace tables,
 the full configuration and
 variable-size rules, audio APIs, pixel read-back, arbitrary HTML/CSS, resource animations,
 or exact Emuera layout/line-measurement semantics. `MAXWIDTH()` uses terminal
-columns measured at browser run start (default 120 in direct/API runs); restart
+columns measured at browser run start, never fewer than the configured window
+width (default 120 in direct/API runs); restart
 the run after resizing or changing font size. `STRLENS`/`SUBSTRING` approximate
 legacy display width, not every CP932 encoding edge case. Regex helpers use
 JavaScript regex syntax plus .NET inline options (`(?i)`, `(?m)`, `(?s)`), not

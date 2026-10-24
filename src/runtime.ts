@@ -6,7 +6,7 @@ import { readdirSync, statSync } from "node:fs";
 import { allowsFullWidthSpace, EraError, integer, integerLiteral, numericString, INTEGER_LITERAL, key, splitArguments, text, type Diagnostic, type Routine, type Source, type Value } from "./model.js";
 import { Variables, type GlobalData, type SaveData } from "./variables.js";
 import { parseFormat } from "./format.js";
-import { MemoryGlobalStore, MemorySaveStore, type GlobalStore, type SaveStore } from "./storage.js";
+import { MemoryGlobalStore, MemorySaveStore, StagedStores, type GlobalStore, type SaveStore } from "./storage.js";
 import { randomInt } from "node:crypto";
 import { escapeHtml, htmlTagSplit, htmlWidth, plainHtml } from "./html.js";
 import { formatInteger, stringWidth, toFullWidth, toHalfWidth } from "./strings.js";
@@ -323,6 +323,9 @@ export class Runtime {
   private deferred: Output[] = [];
   private redraw = 1n;
   private saves: SaveStore;
+  private staged: StagedStores;
+  /** The result of continuing a click-to-continue wait ahead of the click; see prefetch(). */
+  private ahead: { snapshot: Snapshot } | { error: unknown } | null = null;
   private stainDefault: bigint[];
   private maxShopItem: number;
   private printCPerLine: number;
@@ -349,7 +352,8 @@ export class Runtime {
     let shared = COMPILED.get(game);
     if (!shared) COMPILED.set(game, shared = { compiled: new Map(), analysis: { suspends: new Map(), targets: new Map() } });
     this.compiled = shared.compiled;
-    this.store = options.store ?? new MemoryGlobalStore();
+    this.staged = new StagedStores(options.saves ?? new MemorySaveStore(), options.store ?? new MemoryGlobalStore());
+    this.store = this.staged.store;
     this.columns = 120;
     const printCLength = Number(game.config.get("PRINTCの文字数") ?? 25);
     this.printCLength = Number.isSafeInteger(printCLength) && printCLength > 0 ? printCLength : 25;
@@ -403,7 +407,7 @@ export class Runtime {
     this.printCPerLine = Number.isSafeInteger(perLine) ? perLine : 3;
     this.autoSave = game.config.get("オートセーブを行なう")?.toUpperCase() !== "NO";
     this.autoToStr = this.configValue("ユーザー関数の引数に自動的にTOSTRを補完する") === 1n;
-    this.saves = options.saves ?? new MemorySaveStore();
+    this.saves = this.staged.saves;
     this.seedDefaults();
     if (options.intrinsics !== false) {
       const { functions, enabled } = loadIntrinsics({
@@ -994,7 +998,30 @@ export class Runtime {
     const record: SaveRecord = { version: 1, ...this.gameStamp(), text: message, data: this.globals.exportSave(this.context(this.globals)), containers: this.exportContainers("SAVE") };
     this.saves.write(this.saveFile(slot), JSON.stringify(record));
   }
+  /**
+   * Continues a plain click-to-continue wait before the click arrives, so the next input() returns at once.
+   * The value given to a wait is ignored, so any later input() just takes this result. Save and global writes made
+   * meanwhile are staged and only persisted by that input(); abandoning the run drops them.
+   * Returns whether it ran ahead.
+   */
+  prefetch(): boolean {
+    const pending = this.pending;
+    if (this.ahead || !pending || pending.kind !== "wait" || pending.timeout !== undefined || pending.blocking) return false;
+    this.staged.stage();
+    try { this.ahead = { snapshot: this.input("") }; }
+    catch (error) { this.ahead = { error }; }
+    return true;
+  }
+  /** Whether a click-to-continue has been run ahead and is waiting for the player. */
+  get prefetched(): boolean { return this.ahead !== null; }
   input(value: string): Snapshot {
+    if (this.ahead) {
+      const ahead = this.ahead;
+      this.ahead = null;
+      this.staged.commit();
+      if ("error" in ahead) throw ahead.error;
+      return ahead.snapshot;
+    }
     if (!this.pending) throw new EraError("Runtime is not waiting for input");
     if (this.pending.blocking) throw new EraError("This wait cannot be skipped");
     if (this.pending.singleCharacter) {
@@ -1011,6 +1038,7 @@ export class Runtime {
   }
   /** Ends a timed wait (TINPUT family or TWAIT) as Emuera's timer would. */
   timeout(): Snapshot {
+    if (this.ahead) throw new EraError("Runtime is not waiting for timed input");
     if (!this.pending?.timeout || !this.timed) throw new EraError("Runtime is not waiting for timed input");
     const { value, message, countdown } = this.timed;
     // The countdown line is replaced by the timeout message; otherwise a nonempty message is printed.
