@@ -901,8 +901,23 @@ function terminalColumns() {
   probe.remove();
   return Math.max(20, Math.min(1000, Math.floor(terminal.clientWidth / cellWidth)));
 }
+/**
+ * A click (or Enter) made while a step is running continues the next wait, so clicking ahead isn't lost.
+ * Only one is kept, and it is dropped if the step ends anywhere other than a click-to-continue wait.
+ */
+let continueQueued = false;
+function queueContinue() {
+  continueQueued = true;
+  message("Will continue when ready...");
+}
+function runQueuedContinue() {
+  const queued = continueQueued;
+  continueQueued = false;
+  if (queued && !busy && input?.kind === "wait" && !input.blocking) void submit("");
+}
 async function start(mode) {
   if (busy) return;
+  continueQueued = false;
   runMode = mode;
   showReport(false);
   hideTooltip();
@@ -927,7 +942,7 @@ async function start(mode) {
     await render(snapshot, false, true);
   }
   catch (error) { message(error.message, true); }
-  finally { busy = false; endActivity(); updateControls(); if (input) command.focus({ preventScroll: true }); }
+  finally { busy = false; endActivity(); updateControls(); if (input) command.focus({ preventScroll: true }); runQueuedContinue(); }
 }
 async function submit(value, selectedChoice = null) {
   // Input made while an animation frame is loading is sent once that frame is shown.
@@ -955,13 +970,16 @@ async function submit(value, selectedChoice = null) {
     endActivity();
     updateControls();
     if (input) command.focus({ preventScroll: true });
+    runQueuedContinue();
   }
 }
 terminal.addEventListener("click", (event) => {
-  if (event.defaultPrevented || (busy && !expiring) || input?.kind !== "wait") return;
+  if (event.defaultPrevented) return;
   if (event.target instanceof Element && event.target.closest("button, a[href]")) return;
   const selection = getSelection();
   if (selection && !selection.isCollapsed) return;
+  if (busy && !expiring) { if (session) queueContinue(); return; }
+  if (input?.kind !== "wait") return;
   void submit("");
 });
 document.querySelector("#input-form").addEventListener("submit", (event) => {
@@ -979,6 +997,12 @@ command.addEventListener("input", (event) => {
 });
 command.addEventListener("compositionend", submitCharacter);
 document.addEventListener("keydown", (event) => {
+  if (busy && !expiring && session && event.key === "Enter" && !event.repeat && !event.isComposing && !event.defaultPrevented
+    && !(event.target instanceof Element && event.target.closest("input:not(#command), textarea, select, button, a[href], .menu"))) {
+    event.preventDefault();
+    queueContinue();
+    return;
+  }
   if ((busy && !expiring) || !input || event.defaultPrevented || event.isComposing || event.ctrlKey || event.metaKey || event.altKey) return;
   const target = event.target;
   if (target !== command && target instanceof Element && target.closest("input, textarea, select, [contenteditable]:not([contenteditable='false']), .menu")) return;

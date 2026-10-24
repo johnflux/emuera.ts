@@ -122,6 +122,9 @@ does not enter the scrollback. Echoed input counts as a logical line for
 `LINECOUNT` and `CLEARLINE`. `WAIT` continues without adding an input echo.
 While waiting at `WAIT`, clicking the terminal also continues (in addition to
 Enter or the Continue button). Links and text-selection clicks do not advance.
+A terminal click (or Enter) made while a step is still running is remembered:
+if that step ends at a click-to-continue wait, it continues straight away.
+Only one is kept, and it is discarded if the step ends at any other input.
 Each accepted input retires its output screen: earlier screens are grayscale and
 dimmed, with choices disabled and links removed from keyboard/pointer interaction.
 Clicked choices retain 70% brightness through
@@ -390,8 +393,14 @@ declarations and the expression evaluator. No single routine dominates.
   Named `<img src='SPRITENAME'>` images are cropped from sprite sheets.
   Basic HTML paragraphs, breaks, emphasis, fonts (color only), numeric choices,
   nonbuttons and HTTP(S) links are rebuilt as allowlisted DOM nodes.
-  Unitless image dimensions use percentages of the terminal font size; `px`
-  dimensions are supported too. Unsupported tags and missing images show errors.
+  As in Emuera, an image is drawn from the top of its line (shifted by `ypos`)
+  and does not make the line taller. Scripts print blank lines to reserve its
+  height, so the picture overlaps those lines rather than pushing them down.
+  Image sizes and offsets are in the game's units: unitless values are
+  percentages of the configured font size (`フォントサイズ`) and `px` values are
+  pixels. Both are scaled from the configured line height (`一行の高さ`) to the
+  terminal's line height. Negative sizes flip the image. Unsupported tags and
+  missing images show errors.
 - Graphics (`GCREATE`, `GCREATEFROMFILE`, `GCLEAR`, `GSETBRUSH`, `GFILLRECTANGLE`,
   `GSETCOLOR`, `GDRAWSPRITE`, `GDRAWG`, `GDRAWGWITHMASK`, `GDISPOSE`) build
   display lists instead of pixels. As in Emuera, `SPRITECREATE` sprites reference
