@@ -75,6 +75,8 @@ main { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 1
 .title-image { overflow: hidden; }
 .line p { margin: 0; min-height: 1.25em; }
 .line.single-line { white-space: pre; overflow: hidden; }
+.print-cell { display: inline-block; white-space: pre; }
+.half-cells { display: inline-block; overflow: hidden; vertical-align: top; white-space: pre; }
 .title-image, .title-image p { min-height: 0; line-height: 0; }
 /* With line-height 0 an inline span still paints its background over a font-height box centred on the baseline,
    half a line above the image, covering the previous line. The title strip has no text, so drop the font box. */

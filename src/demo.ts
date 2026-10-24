@@ -22,6 +22,8 @@ PRINTBUTTON " [2] Enter text ", 2
 PRINTBUTTON " [3] Single-character input (no Enter) ", 3
 PRINTBUTTON " [4] Animated sprites ", 4
 PRINTBUTTON " [5] Character portraits ", 5
+PRINTBUTTON " [6] Dialogue (click to continue) ", 6
+PRINTBUTTON " [7] Command grid (PRINTC) ", 7
 HTML_PRINT "<button value='0' title='End this demo'>[0] Quit</button>"
 INPUT
 SELECTCASE RESULT
@@ -43,11 +45,34 @@ SELECTCASE RESULT
     CALL ANIMATIONS
   CASE 5
     CALL PORTRAITS
+  CASE 6
+    ; Lines finished by a click-to-continue wait stay bright until the next menu.
+    PRINTW Hello!
+    PRINTW How are you doing?
+    PRINTL Back to the menu.
+  CASE 7
+    ; Fixed-width PRINTC items wrap between items, never inside one (ボタンの途中で行を折りかえさない).
+    PRINTL A row of PRINTC commands, as the game's command menu prints them:
+    SETCOLOR 0x00FF00
+    PRINTC Move[400]
+    RESETCOLOR
+    PRINTC Go Out[405]
+    PRINTC Dirtiness[801]
+    PRINTC Abilities[803]
+    PRINTC Abilities (Master)[804]
+    PRINTC Item List[805]
+    PRINTC Lock The Door[991]
+    PRINTC Calendar[993]
+    PRINTC Auto-TSP Movement[995]
+    PRINTC Auto-Clean[996]
+    PRINTL
+    INPUT
+    PRINTFORML Command {RESULT} chosen.
   CASE 0
     PRINTL Demo finished. Start another run using the toolbar.
     RETURN
   CASEELSE
-    PRINTL Choose 0, 1, 2, 3, 4 or 5.
+    PRINTL Choose a number from 0 to 7.
 ENDSELECT
 GOTO MENU
 

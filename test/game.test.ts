@@ -165,6 +165,16 @@ PRINTFORML {RESULT} {DT_CELL_GET("saveAchievements", RESULT:1, "claimed", 1)} {D
     assert.equal(step.status, "waiting", `${value}: ${JSON.stringify(step.error)}`);
     if (value !== "5" && value !== "99") assert.ok(step.output.some((item) => item.type === "clear" && item.count > 0), value);
   }
+  // The dialogue page stops at two click-to-continue waits, then returns to the menu.
+  assert.equal(demo.input("6").input?.kind, "wait");
+  assert.equal(demo.input("").input?.kind, "wait");
+  assert.equal(demo.input("").input?.kind, "integer");
+  const grid = demo.input("7");
+  const cells = grid.output.filter((output) => output.type === "text" && output.cell);
+  assert.equal(cells.length, 10);
+  assert.ok(cells.every((cell) => cell.type === "text" && [...cell.text].length === 29), "PRINTC items are padded to PRINTCの文字数");
+  assert.equal(grid.input?.kind, "integer");
+  assert.ok(demo.input("405").output.some((output) => output.type === "text" && output.text.includes("Command 405 chosen.")));
   assert.equal(demo.input("0").status, "halted");
 });
 
@@ -197,4 +207,11 @@ test("OBJ framework intrinsics return what the ERB framework returns", {
     return values;
   });
   assert.deepEqual(results[0], results[1]);
+});
+
+test("string widths follow Emuera's Shift-JIS byte count", () => {
+  assert.equal(stringWidth("Lv 0"), 4);
+  assert.equal(stringWidth("あア×─"), 8, "JIS characters, including ×, are two columns");
+  assert.equal(stringWidth("ｱ"), 1, "half-width kana is one byte");
+  assert.equal(stringWidth("▄▄♥é"), 4, "characters CP932 can't encode become one-byte ?");
 });

@@ -15,6 +15,9 @@ let expiring = false;
 let queuedSubmit = null;
 let currentLine = null;
 let currentScreen = null;
+// Screens finished by a click-to-continue wait. They stay active (not greyed) while the dialogue continues, and
+// retire together once a step stops at a real input, so a new menu is shown against greyed history.
+let continuedScreens = [];
 let outputRoot = terminal;
 let pendingImages = [];
 let generation = 0;
@@ -188,9 +191,10 @@ function screen() {
 function lastOutputLine() {
   return terminal.lastElementChild?.lastElementChild;
 }
-function retireScreen() {
-  if (!currentScreen) return;
+function retireScreen(screen = currentScreen) {
+  if (!screen) return;
   hideTooltip();
+  const currentScreen = screen;
   currentScreen.classList.replace("is-active", "is-history");
   const selected = currentScreen.querySelector(".choice.is-selected");
   if (selected) {
@@ -379,11 +383,28 @@ function appendText(parent, value) {
   let start = 0;
   for (let i = 0; i < matches.length; i++) {
     const match = matches[i];
-    parent.append(document.createTextNode(value.slice(start, match.index)));
+    appendCells(parent, value.slice(start, match.index));
     const end = matches[i + 1]?.index ?? value.length;
     const label = value.slice(match.index, end).trimEnd();
     parent.append(choice(label, match[1]));
     start = match.index + label.length;
+  }
+  appendCells(parent, value.slice(start));
+}
+/**
+ * Block elements (▀▄█…) aren't in Shift-JIS, so Emuera counts them as one column and MS Gothic draws them half-width.
+ * Our font lacks them and the fallback glyphs are wider, which would push bars out of their columns.
+ */
+function appendCells(parent, value) {
+  let start = 0;
+  for (const match of value.matchAll(/[\u2580-\u259F]+/g)) {
+    parent.append(document.createTextNode(value.slice(start, match.index)));
+    const cells = document.createElement("span");
+    cells.className = "half-cells";
+    cells.style.width = `${match[0].length}ch`;
+    cells.textContent = match[0];
+    parent.append(cells);
+    start = match.index + match[0].length;
   }
   parent.append(document.createTextNode(value.slice(start)));
 }
@@ -809,12 +830,19 @@ function markTarget(target) {
   // Other characters' pictures (all their layers) are dimmed so the selection stands out.
   for (const button of pictures) if (button.dataset.value !== value) button.classList.add("is-not-target");
 }
+/** advanceScreen: true after a submitted input (retires the screen), "continue" after a click-to-continue wait. */
 async function renderSnapshot(snapshot, advanceScreen) {
   hideTooltip();
   document.title = snapshot.title || "Emuera.ts";
   const previousScreen = currentScreen;
   const previousLine = currentLine;
-  if (advanceScreen) {
+  if (advanceScreen === "continue") {
+    // An unfinished line keeps printing into its screen; otherwise the continued output starts a new screen.
+    if (currentScreen && !currentLine) {
+      continuedScreens.push(currentScreen);
+      currentScreen = null;
+    }
+  } else if (advanceScreen) {
     retireScreen();
     currentScreen = null;
     currentLine = null;
@@ -880,6 +908,8 @@ async function renderSnapshot(snapshot, advanceScreen) {
         if (output.single) textLine.classList.add("single-line");
         const fragment = document.createElement("span");
         applyStyle(fragment, output.style);
+        // A PRINTC button item is padded to a fixed width and wraps only as a whole, so a row of them lines up like a grid.
+        if (output.cell) fragment.classList.add("print-cell");
         if (output.plain) fragment.textContent = parts[i];
         else appendText(fragment, parts[i]);
         textLine.append(fragment);
@@ -906,6 +936,10 @@ async function renderSnapshot(snapshot, advanceScreen) {
       currentScreen = null;
       currentLine = null;
     }
+  }
+  if (snapshot.status !== "waiting" || snapshot.input?.kind !== "wait") {
+    for (const screen of continuedScreens) if (screen !== currentScreen && screen.parentElement === outputRoot) retireScreen(screen);
+    continuedScreens = [];
   }
   markTarget(snapshot.target);
   const revived = outputRoot.querySelectorAll(".screen.is-active button.choice.is-revived");
@@ -987,6 +1021,7 @@ async function start(mode) {
   message(`Starting ${mode === "demo" ? "conformance demo" : "bundled game"}...`);
   beginActivity();
   currentScreen = null;
+  continuedScreens = [];
   command.value = "";
   currentLine = null;
   try {
@@ -1008,6 +1043,7 @@ async function submit(value, selectedChoice = null) {
   if (busy || !input || input.blocking) return;
   hideTooltip();
   busy = true;
+  const waiting = input.kind === "wait";
   // Typed input that matches a visible choice highlights that choice too.
   const pending = selectedChoice ?? (value === "" ? null : [...terminal.querySelectorAll(".screen.is-active button.choice")]
     .find((button) => button.dataset.value === value) ?? null);
@@ -1020,7 +1056,7 @@ async function submit(value, selectedChoice = null) {
     activityResponded();
     selectedChoice?.classList.add("is-selected");
     command.value = "";
-    await render(snapshot, true);
+    await render(snapshot, waiting ? "continue" : true);
   } catch (error) { message(error.message, true); }
   finally {
     busy = false;

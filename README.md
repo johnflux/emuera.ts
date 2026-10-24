@@ -25,6 +25,7 @@ The separate conformance demo is an original ERB program exercising the supporte
 subset; it is not the game's title screen. Its character-portraits page composites the
 game's highres sprites, swaps to a smile on hover (`srcb`), toggles face close-ups when the current
 target is clicked again, and redraws in place with `CLEARLINE`, the way the game's own menus do.
+Other pages cover click-to-continue dialogue and a `PRINTC` command grid.
 
 ## Run
 
@@ -102,7 +103,10 @@ Terminal output and input use the bundled **BIZ UD Gothic** Japanese fixed-pitch
 font, redistributed under the SIL Open Font License in `web/fonts/OFL.txt`
 (source: [Google Fonts](https://github.com/google/fonts/tree/main/ofl/bizudgothic)).
 At 16px, ASCII characters measure 8px and full-width symbols such as `★` and `□`
-measure 16px, matching the interpreter's two-cell layout assumptions. This is not
+measure 16px, matching the interpreter's two-cell layout assumptions. Widths follow
+Emuera's Shift-JIS byte count: JIS characters (`×`, `─`, kana, kanji) are two cells,
+and characters CP932 can't encode (such as the `▄` block in status bars) are one;
+block elements are drawn clipped to one cell each so bars stay in their columns. This is not
 MS Gothic or a pixel-identical recreation of native Emuera. The font is served
 locally, with no external requests, and startup waits for it before measuring
 terminal columns; font-load failure is reported rather than silently measuring a
@@ -111,6 +115,11 @@ The game's configured window width (`ウィンドウ幅`, less Emuera's shape sh
 half-width cells of `フォントサイズ`; 149 columns for this game) is the minimum
 layout width: a narrower browser keeps that layout and scrolls the terminal
 sideways instead of squeezing lines the game expects to fit.
+With `ボタンの途中で行を折りかえさない` (ButtonWrap) on, a `PRINTC` item holding a
+numeric `[n]` button is laid out as one unbreakable fixed-width cell, so a row of
+them (like the game's command menu) wraps between items as Emuera does and lines
+up in columns: 5 per line at 149 columns with `PRINTCの文字数` 29. Wrapped rows are
+still one logical line for `LINECOUNT`.
 
 Browser snapshots are buffered: the previous completed display remains visible
 while clears, HTML and image decoding are prepared off-screen, then the finished
@@ -126,6 +135,9 @@ Accepted input is echoed as plain text before the game's response (including
 clicked choices and single-character input); rejected input stays editable and
 does not enter the scrollback. Echoed input counts as a logical line for
 `LINECOUNT` and `CLEARLINE`. `WAIT` continues without adding an input echo.
+Output continued past a click-to-continue wait stays bright: a run of dialogue
+greys out together only once the game stops at a real input (a menu or prompt),
+so new choices are shown against greyed history.
 While waiting at `WAIT`, clicking the terminal also continues (in addition to
 Enter or the Continue button). Links and drags that select text do not
 advance; any other click does, clearing a leftover selection (for example a
@@ -463,8 +475,9 @@ variable-size rules, audio APIs, pixel read-back, arbitrary HTML/CSS, resource a
 or exact Emuera layout/line-measurement semantics. `MAXWIDTH()` uses terminal
 columns measured at browser run start, never fewer than the configured window
 width (default 120 in direct/API runs); restart
-the run after resizing or changing font size. `STRLENS`/`SUBSTRING` approximate
-legacy display width, not every CP932 encoding edge case. Regex helpers use
+the run after resizing or changing font size. Some game layouts assume Emuera's
+fixed window width (for example the Palam list's items per row), so a wider browser
+can wrap them early. `STRLENS`/`SUBSTRING` count CP932 bytes. Regex helpers use
 JavaScript regex syntax plus .NET inline options (`(?i)`, `(?m)`, `(?s)`), not
 all .NET regex extensions. Only argument-free flat
 print-data blocks, basic/padded FORM interpolation, and zero-padded/hexadecimal

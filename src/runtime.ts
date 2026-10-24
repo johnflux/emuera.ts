@@ -61,7 +61,8 @@ function animationFrame(frame: Omit<AnimationFrame, "src" | "offset">, src: Rect
   return { ...frame, src: [src[0], src[1], right - left, bottom - top], offset: [left, top] };
 }
 export type Output =
-  | { type: "text" | "html" | "input"; text: string; newline: boolean; style: Style; plain?: boolean; single?: boolean; sprites?: Record<string, SpriteDefinition> }
+  /** cell: a PRINTC item that the display wraps as a whole (Emuera's ボタンの途中で行を折りかえさない). */
+  | { type: "text" | "html" | "input"; text: string; newline: boolean; style: Style; plain?: boolean; single?: boolean; cell?: boolean; sprites?: Record<string, SpriteDefinition> }
   | { type: "button"; text: string; value: string; style: Style }
   | { type: "clear"; count: number };
 export interface InputRequest {
@@ -315,6 +316,8 @@ export class Runtime {
   private store: GlobalStore;
   private columns: number;
   private printingHtml = "";
+  /** Emuera's print buffer holds text or buttons not yet ended by a newline (PrintFlush(false) only ends such a line). */
+  private lineOpen = false;
   /** HTML_GETPRINTEDSTR's record of completed lines (EM DisplayLine2Html format) and the line being printed. */
   private printedLines: string[] = [];
   private printedLine = "";
@@ -331,6 +334,8 @@ export class Runtime {
   private stainDefault: bigint[];
   private maxShopItem: number;
   private printCPerLine: number;
+  /** ボタンの途中で行を折りかえさない: a line wraps between buttons, never inside one (unless it starts the line). */
+  private readonly buttonWrap: boolean;
   private autoSave: boolean;
   /** Set by BEGIN; the transition happens once the system-level call returns. */
   private pendingBegin: string | undefined;
@@ -408,6 +413,7 @@ export class Runtime {
     const perLine = Number(game.config.get("PRINTCを並べる数") ?? 3);
     this.printCPerLine = Number.isSafeInteger(perLine) ? perLine : 3;
     this.autoSave = game.config.get("オートセーブを行なう")?.toUpperCase() !== "NO";
+    this.buttonWrap = this.configValue("ボタンの途中で行を折りかえさない") === 1n;
     this.autoToStr = this.configValue("ユーザー関数の引数に自動的にTOSTRを補完する") === 1n;
     this.saves = this.staged.saves;
     this.seedDefaults();
@@ -697,6 +703,8 @@ export class Runtime {
           if (this.printCPerLine > 0 && ++printed % this.printCPerLine === 0) { yield this.emit("text", line, true); line = ""; }
         }
         if (line) yield this.emit("text", line, true);
+        // Emuera PrintFlush(false)s before SHOW_USERCOM, ending a line SHOW_STATUS left open (e.g. a partial Palam row).
+        else if (this.lineOpen) yield this.emit("text", "", true);
         yield* this.trainPhase("SHOW_USERCOM", true);
         if (this.ctrain) this.skipDisplay = false;
         command = this.takeTrain();
@@ -2094,7 +2102,7 @@ export class Runtime {
     this.caseCache.set(source, tests);
     return tests;
   }
-  private emit(type: "text" | "html" | "input", value: string, newline: boolean, plain = false, options: { style?: Style; single?: boolean } = {}): Yield {
+  private emit(type: "text" | "html" | "input", value: string, newline: boolean, plain = false, options: { style?: Style; single?: boolean; cell?: boolean } = {}): Yield {
     if (value.length > 1_000_000) throw new EraError("Output string exceeds limit");
     if (this.skipDisplay) return SKIPPED;
     if (this.temporaryLine) {
@@ -2103,12 +2111,13 @@ export class Runtime {
       this.deferred.push({ type: "clear", count: 1 });
     }
     this.lineCount += (value.match(/\n/g)?.length ?? 0) + (newline ? 1 : 0);
+    this.lineOpen = newline ? false : value.includes("\n") ? !value.endsWith("\n") : this.lineOpen || value !== "";
     this.printingHtml += type === "html" ? value : escapeHtml(value);
     if (newline) this.printingHtml = "";
     else if (value.includes("\n")) this.printingHtml = escapeHtml(value.slice(value.lastIndexOf("\n") + 1));
     this.recordPrinted(type, value, newline, options.style ?? this.style);
     const sprites = type === "html" ? this.htmlSprites(value) : undefined;
-    return { output: { type, text: value, newline, style: { ...(options.style ?? this.style) }, ...(plain ? { plain: true } : {}), ...(options.single ? { single: true } : {}), ...(sprites ? { sprites } : {}) } };
+    return { output: { type, text: value, newline, style: { ...(options.style ?? this.style) }, ...(plain ? { plain: true } : {}), ...(options.single ? { single: true } : {}), ...(options.cell ? { cell: true } : {}), ...(sprites ? { sprites } : {}) } };
   }
   private dropLines(count: number): void {
     this.lineCount = Math.max(0, this.lineCount - count);
@@ -2140,6 +2149,10 @@ export class Runtime {
     this.printedLines.push(`<p align='${this.style.alignment}'><nobr>${this.printedLine || " "}</nobr></p>`);
     if (this.printedLines.length > 4096) this.printedLines.splice(0, this.printedLines.length - 4096);
     this.printedLine = "";
+  }
+  /** Emuera wraps a PRINTC item holding a numeric [n] button only between items when ButtonWrap is on; others may split. */
+  private isButtonCell(value: string): boolean {
+    return this.buttonWrap && !value.includes("\n") && /\[\s*[+-]?\d+\s*\]/.test(value);
   }
   private printC(value: string, align: "" | "C" | "LC"): string {
     if (!align) return value;
@@ -2364,7 +2377,7 @@ export class Runtime {
             : variant.argument === "V" ? this.arguments(args).map((part) => String(ev(part))).join("")
             : args;
           const value = this.kana(this.printC(raw, variant.align), variant.mode);
-          yield this.emit("text", value, variant.single || variant.end !== "", false, { style: this.printStyle(variant.mode), single: variant.single });
+          yield this.emit("text", value, variant.single || variant.end !== "", false, { style: this.printStyle(variant.mode), single: variant.single, cell: !!variant.align && this.isButtonCell(value) });
           if (variant.end === "W") yield { input: { kind: "wait" } };
         } else if (special && (op === "STRDATA" || op.startsWith("PRINTDATA") && isPrintData(op))) {
           const groups: Instruction[][] = [];
@@ -2697,6 +2710,8 @@ export class Runtime {
             const parts = this.arguments(args);
             if (parts.length !== 2) throw new EraError(`${op} expects label and value`);
             const label = this.printC(text(ev(parts[0]!)), op === "PRINTBUTTON" ? "" : op === "PRINTBUTTONC" ? "C" : "LC");
+            if (this.skipDisplay) break;
+            this.lineOpen = true;
             yield { output: { type: "button", text: label, value: String(ev(parts[1]!)), style: { ...this.style } } };
             break;
           }
@@ -2711,7 +2726,7 @@ export class Runtime {
             const count = Number(num(args));
             if (count < 0 || !Number.isSafeInteger(count)) throw new EraError("Invalid CLEARLINE count");
             this.dropLines(count);
-            if (count) { this.printingHtml = ""; this.printedLine = ""; this.temporaryLine = false; }
+            if (count) { this.printingHtml = ""; this.printedLine = ""; this.temporaryLine = false; this.lineOpen = false; }
             yield { output: { type: "clear", count } };
             break;
           }

@@ -492,6 +492,35 @@ QUIT`, (game) => {
   assert.equal(user.status, "halted");
 });
 
+test("the train loop ends a line SHOW_STATUS leaves open before SHOW_USERCOM, as Emuera's PrintFlush does", () => {
+  const rt = runtime(`@SYSTEM_TITLE
+BEGIN TRAIN
+@SHOW_STATUS
+PRINT partial
+PRINTBUTTON "[9]", 9
+@COM_ABLE0
+RETURN 0
+@SHOW_USERCOM
+PRINTL usercom
+@USERCOM
+QUIT`, (game) => game.tables.set("TRAIN", new Map([[0, ["Talk"]]])));
+  const lines = rt.start().output.flatMap((item) => item.type === "text" || item.type === "button" ? [item] : []);
+  const usercom = lines.findIndex((item) => item.text === "usercom");
+  assert.ok(lines.slice(0, usercom).some((item) => item.type === "text" && item.text === "" && item.newline),
+    "the open status line is ended before usercom");
+  const closed = runtime(`@SYSTEM_TITLE
+BEGIN TRAIN
+@SHOW_STATUS
+PRINTL status
+@COM_ABLE0
+RETURN 0
+@SHOW_USERCOM
+PRINTL usercom
+@USERCOM
+QUIT`, (game) => game.tables.set("TRAIN", new Map([[0, ["Talk"]]])));
+  assert.deepEqual(texts(closed.start()), ["status", "usercom"], "no blank line when the status ended its line");
+});
+
 test("CALLTRAIN runs queued TRAIN ids with status and usercom output skipped, then calls CALLTRAINEND", () => {
   const rt = runtime(`@SYSTEM_TITLE
 BEGIN TRAIN

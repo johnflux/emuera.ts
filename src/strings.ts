@@ -1,5 +1,28 @@
+let doubleByte: Set<string> | undefined;
+/** Characters CP932 encodes in two bytes, from the platform's Shift_JIS (Windows-31J) decoder. */
+function cp932DoubleByte(): Set<string> {
+  if (doubleByte) return doubleByte;
+  const decoder = new TextDecoder("shift_jis");
+  doubleByte = new Set();
+  for (let lead = 0x81; lead <= 0xfc; lead++) {
+    if (lead >= 0xa0 && lead < 0xe0) continue;
+    for (let trail = 0x40; trail <= 0xfc; trail++) {
+      if (trail === 0x7f) continue;
+      const c = decoder.decode(new Uint8Array([lead, trail]));
+      if (c !== "\uFFFD" && [...c].length === 1) doubleByte.add(c);
+    }
+  }
+  return doubleByte;
+}
+/**
+ * Emuera's STRLENS and print alignment use the Shift-JIS byte count: two for JIS characters (×, °, ─, 全角),
+ * one for ASCII and half-width kana, and one for anything CP932 can't encode (▄, ♥, é), which becomes "?".
+ */
 export function stringWidth(value: string): number {
-  return [...value].reduce((width, c) => width + (c.codePointAt(0)! <= 0xff || /[\uFF61-\uFF9F]/u.test(c) ? 1 : 2), 0);
+  const wide = cp932DoubleByte();
+  let width = 0;
+  for (const c of value) width += wide.has(c) ? 2 : 1;
+  return width;
 }
 
 export function conditionalQuestion(source: string, start: number): number {
