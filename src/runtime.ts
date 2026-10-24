@@ -877,7 +877,7 @@ export class Runtime {
   /** Definitions of the runtime-made and animated sprites an html string shows, for the browser to paint. */
   private htmlSprites(html: string): Record<string, SpriteDefinition> | undefined {
     let found: Record<string, SpriteDefinition> | undefined;
-    for (const match of html.matchAll(/\bsrc\s*=\s*(?:'([^']*)'|"([^"]*)")/gi)) {
+    for (const match of html.matchAll(/\bsrcb?\s*=\s*(?:'([^']*)'|"([^"]*)")/gi)) {
       const name = match[1] ?? match[2]!;
       if (found?.[name]) continue;
       const sprite = this.sprite(name);

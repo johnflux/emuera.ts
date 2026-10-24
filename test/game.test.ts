@@ -156,8 +156,16 @@ PRINTFORML {RESULT} {DT_CELL_GET("saveAchievements", RESULT:1, "claimed", 1)} {D
   assert.deepEqual(tables.output.filter((item) => item.type === "text").map((item) => item.text), [
     "75 7", "1", "Introducing Yourself", "\u00a55,000", "1 1 1",
   ]);
-  const demo = new Runtime(demoGame(game)).start();
-  assert.equal(demo.status, "waiting", JSON.stringify(demo.error));
+  const demo = new Runtime(demoGame(game));
+  const menu = demo.start();
+  assert.equal(menu.status, "waiting", JSON.stringify(menu.error));
+  // The portraits page redraws in place: every input clears the page's previous output.
+  for (const value of ["5", "1001", "11", "20", "22", "21", "99"]) {
+    const step = demo.input(value);
+    assert.equal(step.status, "waiting", `${value}: ${JSON.stringify(step.error)}`);
+    if (value !== "5" && value !== "99") assert.ok(step.output.some((item) => item.type === "clear" && item.count > 0), value);
+  }
+  assert.equal(demo.input("0").status, "halted");
 });
 
 test("OBJ framework intrinsics return what the ERB framework returns", {

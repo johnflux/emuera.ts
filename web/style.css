@@ -99,6 +99,9 @@ a { color: #8ddaff; }
 .sprite { display: inline-block; position: relative; height: 0; vertical-align: top; }
 .sprite-clip { position: absolute; left: 0; overflow: hidden; }
 .sprite img, .sprite canvas { position: absolute; max-width: none; }
+.sprite-hover { visibility: hidden; }
+.screen.is-active :is(.has-tooltip, button.choice):is(:hover, :focus-visible) .sprite-hover { visibility: visible; }
+.screen.is-active :is(.has-tooltip, button.choice):is(:hover, :focus-visible) .sprite-normal { visibility: hidden; }
 .shape-rect { position: relative; height: 1em; vertical-align: text-top; }
 .shape-rect > span { position: absolute; background: currentColor; }
 .missing { color: #ff9d9d; font-size: 12px; }

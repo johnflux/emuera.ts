@@ -22,7 +22,9 @@ menu ("Re-customize yourself") before the day-to-day game loop. Pre-defined-char
 selection and loading existing saves are not yet supported end to end.
 Unsupported operations stop with their source filename and line.
 The separate conformance demo is an original ERB program exercising the supported
-subset; it is not the game's title screen.
+subset; it is not the game's title screen. Its character-portraits page composites the
+game's highres sprites, swaps to a smile on hover (`srcb`), toggles face close-ups when the current
+target is clicked again, and redraws in place with `CLEARLINE`, the way the game's own menus do.
 
 ## Run
 
@@ -414,7 +416,8 @@ declarations and the expression evaluator. No single routine dominates.
   pixels. Both are scaled from the configured line height (`一行の高さ`) to the
   terminal's line height. Negative sizes flip the image. A picture inside a
   button or tooltip element highlights the whole picture on hover, and its
-  tooltip opens below the picture. Unsupported tags and
+  tooltip opens below the picture; an `srcb` picture replaces `src` while the
+  pointer is over the button, as in Emuera. Unsupported tags and
   missing images show errors.
 - Graphics (`GCREATE`, `GCREATEFROMFILE`, `GCLEAR`, `GSETBRUSH`, `GFILLRECTANGLE`,
   `GSETCOLOR`, `GDRAWSPRITE`, `GDRAWG`, `GDRAWGWITHMASK`, `GDISPOSE`) build

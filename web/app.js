@@ -568,60 +568,72 @@ async function pictureCopy(picture) {
  * Emuera draws an image from the top of its line (offset by ypos) without changing the line's height; scripts print
  * blank lines to make room. So the holder only takes the image's width and the picture overflows downwards.
  */
-async function image(source, token, suppliedSprite, scale = imageScale()) {
+async function image(source, token, suppliedSprite, scale = imageScale(), suppliedHover) {
   const holder = document.createElement("span");
   holder.className = "sprite";
-  const clip = document.createElement("span");
-  clip.className = "sprite-clip";
   const name = source.getAttribute("src");
   if (!name) throw new Error("Image has no src");
+  const hover = source.getAttribute("srcb");
+  // Builds one clipped picture; src and srcb (the mouse-over picture) share the img's size and ypos.
+  const clipFor = async (name, supplied) => {
+    let promise = supplied ? Promise.resolve(supplied) : sprites.get(name);
+    if (!promise) {
+      promise = api(`/api/sprite?name=${encodeURIComponent(name)}`);
+      sprites.set(name, promise);
+    }
+    const sprite = await promise;
+    if (token !== generation) return undefined;
+    // img is the whole source (sheet or painted canvas); sprite.x/y/width/height crop it.
+    let img, naturalWidth, naturalHeight, layers = [];
+    if (sprite.frames?.length) {
+      // An animation: every frame is a picture of the sprite's size, stacked and shown in turn.
+      layers = await Promise.all(sprite.frames.map((frame) => pictureCopy(frame.picture)));
+      [img] = layers;
+      [naturalWidth, naturalHeight] = [img.width, img.height];
+    } else if (sprite.picture) {
+      // A runtime-made sprite (SPRITECREATE), or an animation that has no frames yet.
+      img = await pictureCopy(sprite.picture);
+      [naturalWidth, naturalHeight] = [img.width, img.height];
+    } else {
+      img = document.createElement("img");
+      img.alt = name;
+      await loadImage(img, sprite.url);
+      [naturalWidth, naturalHeight] = [img.naturalWidth, img.naturalHeight];
+    }
+    if (token !== generation) return undefined;
+    const width = sprite.width || naturalWidth;
+    const height = sprite.height || naturalHeight;
+    const signedHeight = sizeAttribute(source.getAttribute("height") || null, metrics.fontSize * scale, scale) || metrics.fontSize * scale;
+    const signedWidth = sizeAttribute(source.getAttribute("width") || null, 0, scale) || width / height * Math.abs(signedHeight);
+    // Negative sizes flip the picture in place.
+    const targetHeight = Math.abs(signedHeight), targetWidth = Math.abs(signedWidth);
+    const clip = document.createElement("span");
+    clip.className = "sprite-clip";
+    Object.assign(clip.style, { top: `${sizeAttribute(source.getAttribute("ypos"), 0, scale)}px`, width: `${targetWidth}px`, height: `${targetHeight}px` });
+    if (signedWidth < 0 || signedHeight < 0) clip.style.transform = `scale(${Math.sign(signedWidth)}, ${Math.sign(signedHeight)})`;
+    for (const layer of layers.length ? layers : [img]) {
+      layer.style.width = `${naturalWidth * targetWidth / width}px`;
+      layer.style.height = `${naturalHeight * targetHeight / height}px`;
+      layer.style.left = `${-sprite.x * targetWidth / width}px`;
+      layer.style.top = `${-sprite.y * targetHeight / height}px`;
+      clip.append(layer);
+    }
+    return { clip, layers, targetWidth, delays: sprite.frames?.map((frame) => frame.delay) ?? [] };
+  };
   const draw = async () => {
     try {
-      let promise = suppliedSprite ? Promise.resolve(suppliedSprite) : sprites.get(name);
-      if (!promise) {
-        promise = api(`/api/sprite?name=${encodeURIComponent(name)}`);
-        sprites.set(name, promise);
+      const [main, over] = await Promise.all([clipFor(name, suppliedSprite), hover ? clipFor(hover, suppliedHover) : undefined]);
+      if (!main || token !== generation) return;
+      holder.style.width = `${main.targetWidth}px`;
+      holder.append(main.clip);
+      animate(name, holder, main.layers, main.delays, token);
+      if (over) {
+        // Shown instead of src while the pointer is over the enclosing button (CSS), as Emuera does.
+        over.clip.classList.add("sprite-hover");
+        main.clip.classList.add("sprite-normal");
+        holder.append(over.clip);
+        animate(hover, holder, over.layers, over.delays, token);
       }
-      const sprite = await promise;
-      if (token !== generation) return;
-      // img is the whole source (sheet or painted canvas); sprite.x/y/width/height crop it.
-      let img, naturalWidth, naturalHeight, layers = [];
-      if (sprite.frames?.length) {
-        // An animation: every frame is a picture of the sprite's size, stacked and shown in turn.
-        layers = await Promise.all(sprite.frames.map((frame) => pictureCopy(frame.picture)));
-        if (token !== generation) return;
-        [img] = layers;
-        [naturalWidth, naturalHeight] = [img.width, img.height];
-      } else if (sprite.picture) {
-        // A runtime-made sprite (SPRITECREATE), or an animation that has no frames yet.
-        img = await pictureCopy(sprite.picture);
-        if (token !== generation) return;
-        [naturalWidth, naturalHeight] = [img.width, img.height];
-      } else {
-        img = document.createElement("img");
-        img.alt = name;
-        await loadImage(img, sprite.url);
-        [naturalWidth, naturalHeight] = [img.naturalWidth, img.naturalHeight];
-      }
-      if (token !== generation) return;
-      const width = sprite.width || naturalWidth;
-      const height = sprite.height || naturalHeight;
-      const signedHeight = sizeAttribute(source.getAttribute("height") || null, metrics.fontSize * scale, scale) || metrics.fontSize * scale;
-      const signedWidth = sizeAttribute(source.getAttribute("width") || null, 0, scale) || width / height * Math.abs(signedHeight);
-      // Negative sizes flip the picture in place.
-      const targetHeight = Math.abs(signedHeight), targetWidth = Math.abs(signedWidth);
-      holder.style.width = `${targetWidth}px`;
-      Object.assign(clip.style, { top: `${sizeAttribute(source.getAttribute("ypos"), 0, scale)}px`, width: `${targetWidth}px`, height: `${targetHeight}px` });
-      if (signedWidth < 0 || signedHeight < 0) clip.style.transform = `scale(${Math.sign(signedWidth)}, ${Math.sign(signedHeight)})`;
-      holder.append(clip);
-      for (const layer of layers.length ? layers : [img]) {
-        layer.style.width = `${naturalWidth * targetWidth / width}px`;
-        layer.style.height = `${naturalHeight * targetHeight / height}px`;
-        layer.style.left = `${-sprite.x * targetWidth / width}px`;
-        layer.style.top = `${-sprite.y * targetHeight / height}px`;
-        clip.append(layer);
-      }
-      animate(name, holder, layers, sprite.frames?.map((frame) => frame.delay) ?? [], token);
     } catch (error) {
       if (token !== generation) return;
       holder.className = "missing";
@@ -642,7 +654,7 @@ async function renderHtml(markup, parent, sprites) {
     if (node.nodeType === Node.TEXT_NODE) { destination.append(document.createTextNode(node.textContent)); return; }
     if (!(node instanceof Element)) return;
     let element;
-    if (node.tagName === "IMG") element = await image(node, token, sprites?.[node.getAttribute("src")]);
+    if (node.tagName === "IMG") element = await image(node, token, sprites?.[node.getAttribute("src")], undefined, sprites?.[node.getAttribute("srcb")]);
     else if (node.tagName === "SHAPE") {
       const type = node.getAttribute("type")?.toLowerCase();
       const fontSize = Number.parseFloat(getComputedStyle(terminal).fontSize);
