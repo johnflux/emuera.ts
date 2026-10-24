@@ -90,7 +90,7 @@ a { color: #8ddaff; }
 .screen.is-active .has-tooltip:hover, .screen.is-active .has-tooltip:focus-visible { background-color: #ffffff12; }
 /* A picture button highlights its picture rather than the line it hangs from. */
 .screen.is-active .has-tooltip:has(.sprite-clip):is(:hover, :focus-visible), .screen.is-active button.choice:has(.sprite-clip):is(:hover, :focus-visible) { background-color: transparent; }
-.screen.is-active :is(.has-tooltip, button.choice):is(:hover, :focus-visible) .sprite-clip { background-color: #ffffff12; }
+.screen.is-active :is(.has-tooltip, button.choice):is(:hover, :focus-visible) .sprite-clip:not(.sprite-hover) { background-color: #ffffff12; }
 .screen.is-active .has-tooltip:hover .interactive-label, .screen.is-active .has-tooltip:focus-visible .interactive-label { text-decoration-color: #ddd; text-shadow: 0 0 4px currentColor; }
 .has-tooltip:focus-visible { outline: 1px dotted #aaa; outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { .has-tooltip, .line button.choice.has-tooltip, .has-tooltip .interactive-label { transition: none; } }
@@ -99,6 +99,13 @@ a { color: #8ddaff; }
 .sprite { display: inline-block; position: relative; height: 0; vertical-align: top; }
 .sprite-clip { position: absolute; left: 0; overflow: hidden; }
 .sprite img, .sprite canvas { position: absolute; max-width: none; }
+/* The selected character's picture (TARGET): a soft aqua glow behind it and a bar beneath, matching the game's aqua name. */
+.screen.is-active button.choice.is-target .sprite-clip:not(.sprite-hover) { background: radial-gradient(ellipse 60% 55% at 50% 60%, #66ffff2e, #66ffff0a 70%, transparent); box-shadow: inset 0 -3px 0 #66ffffb0; border-radius: 6px; }
+.screen.is-active button.choice.is-target:is(:hover, :focus-visible) .sprite-clip:not(.sprite-hover) { background-color: #ffffff12; }
+/* The other characters' pictures are slightly faded and desaturated; hovering one restores it. */
+.screen.is-active button.choice.is-not-target .sprite-clip { opacity: .8; filter: grayscale(.45); transition: opacity 180ms ease, filter 180ms ease; }
+.screen.is-active button.choice.is-not-target:is(:hover, :focus-visible) .sprite-clip { opacity: 1; filter: none; }
+@media (prefers-reduced-motion: reduce) { .screen.is-active button.choice.is-not-target .sprite-clip { transition: none; } }
 .sprite-hover { visibility: hidden; }
 .screen.is-active :is(.has-tooltip, button.choice):is(:hover, :focus-visible) .sprite-hover { visibility: visible; }
 .screen.is-active :is(.has-tooltip, button.choice):is(:hover, :focus-visible) .sprite-normal { visibility: hidden; }

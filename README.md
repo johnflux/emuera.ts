@@ -127,7 +127,13 @@ clicked choices and single-character input); rejected input stays editable and
 does not enter the scrollback. Echoed input counts as a logical line for
 `LINECOUNT` and `CLEARLINE`. `WAIT` continues without adding an input echo.
 While waiting at `WAIT`, clicking the terminal also continues (in addition to
-Enter or the Continue button). Links and text-selection clicks do not advance.
+Enter or the Continue button). Links and drags that select text do not
+advance; any other click does, clearing a leftover selection (for example a
+word picked by a double click), and repeated clicks at one spot don't select
+words while waiting.
+Clicking a disabled choice (any choice while waiting, or one on an older
+screen) counts as a terminal click: browsers send no click event for disabled
+buttons, so the client detects the press and release itself.
 A terminal click (or Enter) made while a step is still running is remembered:
 if that step ends at a click-to-continue wait, it continues straight away.
 Only one is kept, and it is discarded if the step ends at any other input.
@@ -417,7 +423,12 @@ declarations and the expression evaluator. No single routine dominates.
   terminal's line height. Negative sizes flip the image. A picture inside a
   button or tooltip element highlights the whole picture on hover, and its
   tooltip opens below the picture; an `srcb` picture replaces `src` while the
-  pointer is over the button, as in Emuera. Unsupported tags and
+  pointer is over the button, as in Emuera. The game marks the selected
+  character (`TARGET`) only by recolouring its name, so every step also reports
+  `TARGET` and the client gives the picture button whose value is
+  `1000 + TARGET` (the game's picture-button convention) an `is-target` class,
+  styled with an aqua glow and underline. The other characters' pictures get
+  `is-not-target` and are slightly faded and desaturated until hovered. Unsupported tags and
   missing images show errors.
 - Graphics (`GCREATE`, `GCREATEFROMFILE`, `GCLEAR`, `GSETBRUSH`, `GFILLRECTANGLE`,
   `GSETCOLOR`, `GDRAWSPRITE`, `GDRAWG`, `GDRAWGWITHMASK`, `GDISPOSE`) build

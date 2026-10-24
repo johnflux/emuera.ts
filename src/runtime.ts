@@ -82,6 +82,8 @@ export interface Snapshot {
   input: InputRequest | null;
   error: Diagnostic | null;
   title: string;
+  /** The TARGET character index, so the client can mark that character's picture. */
+  target: number;
 }
 interface RoutineInfo {
   returnType: "integer" | "string" | undefined;
@@ -1066,7 +1068,7 @@ export class Runtime {
         this.deferred = [];
         if (next.done) {
           this.finished = true;
-          return { status: "halted", output, input: null, error: null, title: this.windowTitle() };
+          return { status: "halted", output, input: null, error: null, title: this.windowTitle(), target: this.currentTarget() };
         }
         if ("input" in next.value) {
           if (this.skipDisplay) {
@@ -1075,7 +1077,7 @@ export class Runtime {
           }
           this.pending = next.value.input;
           this.waits++;
-          return { status: "waiting", output, input: this.pending, error: null, title: this.windowTitle() };
+          return { status: "waiting", output, input: this.pending, error: null, title: this.windowTitle(), target: this.currentTarget() };
         }
         if (next.value === SKIPPED) continue;
         bytes += JSON.stringify(next.value.output).length;
@@ -1088,8 +1090,11 @@ export class Runtime {
       this.deferred = [];
       this.finished = true;
       this.iterator.return(undefined);
-      return { status: "error", output, input: null, error: error.diagnostic(), title: this.windowTitle() };
+      return { status: "error", output, input: null, error: error.diagnostic(), title: this.windowTitle(), target: this.currentTarget() };
     }
+  }
+  private currentTarget(): number {
+    return Number(this.globals.get("TARGET", [], this.context(this.globals)));
   }
   private windowTitle(): string {
     return text(this.globals.get("WINDOW_TITLE", [], this.context(this.globals)));

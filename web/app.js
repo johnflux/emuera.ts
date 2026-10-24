@@ -790,6 +790,25 @@ async function expire() {
     }
   }
 }
+/**
+ * The game only recolours the selected character's name. Its picture buttons send 1000 + character index
+ * (IMAGE.ERB, USERCOM.ERB), so the picture of the current TARGET is marked for styling.
+ */
+const TARGET_BUTTON_BASE = 1000;
+function markTarget(target) {
+  for (const button of outputRoot.querySelectorAll("button.choice:is(.is-target, .is-not-target)"))
+    button.classList.remove("is-target", "is-not-target");
+  if (!Number.isInteger(target) || target < 0) return;
+  const value = String(TARGET_BUTTON_BASE + target);
+  const pictures = [...outputRoot.querySelectorAll(".screen.is-active button.choice:has(.sprite)")]
+    .filter((button) => Math.floor(Number(button.dataset.value) / TARGET_BUTTON_BASE) === 1);
+  // Layered pictures (effects drawn over the body) are further buttons with the same value; mark only the base.
+  const selected = pictures.find((button) => button.dataset.value === value);
+  if (!selected) return;
+  selected.classList.add("is-target");
+  // Other characters' pictures (all their layers) are dimmed so the selection stands out.
+  for (const button of pictures) if (button.dataset.value !== value) button.classList.add("is-not-target");
+}
 async function renderSnapshot(snapshot, advanceScreen) {
   hideTooltip();
   document.title = snapshot.title || "Emuera.ts";
@@ -888,6 +907,7 @@ async function renderSnapshot(snapshot, advanceScreen) {
       currentLine = null;
     }
   }
+  markTarget(snapshot.target);
   const revived = outputRoot.querySelectorAll(".screen.is-active button.choice.is-revived");
   if (revived.length && outputRoot.querySelector(".screen.is-active button.choice:not(.is-revived)"))
     revived.forEach((button) => { button.classList.replace("is-revived", "is-stale"); });
@@ -1011,14 +1031,49 @@ async function submit(value, selectedChoice = null) {
     runQueuedContinue();
   }
 }
+function clickToContinue() {
+  if (busy && !expiring) { if (session) queueContinue(); return; }
+  if (input?.kind !== "wait") return;
+  void submit("");
+}
+// A click continues unless it was a drag that selected text. Selection state alone can't decide: a double click
+// leaves a word selected, and clicks inside an existing selection keep it, so later clicks would never count.
+const DRAG_DISTANCE = 4;
+let press = null;
+terminal.addEventListener("pointerdown", (event) => {
+  press = event.button === 0 ? {
+    x: event.clientX,
+    y: event.clientY,
+    // Browsers dispatch no click at all for disabled buttons (every choice while waiting, and those on older
+    // screens), so a press and release on the same disabled button counts as a click on the terminal.
+    disabled: event.target instanceof Element ? event.target.closest("button:disabled") : null,
+  } : null;
+});
+function dragged(event) {
+  return !!press && Math.hypot(event.clientX - press.x, event.clientY - press.y) > DRAG_DISTANCE;
+}
+// macOS counts clicks at the same spot within the system double-click interval as double/triple clicks, which
+// select a word or line. While a click would continue, skip that selection and drop any earlier one.
+terminal.addEventListener("mousedown", (event) => {
+  if (event.detail > 1 && event.button === 0 && ((busy && !expiring) || input?.kind === "wait")) {
+    event.preventDefault();
+    getSelection()?.removeAllRanges();
+  }
+});
 terminal.addEventListener("click", (event) => {
   if (event.defaultPrevented) return;
   if (event.target instanceof Element && event.target.closest("button, a[href]")) return;
   const selection = getSelection();
-  if (selection && !selection.isCollapsed) return;
-  if (busy && !expiring) { if (session) queueContinue(); return; }
-  if (input?.kind !== "wait") return;
-  void submit("");
+  if (selection && !selection.isCollapsed) {
+    if (dragged(event)) return;
+    if ((busy && !expiring) || input?.kind === "wait") selection.removeAllRanges();
+  }
+  clickToContinue();
+});
+terminal.addEventListener("pointerup", (event) => {
+  const pressed = press?.disabled;
+  if (!pressed || event.button !== 0 || dragged(event) || !(event.target instanceof Element) || event.target.closest("button:disabled") !== pressed) return;
+  clickToContinue();
 });
 document.querySelector("#input-form").addEventListener("submit", (event) => {
   event.preventDefault();

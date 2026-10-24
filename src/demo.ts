@@ -88,7 +88,6 @@ ENDIF
 #DIMS NAME, 3 = "Aunn", "Merlin", "Kokoro"
 #DIMS FACE, 4 = "通常", "笑い", "怒り", "驚き"
 #DIMS FACE_LABEL, 4 = "Normal", "Smile", "Angry", "Surprised"
-#DIM TARGET
 #DIM EXPRESSION
 #DIM BLUSH
 #DIM LAYERED
@@ -108,6 +107,8 @@ IF !SPRITECREATED("highres_120_本体_通常")
   RETURN
 ENDIF
 LINE_HEIGHT = GETCONFIG("一行の高さ")
+; The selection is the global TARGET, as in the game, so the client can mark the selected picture
+TARGET = 0
 ; Redraw in place: erase everything printed since the page began, as the game's own menus do
 START = LINECOUNT
 $REDRAW
