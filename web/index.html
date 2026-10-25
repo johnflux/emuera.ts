@@ -59,6 +59,14 @@
       <feFlood x="2" y="2" width="1" height="1"/><feComposite width="4" height="4"/><feTile result="grid"/>
       <feComposite in="SourceGraphic" in2="grid" operator="in"/><feMorphology operator="dilate" radius="2"/>
     </filter>
+    <!-- Night clock (.era-clock under a night sky): the white dial turns dark grey and the dark numbers and hands glow radium green. -->
+    <filter id="era-radium" color-interpolation-filters="sRGB">
+      <feColorMatrix in="SourceGraphic" type="matrix" result="dial" values="-.0789 -.2653 -.0268 0 .54  -.1735 -.5836 -.0589 0 1  -.0489 -.1645 -.0166 0 .43  0 0 0 1 0"/>
+      <feColorMatrix in="SourceGraphic" type="matrix" result="ink" values="0 0 0 0 .54  0 0 0 0 1  0 0 0 0 .43  -.2126 -.7152 -.0722 0 1"/>
+      <feComposite in="ink" in2="SourceAlpha" operator="in" result="ink"/>
+      <feGaussianBlur in="ink" stdDeviation="1.6" result="glow"/>
+      <feMerge><feMergeNode in="dial"/><feMergeNode in="glow"/></feMerge>
+    </filter>
   </svg>
 </body>
 </html>
