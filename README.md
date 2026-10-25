@@ -173,7 +173,9 @@ across screen boundaries, not on the screen wrappers. When `CLEARLINE` removes
 output back into a retired screen (for example a "You simply can't enter." `WAIT`
 message that is cleared before the script re-asks the same `INPUT`), that screen
 becomes active again and its choices work. As in Emuera, those revived choices
-stay valid only until the script prints new choices; after that they are disabled.
+stay valid only until the script prints new choices; after that they are disabled,
+and the revived output (up to where the new output starts) moves back into a
+history screen of its own, greyed like any older screen.
 Game HTML `title` descriptions (including trait `<nonbutton>` tags) appear in
 immediate, multiline tooltips on hover or keyboard focus. Descriptions are plain
 text, not executable HTML. Tooltip targets have a `has-tooltip` class and a subtle

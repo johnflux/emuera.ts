@@ -86,6 +86,9 @@ main { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 1
 .choice .interactive-label { text-decoration: underline; text-decoration-color: slategray; text-decoration-thickness: from-font; text-underline-offset: .15em; }
 .line button.choice:disabled { opacity: .5; }
 .screen.is-active button.choice:disabled { opacity: 1; }
+/* Choices left over from before a CLEARLINE, once newer ones are printed (only those still sharing a box with new output). */
+.screen.is-active button.choice.is-stale { opacity: .4; filter: grayscale(1); }
+.screen.is-active .is-stale.has-tooltip:hover { background-color: transparent; }
 a { color: #8ddaff; }
 .has-tooltip, .line button.choice.has-tooltip { cursor: help; text-decoration: none; transition: background-color 180ms ease; }
 .has-tooltip .interactive-label { text-decoration-line: underline; text-decoration-style: dashed; text-decoration-color: #777; text-decoration-thickness: 1px; text-underline-offset: .2em; transition: text-decoration-color 180ms ease, text-shadow 180ms ease; }

@@ -244,8 +244,28 @@ function reviveScreen(group) {
     else element.tabIndex = 0;
   });
   group.querySelectorAll("button.choice").forEach((button) => { button.classList.add("is-revived"); });
+  group.querySelectorAll(".line").forEach((line) => { line.classList.add("is-revived-line"); });
   currentScreen = group;
   currentLine = null;
+}
+// Once a revived screen's choices go stale (new choices were printed after them), its leading output that is wholly
+// from before the revival moves to a history screen of its own, so it looks and behaves like any older screen.
+function splitStaleOutput() {
+  for (const group of outputRoot.querySelectorAll(".screen.is-active")) {
+    const stale = [];
+    for (const child of group.children) {
+      const lines = child.matches(".line") ? [child] : [...child.querySelectorAll(".line")];
+      if (!lines.length || !lines.every((line) => line.classList.contains("is-revived-line"))) break;
+      stale.push(child);
+    }
+    group.querySelectorAll(".is-revived-line").forEach((line) => { line.classList.remove("is-revived-line"); });
+    if (!stale.length) continue;
+    const history = document.createElement("div");
+    history.className = "screen is-active";
+    history.append(...stale);
+    group.before(history);
+    retireScreen(history);
+  }
 }
 function hideTooltip() {
   tooltipTarget?.removeAttribute("aria-describedby");
@@ -268,7 +288,7 @@ function describe(element, description) {
   element.dataset.tooltip = description;
   if (!element.matches("button, a[href]")) element.tabIndex = 0;
   function show() {
-    if (busy || !element.closest(".screen.is-active")) return;
+    if (busy || !element.closest(".screen.is-active") || element.matches(".is-stale")) return;
     hideTooltip();
     tooltipTarget = element;
     tooltip.textContent = description;
@@ -1029,8 +1049,10 @@ async function renderSnapshot(snapshot, advanceScreen) {
   }
   markTarget(snapshot.target);
   const revived = outputRoot.querySelectorAll(".screen.is-active button.choice.is-revived");
-  if (revived.length && outputRoot.querySelector(".screen.is-active button.choice:not(.is-revived)"))
+  if (revived.length && outputRoot.querySelector(".screen.is-active button.choice:not(.is-revived)")) {
     revived.forEach((button) => { button.classList.replace("is-revived", "is-stale"); });
+    splitStaleOutput();
+  }
   session = snapshot.session;
   input = snapshot.input;
   if (snapshot.error) {
