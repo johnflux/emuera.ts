@@ -523,7 +523,7 @@ symlinks). No game-supplied scripts or event attributes are attached to the DOM.
 - `src/compiler.ts`, `src/runtime.ts`: control-flow compilation and execution.
 - `src/compatibility.ts`: unsupported-feature inventory.
 - `src/server.ts`: HTTP/session/resource adapter.
-- `web/`: terminal renderer and input client; `web/areas/` holds the main screen's per-area header art (served at `/areas/*.svg`).
+- `web/`: terminal renderer and input client; `web/areas/` holds the main screen's per-area header art (served at `/areas/*.svg`); `web/maps/` takes optional drop-in pictures for the text maps (see [docs/hotpatches.md](docs/hotpatches.md#map-pictures)).
 - `test/`: conformance, HTTP, loader and bundled-game regression tests.
 
 Next work should follow the verified new-game path into housing's colored-map

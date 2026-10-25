@@ -734,6 +734,103 @@ async function image(source, token, suppliedSprite, scale = imageScale(), suppli
   pendingImages.push(draw());
   return holder;
 }
+/**
+ * Hotpatch extension: map pictures. The map renderers (hotpatch/MOVE_MAP.ERB) wrap a text map in
+ * <era-open class='era-map-art era-map-key-<key>'>. When web/maps/<key>.<ext> exists, the text map is swapped for the
+ * picture and its room buttons are laid over it, each where its number sits in the text map (the picture is taken to
+ * cover the text map's area), unless web/maps/<key>.json places it: { "width": px, "rooms": { "<number>": [[x%, y%], …] } }.
+ * Listing a number there replaces all its automatic positions; [] hides it.
+ */
+const MAP_TEXT_KEY = "era-typescript.mapText";
+let mapManifest = {};
+/** Marks new, complete map boxes; the ones with a picture stay hidden while it loads, to be laid out once shown. */
+async function prepareMapPictures() {
+  const boxes = [...outputRoot.querySelectorAll(".era-map-art:not([data-map])")].filter((box) => box.dataset.closed);
+  if (!boxes.length) return;
+  // Fetched afresh for each new map so pictures dropped into web/maps show up without reloading.
+  try { mapManifest = await api("/api/maps"); } catch (error) { console.warn("Map pictures unavailable:", error); }
+  for (const box of boxes) {
+    const name = [...box.classList].find((name) => name.startsWith("era-map-key-"))?.slice("era-map-key-".length) ?? "";
+    box.dataset.map = name;
+    const entry = mapManifest[name];
+    if (!entry?.image) continue;
+    box.classList.add("era-map-pending");
+    const img = document.createElement("img");
+    img.alt = `Map (${name})`;
+    box.mapPicture = { img, entry };
+    pendingImages.push(loadImage(img, entry.image).catch((error) => { box.mapPicture.error = `${entry.image}: ${error.message}`; }));
+  }
+}
+/** Lays the room buttons over each pending map's picture, measuring where they sit in the (hidden) text map. */
+function layoutMapPictures() {
+  for (const box of terminal.querySelectorAll(".era-map-art.era-map-pending")) {
+    box.classList.remove("era-map-pending");
+    const { img, entry, error } = box.mapPicture;
+    const rows = [...box.children].filter((child) => child.matches(".line:not(.era-marker)"));
+    if (error) {
+      const note = document.createElement("div");
+      note.className = "missing";
+      note.textContent = `[Map picture ${error}]`;
+      box.append(note);
+      continue;
+    }
+    if (!rows.length) continue;
+    const area = box.getBoundingClientRect();
+    const top = rows[0].getBoundingClientRect().top, height = rows.at(-1).getBoundingClientRect().bottom - top;
+    const picture = document.createElement("div");
+    picture.className = "era-map-picture";
+    const layout = entry.layout && typeof entry.layout === "object" ? entry.layout : {};
+    picture.style.width = `${Number(layout.width) > 0 ? Number(layout.width) : box.offsetWidth}px`;
+    picture.append(img);
+    const problems = entry.error ? [entry.error] : [];
+    const placed = new Set();
+    const badge = (button, x, y) => {
+      const label = button.textContent.trim().replace(/[０-９]/g, (digit) => String.fromCharCode(digit.charCodeAt(0) - 0xfee0));
+      const copy = choice(label, button.dataset.value, button.dataset.tooltip ?? "");
+      copy.classList.add("era-map-room");
+      const inked = [...button.querySelectorAll("*")].find((node) => node.textContent.trim());
+      copy.style.color = getComputedStyle(inked ?? button).color;
+      copy.style.left = `${x}%`;
+      copy.style.top = `${y}%`;
+      picture.append(copy);
+    };
+    for (const button of box.querySelectorAll(".line button.choice")) {
+      const value = button.dataset.value;
+      const fixed = layout.rooms?.[value];
+      if (Array.isArray(fixed)) {
+        if (placed.has(value)) continue;
+        placed.add(value);
+        for (const position of fixed)
+          if (Array.isArray(position) && position.length === 2 && position.every(Number.isFinite)) badge(button, position[0], position[1]);
+          else problems.push(`web/maps/${box.dataset.map}.json: rooms["${value}"] needs [x%, y%] pairs`);
+        continue;
+      }
+      const at = button.getBoundingClientRect();
+      badge(button, (at.left + at.width / 2 - area.left) / area.width * 100, (at.top + at.height / 2 - top) / height * 100);
+    }
+    if (problems.length) {
+      const note = document.createElement("div");
+      note.className = "missing";
+      note.textContent = `[${problems.join("; ")}]`;
+      picture.append(note);
+    }
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "era-map-switch";
+    const show = (text) => {
+      box.classList.toggle("is-picture", !text);
+      toggle.textContent = text ? "Picture" : "Text map";
+      toggle.title = text ? "Show the map's picture" : "Show the game's text map";
+    };
+    toggle.addEventListener("click", () => {
+      const text = box.classList.contains("is-picture");
+      if (text) localStorage.setItem(MAP_TEXT_KEY, "1"); else localStorage.removeItem(MAP_TEXT_KEY);
+      show(text);
+    });
+    box.append(picture, toggle);
+    show(localStorage.getItem(MAP_TEXT_KEY) === "1");
+  }
+}
 const allowedTags = new Set(["P", "BR", "B", "STRONG", "I", "EM", "U", "S", "SPAN", "NOBR", "FONT", "NONBUTTON", "DIV"]);
 /**
  * Hotpatch extension (not Emuera HTML): era-* classes are styled by style.css; other class names are ignored so
@@ -857,6 +954,7 @@ async function render(snapshot, advanceScreen = false, fresh = false, keepFocus 
     terminal.replaceChildren(...staged.childNodes);
     outputRoot = terminal;
     pendingImages = [];
+    layoutMapPictures();
     terminal.removeAttribute("aria-busy");
     updateControls();
     if (followBottom) terminal.scrollTop = terminal.scrollHeight;
@@ -1048,6 +1146,7 @@ async function renderSnapshot(snapshot, advanceScreen) {
     continuedScreens = [];
   }
   markTarget(snapshot.target);
+  await prepareMapPictures();
   const revived = outputRoot.querySelectorAll(".screen.is-active button.choice.is-revived");
   if (revived.length && outputRoot.querySelector(".screen.is-active button.choice:not(.is-revived)")) {
     revived.forEach((button) => { button.classList.replace("is-revived", "is-stale"); });

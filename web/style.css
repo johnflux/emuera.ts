@@ -485,3 +485,60 @@ a { color: #8ddaff; }
 .era-shop-place { display: block; margin-bottom: 8px; font-size: 1.1em; font-weight: bold; }
 .era-shop-place .era-sub { display: block; font-size: .85em; font-weight: normal; }
 .era-shop :is(.era-shop-wake, .era-shop-chips, .era-main-header) .interactive-label { text-decoration-line: none; }
+/* Maps (hotpatch/MOVE_MAP.ERB): a text map's rows never wrap; with a picture in web/maps it replaces the rows and the
+   room numbers become badges laid over it (app.js layoutMapPictures). */
+.era-map-art { position: relative; width: max-content; max-width: 100%; }
+.era-map-art > .line { white-space: pre; overflow-wrap: normal; }
+.era-map-art.era-map-pending { visibility: hidden; }
+.era-map-art.is-picture > .line:not(.era-marker) { display: none; }
+.era-map-art:not(.is-picture) > .era-map-picture { display: none; }
+.era-map-picture { position: relative; max-width: 100%; }
+.era-map-picture > img { display: block; width: 100%; height: auto; border-radius: 6px; }
+.era-map-picture > button.choice.era-map-room { position: absolute; transform: translate(-50%, -50%); min-width: 1.7em; padding: 0 .35em;
+  font: inherit; font-size: .9em; line-height: 1.35; text-align: center; border: 1px solid currentColor; border-radius: 999px;
+  background: #000000b8; box-shadow: 0 1px 4px #000a; cursor: pointer; }
+.screen.is-active .era-map-picture > button.choice.era-map-room:enabled:is(:hover, :focus-visible) { background: #1d2a33; z-index: 1; }
+.era-map-picture > .missing { position: absolute; left: 4px; bottom: 4px; background: #000c; padding: 0 4px; }
+.era-map-switch { position: absolute; top: 4px; right: 4px; z-index: 2; padding: 0 8px; border: 1px solid #39434c; border-radius: 999px;
+  background: #182027d0; color: #9fb0bc; font: inherit; font-size: .8em; cursor: pointer; opacity: .6; }
+.era-map-art:hover > .era-map-switch, .era-map-switch:focus-visible { opacity: 1; }
+.era-map-art:not(.is-picture) > .era-map-switch { top: auto; bottom: 0; }
+/* The Move screen: page tabs and Back; the map card and the side card (where you are, where you can walk, senses). */
+.era-move { display: flex; flex-direction: column; gap: 0; max-width: 100cqi; margin: 4px 0; white-space: normal; }
+.era-move-header { position: relative; z-index: 1; display: flex; flex-wrap: wrap; align-items: flex-end; gap: 6px; margin-bottom: -1px; }
+.era-move-header .era-move-back { margin-bottom: 6px; }
+.era-move-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-right: auto; }
+.line button.choice.era-move-tab, .era-move-tab { display: inline-block; padding: 3px 12px; border: 1px solid #2a3138; border-radius: 8px 8px 0 0; border-bottom-color: transparent;
+  background: #111518; color: #9fb0bc; cursor: pointer; }
+.line button.choice.era-move-tab.era-move-current, .era-move-tab.era-move-current { background: #111518; border-color: #2a3138; border-bottom-color: #111518; box-shadow: inset 0 2px #8fc8ff; color: #e8f4ff; font-weight: bold; cursor: default; }
+.screen.is-active .line button.choice.era-move-tab:not(.era-move-current):enabled:is(:hover, :focus-visible) { color: #e8f4ff; border-color: #8ddaff; }
+.era-move-body { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; }
+.era-move-body > .era-move-map { border-top-left-radius: 0; }
+/* A steady size across the map's tabs: the pages' art differs, so the card is fixed and the art centred in it. */
+.era-move-map { flex: 0 1 auto; box-sizing: border-box; width: min(74em, 100%); min-height: 38em; display: flex; flex-direction: column; overflow-x: auto; }
+.era-move-map > .era-map-art { margin: auto; }
+.era-move-side { flex: 1 1 28ch; min-width: 26ch; display: flex; flex-direction: column; gap: 6px; }
+.era-move-side > .era-card-title { margin-bottom: 0; }
+.era-move-here { display: flex; align-items: baseline; gap: 8px; font-size: 1.15em; font-weight: bold; color: #b8f5b0; }
+.era-move-subtitle { margin-top: 6px; color: #8a98a3; font-size: .8em; text-transform: uppercase; letter-spacing: .05em; }
+.era-move-num { display: inline-block; min-width: 2.4ch; padding: 0 3px; border-radius: 4px; background: #222b31; color: #9fb0bc; font-size: .85em; font-weight: normal; text-align: center; }
+.era-move-dests { display: flex; flex-direction: column; gap: 2px; }
+.line button.choice.era-move-dest { display: flex; align-items: baseline; gap: 8px; padding: 2px 6px; border-radius: 6px; text-align: left; cursor: pointer; }
+.screen.is-active .line button.choice.era-move-dest:enabled:is(:hover, :focus-visible) { background: #1b252d; color: #fff; }
+.era-move-none, .era-move-note { color: #8a98a3; font-style: italic; }
+.era-move-key { margin-top: 6px; font-size: .9em; }
+.era-move-legend { margin-top: 8px; padding-top: 6px; border-top: 1px solid #2a3138; font-size: .9em; }
+.era-move-legend > .line { display: flex; flex-wrap: wrap; gap: 2px 14px; white-space: normal; }
+.era-move-legend > .line + .line:not(.era-marker) { margin-top: 3px; }
+.era-move-legend > .line:not(.era-marker):empty { display: none; }
+.screen.is-active .era-move-legend button.choice:enabled:is(:hover, :focus-visible) { color: #fff; text-decoration: underline; }
+.era-move :is(.era-move-header, .era-move-dests, .era-shop-chips) .interactive-label { text-decoration-line: none; }
+.era-move-tasks:not(:has(.line:not(.era-marker):not(:empty))) { display: none; }
+/* Going out (GO_OUT_MAP.ERB): the region map and Stroll, whose maps are smaller than the home maps. */
+.era-travel .era-move-map { width: min(52em, 100%); min-height: 42em; }
+.era-travel .era-move-side { flex-basis: 34ch; max-width: 52ch; }
+.era-move-area { color: #8a98a3; font-size: .9em; }
+.era-travel-time { margin-left: auto; padding-left: 16px; color: #8a98a3; font-size: .9em; white-space: nowrap; }
+.era-travel-time.era-travel-faster { color: #7ee08a; }
+.era-travel-time.era-travel-slower { color: #7c98e8; }
+.line button.choice.era-move-dest.era-travel-danger, .era-travel-danger .era-travel-time { color: #e07070; }

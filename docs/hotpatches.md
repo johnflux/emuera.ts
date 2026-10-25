@@ -62,8 +62,33 @@ Keep opens and closes balanced on every path, including early `RETURN`s.
 | `MAIN_SCREEN_COMMANDS.ERB` | `@SHOW_USERCOM` | The commands as chips grouped under "Interact with *target*" (Talk & Touch, Advances, Activities, Outing, More and the situational "While time is stopped" group) with the command filters as toggles colour-matched to their commands (petting pink, chores green, dialogue blue), each shown only when flipping it would change the listed actions (it tries each flag and restores it) and a ★ Stalk button (follow the target, only with a target), and a "Go & Manage" card for movement, management and settings, starting with "Look after yourself" (Have a Meal and Relax in the Bath, taken out of Activities; Dirtiness/Body Stains [801] is dropped, as the stains are shown on the cards); the condom/moan/standing settings only during a session, mischief, free use or stopped time. Closes the `era-main` layout. While time is stopped the whole screen freezes: frosted cards, desaturated meters (portraits stay in colour), an iced clock. The Petting toggle's tooltip notes that the game shows petting actions anyway while time is stopped, except Fingering and Anal Caress, which keep following it. The show/hide toggles for the status and commands (3001–3003), the Display Image / Display Settings options and the line padding are dropped. |
 | `MAIN_SCREEN_LOOK.ERB` | — | `HOTPATCH_SCENE` and `HOTPATCH_LOOK` split `@LOOK_AT` for the main screen: the room's chatter (ANOTHERTARGET_TALK, 情景描写) goes under the place title, and a verbatim copy of the clothes part goes in the character card, without the [Look] toggle, Display Image/Settings, the picture and the blank padding. `@LOOK_AT` itself is unchanged for its other callers. |
 | `SLEEP_MENU.ERB` | `@SHOW_SHOP` | The menu shown while you sleep, before waking, as panels in the main screen's style (`era-shop` layout): the header (sky, area landmark, a clock showing the waking time, the date, "Waking at" with Change [2400] and Calendar [3333] chips, and a large **Wake Up** [100] button); your card (funds, Sta/Ene/Vig/TSP meters, "Fainted"); a Home card (home and area, where you are sleeping if elsewhere, Home Settings [102] and Change Home [120]); "Records & Collections" and "System" cards with the menu grouped (You, Collections; Settings, Guides, Game); the tip at the bottom. Command numbers, the 4-hour minimum sleep check and the greying while fainted are the original's; USERSHOP is unchanged. The DRAWLINE rules and spacing lines are dropped. |
+| `MOVE_MAP.ERB` | `@COM400`, `@DRAW_COLOREDMAP`, `@DRAW_MAP` | The Move screen as a card: the map's pages as tabs joined to it (replacing the Change Map arrows; switching a tab, or the map colours, replaces the screen instead of adding another copy to the history), the map (centred in a card of fixed size, so switching pages doesn't resize it; larger maps still grow it), the detection colour key and the room legend (with its spacing kept, at the bottom), and beside it "You are here", a "Return to your room" shortcut, "Walk to" buttons for the adjacent rooms, the senses toggles (Y map colours, Z, X) and the move tasks. The map renderers wrap their rows in an `era-map-art` box keyed by map (see *Map pictures* below) and take an extra `BARE` argument that drops the "== page ==" heading; their other callers (moving home, going out, the region map) keep the heading and also get pictures. COM400's logic is the original's; the DRAWLINE rules and the [C] display-mode button are dropped. |
+| `GO_OUT_MAP.ERB` | `@OTHERREGIONS`, `@COM604` | The Go Out region map and the Explore (Stroll) area map in the same card layout as the Move screen. Region map: the Gensokyo map in a fixed-size card, and beside it "You are here", "Travel to" buttons for every other area with the travel time (minutes, or TSP when travelling in stopped time; dangerous routes in red with a tooltip), and the Time Stop / TSP Movement / Dangerous Paths travel options as toggles (only when travelling alone). Stroll: the area's map, "Walk to" buttons for its spots with their walking time (green when faster, blue when slower than usual, with a note explaining why) and the special warp marked ✧. The two screens are tabs of each other (the area's name and "Gensokyo"), with a Back chip; switching tabs, toggling an option, cancelling the "Use TSP?" question, or returning after a refused move replaces the screen instead of adding another copy to the history. The logic is the original's; the DRAWLINEFORM rules and the bracketed lists are dropped. Pictures come from the `field` and `odekake-<n>` map keys. |
 
 To iterate on the main screen, use the conformance demo's item 8 (Menu → Conformance demo, then `8`): it starts the
 game with the hotpatches already on its main screen, alone, with one, two or six people, with time stopped (alone or
 with company), with a sleeping partner, exhausted, or outdoors at night in the rain; scenario 10 stays on the sleep menu
 (before waking) instead. Restart the demo to pick another scenario.
+
+### Map pictures
+
+Any map can be shown as a picture instead of text art: put `web/maps/<key>.webp` (or `.svg`, `.png`, `.jpg`; the first
+of those wins) in place and reload. The keys are `hakurei-1`…`hakurei-4`, `temple-1`/`-2`, `sato-1`…`-4`,
+`koumakan-1`…`-4`, `tikurin-1`…`-3`, `forest-1`…`-4`, `meikai-1`…`-5`, `sanroku-1`…`-4`, `summit-1`…`-4`,
+`chireiden-1`…`-3`, `tuki-1`…`-4` (the Move screen's pages, from `MAP_VIEWING_NAME`), `odekake-0`…`odekake-10`
+(the going-out maps) and `field` (the region map). The page's box has the class `era-map-key-<key>`, so the key can
+be checked in the browser's inspector.
+
+The picture has no numbers: the client overlays the room buttons (keeping their detection colours and tooltips) where
+they sit in the text map, so a picture traced over a screenshot of the text map, at the same aspect ratio, needs
+nothing else. Otherwise add `web/maps/<key>.json`:
+
+```json
+{ "width": 780, "rooms": { "9": [[22, 50], [61, 41]], "6": [[70, 20]], "16": [] } }
+```
+
+`width` is the picture's width in pixels (default: the text map's); `rooms` maps a room's button value to the badge
+positions as percentages of the picture's width and height (several for a room drawn twice, such as an inset building's
+inside and outside; `[]` hides it, e.g. for the numbers in a legend column of the text art). Rooms not listed are placed
+automatically. A "Text map"/"Picture" switch on the picture flips between them (remembered by the browser), and a
+picture that fails to load falls back to the text with a note. The server lists the files at `/api/maps`.

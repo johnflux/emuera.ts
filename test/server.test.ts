@@ -89,6 +89,11 @@ test("HTTP UI, isolated sessions, real image bytes, sprite metadata, errors and 
     assert.equal(area.headers.get("content-type"), "image/svg+xml");
     assert.match(await area.text(), /^<svg /);
     assert.equal((await fetch(base + "/areas/99-nowhere.svg")).status, 404);
+    const maps = await fetch(base + "/api/maps");
+    assert.equal(maps.status, 200);
+    assert.equal(typeof await maps.json(), "object");
+    assert.equal((await fetch(base + "/maps/not-a-map.webp")).status, 404);
+    assert.equal((await fetch(base + "/maps/..%2fapp.js")).status, 404);
     const runtimeInfo = await (await fetch(base + "/api/runtime")).json();
     assert.equal(runtimeInfo.development, false);
     assert.equal(typeof runtimeInfo.instance, "string");

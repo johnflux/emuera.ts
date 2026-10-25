@@ -1,0 +1,470 @@
+;-------------------------------------------------------------------------------
+; Hotpatch for going out: the region map (ERB/MOVEMENTS/物件関連/OTHERREGION.ERB @OTHERREGIONS, used by Go Out [405]
+; and by Stroll's "Move to another area") and strolling around an area (ERB/コマンド関連/COMF/外出系/COMF604 散策する.ERB
+; @COM604).
+;
+; Both keep the original's logic and input handling; only their display is laid out like the Move screen
+; (MOVE_MAP.ERB): a tab naming the map (Stroll also has a "Gensokyo" tab for the region map, which in turn has a tab
+; back to the area) with Back, the map in a card (pictures from web/maps/field.* and web/maps/odekake-<area>.*), and
+; beside it where you are and the places you can go with their times (the region map's dangerous paths in red; a
+; Stroll time shortened by a shortcut or companion in green, lengthened in blue), then the travel options as toggles.
+; Toggling an option or coming back from the region map replaces the screen instead of adding a copy to the history.
+; Dropped: the DRAWLINEFORM rules and the bracketed number lists (the side card replaces them).
+;-------------------------------------------------------------------------------
+@OTHERREGIONS(ARGS)
+#DIM 現在地点
+#DIM 所要時間
+#DIM 現在地MAPID
+#DIM 目的地MAPID
+#DIM ANIMATION_SEED
+#DIM PREV_REDRAW
+#DIM 仮デート相手
+#DIM MultipleDates, 200
+#DIM NumberDates
+#DIM 時間停止ジャンプ
+#DIM DYNAMIC IS_DANGEROUS ;qol custom code
+;拠点のマップ表示をリセットしておく
+TFLAG:マップ切り替え = 0
+
+ANIMATION_SEED = 0
+;qol custom code, allow for consistent testing
+[IF_DEBUG]
+	IF ANIMATERECOLOREDMAPS
+		LOCAL = GETMILLISECOND()
+		ANIMATION_SEED = LOCAL / ANIMATERECOLOREDMAPS % 20
+	ENDIF
+[ENDIF]
+PREV_REDRAW = CURRENTREDRAW()
+
+;Map Animation Code
+$MAPANIMATION
+LINESTART = LINECOUNT
+SIF ANIMATERECOLOREDMAPS && !FLAG:70
+	ANIMATION_SEED ++
+
+;先にデート相手だけ決定しておく,三人以上には対応してません
+仮デート相手 = 0
+NumberDates = 0
+FOR LOCAL, 1, CHARANUM
+	IF CFLAG:LOCAL:同行
+		仮デート相手 = LOCAL
+		IF MOREDATE
+			MultipleDates:NumberDates = LOCAL
+			NumberDates += 1
+		ELSE
+			BREAK
+		ENDIF
+	ENDIF
+NEXT
+
+現在地MAPID = GET_MAPID(CFLAG:MASTER:現在位置)
+CALL HOTPATCH_REGION_SCREEN(ARGS, ANIMATION_SEED, 仮デート相手)
+;----------------------------------
+;Map Animation Code
+IF ANIMATERECOLOREDMAPS && !FLAG:70
+	REDRAW PREV_REDRAW
+	;qol custom code, keep synced with actual time
+	TINPUT ANIMATERECOLOREDMAPS - (GETMILLISECOND() % ANIMATERECOLOREDMAPS),1234,0,""
+ELSE
+	INPUT
+ENDIF
+
+;戻る
+IF RESULT == 100
+	;Hotpatch: back to the area's Stroll screen, which redraws itself
+	SIF ARGS == "散策する"
+		CLEARLINE LINECOUNT - LINESTART
+	RETURN RESULT
+;時間停止
+ELSEIF RESULT == 99 && 同行人数() == 0
+	IF FLAG:時間停止
+		FLAG:時間停止 = 0
+		;(天候パッチ)時刻・天候に応じて背景色を変更
+		IF FLAG:背景色推移 ;bugfix custom code
+		CALL SET_MAP_WEATHER_BGCOLOR
+		ELSE
+			RESETBGCOLOR
+		ENDIF
+	ELSE
+		FLAG:時間停止 = 1
+		SETBGCOLOR C_THE_WORLD
+	ENDIF
+ELSEIF RESULT == 199 && 同行人数() == 0 ;qol custom code
+	INVERTBIT FLAG:瞬間移動, AT_HOME(MASTER)
+ELSEIF RESULT == 198 && 同行人数() == 0 ;qol custom code
+	FLAG:DANGEROUS_TRAVEL = !FLAG:DANGEROUS_TRAVEL
+;帰宅
+ELSEIF RESULT == MAIN_MAP
+	IF FLAG:時間停止 && FLAG:デート相手
+		PRINTFORMW Returning home from date during Time Stop is not possible, please resume time.
+	ELSE
+		CALL 外出先から帰宅
+		SIF RESULT == -1 ;qol custom code
+			RETURN 100
+		RETURN MAIN_MAP
+	ENDIF
+ELSEIF RESULT == 1234
+	PREV_REDRAW = CURRENTREDRAW()
+	REDRAW 0
+	CLEARLINE LINECOUNT - LINESTART
+	GOTO MAPANIMATION
+ELSEIF INRANGE(RESULT, 0, MAXHOME - 1) && RESULT != 現在地MAPID
+	目的地MAPID = RESULT
+	所要時間 = TIME_REQUIRED(現在地MAPID, 目的地MAPID)
+	IS_DANGEROUS = RESULT:1 ;qol custom code
+	時間停止ジャンプ = 0
+	IF ARGS == "出掛ける"
+		;一人でお出掛け
+		IF 同行人数() == 0
+			IF TFLAG:ANYWHERE_DOOR_USES_REMAINING ;addition custom code
+			ELSEIF (FLAG:時間停止 || GETBIT(FLAG:瞬間移動, AT_HOME(MASTER))) && BASE:MASTER:TSP >= 所要時間 * 3 ;bug fix for auto-tsp movement
+				時間停止ジャンプ = 1
+			ELSEIF FLAG:70 ;bug fix
+				PRINTW Not enough TSP!
+				RESTART
+			ELSE
+				PRINTL If TSP is used, it's possible to move there without spending time.
+				PRINTL Use TSP?
+				CALL ASK_M("No", 1, @"Yes (TSP {所要時間 * 3}/{BASE:MASTER:TSP})", BASE:MASTER:TSP >= 所要時間 * 3, "Cancel", 1) ;qol cancel
+				SIF RESULT == 1
+					時間停止ジャンプ = 1
+				IF RESULT == 2
+					;Hotpatch: the question goes with the redrawn screen
+					CLEARLINE LINECOUNT - LINESTART
+					RESTART
+				ENDIF
+			ENDIF
+			SIF !時間停止ジャンプ ;fix
+				CALL Add_UmbrellaUse ;addition custom code
+			CALL SET_DATE(目的地MAPID, 0, 所要時間, 時間停止ジャンプ)
+			IF TFLAG:ANYWHERE_DOOR_USES_REMAINING ;addition custom code
+			ELSEIF IS_DANGEROUS ;qol custom code
+				CALL QOL_CHECK_DANGEROUS_TRAVEL(時間停止ジャンプ)
+			ENDIF
+			RETURN 目的地MAPID
+		;二人でデート
+		ELSEIF 同行人数() == 1
+			PRINTFORML Leaving for a date to %GET_MAPNAME(目的地MAPID)%.
+			CALL SET_DATE(目的地MAPID, 仮デート相手, 所要時間)
+			RETURN 目的地MAPID
+		;三人以上
+		ELSEIF MOREDATE
+			PRINTFORML Leaving for a group date to %GET_MAPNAME(目的地MAPID)%.
+			CALL SET_DATES(目的地MAPID, MultipleDates, NumberDates, 所要時間)
+			;PRINTFORML Taking %GET_DATEES_NAMES(MASTER)%.
+			RETURN 目的地MAPID
+		ENDIF
+	ELSEIF ARGS == "散策する"
+		IF FLAG:デート相手
+			PRINTFORML Heading to %GET_MAPNAME(目的地MAPID)%.
+		ELSEIF FLAG:時間停止
+			IF BASE:MASTER:TSP < 所要時間 * 3
+				PRINTW Not enough TSP!
+				RESTART
+			ELSE
+				時間停止ジャンプ = 1
+			ENDIF
+		ELSEIF GETBIT(FLAG:瞬間移動, AT_HOME(MASTER)) && BASE:MASTER:TSP >= 所要時間 * 3 ;bug fix for auto-tsp movement
+			時間停止ジャンプ = 1
+		ENDIF
+		IF MOREDATE && NumberOfDates > 1 ;keep all dates if moving to another area directly
+			CALL SET_DATES(目的地MAPID, Datees, NumberOfDates, 所要時間)
+		ELSE
+			CALL SET_DATE(目的地MAPID, FLAG:デート相手, 所要時間, 時間停止ジャンプ)
+		ENDIF
+		SIF IS_DANGEROUS ;qol custom code
+			CALL QOL_CHECK_DANGEROUS_TRAVEL(時間停止ジャンプ)
+		RETURN 目的地MAPID
+	ENDIF
+ENDIF
+;Hotpatch: a toggle or an unknown choice redraws the screen in place
+CLEARLINE LINECOUNT - LINESTART
+RESTART
+
+@COM604
+#DIM LPCOUNT
+#DIM 現在地点
+#DIM P_ID
+#DIM 所要時間
+#DIM 時間補正
+#DIM 時間停止ジャンプ
+#DIM 特殊ワープ
+#DIM ANIMATION_SEED
+#DIM PREV_REDRAW
+;散策する
+時間停止ジャンプ = FLAG:時間停止 || (GETBIT(FLAG:瞬間移動, AT_HOME(MASTER)) && !FLAG:デート相手)
+FLAG:自室施錠 = 0 ;custom code, unlocks door
+ANIMATION_SEED = 0
+PREV_REDRAW = CURRENTREDRAW()
+;Map Animation Code
+$MAPANIMATION
+LINESTART = LINECOUNT
+SIF ANIMATERECOLOREDMAPS && !FLAG:70
+	ANIMATION_SEED ++
+
+VARSET LOCAL
+現在地点 = CFLAG:MASTER:現在位置 % 100 / 10
+時間補正 = 散策時間補正(時間停止ジャンプ)
+;特殊ワープ
+特殊ワープ = ODEKAKEMAP_SETTING(CFLAG:MASTER:現在位置, "特殊ワープ")
+CALL HOTPATCH_STROLL_SCREEN(ANIMATION_SEED, 時間補正, 時間停止ジャンプ, 特殊ワープ)
+
+$INPUT_LOOP
+;Map Animation Code
+IF ANIMATERECOLOREDMAPS && !FLAG:70
+	REDRAW PREV_REDRAW
+	;qol custom code, keep synced with actual time
+	TINPUT ANIMATERECOLOREDMAPS - (GETMILLISECOND() % ANIMATERECOLOREDMAPS),1234,0,""
+ELSE
+	INPUT
+ENDIF
+IF INRANGE(RESULT, 1, 9)
+	P_ID = GET_MAPID(CFLAG:MASTER:現在位置) * 100 + RESULT * 10
+	;所要時間は消費TSPも込みになっているので注意
+	所要時間 = 散策所要時間(CFLAG:MASTER:現在位置, P_ID, 時間補正)
+ENDIF
+;特殊ワープの所要時間 (the original sets it while listing the places)
+SIF 特殊ワープ && RESULT == 特殊ワープ
+	所要時間 = 時間停止ジャンプ ? 30 # 10
+;戻る
+IF RESULT == 100 || RESULT == 0
+	RETURN -1
+;他の地域に移動
+ELSEIF RESULT == 99
+	;Hotpatch: the region map takes this screen's place, like a tab
+	CLEARLINE LINECOUNT - LINESTART
+	CALL OTHERREGIONS("散策する")
+	IF RESULT == 100
+		RESTART
+	ELSE
+		RETURN 1
+	ENDIF
+ELSEIF FLAG:70 && FLAG:デート相手
+	PRINTFORMW You shouldn't leave your date behind.
+	CLEARLINE LINECOUNT - LINESTART
+	RESTART
+;特殊ワープ,10分/30TSP固定
+ELSEIF 特殊ワープ && RESULT == 特殊ワープ
+	IF !FLAG:70 && GETBIT(FLAG:瞬間移動, AT_HOME(MASTER)) && 所要時間 > BASE:MASTER:TSP
+		時間停止ジャンプ = 0
+		所要時間 /= 3
+	ENDIF
+	IF TFLAG:ANYWHERE_DOOR_USES_REMAINING ;addition custom code
+		CALL ADD_ANYWHERE_DOOR_MOVEMENT(特殊ワープ)
+		RETURN 1
+	ELSEIF FLAG:時間停止 && BASE:MASTER:TSP <= 30
+		PRINTW Insufficient TSP.
+		CLEARLINE LINECOUNT - LINESTART
+		RESTART
+	ELSEIF 時間停止ジャンプ
+		BASE:MASTER:TSP -= 30
+	ELSE
+		TIME += 10
+	ENDIF
+	PRINTFORML You put a foot in the gap, and before you know it you're standing in %NAME_FROM_PLACE(特殊ワープ)%...
+	P_ID = 特殊ワープ
+	CFLAG:MASTER:現在位置 = P_ID
+	CFLAG:MASTER:デート中 = GET_MAPID(P_ID)
+	IF FLAG:デート相手
+		CFLAG:(FLAG:デート相手):現在位置 = P_ID
+		CFLAG:(FLAG:デート相手):デート中 = GET_MAPID(P_ID)
+		IF MOREDATE
+			FOR LOCAL:10, 0, NumberOfDates
+				CFLAG:(Datees:(LOCAL:10)):現在位置 = P_ID
+				CFLAG:(Datees:(LOCAL:10)):デート中 = GET_MAPID(P_ID)
+			NEXT
+		ENDIF
+	ENDIF
+	RETURN 1
+ELSEIF RESULT == 1234
+	PREV_REDRAW = CURRENTREDRAW()
+	REDRAW 0
+	CLEARLINE LINECOUNT - LINESTART
+	GOTO MAPANIMATION
+;散策移動
+ELSEIF INRANGE(RESULT, 1, 9) && NAME_FROM_PLACE(P_ID) != ""
+	;移動できるかチェック
+	CALL SANSAKU_UNIQUEPLACE(P_ID)
+	IF RESULT
+		;P_IDへ移動
+		P_ID = RESULT
+		IF !FLAG:70 && GETBIT(FLAG:瞬間移動, AT_HOME(MASTER)) && 所要時間 > BASE:MASTER:TSP
+			時間停止ジャンプ = 0
+			所要時間 /= 3
+		ENDIF
+		IF TFLAG:ANYWHERE_DOOR_USES_REMAINING ;addition custom code
+			CALL ADD_ANYWHERE_DOOR_MOVEMENT(P_ID)
+			RETURN 1
+		ELSEIF FLAG:デート相手
+			CFLAG:(FLAG:デート相手):現在位置 = P_ID
+			TIME += 所要時間
+		ELSEIF FLAG:時間停止 && BASE:MASTER:TSP <= 所要時間
+			PRINTW Insufficient TSP.
+			CLEARLINE LINECOUNT - LINESTART
+			RESTART
+		ELSEIF 時間停止ジャンプ
+			BASE:MASTER:TSP -= 所要時間
+		ELSE
+			TIME += 所要時間
+		ENDIF
+		CFLAG:MASTER:現在位置 = P_ID
+		RETURN 1
+	ENDIF
+;qol custom code
+[IF_DEBUG]
+ELSEIF RESULT == -1001
+	ANIMATION_SEED--
+	SIF ANIMATION_SEED < 0
+		ANIMATION_SEED = 19
+	MAP_ANIMATION_PAUSE = 1
+	CLEARLINE LINECOUNT - LINESTART
+	GOTO MAPANIMATION
+ELSEIF RESULT == -1002
+	ANIMATION_SEED++
+	MAP_ANIMATION_PAUSE = 1
+	CLEARLINE LINECOUNT - LINESTART
+	GOTO MAPANIMATION
+ELSEIF RESULT == -1003
+	MAP_ANIMATION_PAUSE = !MAP_ANIMATION_PAUSE
+	CLEARLINE LINECOUNT - LINESTART
+	GOTO MAPANIMATION
+[ENDIF]
+ENDIF
+;Hotpatch: a refused move (its message was waited on) or an unknown choice redraws the screen in place
+CLEARLINE LINECOUNT - LINESTART
+RESTART
+
+;The region map's panels; ARGS is the caller ("出掛ける" Go Out from home, "散策する" from Stroll).
+@HOTPATCH_REGION_SCREEN(ARGS, SEED, PARTNER)
+#DIM SEED
+#DIM PARTNER
+#DIM DYNAMIC nHere
+#DIM DYNAMIC nArea
+#DIM DYNAMIC nTime
+#DIMS DYNAMIC sHtml
+#DIMS DYNAMIC sUnit
+#DIMS DYNAMIC sClass
+#DIMS DYNAMIC sTitle
+nHere = GET_MAPID(CFLAG:MASTER:現在位置)
+HTML_PRINT "<era-open class='era-layout era-move era-travel'>"
+sHtml '= ""
+SIF ARGS == "散策する"
+	sHtml += @"<button value='100' class='era-move-tab' title='Back to walking around %HTML_ESCAPE(GET_MAPNAME(nHere))%'>%HTML_ESCAPE(GET_MAPNAME(nHere))%</button>"
+sHtml += "<span class='era-move-tab era-move-current'>Gensokyo</span>"
+LOCALS '= ARGS == "散策する" ? "Keep walking around here" # "Stay home"
+HTML_PRINT @"<div class='era-move-header'><div class='era-move-tabs'>%sHtml%</div><button value='100' class='era-chip-button era-move-back' title='%LOCALS%'>Back</button></div>"
+
+HTML_PRINT "<era-open class='era-move-body'>"
+HTML_PRINT "<era-open class='era-card era-move-map'>"
+IF RECOLOREDMAPS
+	CALL DRAW_COLOREDMAP(SEED, "GLOBAL")
+ELSE
+	CALL FIELDMAP
+ENDIF
+HTML_PRINT "<era-close>"
+
+HTML_PRINT "<era-open class='era-card era-move-side'>"
+HTML_PRINT "<div class='era-card-title'>You are here</div>"
+HTML_PRINT @"<div class='era-move-here'><span class='era-move-num'>{nHere}</span>%HTML_ESCAPE(GET_MAPNAME(nHere))%</div>"
+sHtml '= ""
+FOR nArea, 0, MAXHOME
+	SIF nArea == nHere
+		CONTINUE
+	IF FLAG:時間停止 || (GETBIT(FLAG:瞬間移動, AT_HOME(MASTER)) && !FLAG:デート相手 && !PARTNER) ;bug fix for auto-tsp movement
+		nTime = TIME_REQUIRED(nHere, nArea) * 3
+		sUnit '= "TSP"
+	ELSE
+		nTime = TIME_REQUIRED(nHere, nArea)
+		sUnit '= "min"
+	ENDIF
+	sClass '= ""
+	sTitle '= ""
+	IF RESULT:1 ;qol custom code, dangerous
+		sClass '= " era-travel-danger"
+		sTitle '= " title='A dangerous path: something may happen on the way'"
+	ENDIF
+	sHtml += @"<button value='{nArea}' class='era-move-dest%sClass%'%sTitle%><span class='era-move-num'>{nArea}</span>%HTML_ESCAPE(GET_MAPNAME(nArea))%<span class='era-travel-time'>{nTime} %sUnit%</span></button>"
+NEXT
+HTML_PRINT "<div class='era-move-subtitle'>Travel to</div>"
+HTML_PRINT @"<div class='era-move-dests'>%sHtml%</div>"
+IF 同行人数() == 0
+	sHtml '= @"<button value='99' class='era-toggle%(FLAG:時間停止 ? " era-on" # "")%' title='Stop time: travel costs TSP (3 per minute) instead of time'>Time Stop</button>"
+	sHtml += @"<button value='199' class='era-toggle%(GETBIT(FLAG:瞬間移動, AT_HOME(MASTER)) ? " era-on" # "")%' title='Travel with TSP automatically whenever you have enough'>TSP Movement</button>"
+	sHtml += @"<button value='198' class='era-toggle%(FLAG:DANGEROUS_TRAVEL ? " era-on" # "")%' title='Take the dangerous paths: quicker, but something may happen on the way'>Dangerous Paths</button>"
+	HTML_PRINT "<div class='era-move-subtitle'>Travel options</div>"
+	HTML_PRINT @"<div class='era-shop-chips'>%sHtml%</div>"
+ENDIF
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-close>"
+
+;The Stroll screen's panels, for the area you are visiting.
+@HOTPATCH_STROLL_SCREEN(SEED, ADJUST, TSPJUMP, WARP)
+#DIM SEED
+#DIM ADJUST
+#DIM TSPJUMP
+#DIM WARP
+#DIM DYNAMIC nArea
+#DIM DYNAMIC nHere
+#DIM DYNAMIC nSpot
+#DIM DYNAMIC nPlace
+#DIM DYNAMIC nTime
+#DIMS DYNAMIC sHtml
+#DIMS DYNAMIC sUnit
+#DIMS DYNAMIC sClass
+nArea = GET_MAPID(CFLAG:MASTER:現在位置)
+nHere = CFLAG:MASTER:現在位置 % 100 / 10
+sUnit '= TSPJUMP ? "TSP" # "min"
+HTML_PRINT "<era-open class='era-layout era-move era-travel'>"
+sHtml '= @"<span class='era-move-tab era-move-current'>%HTML_ESCAPE(GET_MAPNAME(nArea))%</span>"
+sHtml += "<button value='99' class='era-move-tab' title='Move to another area'>Gensokyo</button>"
+HTML_PRINT @"<div class='era-move-header'><div class='era-move-tabs'>%sHtml%</div><button value='100' class='era-chip-button era-move-back' title='Stay here'>Back</button></div>"
+
+HTML_PRINT "<era-open class='era-move-body'>"
+HTML_PRINT "<era-open class='era-card era-move-map'>"
+IF RECOLOREDMAPS
+	CALL DRAW_COLOREDMAP(SEED, "ODEKAKE")
+ELSE
+	CALL DRAW_MAP("ODEKAKE")
+ENDIF
+HTML_PRINT "<era-close>"
+
+HTML_PRINT "<era-open class='era-card era-move-side'>"
+HTML_PRINT "<div class='era-card-title'>You are here</div>"
+nPlace = nArea * 100 + nHere * 10
+IF nHere && NAME_FROM_PLACE(nPlace) != ""
+	HTML_PRINT @"<div class='era-move-here'><span class='era-move-num'>{nHere}</span>%HTML_ESCAPE(THE_CASE_SHIFT(NAME_FROM_PLACE(nPlace)))%</div>"
+ELSE
+	HTML_PRINT @"<div class='era-move-here'>%HTML_ESCAPE(THE_CASE_SHIFT(NAME_FROM_PLACE(CFLAG:MASTER:現在位置)))%</div>"
+ENDIF
+HTML_PRINT @"<div class='era-move-area'>%HTML_ESCAPE(GET_MAPNAME(nArea))%</div>"
+sClass '= ""
+IF ADJUST < 0
+	sClass '= " era-travel-faster"
+ELSEIF ADJUST > 0
+	sClass '= " era-travel-slower"
+ENDIF
+sHtml '= ""
+FOR nSpot, 1, 10
+	nPlace = nArea * 100 + nSpot * 10
+	SIF nSpot == nHere || NAME_FROM_PLACE(nPlace) == ""
+		CONTINUE
+	nTime = 散策所要時間(CFLAG:MASTER:現在位置, nPlace, ADJUST)
+	sHtml += @"<button value='{nSpot}' class='era-move-dest'><span class='era-move-num'>{nSpot}</span>%HTML_ESCAPE(THE_CASE_SHIFT(NAME_FROM_PLACE(nPlace)))%<span class='era-travel-time%sClass%'>{nTime} %sUnit%</span></button>"
+NEXT
+IF WARP
+	nTime = TSPJUMP ? 30 # 10
+	sHtml += @"<button value='{WARP}' class='era-move-dest' title='A gap to somewhere else'><span class='era-move-num'>✧</span>%HTML_ESCAPE(THE_CASE_SHIFT(NAME_FROM_PLACE(WARP)))%<span class='era-travel-time'>{nTime} %sUnit%</span></button>"
+ENDIF
+HTML_PRINT "<div class='era-move-subtitle'>Walk to</div>"
+SIF sHtml == ""
+	sHtml '= "<span class='era-move-none'>Nowhere from here</span>"
+HTML_PRINT @"<div class='era-move-dests'>%sHtml%</div>"
+IF ADJUST < 0
+	HTML_PRINT "<div class='era-move-note'>A shortcut or your company makes walking quicker.</div>"
+ELSEIF ADJUST > 0
+	HTML_PRINT "<div class='era-move-note'>Your company makes walking slower.</div>"
+ENDIF
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-close>"

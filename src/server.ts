@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { randomUUID } from "node:crypto";
-import { readFile, realpath, stat } from "node:fs/promises";
+import { readdir, readFile, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { compatibility } from "./compatibility.js";
@@ -12,6 +12,27 @@ import { FileGlobalStore, FileSaveStore, MemoryGlobalStore, MemorySaveStore, typ
 import { patchTitleImage } from "./render-patches.js";
 
 const WEB_ROOT = fileURLToPath(new URL("../web/", import.meta.url));
+/** Drop-in pictures that replace the game's text maps: web/maps/<map key>.(webp|svg|png|jpg) plus optional <key>.json. */
+const MAP_PICTURE = /^([a-z0-9-]+)\.(webp|svg|png|jpg)$/;
+const MAP_PREFERENCE = ["webp", "svg", "png", "jpg"];
+interface MapEntry { image?: string; layout?: unknown; error?: string }
+/** Map key → picture URL (versioned by modification time so replaced files show at once) and parsed layout. */
+async function mapManifest(root: string): Promise<Record<string, MapEntry>> {
+  const files = await readdir(root).catch(() => [] as string[]);
+  const maps: Record<string, MapEntry> = {};
+  const entry = (name: string) => maps[name] ??= {};
+  for (const file of files.sort((a, b) => MAP_PREFERENCE.indexOf(path.extname(a).slice(1)) - MAP_PREFERENCE.indexOf(path.extname(b).slice(1)))) {
+    const picture = MAP_PICTURE.exec(file);
+    if (picture) {
+      if (!entry(picture[1]!).image) entry(picture[1]!).image = `/maps/${file}?v=${Math.round((await stat(path.join(root, file))).mtimeMs)}`;
+    } else if (/^[a-z0-9-]+\.json$/.test(file)) {
+      const name = file.slice(0, -5);
+      try { entry(name).layout = JSON.parse(await readFile(path.join(root, file), "utf8")); }
+      catch (error) { entry(name).error = `web/maps/${file}: ${error instanceof Error ? error.message : String(error)}`; }
+    }
+  }
+  return maps;
+}
 const mime: Record<string, string> = {
   ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
   ".css": "text/css; charset=utf-8", ".png": "image/png", ".webp": "image/webp",
@@ -177,13 +198,18 @@ export function createApp(game: Game, development = false, store: GlobalStore = 
         response.end(await readFile(file));
         return;
       }
+      if (request.method === "GET" && url.pathname === "/api/maps") {
+        json(response, await mapManifest(path.join(WEB_ROOT, "maps")));
+        return;
+      }
       const pages: Record<string, string> = {
         "/": "index.html", "/app.js": "app.js", "/style.css": "style.css",
         "/fonts/BIZUDGothic-Regular.ttf": "fonts/BIZUDGothic-Regular.ttf",
         "/fonts/OFL.txt": "fonts/OFL.txt",
       };
       // The main screen's per-area header art (web/areas/<map id>-<name>.svg).
-      const page = pages[url.pathname] ?? (/^\/areas\/\d+-[a-z]+\.svg$/.test(url.pathname) ? url.pathname.slice(1) : undefined);
+      // Map pictures (web/maps/<map key>.<ext>) replace the game's text maps.
+      const page = pages[url.pathname] ?? (/^\/areas\/\d+-[a-z]+\.svg$/.test(url.pathname) || /^\/maps\/[a-z0-9-]+\.(webp|svg|png|jpg)$/.test(url.pathname) ? url.pathname.slice(1) : undefined);
       if (request.method === "GET" && page) {
         const body = await readFile(path.join(WEB_ROOT, page)).catch(() => { throw new HttpError(404, "Not found"); });
         response.writeHead(200, { "Content-Type": mime[path.extname(page)]! });

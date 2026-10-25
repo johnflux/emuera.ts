@@ -1,0 +1,539 @@
+;-------------------------------------------------------------------------------
+; Hotpatch for the Move command (ERB/コマンド関連/COMF/日常系/COMF400 移動.ERB @COM400) and the map renderers
+; (ERB/COLOREDMAPS/DRAW_COLOREDMAP.ERB @DRAW_COLOREDMAP, ERB/MOVEMENTS/DRAW_MAP.ERB @DRAW_MAP).
+;
+; The renderers are the game's, unchanged except that the map's rows are wrapped in an era-map-art box naming the map
+; (era-map-key-hakurei-1, era-map-key-odekake-3, era-map-key-field), so the client can swap in a picture from
+; web/maps/<key>.webp|svg|png|jpg with the room numbers laid over it (see docs/hotpatches.md), and that a new optional
+; BARE argument leaves out the "== page name ==" header for screens that show it themselves.
+;
+; @COM400 keeps the original's logic and input handling; only its display is laid out in panels: the map's pages as
+; tabs with Back, the map and its list of places in one card, and beside it where you are, the places you can walk to,
+; Return to your room, the senses (detection mode, whereabouts, cleanliness) and the Lunatic Survival tasks. The tabs
+; send MAP<page>; switching a tab or the detection mode erases the screen before redrawing it, so the history keeps one
+; copy. Dropped: the DRAWLINE, the "Change Map" arrows (the tabs replace them) and the [C] display-mode
+; switch (the list of places and the walkable places are always shown).
+;-------------------------------------------------------------------------------
+@COM400
+#DIM 入浴拒否
+#DIM 虫かご
+#DIM 忍び込み
+#DIM 立ち止まり対象
+#DIM BUTTON戻る
+#DIM BUTTON切替左
+#DIM BUTTON切替中
+#DIM BUTTON切替右
+#DIM 入れません
+#DIM ANIMATION_SEED
+#DIM PREV_REDRAW
+BUTTON戻る = MAXROOM + 1
+BUTTON切替左 = MAXROOM + 2
+BUTTON切替中 = MAXROOM + 4
+BUTTON切替右 = MAXROOM + 4
+入れません = 0
+ANIMATION_SEED = 0
+PREV_REDRAW = CURRENTREDRAW()
+
+;Map Animation Code
+$MAPANIMATION
+LINESTART = LINECOUNT
+SIF ANIMATERECOLOREDMAPS && !FLAG:70
+	ANIMATION_SEED ++
+
+;人数カウントをリセット
+VARSET COUNTCHARA
+;部屋の人数カウントを設定
+FOR LOCAL, 1, CHARANUM
+	COUNTCHARA:(CFLAG:LOCAL:現在位置) ++
+NEXT
+入浴拒否 = 0
+CALL TURN_RESET
+
+CALL HOTPATCH_MOVE_SCREEN(ANIMATION_SEED, BUTTON戻る)
+
+DO
+	;Map Animation Code
+	TOOLTIP_SETDELAY 100
+	IF ANIMATERECOLOREDMAPS && !FLAG:70
+		REDRAW PREV_REDRAW
+		TINPUTS ANIMATERECOLOREDMAPS,"UPDATE",0,""
+	ELSE
+		INPUTS
+	ENDIF
+	TOOLTIP_SETDELAY 500
+	;Hotpatch: the map page tabs
+	IF STRFIND(RESULTS, "MAP") == 0 && ISNUMERIC(SUBSTRING(RESULTS, 3)) && INRANGE(TOINT(SUBSTRING(RESULTS, 3)), 1, MAP_PAGES)
+		TFLAG:マップ切り替え = TOINT(SUBSTRING(RESULTS, 3))
+		CLEARLINE LINECOUNT - LINESTART
+		RESTART
+	ENDIF
+	;システム系を先に処理
+	SELECTCASE RESULTS
+	CASE "UPDATE"
+		PREV_REDRAW = CURRENTREDRAW()
+		REDRAW 0
+		CLEARLINE LINECOUNT - LINESTART
+		BREAK
+	;察知系
+	CASE "Z", "z", "X", "x"
+		IF TALENT:MASTER:居場所察知 && (RESULTS == "Z" || RESULTS == "z")
+			CALL HITOSAGASI(,1)
+		ELSEIF TALENT:MASTER:汚部屋察知 && (RESULTS == "X" || RESULTS == "x")
+			CALL OHEYA_CHECK
+		ENDIF
+		$INPUT_LOOP
+		INPUT
+		IF RESULT == 0
+			RESTART
+		ELSEIF RESULT == -1 && (RESULTS == "Z" || RESULTS == "z")
+			CALL BROAD_HITOSAGASI
+			RETURN 1
+		;移動範囲外
+		ELSEIF IN_HOME(RESULT) != 1 || !AT_HOME(MASTER)
+			TFLAG:マップ切り替え = 0
+			PRINTW Outside of movement range.
+			RETURN -1
+		;-----------------------------
+		ELSEIF MAP_CAN_MOVE(RESULT) == 0
+			CALL CANNOT_MOVE_MESSAGE(RESULT)
+			GOTO INPUT_LOOP
+		ELSEIF IN_HOME(RESULT) == 1
+			CALL SKIP_MOVE(CFLAG:MASTER:現在位置, RESULT)
+			RETURN
+		ENDIF
+	;察知切り替え
+	CASE "Y", "y"
+		IF TALENT:MASTER:居場所察知 && TALENT:MASTER:汚部屋察知
+			FLAG:察知モード += 1
+			SIF FLAG:察知モード >= 3
+				FLAG:察知モード = 0
+		ELSEIF TALENT:MASTER:居場所察知
+			FLAG:察知モード = !FLAG:察知モード
+		ELSEIF TALENT:MASTER:汚部屋察知
+			FLAG:察知モード = (!FLAG:察知モード) * 2
+		ENDIF
+		CLEARLINE LINECOUNT - LINESTART
+		RESTART
+	;表示切り替え
+	CASE "C", "c"
+		FLAG:移動先表示 += 1
+		;Qol custom code, more options
+		SIF FLAG:移動先表示 > 5
+			FLAG:移動先表示 = 0
+		RESTART
+	CASE ""
+		CONTINUE
+	ENDSELECT
+
+	;半角数字の場合のみ判定を続行
+	IF ISNUMERIC(RESULTS)
+		RESULT = TOINT(RESULTS)
+	ELSE
+		CALL CANNOT_MOVE_MESSAGE(0)
+		CONTINUE
+	ENDIF
+	;システム系を先に処理
+	SELECTCASE RESULT
+	CASE BUTTON戻る, CFLAG:MASTER:現在位置
+		RETURN -1
+	CASE BUTTON切替左
+		TFLAG:マップ切り替え -= 1
+		SIF TFLAG:マップ切り替え <= 0
+			TFLAG:マップ切り替え = MAP_PAGES
+		RESTART
+	CASE BUTTON切替右
+		TFLAG:マップ切り替え += 1
+		SIF TFLAG:マップ切り替え > MAP_PAGES
+			TFLAG:マップ切り替え = 1
+		RESTART
+	;私室に戻る
+	CASE 0
+		IF IN_HOME(CFLAG:MASTER:初期位置) != 1
+			PRINTW Initial position is invalid. Returning to default position.
+			CFLAG:MASTER:初期位置 = デフォルト初期位置
+		ENDIF
+		SIF CFLAG:MASTER:現在位置 != CFLAG:MASTER:初期位置
+			CALL SKIP_MOVE(CFLAG:MASTER:現在位置, CFLAG:MASTER:初期位置)
+		RETURN
+	ENDSELECT
+
+	;残るは通常の場所の選択もしくは誤入力
+
+	;TWの方針として非推奨なんだけど手打ち入力でこれがあると入力文字数減って便利なんだ
+	SIF INRANGE(RESULT, 1, 99)
+		RESULT += MAIN_MAP * 100
+	;同じ場所はキャンセル
+	IF RESULT == CFLAG:MASTER:現在位置
+		RETURN -1
+	ELSEIF IN_HOME(RESULT) != 1
+		TFLAG:マップ切り替え = 0
+		PRINTW Outside of movement range.
+		CONTINUE
+	;移動不可能なら弾くよ
+	ELSEIF MAP_CAN_MOVE(RESULT) == 0
+		CALL CANNOT_MOVE_MESSAGE(RESULT)
+		CONTINUE
+	;移動する
+	ELSE
+		CALL SKIP_MOVE(CFLAG:MASTER:現在位置, RESULT)
+		RETURN
+	ENDIF
+LOOP 1
+;Map Animation Code
+SIF ANIMATERECOLOREDMAPS && !FLAG:時間停止
+	GOTO MAPANIMATION
+
+@DRAW_COLOREDMAP(ANIMATION_SEED, ARGS, BARE)
+	#DIM BARE
+	#DIMS MAPKEY
+	#DIM ANIMATION_SEED
+	#DIM COLUMN
+	#DIM LOCATION
+	#DIM ROW
+	#DIM COLUMN_LENGTH
+	#DIMS COLOR, 42
+	#DIMS COLORCOLUMNS, 128
+	#DIMS MAP, 42
+	#DIMS TYPE
+	#DIMS COLUMN_STR
+	#DIMS CURRENT_STR
+	#DIM BENCHMARKS
+	#DIM BENCHMARKE
+	#DIM EFFECT_SEED
+	#DIM EFFECT_SEEDA
+	#DIM PREV_REDRAW
+	#DIMS TEMP_LINE
+	#DIMS TEMP_TILE
+	#DIMS TEMP_TILE_COLOR
+	#DIMS FONT
+	FONT '= "ＭＳ ゴシック"
+	VARSET MAP, "NULL"
+	VARSET COLOR, "0"
+	BITMAP_CACHE_ENABLE 1
+	;If failed to retrieve map, revert back to original.
+	;If failed to retrieve color, set it to default color.
+	BENCHMARKS = GETMILLISECOND()
+	PREV_REDRAW = CURRENTREDRAW()
+	REDRAW 0
+	;qol custom code, animation test
+	[IF_DEBUG]
+		IF ANIMATERECOLOREDMAPS
+			PRINTFORM Animation Frame: 
+			IF GROUPMATCH(ARGS, "ODEKAKE", "HIKKOSHI")
+				PRINTBUTTON "[＜]", -1001
+			ENDIF
+			PRINTFORM %TOSTR(ANIMATION_SEED % 20, "D2")%
+			IF GROUPMATCH(ARGS, "ODEKAKE", "HIKKOSHI")
+				PRINTBUTTON "[＞]", -1002
+				PRINTBUTTON @" [\@ MAP_ANIMATION_PAUSE ? Resume # Pause \@]", -1003
+			ENDIF
+			PRINTL
+		ENDIF
+	[ENDIF]
+	IF ARGS == "ODEKAKE"
+		MAPKEY '= @"odekake-{CFLAG:MASTER:デート中}"
+		TRYCCALLFORM COLOREDODEKAKEMAP_{CFLAG:MASTER:デート中}(MAP,COLOR)
+		CATCH
+			CALL DRAW_MAP("ODEKAKE")
+			SETFONT
+			RETURN 0
+		ENDCATCH
+	ELSEIF ARGS == "GLOBAL"
+		MAPKEY '= "field"
+		TRYCCALLFORM COLOREDFIELD(MAP, COLOR)
+		CATCH
+			CALL FIELDMAP
+			SETFONT
+			RETURN 0
+		ENDCATCH
+	ELSE
+		CALLFORM MAP_VIEWING(MAIN_MAP)
+		MAPKEY '= RESULTS
+		IF !BARE
+			CALL DRAW_INFORMATIONLINE(@"%MAPNAME:(TFLAG:マップ切り替え)%")
+			PRINTFORML
+		ENDIF
+		CALLFORM COLOREDMAP_%MAPKEY%_{TFLAG:マップ切り替え}(MAP, COLOR)
+		MAPKEY '= @"%MAPKEY%-{TFLAG:マップ切り替え}"
+	ENDIF
+	EFFECT_SEED = 0
+	EFFECT_SEEDA = 0
+	CALL HOTPATCH_MAP_OPEN(MAPKEY)
+	FOR ROW, 0, 42
+		SIF MAP:ROW == "NULL"
+			BREAK
+		VARSET TEMP_LINE
+		;Remove zero width space
+		COLUMN_STR = %REPLACE(MAP:ROW,"​","")%
+		COLUMN_LENGTH = STRLENSU(COLUMN_STR)
+		SPLIT COLOR:ROW, ",", COLORCOLUMNS
+		TEMP_LINE += @"<font face='%FONT%'>"
+		FOR COLUMN, 0, 128
+			CURRENT_STR = %SUBSTRINGU(COLUMN_STR, COLUMN, 1)%
+			SIF CURRENT_STR == ""
+				BREAK
+
+			;Apply the character's color
+			IF COLORCOLUMNS:COLUMN == "def"
+				TEMP_TILE_COLOR = #%CONVERT(GETDEFCOLOR() , 16)%
+			ELSEIF COLORCOLUMNS:COLUMN != ""
+				IF ISNUMERIC(COLORCOLUMNS:COLUMN)
+					TYPE = NULL
+					IF COLORCOLUMNS:COLUMN == "0"
+						RESETCOLOR
+						TEMP_TILE_COLOR '= "#" + TOSTR(GETDEFCOLOR(), "X6")
+					ELSE
+						TEMP_TILE_COLOR '= "#" + TOSTR(APPLYCOLOR_F(TOINT(COLORCOLUMNS:COLUMN)), "X6")
+						CALL APPLYCOLOR(TOINT(COLORCOLUMNS:COLUMN))
+					ENDIF
+				ELSE
+					TYPE = %COLORCOLUMNS:COLUMN%
+					CALL GETSEASONALCOLORS(TYPE,EFFECT_SEED)
+					IF RESULT > -1
+						SIF (RESULT:1 != -1)
+							CALL CREATETRANSITION(RESULT:0, RESULT:1)
+						CALL APPLYCOLOR(RESULT)
+						TEMP_TILE_COLOR '= "#" + TOSTR(APPLYCOLOR_F(RESULT), "X6")
+					ENDIF
+				ENDIF
+			ENDIF
+
+			;Print the character
+			IF ISNUMERIC(CURRENT_STR)
+				LOCATION = (TOINT(CURRENT_STR) * 10)
+				COLUMN ++
+				CURRENT_STR = %SUBSTRINGU(COLUMN_STR, COLUMN, 1)%
+				LOCATION += TOINT(CURRENT_STR)
+				IF ARGS == "ODEKAKE"
+					CALL GETMAP(LOCATION, ARGS, 1)
+					TEMP_TILE '= RESULTS
+				ELSEIF ARGS == "GLOBAL"
+					;CALL MAPBUTTON(((LOCATION > 9)? TOSTR(LOCATION) # TOFULL(TOSTR(LOCATION))),LOCATION)
+					TEMP_TILE '= MAPBUTTON_HTML_F(((LOCATION > 9)? TOSTR(LOCATION) # TOFULL(TOSTR(LOCATION))),LOCATION)
+				ELSE
+					CALL GETMAP(LOCATION, , 1)
+					TEMP_TILE '= RESULTS
+				ENDIF
+			ELSE
+				IF TYPE == "NULL"
+					TEMP_TILE '= HTML_ESCAPE(CURRENT_STR)
+					;PRINTS CURRENT_STR
+				ELSE
+					CALL GETANIMATIONCHARACTER(ANIMATION_SEED, TYPE, CURRENT_STR, EFFECT_SEEDA, 1)
+					TEMP_TILE '= RESULTS
+				ENDIF
+			ENDIF
+			SIF !STRCOUNT(TEMP_TILE, "<font color")
+				TEMP_TILE = <font color = '%TEMP_TILE_COLOR%'>%TEMP_TILE%</font>
+			TEMP_LINE += TEMP_TILE
+		NEXT
+		;custom code, add empty space to prevent the last part of the character from being cut off
+		TEMP_LINE += " </font>"
+		HTML_PRINT TEMP_LINE
+		;PRINTL
+	NEXT
+	HTML_PRINT "<era-close>"
+	RESETCOLOR
+	REDRAW PREV_REDRAW
+	BENCHMARKE = GETMILLISECOND()
+	LOCAL = BENCHMARKE - BENCHMARKS
+	;PRINTFORML Time taken: {LOCAL}
+	SETFONT
+	BITMAP_CACHE_ENABLE 0
+
+@DRAW_MAP(ARGS, BARE)
+#DIM BARE
+#DIMS MAPKEY
+#DIMS AA, 50
+#DIMS COLOR, 50
+#DIM MODE
+#DIM LOCATION
+
+#DIM LINENUM
+#DIM X_POINT
+
+;AAを取得、なければそのまま帰る
+VARSET AA
+VARSET COLOR
+SETFONT CHKFONTNAME("ＭＳ ゴシック") ;custom code
+;お出かけマップかどうかの分岐
+IF ARGS == "ODEKAKE"
+	MAPKEY '= @"odekake-{CFLAG:MASTER:デート中}"
+	TRYCCALLFORM ODEKAKEMAP_{CFLAG:MASTER:デート中}(AA)
+	CATCH
+		SETFONT
+		RETURN 0
+	ENDCATCH
+ELSE
+	TRYCCALLFORM MAP_VIEWING(MAIN_MAP)
+		MAPKEY '= @"%RESULTS%-{TFLAG:マップ切り替え}"
+		IF !BARE
+			CALL DRAW_INFORMATIONLINE(@"%MAPNAME:(TFLAG:マップ切り替え)%")
+			PRINTFORML 
+		ENDIF
+		IF RECOLOREDMAPS
+			TRYCCALLFORM COLOREDMAP_%RESULTS%_{TFLAG:マップ切り替え}(AA, COLOR)
+			CATCH
+				RECOLOREDMAPS = 0
+				CALL DRAW_MAP(ARGS, BARE)
+				RECOLOREDMAPS = 1
+				RETURN
+			ENDCATCH
+		ELSE
+			TRYCALLFORM MAP_%RESULTS%_{TFLAG:マップ切り替え}(AA)
+		ENDIF
+	CATCH
+		SETFONT
+		RETURN 0
+	ENDCATCH
+ENDIF
+
+;-----------------------------------------------------------
+;描画処理
+;-----------------------------------------------------------
+CALL HOTPATCH_MAP_OPEN(MAPKEY)
+FOR LINENUM, 0, VARSIZE("AA")
+	SIF AA:LINENUM == ""
+		CONTINUE
+	;行ごとに初期化
+	X_POINT = 0
+	RESULTS = I
+	;行の終端までループ
+	WHILE RESULTS != "" && STRLENSU(RESULTS) < 3
+		;1文字取り出す
+		SUBSTRINGU AA:LINENUM, X_POINT, 1
+		;数字ならボタンにする
+		IF ISNUMERIC(RESULTS)
+			;分岐めんどいから必ず2ケタ取る
+			SUBSTRINGU AA:LINENUM, X_POINT, 2
+			CALL GETMAP(TOINT(RESULTS), ARGS)
+			X_POINT += 2
+		;記号に意味を持たせる例、これだと#は普通には使えなくなるけどまあいいか
+		ELSEIF RESULTS == "#"
+			;必ず二文字取る
+			SUBSTRINGU AA:LINENUM, X_POINT, 2
+			IF ARGS == "HIKKOSHI"
+				TRYCALLFORM DRAW_MAP_BG_{MAIN_MAP}(RESULTS)
+			ELSE
+				TRYCALLFORM DRAW_MAP_BG_{CFLAG:MASTER:デート中}(RESULTS)
+			ENDIF
+			X_POINT += 2
+		;ふつうの文字
+		ELSE
+			;CALL DRAW_MAP_BG(RESULTS)
+			IF ARGS == "HIKKOSHI"
+				TRYCALLFORM DRAW_MAP_BG_{MAIN_MAP}(RESULTS)
+			ELSE
+				TRYCALLFORM DRAW_MAP_BG_{CFLAG:MASTER:デート中}(RESULTS)
+			ENDIF
+			X_POINT ++
+		ENDIF
+	WEND
+	PRINTL
+NEXT
+HTML_PRINT "<era-close>"
+SETFONT
+RESETCOLOR
+;------------------------------------------
+;マップの表示設定
+;ARG    表示するマップのMAPID
+;ARG:1  判定する場所ID（任意）
+;------------------------------------------
+
+@HOTPATCH_MOVE_SCREEN(SEED, BACK)
+#DIM SEED
+#DIM BACK
+#DIM DYNAMIC nHere
+#DIMS DYNAMIC sHtml
+#DIMS DYNAMIC sMode
+nHere = CFLAG:MASTER:現在位置
+CALL MAP_VIEWING(MAIN_MAP)
+HTML_PRINT "<era-open class='era-layout era-move'>"
+sHtml '= ""
+FOR LOCAL, 1, MAP_PAGES + 1
+	LOCALS '= LOCAL == TFLAG:マップ切り替え ? " era-move-current" # ""
+	sHtml += @"<button value='MAP{LOCAL}' class='era-move-tab%LOCALS%'>%HTML_ESCAPE(MAPNAME:LOCAL)%</button>"
+NEXT
+HTML_PRINT @"<div class='era-move-header'><div class='era-move-tabs'>%sHtml%</div><button value='{BACK}' class='era-chip-button era-move-back' title='Stay here'>Back</button></div>"
+
+HTML_PRINT "<era-open class='era-move-body'>"
+HTML_PRINT "<era-open class='era-card era-move-map'>"
+IF RECOLOREDMAPS
+	CALL DRAW_COLOREDMAP(SEED, "", 1)
+ELSE
+	CALL DRAW_MAP("", 1)
+ENDIF
+IF FLAG:察知モード == 1 || FLAG:察知モード == 2
+	HTML_PRINT "<era-open class='era-move-key'>"
+	IF FLAG:察知モード == 1
+		CALL COLORMESSAGE("Resident　", C_H_PINK, 0)
+		CALL COLORMESSAGE("Working　", C_D_ORANGE, 0)
+		CALL COLORMESSAGE("Asleep　", C_N_BLUE, 0)
+		CALL COLORMESSAGE("Mob　", C_D_PINK, 0)
+		CALL COLORMESSAGE("Idle Activity", C_YELLOW, 0)
+	ELSE
+		CALL COLORMESSAGE("Clean　", C_CREAM, 0)
+		CALL COLORMESSAGE("A little dirty　", C_YELLOW , 0)
+		CALL COLORMESSAGE("Dirty　", C_V_PINK, 0)
+		CALL COLORMESSAGE("Garbage Mountain", C_RED, 0)
+	ENDIF
+	PRINTL
+	HTML_PRINT "<era-close>"
+ENDIF
+HTML_PRINT "<era-open class='era-move-legend'>"
+TRYCALLFORM MAP_{MAIN_MAP}_{TFLAG:マップ切り替え}
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-close>"
+
+HTML_PRINT "<era-open class='era-card era-move-side'>"
+HTML_PRINT "<div class='era-card-title'>You are here</div>"
+HTML_PRINT @"<div class='era-move-here'><span class='era-move-num'>{nHere % 100}</span>%HTML_ESCAPE(THE_CASE_SHIFT(NAME_FROM_PLACE(nHere)))%</div>"
+SIF nHere != CFLAG:MASTER:初期位置 && IN_HOME(CFLAG:MASTER:初期位置) == 1
+	HTML_PRINT @"<div class='era-shop-chips'><button value='0' class='era-chip-button' title='%HTML_ESCAPE(THE_CASE_SHIFT(NAME_FROM_PLACE(CFLAG:MASTER:初期位置)))%'>Return to your room</button></div>"
+sHtml '= ""
+FOR LOCAL, MINROOM(), MAXROOM
+	SIF !(CAN_MOVE(nHere, LOCAL) & 1)
+		CONTINUE
+	SIF NAME_FROM_PLACE(LOCAL) == ""
+		CONTINUE
+	sHtml += @"<button value='{LOCAL}' class='era-move-dest'><span class='era-move-num'>{LOCAL % 100}</span>%HTML_ESCAPE(THE_CASE_SHIFT(NAME_FROM_PLACE(LOCAL)))%</button>"
+NEXT
+SIF !(CAN_MOVE(nHere, ENTRANCE) & 1) && nHere != ENTRANCE
+	sHtml += @"<button value='{ENTRANCE}' class='era-move-dest' title='The way out'><span class='era-move-num'>{ENTRANCE % 100}</span>%HTML_ESCAPE(THE_CASE_SHIFT(NAME_FROM_PLACE(ENTRANCE)))%</button>"
+HTML_PRINT "<div class='era-move-subtitle'>Walk to</div>"
+SIF sHtml == ""
+	sHtml '= "<span class='era-move-none'>Nowhere from here</span>"
+HTML_PRINT @"<div class='era-move-dests'>%sHtml%</div>"
+IF TALENT:MASTER:居場所察知 || TALENT:MASTER:汚部屋察知
+	IF FLAG:察知モード == 1
+		sMode '= "People"
+	ELSEIF FLAG:察知モード == 2
+		sMode '= "Dirt"
+	ELSE
+		sMode '= "Off"
+	ENDIF
+	sHtml '= @"<button value='Y' class='era-chip-button' title='Switch what the map colours show'>Map colours: %sMode%</button>"
+	SIF TALENT:MASTER:居場所察知 && FLAG:察知モード == 1
+		sHtml += "<button value='Z' class='era-chip-button' title='Sense where everyone is, then pick a place to go'>Whereabouts</button>"
+	SIF TALENT:MASTER:汚部屋察知 && FLAG:察知モード == 2
+		sHtml += "<button value='X' class='era-chip-button' title='Sense how dirty each room is, then pick a place to go'>Cleanliness</button>"
+	HTML_PRINT "<div class='era-move-subtitle'>Senses</div>"
+	HTML_PRINT @"<div class='era-shop-chips'>%sHtml%</div>"
+ENDIF
+HTML_PRINT "<era-open class='era-move-tasks'>"
+CALL LS_MOVE_PRINT()
+HTML_PRINT "<era-close>"
+IF TALENT:MASTER:体型 < -4 && !CFLAG:MASTER:同行
+	HTML_PRINT "<div class='era-move-note'>It's hard to walk alone in this state...</div>"
+ENDIF
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-close>"
+
+@HOTPATCH_MAP_OPEN(KEY)
+#DIMS KEY
+IF KEY == ""
+	HTML_PRINT "<era-open class='era-map-art'>"
+ELSE
+	HTML_PRINT @"<era-open class='era-map-art era-map-key-%TOLOWER(KEY)%'>"
+ENDIF
