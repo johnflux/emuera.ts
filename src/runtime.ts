@@ -4,7 +4,7 @@ import { displayDefaults, imageSize, readTextFileSync, type Sprite, type Contain
 import path from "node:path";
 import { readdirSync, statSync } from "node:fs";
 import { allowsFullWidthSpace, EraError, integer, integerLiteral, numericString, INTEGER_LITERAL, key, splitArguments, text, type Diagnostic, type Routine, type Source, type Value } from "./model.js";
-import { Variables, type GlobalData, type SaveData } from "./variables.js";
+import { symbolTable, Variables, type GlobalData, type SaveData } from "./variables.js";
 import { parseFormat } from "./format.js";
 import { MemoryGlobalStore, MemorySaveStore, StagedStores, type GlobalStore, type SaveStore } from "./storage.js";
 import { randomInt } from "node:crypto";
@@ -1424,7 +1424,7 @@ export class Runtime {
         if (args.length !== 2) throw new EraError("GETNUM expects a CSV variable and a name");
         const reference = args[0]!;
         if (reference.kind !== "variable" || reference.indices.length) throw new EraError("GETNUM expects a bare CSV variable");
-        const symbols = this.game.names.get(reference.name);
+        const symbols = this.game.names.get(symbolTable(reference.name));
         if (!symbols) throw new EraError(`No CSV name table for ${reference.name}`);
         return BigInt(symbols.get(key(text(evaluate(args[1]!, context)))) ?? -1);
       },

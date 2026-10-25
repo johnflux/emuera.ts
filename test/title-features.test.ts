@@ -217,11 +217,15 @@ PRINTFORML {MAP_EXIST("test")}`)).start();
 });
 test("CSV lookup references, declared variable sizes and GETVARS", () => {
   const data = game(`@SYSTEM_TITLE
-PRINTFORML {GETNUM(TALENT, "example")} {GETNUM(TALENT, "missing")} {VARSIZE("LABELS")} %GETVARS("LABELS:1")%`, '#DIMS LABELS = "first", "second"');
+PRINTFORML {GETNUM(TALENT, "example")} {GETNUM(TALENT, "missing")} {VARSIZE("LABELS")} %GETVARS("LABELS:1")%
+PRINTFORML {GETNUM(TRAINNAME, "kiss")} {GETNUM(MAXBASE, "stamina")} {GETNUM(STR, "greeting")}`, '#DIMS LABELS = "first", "second"');
   data.names.set("TALENT", new Map([["EXAMPLE", 7]]));
+  data.names.set("TRAIN", new Map([["KISS", 3]]));
+  data.names.set("BASE", new Map([["STAMINA", 0]]));
+  data.names.set("STR", new Map([["GREETING", 5]]));
   const result = new Runtime(data).start();
   assert.equal(result.status, "halted", JSON.stringify(result.error));
-  assert.equal(printed(result), "7 -1 2 second");
+  assert.equal(printed(result), "7 -1 2 second\n3 0 5");
 });
 test("unfinished print buffer can be popped, decoded and split without duplicating output", () => {
   const result = new Runtime(game(`@SYSTEM_TITLE

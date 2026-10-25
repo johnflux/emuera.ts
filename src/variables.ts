@@ -46,13 +46,14 @@ function parseAddress(variable: Variable, address: string): number | undefined {
 // EM ConstantData.GetKeywordDictionary: variables that index by another CSV's names.
 const SYMBOL_ALIASES: Record<string, string> = {
   MAXBASE: "BASE", DOWNBASE: "BASE", LOSEBASE: "BASE", JUEL: "PALAM", GOTJUEL: "PALAM", UP: "PALAM", DOWN: "PALAM",
-  CUP: "PALAM", CDOWN: "PALAM", NOWEX: "EX", ITEMSALES: "ITEM", ITEMPRICE: "ITEM", STR: "STRNAME",
+  CUP: "PALAM", CDOWN: "PALAM", NOWEX: "EX", ITEMSALES: "ITEM", ITEMPRICE: "ITEM",
 };
 const symbolTables = new Map<string, string>();
-function symbolTable(name: string): string {
+/** The CSV name table a variable's indices are named by (TRAINNAME → TRAIN, MAXBASE → BASE). */
+export function symbolTable(name: string): string {
   let table = symbolTables.get(name);
   if (table === undefined) {
-    const normalized = name === "STRNAME" ? name : name.replace(/NAME$/, "");
+    const normalized = name.replace(/NAME$/, "");
     table = SYMBOL_ALIASES[normalized] ?? normalized;
     symbolTables.set(name, table);
   }
