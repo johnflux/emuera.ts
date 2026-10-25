@@ -1,3 +1,5 @@
+import { createTranslation } from "./translate.js";
+
 const terminal = document.querySelector("#terminal");
 const status = document.querySelector("#status");
 const command = document.querySelector("#command");
@@ -5,6 +7,7 @@ const send = document.querySelector("#submit");
 const report = document.querySelector("#compatibility");
 const tooltip = document.querySelector("#game-tooltip");
 let tooltipTarget = null;
+const translation = createTranslation({ onChange: (status) => showTranslation(status) });
 const startButtons = [document.querySelector("#demo"), document.querySelector("#game")];
 let runMode = "game";
 let session = null;
@@ -291,7 +294,7 @@ function describe(element, description) {
     if (busy || !element.closest(".screen.is-active") || element.matches(".is-stale")) return;
     hideTooltip();
     tooltipTarget = element;
-    tooltip.textContent = description;
+    tooltip.textContent = translation.text(description, (text) => { if (tooltipTarget === element) tooltip.textContent = text; });
     tooltip.hidden = false;
     element.setAttribute("aria-describedby", tooltip.id);
     const anchor = visibleBox(element);
@@ -920,6 +923,9 @@ async function renderHtml(markup, parent, sprites) {
       }
     } else throw new Error(`Unsupported HTML tag: <${node.tagName.toLowerCase()}>`);
     applyClasses(element, node);
+    // Hotpatch extension: data-room links a non-button element to the map's room buttons with that value.
+    const room = node.getAttribute("data-room");
+    if (room !== null && /^-?\d+$/.test(room)) element.dataset.room = room;
     const title = node.getAttribute("title");
     if (title && !element.dataset.tooltip) describe(element, title);
     destination.append(element);
@@ -928,13 +934,21 @@ async function renderHtml(markup, parent, sprites) {
   for (const child of documentNode.body.childNodes) await copy(child, parent);
   parent.querySelectorAll("button.choice, .has-tooltip").forEach(decorateLabel);
 }
+// A browser's page translator (Chrome/Edge mark <html> with translated-ltr/-rtl and wrap
+// translated text in <font>, which our renderer never emits) only notices nodes added
+// to the live page, so while one is active updates are rendered in place.
+function pageTranslated() {
+  return /\btranslated-(ltr|rtl)\b/.test(document.documentElement.className) || terminal.querySelector("font") !== null;
+}
 async function render(snapshot, advanceScreen = false, fresh = false, keepFocus = false, toBottom = fresh) {
   const scrollTop = terminal.scrollTop;
   const followBottom = toBottom || terminal.scrollHeight - terminal.clientHeight - scrollTop < 2;
-  const staged = document.createElement("div");
+  const live = pageTranslated();
+  const staged = live ? terminal : document.createElement("div");
+  if (live && fresh) terminal.replaceChildren();
   // Keep a visual copy on screen while the original nodes (and their listeners)
   // are updated off-screen. Commit only after HTML and new images are ready.
-  if (!fresh) {
+  if (!fresh && !live) {
     const visible = terminal.cloneNode(true);
     // Cloned canvases are blank; copy their pixels so pictures don't blink out while the update is prepared.
     const originals = terminal.querySelectorAll("canvas");
@@ -951,10 +965,12 @@ async function render(snapshot, advanceScreen = false, fresh = false, keepFocus 
     await renderSnapshot(snapshot, advanceScreen);
     await Promise.all(pendingImages);
   } finally {
-    terminal.replaceChildren(...staged.childNodes);
+    if (!live) terminal.replaceChildren(...staged.childNodes);
     outputRoot = terminal;
     pendingImages = [];
     layoutMapPictures();
+    markMapLabels();
+    translation.translateTree(terminal);
     terminal.removeAttribute("aria-busy");
     updateControls();
     if (followBottom) terminal.scrollTop = terminal.scrollHeight;
@@ -1306,6 +1322,12 @@ terminal.addEventListener("mousedown", (event) => {
 });
 terminal.addEventListener("click", (event) => {
   if (event.defaultPrevented) return;
+  const label = event.target instanceof Element ? event.target.closest(".screen.is-active .era-map-label") : null;
+  const labelled = label && labelButtons.get(label);
+  if (labelled) {
+    if (!dragged(event) && !labelled.disabled) labelled.click();
+    return;
+  }
   if (event.target instanceof Element && event.target.closest("button, a[href]")) return;
   const selection = getSelection();
   if (selection && !selection.isCollapsed) {
@@ -1319,6 +1341,48 @@ terminal.addEventListener("pointerup", (event) => {
   if (!pressed || event.button !== 0 || dragged(event) || !(event.target instanceof Element) || event.target.closest("button:disabled") !== pressed) return;
   clickToContinue();
 });
+// On the map screens a room's number on the map, its label beside it, its legend entry, its "Walk to" entry and
+// "You are here" are separate elements for the same room; pointing at (or focusing) one highlights the others.
+const roomLinkTarget = "button.choice, [data-room]";
+function roomOf(element) { return element.dataset.value ?? element.dataset.room; }
+function linkRooms(target) {
+  const element = target instanceof Element ? target.closest(roomLinkTarget) : null;
+  const scope = element?.closest(".screen.is-active .era-move");
+  const value = scope && !element.closest(".era-move-tabs, .era-move-header") ? roomOf(element) : undefined;
+  terminal.querySelectorAll(".is-linked").forEach((other) => other.classList.remove("is-linked"));
+  if (value === undefined) return;
+  const matches = [...scope.querySelectorAll(roomLinkTarget)].filter((other) => roomOf(other) === value && !other.closest(".era-move-tabs, .era-move-header"));
+  if (matches.length > 1) matches.forEach((other) => other.classList.add("is-linked"));
+}
+terminal.addEventListener("pointerover", (event) => linkRooms(event.target));
+terminal.addEventListener("pointerleave", () => linkRooms(null));
+terminal.addEventListener("focusin", (event) => linkRooms(event.target));
+terminal.addEventListener("focusout", (event) => linkRooms(event.relatedTarget));
+// Maps print a room's name after its number ("16：Worn-out Hut") one character at a time, outside the button.
+// Mark that text as the room's label so it highlights with the room and clicking it presses the number.
+const labelButtons = new WeakMap();
+function markMapLabels() {
+  for (const button of terminal.querySelectorAll(".screen.is-active .era-map-art button.choice:not([data-labelled])")) {
+    button.dataset.labelled = "";
+    const run = [];
+    let started = false;
+    for (let node = button.nextElementSibling; node && !node.matches("button"); node = node.nextElementSibling) {
+      const text = node.textContent;
+      if (!started) {
+        if (!/^[：:]$/.test(text)) break;
+        started = true;
+      } else if (/^[\u2500-\u257f|｜　]$/.test(text) || (text === " " && node.nextElementSibling?.textContent === " ")) break;
+      run.push(node);
+    }
+    while (run.length && /^\s*$/.test(run.at(-1).textContent)) run.pop();
+    if (run.length < 2) continue;
+    for (const node of run) {
+      node.classList.add("era-map-label");
+      node.dataset.room = button.dataset.value;
+      labelButtons.set(node, button);
+    }
+  }
+}
 document.querySelector("#input-form").addEventListener("submit", (event) => {
   event.preventDefault();
   void submit(command.value);
@@ -1394,6 +1458,20 @@ startButtons[0].addEventListener("click", () => { void start("demo"); });
 startButtons[1].addEventListener("click", () => { void start("game"); });
 document.querySelector("#font-size").addEventListener("input", (event) => {
   updateSetting("fontSize", Number(event.target.value));
+});
+const translateToggle = document.querySelector("#translate-toggle");
+const translateState = document.querySelector("#translate-state");
+function showTranslation({ state, detail, enabled, supported }) {
+  translateToggle.setAttribute("aria-pressed", String(enabled));
+  translateToggle.disabled = !supported;
+  const labels = { starting: "starting", waiting: "click to download", downloading: `downloading ${detail}`, unavailable: "unavailable" };
+  translateState.textContent = !supported ? "(needs Chrome or Edge)" : enabled && labels[state] ? `(${labels[state].trim()})` : "";
+  translateToggle.title = detail && state !== "downloading" ? `Translate Japanese: ${detail}` : "Translate the game's Japanese text on this device as it is printed";
+}
+showTranslation(translation.status());
+translateToggle.addEventListener("click", () => {
+  translation.setEnabled(!translation.enabled());
+  translation.translateTree(terminal);
 });
 const settingsPanel = document.querySelector("#settings");
 document.querySelector("#settings-toggle").addEventListener("click", (event) => {

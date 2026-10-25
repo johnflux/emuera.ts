@@ -91,6 +91,8 @@ main { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 1
 .screen.is-active .is-stale.has-tooltip:hover { background-color: transparent; }
 a { color: #8ddaff; }
 .has-tooltip, .line button.choice.has-tooltip { cursor: help; text-decoration: none; transition: background-color 180ms ease; }
+/* A tooltip on something clickable still shows the hand: the click matters more than the explanation. */
+.screen.is-active .line button.choice.has-tooltip:enabled { cursor: pointer; }
 .has-tooltip .interactive-label { text-decoration-line: underline; text-decoration-style: dashed; text-decoration-color: #777; text-decoration-thickness: 1px; text-underline-offset: .2em; transition: text-decoration-color 180ms ease, text-shadow 180ms ease; }
 .screen.is-active .has-tooltip:hover, .screen.is-active .has-tooltip:focus-visible { background-color: #ffffff12; }
 /* A picture button highlights its picture rather than the line it hangs from. */
@@ -383,9 +385,13 @@ a { color: #8ddaff; }
 .era-place-name { color: #e6f2ff; font-size: 1.3em; letter-spacing: .02em; }
 .era-place-name::before { content: ""; display: inline-block; width: .55em; height: .55em; margin-right: .5em; border: 2px solid #66ffff; border-radius: 50% 50% 50% 0; transform: rotate(-45deg) translateY(-.1em); }
 .era-place-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-left: auto; font-size: .8em; font-weight: normal; }
-.era-portrait { min-width: 180px; }
+/* The portrait sits in the card's bottom-left corner, over the card's padding (10px left, 8px bottom); HOTPATCH_PORTRAIT draws it a little larger. */
+.era-portrait { min-width: 180px; align-self: end; margin: 0 0 -8px -10px; }
+.era-portrait .sprite { height: auto; vertical-align: bottom; }
+/* The picture takes its own height here, so the blank lines the game prints to make room for it are dropped. */
+.era-portrait .sprite-clip:first-child { position: relative; display: block; }
+.era-portrait > .line:not(:has(.sprite)) { display: none; }
 .screen.is-active .era-portrait button.choice.is-target .sprite-clip:not(.sprite-hover) { box-shadow: none; }
-.era-portrait .line:has(button.choice):not(:has(.sprite)) { display: none; }
 .era-character-info { min-width: 0; }
 .era-character-state { color: #bbb; }
 .era-facts { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 4px 0; }
@@ -532,6 +538,11 @@ a { color: #8ddaff; }
 .era-move-legend > .line + .line:not(.era-marker) { margin-top: 3px; }
 .era-move-legend > .line:not(.era-marker):empty { display: none; }
 .screen.is-active .era-move-legend button.choice:enabled:is(:hover, :focus-visible) { color: #fff; text-decoration: underline; }
+.screen.is-active .era-map-art .era-map-label { cursor: pointer; }
+.screen.is-active .era-map-art .era-map-label.is-linked { background: #3a3414; color: #fff !important; }
+.screen.is-active .era-move .era-move-here.is-linked { background: #3a3414; outline: 1px solid #e8c95a; border-radius: 2px; }
+.screen.is-active .era-move button.choice.is-linked { background: #3a3414; outline: 1px solid #e8c95a; outline-offset: 0; border-radius: 2px; color: #fff; }
+.screen.is-active .era-map-picture > button.choice.era-map-room.is-linked { background: #3a3414; z-index: 1; }
 .era-move :is(.era-move-header, .era-move-dests, .era-shop-chips) .interactive-label { text-decoration-line: none; }
 .era-move-tasks:not(:has(.line:not(.era-marker):not(:empty))) { display: none; }
 /* Going out (GO_OUT_MAP.ERB): the region map and Stroll, whose maps are smaller than the home maps. */
@@ -542,3 +553,4 @@ a { color: #8ddaff; }
 .era-travel-time.era-travel-faster { color: #7ee08a; }
 .era-travel-time.era-travel-slower { color: #7c98e8; }
 .line button.choice.era-move-dest.era-travel-danger, .era-travel-danger .era-travel-time { color: #e07070; }
+.menu-state { color: #8a8a8a; font-size: 11px; }

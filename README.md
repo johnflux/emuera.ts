@@ -130,6 +130,16 @@ while clears, HTML and image decoding are prepared off-screen, then the finished
 update is committed together. Existing output nodes and their event listeners
 are retained during staging; unchanged images are not reconstructed. Scroll
 position is preserved unless already following the bottom or starting a new run.
+Japanese text the game prints is translated in place by the browser's on-device
+Translator API (Chrome/Edge 138 or later; `web/translate.js`). Nothing is sent
+off the machine. It is on by default unless the browser's language is Japanese,
+and **Menu → Translate Japanese** turns it off, restoring the original text.
+The first use downloads the language model, which starts on your next click or
+key press. Map art and box-drawing text art are left alone, and tooltips are
+translated too. Chrome's own Translate button only translates a page once, so it
+misses lines printed later. While it is on (Chrome/Edge's `translated-ltr` class
+or its `<font>` wrappers), updates are rendered straight into the live page
+(marked `lang="ja"`), but the built-in translator above is the reliable option.
 Busy controls do not dim the current screen. Run buttons expose `aria-disabled`
 while busy and ignore repeat activation without flashing disabled colors or
 losing their hover/focus appearance. This batches each HTTP snapshot,

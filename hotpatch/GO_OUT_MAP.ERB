@@ -365,7 +365,7 @@ HTML_PRINT "<era-close>"
 
 HTML_PRINT "<era-open class='era-card era-move-side'>"
 HTML_PRINT "<div class='era-card-title'>You are here</div>"
-HTML_PRINT @"<div class='era-move-here'><span class='era-move-num'>{nHere}</span>%HTML_ESCAPE(GET_MAPNAME(nHere))%</div>"
+HTML_PRINT @"<div class='era-move-here' data-room='{nHere}'><span class='era-move-num'>{nHere}</span>%HTML_ESCAPE(GET_MAPNAME(nHere))%</div>"
 sHtml '= ""
 FOR nArea, 0, MAXHOME
 	SIF nArea == nHere
@@ -433,7 +433,7 @@ HTML_PRINT "<era-open class='era-card era-move-side'>"
 HTML_PRINT "<div class='era-card-title'>You are here</div>"
 nPlace = nArea * 100 + nHere * 10
 IF nHere && NAME_FROM_PLACE(nPlace) != ""
-	HTML_PRINT @"<div class='era-move-here'><span class='era-move-num'>{nHere}</span>%HTML_ESCAPE(THE_CASE_SHIFT(NAME_FROM_PLACE(nPlace)))%</div>"
+	HTML_PRINT @"<div class='era-move-here' data-room='{nHere}'><span class='era-move-num'>{nHere}</span>%HTML_ESCAPE(THE_CASE_SHIFT(NAME_FROM_PLACE(nPlace)))%</div>"
 ELSE
 	HTML_PRINT @"<div class='era-move-here'>%HTML_ESCAPE(THE_CASE_SHIFT(NAME_FROM_PLACE(CFLAG:MASTER:現在位置)))%</div>"
 ENDIF

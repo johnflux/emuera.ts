@@ -203,7 +203,7 @@ export function createApp(game: Game, development = false, store: GlobalStore = 
         return;
       }
       const pages: Record<string, string> = {
-        "/": "index.html", "/app.js": "app.js", "/style.css": "style.css",
+        "/": "index.html", "/app.js": "app.js", "/translate.js": "translate.js", "/style.css": "style.css",
         "/fonts/BIZUDGothic-Regular.ttf": "fonts/BIZUDGothic-Regular.ttf",
         "/fonts/OFL.txt": "fonts/OFL.txt",
       };

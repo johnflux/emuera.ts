@@ -487,7 +487,7 @@ HTML_PRINT "<era-close>"
 
 HTML_PRINT "<era-open class='era-card era-move-side'>"
 HTML_PRINT "<div class='era-card-title'>You are here</div>"
-HTML_PRINT @"<div class='era-move-here'><span class='era-move-num'>{nHere % 100}</span>%HTML_ESCAPE(THE_CASE_SHIFT(NAME_FROM_PLACE(nHere)))%</div>"
+HTML_PRINT @"<div class='era-move-here' data-room='{nHere}'><span class='era-move-num'>{nHere % 100}</span>%HTML_ESCAPE(THE_CASE_SHIFT(NAME_FROM_PLACE(nHere)))%</div>"
 SIF nHere != CFLAG:MASTER:初期位置 && IN_HOME(CFLAG:MASTER:初期位置) == 1
 	HTML_PRINT @"<div class='era-shop-chips'><button value='0' class='era-chip-button' title='%HTML_ESCAPE(THE_CASE_SHIFT(NAME_FROM_PLACE(CFLAG:MASTER:初期位置)))%'>Return to your room</button></div>"
 sHtml '= ""
