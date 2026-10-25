@@ -83,18 +83,18 @@ ENDSELECT
 GOTO MENU
 
 @SCENARIOS
-#DIMS SCENE, 10 = "", "Alone", "One person", "Two people", "Crowd (six people)", "Time stopped, two people", "Time stopped, alone", "Partner asleep", "Exhausted", "Outdoors at night, in the rain"
+#DIMS SCENE, 11 = "", "Alone", "One person", "Two people", "Crowd (six people)", "Time stopped, two people", "Time stopped, alone", "Partner asleep", "Exhausted", "Outdoors at night, in the rain", "Asleep, before waking (the sleep menu)"
 #DIM I
 ; RESETDATA resets static locals too.
 #DIM DYNAMIC CHOICE
 PRINTL Start the bundled game on its main screen in a prepared situation (Quicktest player, Hakurei Shrine back room).
 PRINTL Play continues normally from there; restart the demo to pick another scenario.
-FOR I, 1, 10
+FOR I, 1, 11
   PRINTFORML [{I}] %SCENE:I%
 NEXT
 PRINTL [0] Back
 INPUT
-IF RESULT < 1 || RESULT > 9
+IF RESULT < 1 || RESULT > 10
   RETURN 0
 ENDIF
 CHOICE = RESULT
@@ -113,9 +113,13 @@ BEGIN FIRST
 
 @EVENTFIRST
 #LATER
-; Overrides SYSTEM.ERB's BEGIN SHOP so the day starts at once (like choosing [100]).
-SIF DEMO_SCENARIO
+; Overrides SYSTEM.ERB's BEGIN SHOP so the day starts at once (like choosing [100]); scenario 10 stays on the sleep menu.
+IF DEMO_SCENARIO == 10
+  DEMO_SCENARIO = 0
+  DevTest = 0
+ELSEIF DEMO_SCENARIO
   BEGIN TRAIN
+ENDIF
 
 ; Wraps the game's main screen: the scene is arranged right before it is first drawn, so arrival greetings wait for the next turn.
 @SHOW_STATUS

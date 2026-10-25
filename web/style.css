@@ -453,3 +453,29 @@ a { color: #8ddaff; }
 .era-main:has(.era-stopped) .era-sky * { animation-play-state: paused; }
 .era-main:has(.era-stopped) .era-main-header::before { z-index: 1; }
 .era-main:has(.era-stopped) .era-main-when { color: #cfe6f5; }
+/* Sleep menu (hotpatch/SLEEP_MENU.ERB): the main screen's header and cards; you | home, then the menu | system, the tip. */
+.era-shop { display: grid; gap: 10px; max-width: 100cqi; margin: 4px 0; white-space: normal;
+  grid-template-columns: minmax(32ch, 38ch) minmax(0, 1fr) minmax(32ch, 44ch);
+  grid-template-areas: "header header header" "player menu system" "home menu system" "tip tip tip"; }
+.era-shop > * { min-width: 0; }
+.era-shop > .line { grid-column: 1 / -1; }
+.era-shop > .era-shop-player { grid-area: player; }
+.era-shop > .era-shop-home { grid-area: home; }
+.era-shop > .era-shop-menu { grid-area: menu; }
+.era-shop > .era-shop-system { grid-area: system; }
+.era-shop > .era-shop-tip { grid-area: tip; color: #e8d870; }
+.era-shop .era-main-header { min-height: 92px; }
+.era-shop-wake { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; margin-top: 4px; }
+.era-shop-wake .era-status-label { margin-right: 0; }
+.era-shop-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.era-shop .era-main-header > .era-main-when + * { margin-left: auto; }
+.line button.choice.era-timestop-button.era-wake-button { border-color: #e8b860; background: linear-gradient(#4a3618, #2c200e); color: #ffe8b8; box-shadow: 0 0 14px #ffb84a44; }
+@container (max-width: 1100px) {
+  .era-shop { grid-template-columns: minmax(32ch, 40ch) minmax(0, 1fr); grid-template-areas: "header header" "player menu" "home menu" "system system" "tip tip"; }
+}
+@container (max-width: 760px) {
+  .era-shop { grid-template-columns: minmax(0, 1fr); grid-template-areas: "header" "player" "home" "menu" "system" "tip"; }
+}
+.era-shop-place { display: block; margin-bottom: 8px; font-size: 1.1em; font-weight: bold; }
+.era-shop-place .era-sub { display: block; font-size: .85em; font-weight: normal; }
+.era-shop :is(.era-shop-wake, .era-shop-chips, .era-main-header) .interactive-label { text-decoration-line: none; }

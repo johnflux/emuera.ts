@@ -1,0 +1,131 @@
+;-------------------------------------------------------------------------------
+; Hotpatch for the menu shown while you sleep, before waking (ERB/SHOP関連/SHOP.ERB @SHOW_SHOP), laid out in panels like
+; the main screen (MAIN_SCREEN.ERB): a header with the sky, the waking time's clock, the date, the waking time and a
+; large Wake Up button; your card (meters and funds) and your home's; the menu grouped into cards; the tip at the
+; bottom. The commands and their numbers are the original's (USERSHOP handles them unchanged), greyed out as before
+; while you are fainted. Dropped: the DRAWLINE rules and the blank lines that spaced the menu.
+;-------------------------------------------------------------------------------
+@SHOW_SHOP
+#DIMS DYNAMIC sHtml
+#DIMS DYNAMIC sGray
+;mod custom code - turn off
+THIRD_PERSON = 0
+;起床前画面表示中フラグ
+TFLAG:100 = 0
+;起床時間自動補正、最低睡眠時間は4時間
+IF 睡眠時間予測(TIME:3) < 240
+	PRINTL The sleeping period is too short. At least 4 hours of sleep is needed.
+	CALL 最低睡眠時間設定()
+	PRINTFORMW Waking time has been set to (%時刻表示(TIME:3)%).
+ENDIF
+SIF FLAG:気絶中断
+	sGray '= " era-unavailable"
+
+HTML_PRINT "<era-open class='era-layout era-shop'>"
+HTML_PRINT "<era-open class='era-main-header'>"
+CALL HOTPATCH_SKY(0)
+HTML_PRINT @"<div class='era-clock' title='Waking time'><img src='%GET_CLOCK_IMAGE_NAME(TIME:3)%' height='72px'></div>"
+HTML_PRINT "<era-open class='era-main-when'>"
+PRINTFORM %COND_STR(@"NG:{FLAG:周回数}, ", FLAG:周回数)%Day {DAY}, %PRINT_DATE_F(DAY, 1)% (
+CALL COLOR_YOUBI
+PRINTL )
+HTML_PRINT @"<div class='era-shop-wake'><span class='era-status-label'>Waking at</span>%HTML_ESCAPE(時刻表示(TIME:3))%<button value='2400' class='era-chip-button' title='Change the time you wake up'>Change</button><button value='3333' class='era-chip-button' title='The calendar of events and birthdays'>Calendar</button></div>"
+HTML_PRINT "<era-close>"
+HTML_PRINT @"<button value='100' class='era-timestop-button era-wake-button'>Wake Up<span class='era-sub'>Start the day at %HTML_ESCAPE(時刻表示(TIME:3))%</span></button>"
+HTML_PRINT "<era-close>"
+
+HTML_PRINT "<era-open class='era-card era-player era-shop-player'>"
+sHtml '= "Funds" + COND_STR(@"&#10;Charisma: %DIGIT_GROUP(MONEY:2)% CM", MONEY:2) + COND_STR(@"&#10;Bullet Money: %DIGIT_GROUP(MONEY:弾貨)% BM", MONEY:弾貨)
+HTML_PRINT @"<div class='era-card-title'>%HTML_ESCAPE(CALLNAME:MASTER)%<span class='era-sub'>You</span><span class='era-funds' title='%sHtml%'>%HTML_ESCAPE(金額表示(MONEY))%</span></div>"
+CALL HOTPATCH_BASE(MASTER)
+SIF MAXBASE:MASTER:TSP
+	HTML_PRINT @"<div class='era-bars'>%HOTPATCH_BAR("TSP", BASE:MASTER:TSP, MAXBASE:MASTER:TSP, "era-tsp", "Time Stop Points")%</div>"
+SIF FLAG:気絶中断
+	HTML_PRINT "<div class='era-player-status'><span class='era-status-label'>Status:</span><span class='era-status' color='#FF6060' title='You fainted: home, shopping and some settings are unavailable until you wake up'>Fainted</span></div>"
+HTML_PRINT "<era-close>"
+
+HTML_PRINT "<era-open class='era-card era-shop-home'>"
+HTML_PRINT "<div class='era-card-title'>Home</div>"
+HTML_PRINT @"<div class='era-place-name era-shop-place'>%HTML_ESCAPE(STR_TR((((MAIN_MAP != 0) ? 8000 # 0 ) + CFLAG:MASTER:初期位置)))%<span class='era-sub'>%HTML_ESCAPE(GET_MAPNAME(MAIN_MAP))%</span></div>"
+SIF CFLAG:MASTER:初期位置 != CFLAG:MASTER:現在位置
+	HTML_PRINT @"<div class='era-player-status'><span class='era-status-label'>Sleeping at:</span>%HTML_ESCAPE(NAME_FROM_PLACE(CFLAG:MASTER:現在位置))%</div>"
+HTML_PRINT "<era-open class='era-actions-group'>"
+sHtml '= @"<button value='102' class='era-chip-button%sGray%' title='Your home&#39;s schedule and settings'>Home Settings</button>"
+SIF CFLAG:MASTER:現在位置 != OMANEKIBEYA()
+	sHtml += @"<button value='120' class='era-chip-button%sGray%' title='Move your home to another place'>Change Home</button>"
+HTML_PRINT @"<div class='era-shop-chips'>%sHtml%</div>"
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-close>"
+
+HTML_PRINT "<era-open class='era-card era-shop-menu'>"
+HTML_PRINT "<div class='era-card-title'>Records &amp; Collections</div>"
+HTML_PRINT "<era-open class='era-actions-group'>"
+HTML_PRINT "<div class='era-actions-title'>You</div>"
+PRINTC Abilities[101]
+SIF FLAG:気絶中断
+	SETCOLOR C_GRAY
+PRINTC Mail Order[103]
+RESETCOLOR
+PRINTC List Items[104]
+SIF FLAG:気絶中断
+	SETCOLOR C_GRAY
+PRINTC Achievements[150]
+PRINTC Farm Settings[151]
+SIF CFLAG:MASTER:子供人数
+	PRINTC Child List[152]
+RESETCOLOR
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-open class='era-actions-group'>"
+HTML_PRINT "<div class='era-actions-title'>Collections</div>"
+IF FLAG:700
+	SIF FLAG:気絶中断
+		SETCOLOR C_GRAY
+	PRINTC Panty Collection[105]
+	RESETCOLOR
+ENDIF
+PRINTC Music Collection[106]
+PRINTC Gift Collection[107]
+PRINTC Fish Collection[108]
+PRINTC Animals Hunted[109]
+PRINTC Bugs Caught[110]
+PRINTC Special Dishes[111]
+PRINTC Mob Characters[112]
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-close>"
+
+HTML_PRINT "<era-open class='era-card era-shop-system'>"
+HTML_PRINT "<div class='era-card-title'>System</div>"
+HTML_PRINT "<era-open class='era-actions-group'>"
+HTML_PRINT "<div class='era-actions-title'>Settings</div>"
+SIF FLAG:気絶中断
+	SETCOLOR C_GRAY
+PRINTC Request Config[160]
+RESETCOLOR
+PRINTC Reset Clothing[161]
+PRINTC Automatic Item Use[162]
+PRINTC Options[400]
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-open class='era-actions-group'>"
+HTML_PRINT "<div class='era-actions-title'>Guides</div>"
+PRINTC Foraging Spots[410]
+PRINTC Fishing Spots[411]
+PRINTC Locations Table[412]
+PRINTC Tutorial[420]
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-open class='era-actions-group'>"
+HTML_PRINT "<div class='era-actions-title'>Game</div>"
+PRINTC Save[200]
+PRINTC Load[300]
+SIF SAVESTR:本体バージョン != eraTW_Version || !RANDOM_CHARANUM || SAVESTR:ATW_SAVE_VER != ATW_VERSION ;custom code, check ATW version as well
+	SETCOLOR C_RED
+PRINTC Update[500]
+RESETCOLOR
+SIF MONEY:2 && FLAG:会員ランク ;custom code, added membership req
+	PRINTC Sell Charisma[600]
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-close>"
+
+HTML_PRINT "<era-open class='era-card era-shop-tip'>"
+CALL TW_TIPS
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-close>"
