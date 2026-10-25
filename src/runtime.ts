@@ -1083,6 +1083,12 @@ export class Runtime {
             if (next.value.input.kind === "wait") continue;
             throw new EraError("Input was requested while SKIPDISP is hiding output; wrap it in NOSKIP...ENDNOSKIP", this.currentSource);
           }
+          // Emuera's RunEmueraProgram PrintFlush(false)s whenever the script stops to wait, so a line left open
+          // (PRINT "[0] - Return " then INPUT) is finished and the echoed input goes on a line of its own.
+          if (this.lineOpen) {
+            const flush = this.emit("text", "", true);
+            if (flush !== SKIPPED && "output" in flush) output.push(flush.output);
+          }
           this.pending = next.value.input;
           this.waits++;
           return { status: "waiting", output, input: this.pending, error: null, title: this.windowTitle(), target: this.currentTarget() };

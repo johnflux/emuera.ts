@@ -227,14 +227,15 @@ ONEINPUT 42
 WAIT
 PRINTL Finished`);
   const initial = rt.start();
-  assert.equal(initial.output.length, 1);
+  // Emuera finishes the open "Name:" line when the script stops to wait, so the echo is a line of its own.
+  assert.deepEqual(initial.output.map((item) => [item.type, "text" in item ? item.text : "", "newline" in item ? item.newline : null]), [["text", "Name:", false], ["text", "", true]]);
   const named = rt.input("<b>John</b> [3]");
   assert.deepEqual(named.output.map((item) => item.type), ["input", "text", "text", "clear"]);
   const echo = named.output[0];
   assert.ok(echo && echo.type === "input");
   assert.equal(echo.text, "<b>John</b> [3]");
   assert.equal(echo.newline, true);
-  assert.equal(output(named), "Hello, <b>John</b> [3].\n2");
+  assert.equal(output(named), "Hello, <b>John</b> [3].\n3");
   assert.throws(() => rt.input("wrong"), /whole number/);
   const number = rt.input("0");
   assert.equal(number.output.length, 1);

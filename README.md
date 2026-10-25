@@ -149,6 +149,9 @@ Accepted input is echoed as plain text before the game's response (including
 clicked choices and single-character input); rejected input stays editable and
 does not enter the scrollback. Echoed input counts as a logical line for
 `LINECOUNT` and `CLEARLINE`. `WAIT` continues without adding an input echo.
+As in Emuera (which `PrintFlush`es whenever the script stops to wait), a line
+left open when input is requested (`PRINT [0] - Return` then `INPUT`) is ended
+there, so the echo is a line of its own and `CLEARLINE 1` removes only the echo.
 Output continued past a click-to-continue wait stays bright: a run of dialogue
 greys out together only once the game stops at a real input (a menu or prompt),
 so new choices are shown against greyed history.

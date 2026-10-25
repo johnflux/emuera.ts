@@ -12,8 +12,7 @@ of this document. Re-apply it after updating or reinstalling the game.
 | # | Symptom | Cause | Files |
 |---|---------|-------|-------|
 | 1 | "Ego alert! Biten has Relation towards herself!" on every load | Typo in Biten's CSV: her affinity for Ubame uses Biten's number | `CSV/Chara/Chara153 美天.csv`, `ERB/TRANSLATION/Addition/Add_Relation.ERB` |
-| 2 | After "You simply can't enter." the map's bottom row (`[C] - Change Display Mode`, `Change Map`, `Return`) disappears | `CLEARLINE 2` assumes the typed input is on its own line, but it shares the last menu row | `ERB/コマンド関連/COMF/日常系/COMF400 移動.ERB` |
-| 3 | Play A Game: after picking a game, "Add a wager?" answers every choice with "Invalid input" and never lets you continue | Off-by-one in the bet-choice check (`RESULT < LOCAL-1`) | `ERB/TRANSLATION/Addition/Custom_Commands/Add_CUSTOM_COM0 Play Game.ERB` |
+| 2 | Play A Game: after picking a game, "Add a wager?" answers every choice with "Invalid input" and never lets you continue | Off-by-one in the bet-choice check (`RESULT < LOCAL-1`) | `ERB/TRANSLATION/Addition/Custom_Commands/Add_CUSTOM_COM0 Play Game.ERB` |
 
 ## 1. Biten's self-relation ("Ego alert!")
 
@@ -62,49 +61,7 @@ Running [Update] does not help.
 Verified headlessly: loading save 300, which was made before the fix, no
 longer prints the alert.
 
-## 2. "You simply can't enter" erases the map's bottom row
-
-### Symptom
-
-Choose Move and pick a location you can't enter yet, for example
-`54 - Inchling's Insect Cage`. The message "You simply can't enter." appears.
-After clicking past it, the map is still active, but its last row is gone:
-`[ 58] - Return　＜]Change Map (1)[＞　[C] - Change Display Mode`.
-
-### Cause
-
-- The map menu (`COMF400 移動.ERB`) ends with
-  `PRINTBUTTON "[C] - Change Display Mode　　 ", "C"` and no newline, then
-  waits in `INPUTS`.
-- In Emuera, input is echoed with `Print(str); PrintFlush(false)`
-  (`EmueraConsole.doInputToEmueraProgram`). The echo is appended to the
-  unfinished line, so the last row becomes `…[C] - Change Display Mode　　 54`.
-- `CANNOT_MOVE_MESSAGE` and every map's `MAP_CANNOT_WORD_*` then do
-  `PRINTFORMW <message>`, `CLEARLINE 2` and `REUSELASTLINE`. The intent is to
-  remove "the echoed input and the message". Because the echo shares the menu
-  row, `CLEARLINE 2` deletes the message **and the menu's last row**. The loop
-  then goes back to the same `INPUT` without redrawing the map.
-
-The same happens for "It's locked.", "Invalid input", the Lunatic Survival
-restriction messages, and the "too inexperienced" message.
-
-### Fix
-
-Add a `PRINTL` after the menu is drawn and before the input loop. This ends
-the last row, so the echo goes on its own line and `CLEARLINE 2` removes
-exactly the echo and the message. The shared `CANNOT_MOVE_MESSAGE` and the
-per-map message functions stay unchanged.
-
-The menu looks the same, because `PRINTL` on a non-empty pending line only
-finishes that line. The map-animation redraw (`CLEARLINE LINECOUNT - LINESTART`)
-still clears the whole menu, because the finished row is now counted inside
-that range.
-
-Verified headlessly: after Move then `54`, the output is
-`…[C] - Change Display Mode`, `54`, `You simply can't enter.`, `<<clear 2>>`,
-and the menu row survives.
-
-## 3. "Add a wager?" rejects every choice
+## 2. "Add a wager?" rejects every choice
 
 ### Symptom
 
@@ -162,18 +119,6 @@ diff -ru a/ERB/TRANSLATION/Addition/Add_Relation.ERB b/ERB/TRANSLATION/Addition/
  LOCAL:2 = 0
  FOR LOCAL, 0, CHARANUM
  	FOR LOCAL:1, 0, CHARANUM
-diff -ru a/ERB/コマンド関連/COMF/日常系/COMF400 移動.ERB b/ERB/コマンド関連/COMF/日常系/COMF400 移動.ERB
---- a/ERB/コマンド関連/COMF/日常系/COMF400 移動.ERB
-+++ b/ERB/コマンド関連/COMF/日常系/COMF400 移動.ERB
-@@ -129,6 +129,8 @@
- 		PRINT (It's hard to walk alone in this state...)
- 	ENDIF
- ENDIF
-+;Patch: end the last menu row so the INPUT echo gets its own line for CLEARLINE 2
-+PRINTL
- 
- DO
- 	;Map Animation Code
 diff -ru a/ERB/TRANSLATION/Addition/Custom_Commands/Add_CUSTOM_COM0 Play Game.ERB b/ERB/TRANSLATION/Addition/Custom_Commands/Add_CUSTOM_COM0 Play Game.ERB
 --- a/ERB/TRANSLATION/Addition/Custom_Commands/Add_CUSTOM_COM0 Play Game.ERB
 +++ b/ERB/TRANSLATION/Addition/Custom_Commands/Add_CUSTOM_COM0 Play Game.ERB
