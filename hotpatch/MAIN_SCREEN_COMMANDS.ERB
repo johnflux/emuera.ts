@@ -603,12 +603,8 @@ IF (TARGET != MASTER && FREE_USE_ACTIVE()) || CFLAG:うふふ || CFLAG:MASTER:�
 	SIF GETBIT(nFilters, 5)
 		sHtml += HOTPATCH_TOGGLE("Rev Service", -9120, CFLAG:TARGET:RevServiceFilter)
 ENDIF
-IF !GETBIT(nFilters, 6)
-ELSEIF FLAG:70 && CFLAG:TARGET:344 != 1
-	sHtml += HOTPATCH_TOGGLE("Petting", 837, CFLAG:TARGET:セクハラアンフィルタ, "petting", "Show the petting actions (pink): touching she may not welcome, from pinching her cheek to pushing her down (the game&#39;s セクハラ, harassment, tag)&#10;While time is stopped most are shown anyway, as she can&#39;t react; Fingering and Anal Caress still follow this filter")
-ELSE
-	sHtml += HOTPATCH_TOGGLE("Petting", 837, CFLAG:TARGET:セクハラアンフィルタ, "petting", "Show the petting actions (pink): touching she may not welcome, from pinching her cheek to pushing her down (the game&#39;s セクハラ, harassment, tag)")
-ENDIF
+SIF GETBIT(nFilters, 6)
+	sHtml += HOTPATCH_TOGGLE("Petting", 837, CFLAG:TARGET:セクハラアンフィルタ, "petting", "Show touching actions she may not welcome (pink)")
 SIF GETBIT(nFilters, 7)
 	sHtml += HOTPATCH_TOGGLE("Housekeeping", 840, FLAG:家事アンフィルタ, "chores", "Show the housekeeping actions (green)")
 SIF GETBIT(nFilters, 8)
@@ -655,7 +651,7 @@ SELECTCASE nBit
 ENDSELECT
 RETURNF nOld
 
-; A toggle chip: lit when on; a filter's kind tints it like the actions it shows (HOTPATCH_ACTION_KIND).
+; A toggle chip: lit when on (so its tooltip just says what it does); a filter's kind tints it like the actions it shows (HOTPATCH_ACTION_KIND).
 @HOTPATCH_TOGGLE(sLabel, nValue, nOn, sKind, sTitle)
 #FUNCTIONS
 #DIMS DYNAMIC sLabel
@@ -667,7 +663,7 @@ RETURNF nOld
 SIF STRLENS(sKind)
 	sClass '= " era-kind-" + sKind
 SIF STRLENS(sTitle)
-	sTitle '= @" title='%sLabel%: %(nOn ? "on" # "off")%&#10;%sTitle%'"
+	sTitle '= @" title='%sLabel%: %sTitle%'"
 RETURNF @"<button value='{nValue}' class='era-toggle%sClass%%(nOn ? " era-on" # "")%'%sTitle%>%sLabel%</button>"
 
 ;-------------------------------------------------------------------------------

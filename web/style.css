@@ -365,8 +365,21 @@ a { color: #8ddaff; }
 .era-face-letter { color: #aaa; font-weight: bold; font-size: 1.3em; }
 .era-occupant-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
 .era-occupant-name { color: #eee; font-weight: bold; }
-.era-occupant.era-selected .era-occupant-name { color: #66ffff; }
+.era-occupant.era-selected .era-occupant-name { color: #8fc8ff; }
+/* Names in the game's mood colours (SHOW_EQUIP_2: C_BLUE, C_H_PINK, C_ORANGE, C_AQUA, C_RED). */
+.era-occupant.era-mood-asleep .era-occupant-name { color: #306eff; }
+.era-occupant.era-mood-heat .era-occupant-name { color: #ff69b4; }
+.era-occupant.era-mood-drunk .era-occupant-name { color: #ffa500; }
+.era-occupant.era-mood-happy .era-occupant-name { color: #66ffff; }
+.era-occupant.era-mood-sullen .era-occupant-name { color: #ff0000; }
 .era-occupant-state { color: #8a949c; font-size: .85em; }
+/* HOTPATCH_FEELINGS: relationship, hate mark, mad/sullen/happy (colours from the game's character list and SHOW_EQUIP_2). */
+.era-feel { white-space: nowrap; }
+.era-occupant-state .era-feel::before { content: " · "; color: #8a949c; }
+.era-feel-partner { color: #ff5050; } .era-feel-love { color: #ee60ee; } .era-feel-lust { color: #4fbf80; }
+.era-feel-friend { color: #6aa8e0; } .era-feel-mistress { color: #ff6347; } .era-feel-yearning { color: #ccc; }
+.era-feel-hate, .era-feel-mad, .era-feel-sullen { color: #ff5050; } .era-feel-sad { color: #6f9cff; } .era-feel-happy { color: #66ffff; }
+.era-facts .era-feel-hate { cursor: help; }
 /* The character card: name, portrait beside the facts and meters. */
 .era-character { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 14px; align-items: start; }
 .era-character > :is(.line, .era-scene) { grid-column: 1 / -1; }
@@ -391,9 +404,21 @@ a { color: #8ddaff; }
 /* The picture takes its own height here, so the blank lines the game prints to make room for it are dropped. */
 .era-portrait .sprite-clip:first-child { position: relative; display: block; }
 .era-portrait > .line:not(:has(.sprite)) { display: none; }
+/* PRINT_TARGET_IMAGE prints each layer (effects, frame, time-stop tint) on its own line, raised by ypos to overlap the
+   first; here every line shares one grid cell instead, so the layers stack whatever height they take. */
+.era-portrait { display: grid; }
+.era-portrait > .line { grid-area: 1 / 1; }
+.era-portrait .sprite-clip { top: 0 !important; }
+/* The time-stop layer is a flat translucent square of Emuera's background colour, which would show as a box on the
+   card's gradient; fading the picture by the same amount (its alpha is 35%) gives the intended dimming. */
+.era-portrait .sprite[data-src="時間停止"] { display: none; }
+.era-portrait:has(.sprite[data-src="時間停止"]) .sprite { opacity: .65; }
 .screen.is-active .era-portrait button.choice.is-target .sprite-clip:not(.sprite-hover) { box-shadow: none; }
 .era-character-info { min-width: 0; }
 .era-character-state { color: #bbb; }
+/* The target's name (SHOW_EQUIP_2) in the card-title blue, unless the game colours it for their mood; species after it. */
+.era-character-state > .line:not(.era-marker) > .text-color-neutral:first-child { color: #8fc8ff; font-weight: bold; }
+.era-race { margin-left: 1ch; color: #8a8a8a; font-size: .8em; font-weight: normal; }
 .era-facts { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 4px 0; }
 .era-fact-label { margin-right: .75ch; color: #8a949c; }
 .era-rank { font-weight: bold; }

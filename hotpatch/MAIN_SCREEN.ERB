@@ -295,8 +295,10 @@ IF TARGET > 0
 		ENDIF
 		SIF !STRLENS(sState)
 			sState '= @"Favor %HOTPATCH_RANK(CFLAG:nChara:2, "MAX_50000")%"
+		sState += HOTPATCH_FEELINGS(nChara, 1)
 		SIF nChara == TARGET
 			sClass += " era-selected"
+		sClass += HOTPATCH_MOOD_CLASS(nChara)
 		CALL HOTPATCH_FACE(nChara)
 		sItems += @"<button value='{1000 + nChara}' class='era-occupant%sClass%'><span class='era-face'>%RESULTS%</span>"
 		sItems += @"<span class='era-occupant-text'><span class='era-occupant-name'>%HTML_ESCAPE(CALLNAME:nChara)%</span>"
@@ -356,7 +358,13 @@ isModifier = nSize
 #DIMS DYNAMIC sHtml
 HTML_PRINT "<era-open class='era-character-state'>"
 CALL SHOW_EQUIP_2
-PRINTL
+;Species after the name (the game's own race text and description, as in its talent list).
+sHtml '= PRINT_GET_RACE(TARGET)
+IF STRLENS(sHtml)
+	HTML_PRINT @"<span class='era-race' title='%HTML_ESCAPE(RACE_INFO(TARGET))%'>%HTML_ESCAPE(sHtml)%</span>"
+ELSE
+	PRINTL
+ENDIF
 HTML_PRINT "<era-close>"
 sHtml '= @"<span class='era-fact'><span class='era-fact-label'>Favor</span>%HOTPATCH_RANK(CFLAG:2, "MAX_50000")% {CFLAG:2}</span>"
 sHtml += @"<span class='era-fact'><span class='era-fact-label'>Trust</span>%HOTPATCH_RANK(CFLAG:信頼度, "MAX_20000")% {CFLAG:信頼度}</span>"
@@ -370,10 +378,12 @@ IF 情報表示MODE == 0
 		sHtml += "<span class='era-fact'><span class='era-fact-label'>Fertile</span>〇</span>"
 	ENDIF
 ENDIF
+sHtml += HOTPATCH_FEELINGS(TARGET, 0)
 HTML_PRINT @"<div class='era-facts'>%sHtml%</div>"
 LOCAL = MIN(BASE:怒り / 200, 5)
 SIF BASE:怒り && LOCAL == 0 ;qol custom code, show anger sign if there's even a little bit of anger going
 	LOCAL = 1
+LOCAL:1 = 1
 IF CFLAG:睡眠
 	IF CFLAG:ブチギレ
 		SETCOLOR 255,0,0
@@ -397,26 +407,30 @@ IF CFLAG:睡眠
 				SETCOLOR C_BLUE ;custom code, changed color
 				PRINTFORM Sleep status: Soundly asleep
 			CASEELSE
+				LOCAL:1 = 0
 		ENDSELECT
 		RESETCOLOR
-	ELSE
+	ELSEIF LOCAL
 		PRINTFORM Awoken:%"！" * LOCAL%
+	ELSE
+		LOCAL:1 = 0
 	ENDIF
 ELSE
+	;Mad (or Sad) is a tag in the facts row (HOTPATCH_FEELINGS), so it takes no line of its own.
 	IF CFLAG:ブチギレ
-		IF TALENT:度胸 < 0
-			SETCOLOR C_BLUE
-			PRINT Sad
-		ELSE
-			SETCOLOR 255,0,0
-			PRINT Mad
-		ENDIF
-		RESETCOLOR
+		LOCAL:1 = 0
 	ELSEIF CFLAG:イタズラ || TCVAR:泥酔
-		PRINTFORM Awoken:%"！" * LOCAL%
+		IF LOCAL
+			PRINTFORM Awoken:%"！" * LOCAL%
+		ELSE
+			LOCAL:1 = 0
+		ENDIF
 	ELSE
-		PRINTFORM Anger:%"！" * LOCAL%
-		PRINTFORM   %"　" * (5 - LOCAL)%
+		;An empty "Anger:" is left out; the anger marks are padded only when sleep resistance follows them.
+		SIF LOCAL
+			PRINTFORM Anger:%"！" * LOCAL%
+		SIF LOCAL && CFLAG:TARGET:眠気覚まし > 0
+			PRINTFORM   %"　" * (5 - LOCAL)%
 		SELECTCASE CFLAG:TARGET:眠気覚まし
 			CASE IS > 240
 				PRINT <Sleep Res・Lots>
@@ -427,11 +441,13 @@ ELSE
 			CASE IS > 0
 				PRINT <Sleep Res・Weak>
 			CASEELSE
-				PRINT
+				SIF !LOCAL
+					LOCAL:1 = 0
 		ENDSELECT
 	ENDIF
 ENDIF
-PRINTL 
+SIF LOCAL:1
+	PRINTL 
 
 ; PRINT_RANK as HTML: the rank letter coloured as PRINT_ALPHABET colours it.
 @HOTPATCH_RANK(nValue, sScale)
@@ -875,3 +891,83 @@ SIF CHK_DATENOW(CFLAG:MASTER:デート中) && CFLAG:MASTER:現在位置 != OMANE
 SIF INRANGE(CFLAG:MASTER:現在位置, 0, 1999)
 	RETURNF GET_MAPID(CFLAG:MASTER:現在位置)
 RETURNF -1
+
+;-------------------------------------------------------------------------------
+; The colour SHOW_EQUIP_2 gives a character's name (highest priority first), as a class for the occupant list.
+;-------------------------------------------------------------------------------
+@HOTPATCH_MOOD_CLASS(nChara)
+#FUNCTIONS
+#DIM nChara
+IF CFLAG:nChara:睡眠
+	RETURNF " era-mood-asleep"
+ELSEIF TCVAR:nChara:発情
+	RETURNF " era-mood-heat"
+ELSEIF TCVAR:nChara:泥酔
+	RETURNF " era-mood-drunk"
+ELSEIF TCVAR:nChara:睡眠薬強度
+	RETURNF " era-mood-asleep"
+ELSEIF TALENT:nChara:機嫌 == 1
+	RETURNF " era-mood-happy"
+ELSEIF TALENT:nChara:機嫌 == -1
+	RETURNF " era-mood-sullen"
+ENDIF
+RETURNF ""
+
+;-------------------------------------------------------------------------------
+; How a character feels about you, as small tags; nothing when there is nothing to tell.
+; The relationship uses the character list's words and colours (LIST.ERB); then their hate mark,
+; whether they are mad (or sad, if timid) as SHOW_EQUIP_2 shows it, and their mood.
+; bTab: 1 for the occupant list (the mood is not otherwise shown there), 0 for the character card
+; (whose name line already says "(Sullen)" or "(Happy)").
+;-------------------------------------------------------------------------------
+@HOTPATCH_FEELINGS(nChara, bTab)
+#FUNCTIONS
+#DIM nChara
+#DIM bTab
+#DIMS DYNAMIC sHtml
+#DIMS DYNAMIC sWord
+#DIMS DYNAMIC sTone
+sHtml '= ""
+IF TALENT:nChara:妻
+	sWord '= PRINT_MALE("Husband", nChara)
+	sTone '= "partner"
+ELSEIF TALENT:nChara:妾
+	sWord '= "Concubine"
+	sTone '= "partner"
+ELSEIF TALENT:nChara:恋人
+	sWord '= "Lover"
+	sTone '= "partner"
+ELSEIF TALENT:nChara:恋慕 > 1
+	sWord '= "Deep Love"
+	sTone '= "love"
+ELSEIF TALENT:nChara:恋慕 == 1
+	sWord '= "Love"
+	sTone '= "love"
+ELSEIF TALENT:nChara:愛欲 == 1
+	sWord '= "Lust"
+	sTone '= "lust"
+ELSEIF TALENT:nChara:セフレ == 1
+	sWord '= "S.Friend"
+	sTone '= "friend"
+ELSEIF TALENT:nChara:セフレ == 2
+	sWord '= TALENT:nChara:2 == 2 ? "Paramour" # "Mistress"
+	sTone '= "mistress"
+ELSEIF TALENT:nChara:思慕 == 1
+	sWord '= "Yearning"
+	sTone '= "yearning"
+ELSE
+	sWord '= ""
+ENDIF
+SIF STRLENS(sWord)
+	sHtml += @"<span class='era-feel era-feel-%sTone%'>%HTML_ESCAPE(sWord)%</span>"
+SIF MARK:nChara:反発刻印 > 0
+	sHtml += @"<span class='era-feel era-feel-hate' title='Hate Mark level {MARK:nChara:反発刻印} of 3'>Hate Lv{MARK:nChara:反発刻印}</span>"
+IF CFLAG:nChara:ブチギレ && !CFLAG:nChara:睡眠
+	sHtml += TALENT:nChara:度胸 < 0 ? "<span class='era-feel era-feel-sad'>Sad</span>" # "<span class='era-feel era-feel-mad'>Mad</span>"
+ELSEIF bTab && TALENT:nChara:機嫌 == -1
+	sHtml += "<span class='era-feel era-feel-sullen'>Sullen</span>"
+ENDIF
+SIF bTab && TALENT:nChara:機嫌 == 1
+	sHtml += "<span class='era-feel era-feel-happy'>Happy</span>"
+
+RETURNF sHtml

@@ -667,6 +667,7 @@ async function image(source, token, suppliedSprite, scale = imageScale(), suppli
   holder.className = "sprite";
   const name = source.getAttribute("src");
   if (!name) throw new Error("Image has no src");
+  holder.dataset.src = name;
   const hover = source.getAttribute("srcb");
   // Builds one clipped picture; src and srcb (the mouse-over picture) share the img's size and ypos.
   const clipFor = async (name, supplied) => {
