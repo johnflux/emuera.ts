@@ -179,6 +179,13 @@ Notes:
 
 ### 5. Sending runtime sprites to the browser
 
+Clock sprites inside `.era-clock` use the `era-clock-dial` SVG filter in
+[`web/index.html`](../web/index.html): the white dial is 80% opaque, black
+hands and numbers stay opaque, and existing transparent pixels stay transparent.
+Intermediate shades fade proportionally to their luminance. This affects only
+the displayed clock, not its source sprite sheet. The main/shop header's night
+clock still uses its separate `era-radium` filter.
+
 `emit()` checks every `html` output. `htmlSprites()` scans the markup for
 `src='…'`/`src="…"` attributes. For each one naming a live G-backed sprite,
 it adds

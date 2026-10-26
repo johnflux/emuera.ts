@@ -211,6 +211,7 @@ a { color: #8ddaff; }
 .era-main-header > .era-main-when { flex: 0 1 auto; padding: 6px 12px; border-radius: 8px; background: #0a0e1428; box-shadow: 0 0 0 1px #ffffff14; backdrop-filter: blur(3px); }
 .era-main-header > .era-main-when + * { margin-left: auto; }
 .era-main-header .era-clock { border-radius: 50%; box-shadow: 0 0 0 3px #0a0e1466, 0 2px 8px #0008; }
+.era-clock .sprite-clip { filter: url(#era-clock-dial); }
 /* At night the clock is a dark dial with glow-in-the-dark numbers and hands (the era-radium SVG filter); frozen time keeps its icy look. */
 :is(.era-main, .era-shop):not(:has(.era-stopped)) .era-main-header:has(.era-sky-night) .era-clock .sprite-clip { filter: url(#era-radium); }
 :is(.era-main, .era-shop):not(:has(.era-stopped)) .era-main-header:has(.era-sky-night) .era-clock { box-shadow: 0 0 0 3px #0a0e1466, 0 0 10px #8aff6e33, 0 2px 8px #0008; }
