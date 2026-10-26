@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { randomUUID } from "node:crypto";
 import { readdir, readFile, realpath, stat } from "node:fs/promises";
@@ -5,7 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { compatibility } from "./compatibility.js";
 import { demoGame } from "./demo.js";
-import { applyHotpatches, displayDefaults, displayMetrics, GAME_ROOT, loadGame, stillFrame, type DisplaySettings, type Game } from "./loader.js";
+import { applyHotpatches, displayDefaults, displayMetrics, GAMES, loadGame, stillFrame, type DisplaySettings, type Game } from "./loader.js";
 import { EraError, key } from "./model.js";
 import { GAME_INSTRUCTION_LIMIT, Runtime, type Snapshot } from "./runtime.js";
 import { FileGlobalStore, FileSaveStore, MemoryGlobalStore, MemorySaveStore, type GlobalStore, type SaveStore } from "./storage.js";
@@ -61,10 +62,18 @@ const mime: Record<string, string> = {
 };
 /** How the browser renders a step: a fresh run, after a submitted input, after a click-to-continue, or a timeout. */
 type Advance = "start" | "input" | "continue" | "timeout";
+/** A game the server runs; the first entry is the default, and also hosts the conformance demo. */
+export interface GameEntry {
+  id: string; title: string; game: Game; store?: GlobalStore; saves?: SaveStore;
+  /** Loads the game in Emuera's debug mode (with its [IF_DEBUG] code); by default a copy of `game` with the debug flag. */
+  loadDebug?: () => Promise<Game>;
+}
 interface Session {
   runtime: Runtime;
   used: number;
   mode: "game" | "demo";
+  game: string;
+  debug: boolean;
   /** The delivered steps, oldest first, trimmed to HISTORY_BYTES. */
   history: { advance: Advance; snapshot: BrowserSnapshot; bytes: number }[];
   bytes: number;
@@ -127,12 +136,36 @@ function displaySettings(value: unknown): Partial<DisplaySettings> | undefined {
   return result;
 }
 
-export function createApp(game: Game, development = false, store: GlobalStore = game.root
-  ? new FileGlobalStore(path.join(game.root, ".era-typescript", "global.json")) : new MemoryGlobalStore(),
-  saves: SaveStore = game.root ? new FileSaveStore(path.join(game.root, ".era-typescript", "saves")) : new MemorySaveStore()) {
+/**
+ * Serves the browser UI for one or more games. Each game keeps its global data and saves in its own
+ * <game>/.era-typescript/, and its resources/ images are served at /resources/ (the default game) or
+ * /games/<id>/resources/.
+ */
+export function createApp(games: Game | readonly GameEntry[], development = false) {
+  const list = Array.isArray(games) ? games as readonly GameEntry[] : [{ id: "game", title: "Game", game: games as Game }];
+  if (!list.length) throw new Error("No games to serve");
+  const entries = new Map(list.map((entry, index) => {
+    const { game } = entry;
+    if (!/^[a-z0-9-]+$/.test(entry.id)) throw new Error(`Invalid game id: ${entry.id}`);
+    game.resourceBase = index === 0 ? "/resources/" : `/games/${entry.id}/resources/`;
+    return [entry.id, {
+      ...entry,
+      store: entry.store ?? (game.root ? new FileGlobalStore(path.join(game.root, ".era-typescript", "global.json")) : new MemoryGlobalStore()),
+      saves: entry.saves ?? (game.root ? new FileSaveStore(path.join(game.root, ".era-typescript", "saves")) : new MemorySaveStore()),
+      report: undefined as ReturnType<typeof compatibility> | undefined,
+      debugGame: undefined as Promise<Game> | undefined,
+    }];
+  }));
+  const fallback = entries.get(list[0]!.id)!;
+  const entryFor = (id: unknown) => {
+    if (id === undefined || id === null) return fallback;
+    const entry = typeof id === "string" ? entries.get(id) : undefined;
+    if (!entry) throw new HttpError(404, `Unknown game: ${String(id)}`);
+    return entry;
+  };
   const sessions = new Map<string, Session>();
   /** Delivers a step's snapshot and records it so a reloaded page can replay the run (see /api/resume). */
-  function deliver(response: ServerResponse, id: string, session: Session | undefined, advance: Advance, snapshot: Snapshot): void {
+  function deliver(response: ServerResponse, id: string, session: Session | undefined, advance: Advance, snapshot: Snapshot, game: Game): void {
     const patched = patchTitleImage(game, snapshot);
     if (session) {
       session.step++;
@@ -144,8 +177,15 @@ export function createApp(game: Game, development = false, store: GlobalStore = 
     }
     json(response, { session: id, step: session?.step ?? 0, ...patched });
   }
-  const report = compatibility(game);
-  const demo = demoGame(game);
+  const demo = demoGame(fallback.game);
+  let debugDemo: Game | undefined;
+  /** Debug-mode games are loaded the first time a debug run asks for one. */
+  const debugGame = (entry: typeof fallback): Promise<Game> => entry.debugGame ??= (async () => {
+    const game = entry.loadDebug ? await entry.loadDebug() : { ...entry.game };
+    game.debug = true;
+    game.resourceBase = entry.game.resourceBase;
+    return game;
+  })().catch((error: unknown) => { entry.debugGame = undefined; throw error; });
   const instance = randomUUID();
   return createServer((request, response) => {
     void (async () => {
@@ -159,13 +199,21 @@ export function createApp(game: Game, development = false, store: GlobalStore = 
       if (origin && origin !== `http://${host}`) throw new HttpError(403, "Cross-origin requests are not allowed");
       const url = new URL(request.url ?? "/", `http://${host}`);
       if (request.method === "GET" && url.pathname === "/api/runtime") {
-        json(response, { instance, development, display: displayDefaults(game), metrics: displayMetrics(game) });
+        const games = [...entries.values()].map(({ id, title, game }) => ({ id, title, display: displayDefaults(game), metrics: displayMetrics(game) }));
+        json(response, { instance, development, games, display: games[0]!.display, metrics: games[0]!.metrics });
         return;
       }
-      if (request.method === "GET" && url.pathname === "/api/compatibility") { json(response, report); return; }
+      if (request.method === "GET" && url.pathname === "/api/compatibility") {
+        const entry = entryFor(url.searchParams.get("game"));
+        json(response, entry.report ??= compatibility(entry.game));
+        return;
+      }
       if (request.method === "POST" && url.pathname === "/api/start") {
         const data = await body(request);
         if (data.mode !== "game" && data.mode !== "demo") throw new HttpError(400, "mode must be game or demo");
+        const entry = data.mode === "demo" ? fallback : entryFor(data.game);
+        if (data.debug !== undefined && typeof data.debug !== "boolean") throw new HttpError(400, "debug must be a boolean");
+        const debug = data.debug === true;
         const display = displaySettings(data.display);
         if (data.columns !== undefined && (typeof data.columns !== "number" || !Number.isSafeInteger(data.columns) || data.columns < 20 || data.columns > 1000))
           throw new HttpError(400, "columns must be an integer from 20 to 1000");
@@ -175,17 +223,19 @@ export function createApp(game: Game, development = false, store: GlobalStore = 
         if (sessions.size >= 8) throw new HttpError(429, "Too many sessions; restart the server or wait for expiry");
         const id = randomUUID();
         try {
-          const runtime = new Runtime(data.mode === "demo" ? demo : game, GAME_INSTRUCTION_LIMIT, {
-            store: data.mode === "game" ? store : new MemoryGlobalStore(),
-            saves: data.mode === "game" ? saves : new MemorySaveStore(),
+          const game = data.mode === "demo" ? debug ? debugDemo ??= { ...demo, debug: true } : demo
+            : debug ? await debugGame(entry) : entry.game;
+          const runtime = new Runtime(game, GAME_INSTRUCTION_LIMIT, {
+            store: data.mode === "game" ? entry.store : new MemoryGlobalStore(),
+            saves: data.mode === "game" ? entry.saves : new MemorySaveStore(),
             columns: typeof data.columns === "number" ? data.columns : 120,
             ...(display ? { display } : {}),
           });
           const snapshot = runtime.start();
           const session: Session | undefined = snapshot.status === "waiting"
-            ? { runtime, used: now, mode: data.mode, history: [], bytes: 0, step: 0 } : undefined;
+            ? { runtime, used: now, mode: data.mode, game: entry.id, debug, history: [], bytes: 0, step: 0 } : undefined;
           if (session) sessions.set(id, session);
-          deliver(response, id, session, "start", snapshot);
+          deliver(response, id, session, "start", snapshot, game);
         } catch (error) {
           if (!(error instanceof EraError)) throw error;
           json(response, { session: id, status: "error", output: [], input: null, error: error.diagnostic() });
@@ -210,7 +260,7 @@ export function createApp(game: Game, development = false, store: GlobalStore = 
           const waiting = session.history.at(-1)?.snapshot.input?.kind === "wait";
           const snapshot = timeout ? session.runtime.timeout() : session.runtime.input(data.value as string);
           if (snapshot.status !== "waiting") sessions.delete(data.session);
-          deliver(response, data.session, session, timeout ? "timeout" : waiting ? "continue" : "input", snapshot);
+          deliver(response, data.session, session, timeout ? "timeout" : waiting ? "continue" : "input", snapshot, session.runtime.game);
         } catch (error) {
           if (!(error instanceof EraError)) throw error;
           throw new HttpError(400, error.message);
@@ -224,7 +274,7 @@ export function createApp(game: Game, development = false, store: GlobalStore = 
         const session = sessions.get(data.session);
         if (!session) throw new HttpError(404, "Session expired or does not exist; start a new run");
         session.used = Date.now();
-        json(response, { session: data.session, mode: session.mode, step: session.step, history: session.history.map(({ advance, snapshot }) => ({ advance, snapshot })) });
+        json(response, { session: data.session, mode: session.mode, game: session.game, debug: session.debug, step: session.step, history: session.history.map(({ advance, snapshot }) => ({ advance, snapshot })) });
         return;
       }
       if (request.method === "POST" && url.pathname === "/api/prefetch") {
@@ -238,18 +288,21 @@ export function createApp(game: Game, development = false, store: GlobalStore = 
       }
       if (request.method === "GET" && url.pathname === "/api/sprite") {
         const name = url.searchParams.get("name") ?? "";
+        const { game } = entryFor(url.searchParams.get("game"));
         const definition = game.sprites.get(key(name));
         if (!definition) throw new HttpError(404, `Unknown sprite: ${name}`);
         const sprite = stillFrame(definition);
         if (!sprite) throw new HttpError(404, `Animation sprite has no frames: ${name}`);
         // Validate before handing metadata to the browser.
         await resourceFile(path.join(game.root, "resources"), sprite.file);
-        json(response, { ...sprite, url: `/resources/${sprite.file.split(path.sep).map(encodeURIComponent).join("/")}` });
+        json(response, { ...sprite, url: `${game.resourceBase}${sprite.file.split(path.sep).map(encodeURIComponent).join("/")}` });
         return;
       }
-      if (request.method === "GET" && url.pathname.startsWith("/resources/")) {
+      const resource = /^(?:\/games\/([a-z0-9-]+))?\/resources\/(.*)$/.exec(url.pathname);
+      if (request.method === "GET" && resource) {
+        const { game } = entryFor(resource[1]);
         let relative: string;
-        try { relative = decodeURIComponent(url.pathname.slice("/resources/".length)); }
+        try { relative = decodeURIComponent(resource[2]!); }
         catch (error) {
           if (!(error instanceof URIError)) throw error;
           throw new HttpError(400, "Invalid resource path encoding");
@@ -299,15 +352,29 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     const rawPort = process.env.PORT ?? "3000";
     const port = Number(rawPort);
     if (!/^\d+$/.test(rawPort) || port < 1 || port > 65535) throw new Error("PORT must be an integer from 1 to 65535");
-    console.log(`Loading ${GAME_ROOT} ...`);
-    const game = await loadGame();
-    const patched = await applyHotpatches(game);
-    if (patched.length) console.log(`Hotpatched ${patched.map((name) => `@${name}`).join(", ")}`);
+    const available = GAMES.filter((definition) => existsSync(definition.root));
+    if (!available.length) throw new Error(`No game directory found; expected one of ${GAMES.map((definition) => definition.root).join(", ")}`);
+    const loaded: GameEntry[] = [];
+    for (const definition of available) {
+      console.log(`Loading ${definition.title} from ${definition.root} ...`);
+      const game = await loadGame(definition.root);
+      const patched = definition.hotpatch ? await applyHotpatches(game, definition.hotpatch) : [];
+      if (patched.length) console.log(`Hotpatched ${patched.map((name) => `@${name}`).join(", ")}`);
+      console.log(`Loaded ${game.scriptFiles} scripts, ${game.routines.size} function names and ${game.sprites.size} sprites`);
+      loaded.push({
+        id: definition.id, title: definition.title, game,
+        loadDebug: async () => {
+          console.log(`Loading ${definition.title} in debug mode ...`);
+          const debug = await loadGame(definition.root, { debug: true });
+          if (definition.hotpatch) await applyHotpatches(debug, definition.hotpatch);
+          return debug;
+        },
+      });
+    }
     const development = process.argv.includes("--dev");
-    const app = createApp(game, development);
+    const app = createApp(loaded, development);
     app.on("error", (error) => { console.error(error); process.exitCode = 1; });
     app.listen(port, "127.0.0.1", () => {
-      console.log(`Loaded ${game.scriptFiles} scripts, ${game.routines.size} function names and ${game.sprites.size} sprites`);
       console.log(`Open http://127.0.0.1:${port}`);
       if (development) console.log("Development watch enabled; changes restart the backend and reload browser tabs. Active sessions reset.");
     });

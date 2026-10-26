@@ -5,7 +5,25 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { once } from "node:events";
 import { createApp } from "../src/server.js";
-import { emptyGame, indexScript, loadGame, readText } from "../src/loader.js";
+import { discoverGames, emptyGame, indexScript, loadGame, readText } from "../src/loader.js";
+
+test("games are discovered in GAMES folders directly or one level down, after the known ones", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "era-games-"));
+  try {
+    for (const root of ["Known/Known-master", "era Two", "Nested/inner", "Nested/other", "Era-Two", "Empty/none"]) {
+      await mkdir(path.join(dir, root, "ERB"), { recursive: true });
+      if (!root.startsWith("Empty")) await mkdir(path.join(dir, root, "CSV"), { recursive: true });
+    }
+    const known = [{ id: "k", title: "Known", root: path.join(dir, "Known/Known-master") }];
+    assert.deepEqual(discoverGames(dir, known), [
+      known[0],
+      { id: "era-two", title: "Era-Two", root: path.join(dir, "Era-Two") },
+      { id: "nested", title: "Nested", root: path.join(dir, "Nested/inner") },
+      { id: "era-two-2", title: "era Two", root: path.join(dir, "era Two") },
+    ]);
+    assert.deepEqual(discoverGames(path.join(dir, "missing"), known), known);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
 
 test("loader decodes legacy files and indexes CSV, sprites, headers and scripts", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "era-loader-"));
@@ -166,6 +184,62 @@ test("HTTP UI, isolated sessions, real image bytes, sprite metadata, errors and 
   } finally {
     if (app.listening) await new Promise<void>((resolve, reject) => app.close((error) => error ? reject(error) : resolve()));
     await rm(root, { recursive: true });
+  }
+});
+test("several games: menu catalogue, per-game runs, sprites, resources and compatibility", async () => {
+  const roots = await Promise.all(["era-first-", "era-second-"].map((prefix) => mkdtemp(path.join(tmpdir(), prefix))));
+  const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j6foAAAAASUVORK5CYII=", "base64");
+  const [first, second] = roots.map((root, i) => {
+    const game = emptyGame(root);
+    indexScript(game, `@SYSTEM_TITLE\nPRINTL game ${i + 1}\nINPUT`, "fixture.ERB");
+    game.sprites.set("PIXEL", { file: `pixel${i + 1}.png`, x: 0, y: 0, width: 1, height: 1 });
+    game.config.set("文字色", i ? "0,255,0" : "255,0,0");
+    return game;
+  });
+  const app = createApp([{ id: "one", title: "First", game: first! }, { id: "two", title: "Second", game: second! }]);
+  try {
+    await Promise.all(roots.map(async (root, i) => {
+      await mkdir(path.join(root, "resources"));
+      await writeFile(path.join(root, "resources", `pixel${i + 1}.png`), png);
+    }));
+    app.listen(0, "127.0.0.1");
+    await once(app, "listening");
+    const address = app.address();
+    assert.ok(address && typeof address !== "string");
+    const base = `http://127.0.0.1:${address.port}`;
+    const post = (route: string, data: unknown) => fetch(base + route, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data),
+    });
+    const info = await (await fetch(base + "/api/runtime")).json();
+    assert.deepEqual(info.games.map((game: { id: string; title: string; display: { foreground: string } }) => [game.id, game.title, game.display.foreground]),
+      [["one", "First", "#ff0000"], ["two", "Second", "#00ff00"]]);
+    assert.deepEqual(info.display, info.games[0].display);
+    const text = (snapshot: { output: { text?: string }[] }) => snapshot.output.map((item) => item.text).join("");
+    const defaultRun = await (await post("/api/start", { mode: "game" })).json();
+    assert.equal(text(defaultRun), "game 1");
+    const run = await (await post("/api/start", { mode: "game", game: "two" })).json();
+    assert.equal(text(run), "game 2");
+    const restored = await (await post("/api/resume", { session: run.session })).json();
+    assert.deepEqual([restored.mode, restored.game], ["game", "two"]);
+    assert.equal((await post("/api/start", { mode: "game", game: "three" })).status, 404);
+    const sprite = await (await fetch(base + "/api/sprite?name=pixel&game=two")).json();
+    assert.equal(sprite.url, "/games/two/resources/pixel2.png");
+    assert.deepEqual(Buffer.from(await (await fetch(base + sprite.url)).arrayBuffer()), png);
+    assert.equal((await (await fetch(base + "/api/sprite?name=pixel")).json()).url, "/resources/pixel1.png");
+    assert.equal((await fetch(base + "/resources/pixel2.png")).status, 404);
+    assert.equal((await fetch(base + "/games/two/resources/pixel1.png")).status, 404);
+    assert.equal((await fetch(base + "/games/three/resources/pixel1.png")).status, 404);
+    assert.equal((await fetch(base + "/api/compatibility?game=two")).status, 200);
+    assert.equal((await fetch(base + "/api/compatibility?game=three")).status, 404);
+    assert.equal((await post("/api/start", { mode: "game", game: "two", debug: "yes" })).status, 400);
+    const debugRun = await (await post("/api/start", { mode: "game", game: "two", debug: true })).json();
+    assert.equal(text(debugRun), "game 2");
+    assert.equal((await (await post("/api/resume", { session: debugRun.session })).json()).debug, true);
+    assert.equal(restored.debug, false);
+    assert.equal(second!.debug, undefined);
+  } finally {
+    if (app.listening) await new Promise<void>((resolve, reject) => app.close((error) => error ? reject(error) : resolve()));
+    await Promise.all(roots.map((root) => rm(root, { recursive: true })));
   }
 });
 test("development runtime metadata changes across server instances", async () => {

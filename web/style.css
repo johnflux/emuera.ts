@@ -59,7 +59,7 @@ button:disabled { color: #666; cursor: default; }
 main { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 16px 0 16px 20px; color: var(--terminal-foreground); background: var(--terminal-background); }
 #terminal, #input-form { font-family: var(--terminal-font); }
 /* main has no right padding: the scrollbar takes its place, and the output keeps a 20px margin like the left one. */
-#terminal { flex: 1; min-height: 0; display: flex; flex-direction: column; padding-right: max(6px, calc(20px - var(--scrollbar-width, 0px))); font-size: var(--font-size); line-height: 1.25; overflow: auto; scrollbar-gutter: stable; container-type: inline-size; }
+#terminal { flex: 1; min-height: 0; display: flex; flex-direction: column; padding-right: max(6px, calc(20px - var(--scrollbar-width, 0px))); font-size: var(--font-size); line-height: var(--line-height, 1.25); overflow: auto; scrollbar-gutter: stable; container-type: inline-size; }
 #terminal::before { content: ""; margin-top: auto; }
 #terminal > * { flex-shrink: 0; min-width: var(--logical-width, 0); }
 #terminal.is-waiting { cursor: pointer; }
@@ -92,7 +92,9 @@ main { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 1
 .subarea-fixed > .subarea { position: fixed; }
 .subarea { position: absolute; box-sizing: border-box; overflow: hidden; border: 0 solid currentColor; text-align: left; white-space: pre-wrap; }
 .print-cell { display: inline-block; white-space: pre; }
-.half-cells { display: inline-block; overflow: hidden; vertical-align: top; white-space: pre; }
+.half-cells { display: inline-block; overflow: hidden; vertical-align: top; white-space: pre; text-decoration: inherit; }
+.half-cells.squeezed { position: relative; overflow: visible; }
+.half-cells.squeezed > span { position: absolute; left: 0; top: 0; text-decoration: none; transform: scale(.5, .6); transform-origin: left 55%; }
 .title-image, .title-image p { min-height: 0; line-height: 0; }
 /* With line-height 0 an inline span still paints its background over a font-height box centred on the baseline,
    half a line above the image, covering the previous line. The title strip has no text, so drop the font box. */
@@ -139,13 +141,19 @@ a { color: #8ddaff; }
 #compatibility h2 { font-size: 16px; }
 #compatibility table { border-collapse: collapse; width: 100%; }
 #compatibility td, #compatibility th { border-bottom: 1px solid #333; padding: 8px; text-align: left; vertical-align: top; white-space: pre-wrap; }
+#debug-output { order: 2; flex-shrink: 0; display: flex; flex-direction: column; max-height: 30vh; border: 1px solid #444; margin: 8px 20px 12px 0; font-size: 12px; color: #cfc; background: #050a05; font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace; }
+#debug-output[hidden] { display: none; }
+.debug-header { display: flex; align-items: center; justify-content: space-between; padding: 4px 8px; border-bottom: 1px solid #333; }
+.debug-header h2 { margin: 0; font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: .08em; }
+.debug-header button { font-size: 11px; padding: 2px 8px; }
+#debug-log { flex: 1; min-height: 3em; margin: 0; padding: 6px 8px; overflow: auto; white-space: pre-wrap; }
 #settings { border: 1px solid #444; padding: 16px; margin: 20px 20px 0 0; font-size: 13px; color: #fff; background: #090909; font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace; }
 #settings h2 { font-size: 16px; margin-top: 0; }
 #settings-form { display: grid; grid-template-columns: max-content; gap: 10px; }
 #settings-form label { display: flex; gap: 10px; align-items: center; justify-content: space-between; }
 #settings-form input[type="text"] { background: #101010; border: 1px solid #555; padding: 3px 6px; width: 16em; }
 #settings-form input[type="color"] { background: none; border: 1px solid #555; padding: 0; width: 3em; height: 1.6em; }
-#input-form { order: 1; flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding-right: 20px; font-size: var(--font-size); line-height: 1.25; }
+#input-form { order: 1; flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding-right: 20px; font-size: var(--font-size); line-height: var(--line-height, 1.25); }
 #input-form[hidden] { display: none; }
 #command { flex: 1; min-width: 0; background: transparent; border: 0; padding: 0; line-height: inherit; outline: none; }
 #submit { font-size: 12px; padding: 2px 8px; }

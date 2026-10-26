@@ -23,7 +23,7 @@ function titleRectangle(game: Game): (Sprite & { url: string }) | null {
   }
   return {
     ...first, height: first.height * TITLE_STRIPS,
-    url: `/resources/${first.file.split(/[\\/]/).map(encodeURIComponent).join("/")}`,
+    url: `${game.resourceBase}${first.file.split(/[\\/]/).map(encodeURIComponent).join("/")}`,
   };
 }
 

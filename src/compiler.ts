@@ -18,9 +18,9 @@ export const SUPPORTED = new Set([
   "SETCOLOR", "RESETCOLOR", "SETBGCOLOR", "RESETBGCOLOR", "ALIGNMENT", "QUIT", "THROW",
   "LOADGLOBAL", "SAVEGLOBAL", "CLEARMEMORY", "RETURNF", "FONTSTYLE", "FONTBOLD", "FONTITALIC", "FONTREGULAR", "REDRAW",
   "MAP_RELEASE", "MAP_CREATE", "MAP_SET", "STRDATA", "DATA", "DATAFORM", "DATALIST", "ENDLIST", "ENDDATA",
-  "DEBUGPRINT", "DEBUGPRINTL", "DEBUGPRINTFORM", "DEBUGPRINTFORML", "DEBUGCLEAR",
+  "DEBUGPRINT", "DEBUGPRINTL", "DEBUGPRINTFORM", "DEBUGPRINTFORML", "DEBUGCLEAR", "ASSERT",
   "SPLIT", "VARSET", "ARRAYREMOVE", "SETBIT", "CLEARBIT", "INVERTBIT",
-  "BITMAP_CACHE_ENABLE", "SETFONT", "RESETDATA", "ADDCHARA", "DELCHARA", "DELALLCHARA", "COPYCHARA", "ADDCOPYCHARA", "SWAPCHARA", "PICKUPCHARA", "BEGIN", "CALLF", "TRYCALLF", "CALLFORM", "CALLFORMF", "TRYCALLFORM", "TRYCALLFORMF", "TRYCCALLFORM", "TRYCALL", "TRYJUMP", "TRYCCALL", "TRYCJUMP", "JUMPFORM", "TRYJUMPFORM", "TRYCJUMPFORM", "CATCH", "ENDCATCH",
+  "BITMAP_CACHE_ENABLE", "SETFONT", "RESETDATA", "ADDCHARA", "ADDVOIDCHARA", "DELCHARA", "DELALLCHARA", "COPYCHARA", "ADDCOPYCHARA", "SWAPCHARA", "PICKUPCHARA", "BEGIN", "CALLF", "TRYCALLF", "CALLFORM", "CALLFORMF", "TRYCALLFORM", "TRYCALLFORMF", "TRYCCALLFORM", "TRYCALL", "TRYJUMP", "TRYCCALL", "TRYCJUMP", "JUMPFORM", "TRYJUMPFORM", "TRYCJUMPFORM", "CATCH", "ENDCATCH",
   "TIMES", "BAR", "BARL", "BARSTR", "SKIPDISP", "NOSKIP", "ENDNOSKIP", "ISSKIP", "MOUSESKIP", "REUSELASTLINE", "CVARSET",
   "ARRAYSHIFT", "ARRAYSORT", "ARRAYCOPY", "SWAP", "POWER", "HTML_TAGSPLIT", "EXISTFUNCTION", "CLIENTWIDTH", "CLIENTHEIGHT", "FIND_CHARADATA", "EXISTFILE",
   "SIGN", "ALLSAMES", "NOSAMES", "COLOR_FROMNAME", "COLOR_FROMRGB", "CHKFONT", "LINEISEMPTY", "HTML_GETPRINTEDSTR", "GETDOINGFUNCTION",
@@ -83,7 +83,7 @@ export function classify(line: Line): { op: string; args: string } {
   // Instructions match whole identifiers: "printNum ++" assigns a variable, it is not a PRINT variant.
   if (isSupported(op) || op.startsWith("DEBUGPRINT")) return { op, args: command[2]! };
   // `VALUE ,= ,` is still an assignment line in Emuera (rejected for the extra left-hand comma).
-  if (/^[^\s=,]+(?::.*?)?(?:\s*,[\s\w]*)?\s*(?:\+\+|--|(?:'|[+\-*/%&|^])?=)(?!=)/u.test(line.text))
+  if (/^[^\s=,]+(?::.*?)?(?:\s*,[\s\w]*)?\s*(?:\+\+|--|(?:'|<<|>>|[+\-*/%&|^])?=)(?!=)/u.test(line.text))
     return { op: "ASSIGN", args: line.text };
   return { op, args: command[2]! };
 }

@@ -1,9 +1,11 @@
 import { classify, isSupported } from "./compiler.js";
 import { BUILTIN_FUNCTIONS } from "./runtime.js";
 import type { Game } from "./loader.js";
-import type { Diagnostic, Line } from "./model.js";
+import { key, LITERAL_TEXT_INSTRUCTION, type Diagnostic, type Line } from "./model.js";
 
 const EVENT_FUNCTIONS = new Set(["EVENTFIRST", "EVENTTRAIN", "EVENTSHOP", "EVENTBUY", "EVENTCOM", "EVENTTURNEND", "EVENTCOMEND", "EVENTEND", "EVENTLOAD"]);
+// Emuera calls are written NAME( with no space; text such as "Hero (x)" is not a call.
+const CALL = /(?<![\p{L}\p{N}_@.$])([\p{L}_][\p{L}\p{N}_]*)\(/gu;
 export interface Gap { feature: string; count: number; examples: Diagnostic[] }
 export function compatibility(game: Game) {
   const gaps = new Map<string, Gap>();
@@ -30,8 +32,18 @@ export function compatibility(game: Game) {
           record(`Preprocessor directive: ${line.text}`, line);
           continue;
         }
-        const { op } = classify(line);
+        const { op, args } = classify(line);
         if (op === "LABEL") continue;
+        // Instructions we support as statements but not when called as expression functions, e.g. IF CHKDATA(0) == 0.
+        const literal = LITERAL_TEXT_INSTRUCTION.test(op);
+        if (!literal || op.includes("FORM")) {
+          // FORM text is literal apart from its {expr} and %expr% parts.
+          const code = literal ? (args.match(/\{[^{}]*\}|%[^%]*%/g) ?? []).join(" ") : args;
+          for (const [, name] of code.replace(/"(?:[^"\\]|\\.)*"/g, '""').matchAll(CALL)) {
+            const called = key(name!);
+            if (isSupported(called) && !BUILTIN_FUNCTIONS.has(called) && !game.routines.has(called)) record(`Expression function (instruction only): ${called}`, line);
+          }
+        }
         instructions++;
         // Builtin functions written as statements store their value in RESULT/RESULTS.
         if (op === "ASSIGN" || isSupported(op) || (BUILTIN_FUNCTIONS.has(op) && !game.routines.has(op))) supported++;

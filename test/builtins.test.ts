@@ -18,6 +18,45 @@ const template = (game: Game) => game.characters.set(0, { file: "Chara0.csv", ro
   ["フラグ", "3", "42"], ["刻印", "1", "2"], ["CSTR", "1", "text"],
 ] });
 
+test("ADDVOIDCHARA adds an empty character and ASSERT is skipped like other debug instructions", () => {
+  const source = `@SYSTEM_TITLE
+ADDCHARA 0
+ADDVOIDCHARA
+ASSERT 0
+ASSERT UNDEFINED_THING(
+PRINTFORML {CHARANUM} {NO:1} [%NAME:1%] {CFLAG:1:3} {CFLAG:0:3}
+CFLAG:1:3 = 5
+PRINTFORML {CFLAG:1:3}`;
+  assert.deepEqual(texts(runtime(source, template).start()), ["2 0 [] 0 42", "5"]);
+  assert.match(runtime("@SYSTEM_TITLE\nADDVOIDCHARA 1").start().error?.message ?? "", /takes no arguments/);
+});
+test("debug mode loads [IF_DEBUG] code, sends DEBUGPRINT to the debug window, checks ASSERT and fills debug variables", () => {
+  const source = `@SYSTEM_TITLE
+[IF_DEBUG]
+PRINTL debug build
+[ENDIF]
+[IF_NDEBUG]
+PRINTL release build
+[ENDIF]
+DEBUGPRINTL first
+DEBUGCLEAR
+DEBUGPRINT a
+DEBUGPRINTFORML {1 + 1}
+PRINTFORML %__FILE__% {__LINE__} %__FUNCTION__%
+ASSERT 1
+INPUT
+ASSERT 0`;
+  const release = runtime(source).start();
+  assert.deepEqual(texts(release), ["release build", " 0 "]);
+  assert.equal(release.debug, undefined);
+  const debug = runtime(source, (game) => { game.debug = true; });
+  const first = debug.start();
+  assert.deepEqual(texts(first), ["debug build", "builtins.ERB 12 SYSTEM_TITLE"]);
+  assert.deepEqual([first.debug, first.debugClear], ["a2\n", true]);
+  const failed = debug.input("0");
+  assert.equal(failed.error?.message, "ASSERT文の引数が0です");
+  assert.equal(failed.debug, undefined);
+});
 test("VARSET fills whole arrays, 1D ranges and one character's elements", () => {
   const result = runtime(`@SYSTEM_TITLE
 #DIM VALUES, 5
@@ -352,6 +391,7 @@ CFLAG:0:3 = 7
 SAVEDATA 3, "slot three"
 CHKDATA 3
 PRINTFORML {RESULT} %RESULTS%
+PRINTFORML function {CHKDATA(3)} {CHKDATA(4)} {RESULT}
 @EVENTLOAD
 PRINTFORML loaded {FLAG:5} {CHARANUM} {CFLAG:0:3}
 @SHOW_SHOP
@@ -359,7 +399,7 @@ PRINTL shop
 @USERSHOP
 QUIT`;
   const first = runtime(source, template, { saves }).start();
-  assert.deepEqual(texts(first), ["1 ----", "0 slot three"]);
+  assert.deepEqual(texts(first), ["1 ----", "0 slot three", "function 0 1 0"]);
   const second = runtime(source, template, { saves }).start();
   assert.deepEqual(texts(second), ["0 slot three", "loaded 42 1 7", "shop"]);
   assert.equal(second.status, "waiting");

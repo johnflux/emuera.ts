@@ -22,6 +22,7 @@
         <button id="game" aria-pressed="true">eraToho The World</button>
         <button id="demo" aria-pressed="false">Conformance demo</button>
         <button id="restart" aria-haspopup="dialog">Restart game…</button>
+        <button id="debug-toggle" aria-pressed="false" aria-haspopup="dialog" title="Emuera's debug mode: restarts the run with [IF_DEBUG] code loaded, DEBUGPRINT output shown and ASSERT checked">Debug mode</button>
         <p class="menu-heading">Tools</p>
         <button id="report" aria-expanded="false" aria-controls="compatibility">Compatibility report</button>
         <button id="settings-toggle" aria-expanded="false" aria-controls="settings">Settings</button>
@@ -34,7 +35,7 @@
     <section id="terminal" lang="ja" role="log" aria-label="Interpreter output" tabindex="0">
       <div class="screen is-active">
       <div class="line">Black background. White text. Real ERB execution.</div>
-      <div class="line">Run eraToho The World to open its title and custom-character editor, or try the conformance demo. Later new-game setup and loading saves are not supported yet.</div>
+      <div class="line">Choose a game from the ☰ menu, or try the conformance demo. Full gameplay is not supported yet.</div>
       </div>
     </section>
     <form id="input-form" autocomplete="off" hidden>
@@ -42,6 +43,10 @@
       <button id="submit" disabled>Send</button>
     </form>
     <aside id="compatibility" hidden aria-label="Compatibility report"></aside>
+    <aside id="debug-output" hidden aria-labelledby="debug-heading">
+      <div class="debug-header"><h2 id="debug-heading">Debug output</h2><button type="button" id="debug-clear">Clear</button></div>
+      <pre id="debug-log" tabindex="0"></pre>
+    </aside>
     <aside id="settings" hidden aria-labelledby="settings-heading">
       <h2 id="settings-heading">Settings</h2>
       <p>Defaults come from the game's <code>emuera.config</code>. Your changes are saved in this browser only.</p>

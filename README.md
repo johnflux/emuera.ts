@@ -1,7 +1,13 @@
 # Emuera.ts
 
 A TypeScript/Node.js interpreter for Emuera/eramaker ERB, with a browser terminal.
-The local game directory `anon-tw-anon-tw_eng-modding` is the default target.
+Games live under `GAMES/`: eraToho The World (`GAMES/anon-tw-anon-tw_eng-modding`,
+the default), eraTohoK (`GAMES/eraTohoK/eraTohoK-master`) and eraRanceK
+(`GAMES/eraRanceK`). `KNOWN_GAMES` in `src/loader.ts` fixes their ids, titles
+and hotpatches; the server offers each one whose directory exists. At startup it
+also offers any other folder in `GAMES/` that holds `ERB/` and `CSV/`, directly
+or one level down (e.g. an unzipped `name/name-master`), titled and identified
+by the folder name. Restart the server after adding a game.
 Game scripts, data, and images are read in place and are not bundled or copied.
 Bugs in the game itself (reproducible in real Emuera) are fixed in the game
 files and recorded, with a reapplicable patch, in
@@ -69,16 +75,32 @@ longer); hover it for the split between script time (server) and render time
   real cropped title-image resource from the local game, and animated sprites (menu option 4: a script-built
   `SPRITEANIMECREATE` animation and the game's CSV `ANIME` halo `30_BG1`).
 - **eraToho The World**: execute the real `SYSTEM_TITLE` and display its menu.
-  This is the default and starts automatically on page load. The selected run
-  mode is marked in the menu. Choosing the other run item switches to it, and
-  **Restart game…** (or **Restart demo…**) starts the current one afresh; both
-  ask for confirmation first while a run is in progress. While the compatibility
-  panel is open, only its item is marked; choosing the current run item, or
-  closing the panel, returns to the run.
+  This is the default and starts automatically on page load.
   Invalid menu choices return to the menu; Start Game reaches custom-character
   creation, but later setup and Continue are not yet supported end to end.
-- **Compatibility report**: inspect unsupported instruction names, directives,
-  duplicate function/event definitions, and loader diagnostics.
+- **eraTohoK**: run eraTohoK's title. It reaches its new-game scenario selection;
+  much of the rest is untested. The hotpatches and map/area pictures are
+  eraToho The World's only.
+- **eraRanceK**, and any discovered game: run its title. Untested beyond that.
+- **Restart game…** (or **Restart demo…**): start the current run afresh.
+- **Debug mode**: restart the run in Emuera's debug mode (asks first when a run
+  is in progress; the choice is remembered). The game is loaded with
+  `[IF_DEBUG]` code instead of `[IF_NDEBUG]`, `ASSERT` stops the run with an
+  error when its argument is 0, `__FILE__`/`__FUNCTION__`/`__LINE__` are filled
+  in, and `DEBUGPRINT*` output appears in a **Debug output** panel under the
+  terminal (`DEBUGCLEAR` empties it). Outside debug mode these instructions are
+  skipped, as in Emuera. The status shows "Game · Debug" while it is on.
+- **Compatibility report**: for the current game, inspect unsupported instruction names, directives,
+  duplicate function/event definitions, and loader diagnostics. It also lists
+  instructions that are supported as statements but are called as expression
+  functions (for example `IF CHKDATA(0) == 0`) without an expression form, as
+  `Expression function (instruction only): NAME`. Literal PRINT/DATA text is
+  ignored, and for FORM text only the `{…}`/`%…%` parts are checked.
+
+The selected run is marked in the menu. Choosing another run item switches to
+it; switching and restarting ask for confirmation first while a run is in
+progress. While the compatibility panel is open, only its item is marked;
+choosing the current run item, or closing the panel, returns to the run.
 
 **Reloading the page continues the current run.** The run lives on the server;
 the tab remembers its session in `sessionStorage`, and on reload asks
@@ -89,6 +111,18 @@ idle for 30 minutes and been expired, or the server has restarted (including
 development reloads). Each response carries a step count that input requests
 echo back; if a duplicated tab has moved the same run on, the stale tab is
 refused (HTTP 409) and catches up by resuming.
+
+The address names the current game (`?game=tw`, `?game=k`, `?game=rancek`, or `?demo`), so a
+fresh run after a server or development reload starts the same game, and a link
+opens a particular game. Opening an address for a different game than the tab's
+run starts that game; an unknown id falls back to the first game.
+
+Each game keeps its own global data and saves in its `.era-typescript/` directory,
+and its colors, font and window width from its `emuera.config`. Runs start with
+`POST /api/start {mode: "game", game: "<id>"}` (the id defaults to the first game;
+add `debug: true` for debug mode, whose snapshots carry `debug` text and
+`debugClear`); `/api/runtime` lists the games, and the default game's images are served from
+`/resources/`, others' from `/games/<id>/resources/`.
 
 The interface uses the game's configured colors and font, scrollback, keyboard
 input, clickable choices, and a font-size slider in the menu. **Settings** edits the text,
@@ -122,7 +156,10 @@ At 16px, ASCII characters measure 8px and full-width symbols such as `★` and `
 measure 16px, matching the interpreter's two-cell layout assumptions. Widths follow
 Emuera's Shift-JIS byte count: JIS characters (`×`, `─`, kana, kanji) are two cells,
 and characters CP932 can't encode (such as the `▄` block in status bars) are one;
-block elements are drawn clipped to one cell each so bars stay in their columns. This is not
+block elements are drawn clipped to one cell each so bars stay in their columns, and the
+corner triangles `◢◣◤◥` (slider ends) are squeezed to one cell. Lines are spaced by the
+game's configured line height (`一行の高さ` over `フォントサイズ`, at least 1), as in
+Emuera, so pictures that span lines line up with the text beside them. This is not
 MS Gothic or a pixel-identical recreation of native Emuera. The font is served
 locally, with no external requests, and startup waits for it before measuring
 terminal columns; font-load failure is reported rather than silently measuring a
@@ -335,7 +372,7 @@ declarations and the expression evaluator. No single routine dominates.
 
 - Recursive, deterministic ERB/ERH, ERD name-index and CSV discovery; UTF-8/BOM, UTF-16LE BOM,
   and strict Shift-JIS decoding. Source filenames and original line numbers
-  survive indexing. Release-mode `[IF_DEBUG]`, `[IF_NDEBUG]`, `[ELSE]`,
+  survive indexing. Release- and debug-mode `[IF_DEBUG]`, `[IF_NDEBUG]`, `[ELSE]`,
   `[ENDIF]`, and `[SKIPSTART]`/`[SKIPEND]` handling.
 - Macro-definedness conditionals `[IF NAME]` / `[ELSEIF NAME]` / `[ELSE]` /
   `[ENDIF]`, including nesting. Headers are loaded before ERB scripts.
@@ -465,8 +502,9 @@ declarations and the expression evaluator. No single routine dominates.
   `FONTBOLD`/`FONTITALIC`/`FONTREGULAR` adjust it. The `PRINT` family (including
   `S`/`V`/`FORMS`, `C`/`LC` alignment, `K`/`D` modes, `PRINTSINGLE*`, `PRINTPLAIN*`),
   `CUSTOMDRAWLINE`/`DRAWLINEFORM` are supported; `REDRAW 0/1` uses the existing
-  snapshot buffering. Release-mode debug print instructions do not evaluate
-  their arguments. `CLEARMEMORY` clears interpreter parser/compiler caches and
+  snapshot buffering. Release-mode debug instructions (`DEBUGPRINT*`,
+  `DEBUGCLEAR`, `ASSERT`) do not evaluate their arguments; in debug mode they
+  write to the debug output panel or check the assertion. `CLEARMEMORY` clears interpreter parser/compiler caches and
   requests V8 garbage collection when Node exposes it; it returns observed
   reclaimed heap bytes (possibly zero), not a promise to release native resources.
 - `CALLTRAIN`/`STOPCALLTRAIN` queue `SELECTCOM:1..n` train commands as in
@@ -487,7 +525,7 @@ declarations and the expression evaluator. No single routine dominates.
   Image sizes and offsets are in the game's units: unitless values are
   percentages of the configured font size (`フォントサイズ`) and `px` values are
   pixels. Both are scaled from the configured line height (`一行の高さ`) to the
-  terminal's line height. Negative sizes flip the image. A picture inside a
+  terminal's line height (which keeps the configured ratio to the font size). Negative sizes flip the image. A picture inside a
   button or tooltip element highlights the whole picture on hover, and its
   tooltip opens below the picture; an `srcb` picture replaces `src` while the
   pointer is over the button, as in Emuera. The game marks the selected

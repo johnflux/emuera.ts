@@ -31,6 +31,8 @@ export interface JitHost {
   names(): Iterable<string>;
   /** Analysis results, shared by every runtime of the game. */
   readonly analysis: CallAnalysis;
+  /** Debug mode runs DEBUG_FUNC instructions (interpreted); otherwise they compile to nothing. */
+  readonly debug?: boolean;
 }
 export interface CallAnalysis {
   suspends: Map<Routine, boolean>;
@@ -401,7 +403,7 @@ class Generator {
           `${v} = ${value || `F.returnType === "string" ? "" : 0n`}; return F.returnType === "string" ? H.txt(${v}) : H.int(${v});`;
       }
       case "CATCH": return `${p} ${jump(target + 1)}`;
-      case "DEBUGPRINT": case "DEBUGPRINTL": case "DEBUGPRINTFORM": case "DEBUGPRINTFORML": case "DEBUGCLEAR": return p;
+      case "DEBUGPRINT": case "DEBUGPRINTL": case "DEBUGPRINTFORM": case "DEBUGPRINTFORML": case "DEBUGCLEAR": case "ASSERT": return this.host.debug ? this.single(k) : p;
       case "CALLF": case "TRYCALLF": {
         let expr: Expr;
         try { expr = this.host.parse(args.includes("(") ? args : `${args}()`); } catch { return this.single(k); }
@@ -494,7 +496,7 @@ class Generator {
           return `${v} = ${rhs}; ${resolve} H.wr(${b}, ${at}, ${v});`;
         }
         if ((operator === "++" || operator === "--") && source) return undefined;
-        const helper = BINARY[operator === "++" ? "+" : operator === "--" ? "-" : operator[0]!];
+        const helper = BINARY[operator === "++" ? "+" : operator === "--" ? "-" : operator.slice(0, -1)];
         if (!helper) return undefined;
         const rhs = operator === "++" || operator === "--" ? "1n" : this.expr(this.parse(source));
         const v = this.temp(), index = this.temp();

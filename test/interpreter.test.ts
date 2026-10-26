@@ -84,6 +84,14 @@ test("signed 64-bit arithmetic, precedence, ternary and short circuit without ev
   assert.throws(() => parseExpression("process.exit()"), /Unsupported/);
   assert.throws(() => parseExpression("1p100000"), /exponent out of range/);
 });
+test("compound shift assignments and GAMEBASE author, flags and window title", () => {
+  const game = emptyGame();
+  game.tables.set("GAMEBASE", new Map([[0, ["作者", "Someone"]], [1, ["バージョン違い認める", "1000"]], [2, ["最初からいるキャラ", "3"]], [3, ["アイテムなし", "1"]], [4, ["ウィンドウタイトル", "Window"]]]));
+  indexScript(game, "@SYSTEM_TITLE\nA = 3\nA <<= 4\nB = -64\nB >>= 2\nFOR I, 0, 50\n  C = 1 << 20\n  C >>= 3\n  C <<=1\nNEXT\nPRINTFORML {A} {B} {C}\nPRINTFORML %GAMEBASE_AUTHOR% {GAMEBASE_ALLOWVERSION} {GAMEBASE_DEFAULTCHARA} {GAMEBASE_NOITEM}", "test.ERB");
+  const snapshot = new Runtime(game).start();
+  assert.equal(output(snapshot), "48 -16 262144\nSomeone 1000 3 1");
+  assert.equal(snapshot.title, "Window");
+});
 test("CSV comments, escaped quotes, quoted commas and semicolons", () => {
   assert.deepEqual(csvRows('; comment\n0,"a,b"\n1,"x;""y"; ignored'), [["0", "a,b"], ["1", 'x;"y']]);
 });
@@ -343,6 +351,17 @@ PRINTL release
   const report = compatibility(game);
   assert.ok(!report.gaps.some((gap) => gap.feature.startsWith("Instruction: [")));
   assert.ok(report.gaps.some((gap) => gap.feature === "Preprocessor directive: [UNSUPPORTED_DIRECTIVE]"));
+  const calls = emptyGame();
+  indexScript(calls, `@SYSTEM_TITLE
+IF CLEARLINE(1) || RESULT == WAIT(0)
+  PRINTFORML Invalid input({ARG}) %"CLEARLINE(2)"% INPUT(x)
+  PRINTL WAIT(1)
+  PRINTFORML {CLEARLINE (3)}
+ENDIF`, "calls.ERB");
+  assert.deepEqual(compatibility(calls).gaps.map((gap) => [gap.feature, gap.count]), [
+    ["Expression function (instruction only): CLEARLINE", 1],
+    ["Expression function (instruction only): WAIT", 1],
+  ]);
   const debug = emptyGame();
   indexScript(debug, "#DEFINE DEBUG", "debug.ERH", true);
   indexScript(debug, "@SYSTEM_TITLE\n[IF DEBUG]\nPRINTL defined\n[ELSE]\nTHROW wrong\n[ENDIF]", "debug.ERB");

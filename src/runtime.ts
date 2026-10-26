@@ -85,6 +85,9 @@ export interface Snapshot {
   title: string;
   /** The TARGET character index, so the client can mark that character's picture. */
   target: number;
+  /** Debug mode: text for Emuera's debug window since the previous snapshot; `debugClear` (DEBUGCLEAR) empties it first. */
+  debug?: string;
+  debugClear?: boolean;
 }
 interface RoutineInfo {
   returnType: "integer" | "string" | undefined;
@@ -142,7 +145,6 @@ interface SavedContainers { maps: Record<string, [string, string][]>; xmls: Reco
 interface SaveRecord { version: 1; code: string; gameVersion: string; text: string; data: SaveData; containers?: SavedContainers }
 interface CharacterRecord { version: 1; code: string; gameVersion: string; text: string; characters: GlobalData[] }
 const literal = (value: Value): Expr => ({ kind: "literal", value });
-const resourceUrl = (file: string): string => `/resources/${file.split(/[\\/]/).map(encodeURIComponent).join("/")}`;
 /** Emuera ReadColor: 0xAARRGGBB as a CSS color. */
 function argbColor(value: bigint, name: string): string {
   if (value < 0n || value > 0xFFFFFFFFn) throw new EraError(`${name}: invalid ARGB color ${value}`);
@@ -197,7 +199,7 @@ const BUILTIN_ARITIES: Record<string, [number, number]> = {
     GSETBRUSH: [2, 2], GSETPEN: [3, 3], GSETFONT: [3, 4], GSAVE: [2, 2], GLOAD: [2, 2],
   GETTIME: [0, 0], GETTIMES: [0, 0], EXISTFUNCTION: [1, 1], CLIENTWIDTH: [0, 0], CLIENTHEIGHT: [0, 0], FIND_CHARADATA: [0, 1], EXISTFILE: [1, 1], SQRT: [1, 1], CBRT: [1, 1], LOG: [1, 1], LOG10: [1, 1], EXPONENT: [1, 1], GETMILLISECOND: [0, 0], GETSECOND: [0, 0], GETDEFCOLOR: [0, 0], GETBGCOLOR: [0, 0], GETDEFBGCOLOR: [0, 0], GETFONT: [0, 0],
   CONVERT: [2, 2], SUBSTRINGU: [2, 3], CHARATU: [2, 2],
-  SIGN: [1, 1], ALLSAMES: [1, 10000], NOSAMES: [1, 10000], COLOR_FROMNAME: [1, 1], COLOR_FROMRGB: [3, 3], ENCODETOUNI: [1, 2], CHKFONT: [1, 1],
+  SIGN: [1, 1], ALLSAMES: [1, 10000], NOSAMES: [1, 10000], COLOR_FROMNAME: [1, 1], COLOR_FROMRGB: [3, 3], ENCODETOUNI: [1, 2], CHKFONT: [1, 1], CHKDATA: [1, 1],
   LINEISEMPTY: [0, 0], HTML_GETPRINTEDSTR: [0, 1], GETDOINGFUNCTION: [0, 0], MESSKIP: [0, 0], GETKEY: [1, 1], GETKEYTRIGGERED: [1, 1],
   MOUSEB: [0, 0], GETTEXTBOX: [0, 0], REGEXPMATCH: [2, 3], CLEARMEMORY: [0, 0], GETMEMORYUSAGE: [0, 0], PRINTCPERLINE: [0, 0], PRINTCLENGTH: [0, 0],
     CSVCSTR: [2, 3], CSVABL: [2, 3], CSVTALENT: [2, 3], CSVBASE: [2, 3], CSVEXP: [2, 3], CSVRELATION: [2, 3], CSVFLAG: [2, 3],
@@ -323,6 +325,9 @@ export class Runtime {
   private printedLine = "";
   /** Routines currently executing, innermost last. */
   private doing: Routine[] = [];
+  /** Debug mode's DEBUGPRINT output since the last snapshot, and whether DEBUGCLEAR ran meanwhile. */
+  private debugText = "";
+  private debugClear = false;
   private forceKana = 0;
   private printCLength: number;
   private deferred: Output[] = [];
@@ -380,12 +385,13 @@ export class Runtime {
     this.globals.defineCharacter("DOWNBASE", false, game.variableSizes.get("BASE") ?? [100]);
     for (const name of ["CUP", "CDOWN"]) this.globals.defineCharacter(name, false, game.variableSizes.get("PALAM") ?? [200]);
     this.globals.define("TSTR", true, game.variableSizes.get("TSTR") ?? [100]);
-    ["STR", "SAVESTR", "GLOBALS", "RESULTS", "WINDOW_TITLE", "GAMEBASE_TITLE", "GAMEBASE_INFO", "GAMEBASE_YEAR"].forEach((name) => this.globals.define(name, true, game.variableSizes.get(name) ?? [1000]));
-    for (const name of ["GAMEBASE_VERSION", "GAMEBASE_CODE", "CHARANUM"]) this.globals.define(name);
+    ["STR", "SAVESTR", "GLOBALS", "RESULTS", "WINDOW_TITLE", "GAMEBASE_TITLE", "GAMEBASE_INFO", "GAMEBASE_YEAR", "GAMEBASE_AUTHOR"].forEach((name) => this.globals.define(name, true, game.variableSizes.get(name) ?? [1000]));
+    for (const name of ["GAMEBASE_VERSION", "GAMEBASE_CODE", "GAMEBASE_ALLOWVERSION", "GAMEBASE_DEFAULTCHARA", "GAMEBASE_NOITEM", "CHARANUM"]) this.globals.define(name);
     const base = new Map([...(game.tables.get("GAMEBASE")?.values() ?? [])].map((row) => [row[0], row[1] ?? ""]));
-    for (const [variable, csv] of [["GAMEBASE_TITLE", "タイトル"], ["GAMEBASE_INFO", "追加情報"], ["GAMEBASE_YEAR", "製作年"]])
+    for (const [variable, csv] of [["GAMEBASE_TITLE", "タイトル"], ["GAMEBASE_INFO", "追加情報"], ["GAMEBASE_YEAR", "製作年"], ["GAMEBASE_AUTHOR", "作者"], ["WINDOW_TITLE", "ウィンドウタイトル"]])
       this.globals.seed(variable!, 0, base.get(csv!) ?? "");
-    for (const [variable, csv] of [["GAMEBASE_CODE", "コード"], ["GAMEBASE_VERSION", "バージョン"]]) {
+    for (const [variable, csv] of [["GAMEBASE_CODE", "コード"], ["GAMEBASE_VERSION", "バージョン"], ["GAMEBASE_ALLOWVERSION", "バージョン違い認める"],
+      ["GAMEBASE_DEFAULTCHARA", "最初からいるキャラ"], ["GAMEBASE_NOITEM", "アイテムなし"]]) {
       const value = base.get(csv!);
       if (value && /^-?\d+$/.test(value)) this.globals.seed(variable!, 0, BigInt(value));
       else if (variable === "GAMEBASE_VERSION" && value === "proto") this.globals.seed(variable, 0, 0n);
@@ -442,6 +448,7 @@ export class Runtime {
       targets: (name) => this.game.routines.get(name) ?? [],
       names: () => this.game.routines.keys(),
       analysis: shared.analysis,
+      debug: !!game.debug,
     });
   }
   /** Config.DrawableWidth: WindowX less the shape shift used by every drawing mode except WINAPI. */
@@ -838,10 +845,10 @@ export class Runtime {
     if (sprite.animation) {
       const { width, height, frames } = sprite.animation;
       cached = { width, height, x: 0, y: 0, frames: frames.map((frame) =>
-        animationFrame({ url: resourceUrl(frame.file), delay: frame.delay }, crop(frame), [frame.offsetX ?? 0, frame.offsetY ?? 0], width, height)) };
+        animationFrame({ url: this.resourceUrl(frame.file), delay: frame.delay }, crop(frame), [frame.offsetX ?? 0, frame.offsetY ?? 0], width, height)) };
     } else {
       const src = crop(sprite), size = sprite.size ?? { width: src[2], height: src[3] };
-      cached = { width: size.width, height: size.height, x: sprite.offsetX ?? 0, y: sprite.offsetY ?? 0, url: resourceUrl(sprite.file), src };
+      cached = { width: size.width, height: size.height, x: sprite.offsetX ?? 0, y: sprite.offsetY ?? 0, url: this.resourceUrl(sprite.file), src };
     }
     this.spriteSizes.set(id, cached);
     return cached;
@@ -1076,7 +1083,7 @@ export class Runtime {
         this.deferred = [];
         if (next.done) {
           this.finished = true;
-          return { status: "halted", output, input: null, error: null, title: this.windowTitle(), target: this.currentTarget() };
+          return this.withDebug({ status: "halted", output, input: null, error: null, title: this.windowTitle(), target: this.currentTarget() });
         }
         if ("input" in next.value) {
           if (this.skipDisplay) {
@@ -1091,7 +1098,7 @@ export class Runtime {
           }
           this.pending = next.value.input;
           this.waits++;
-          return { status: "waiting", output, input: this.pending, error: null, title: this.windowTitle(), target: this.currentTarget() };
+          return this.withDebug({ status: "waiting", output, input: this.pending, error: null, title: this.windowTitle(), target: this.currentTarget() });
         }
         if (next.value === SKIPPED) continue;
         bytes += JSON.stringify(next.value.output).length;
@@ -1104,7 +1111,7 @@ export class Runtime {
       this.deferred = [];
       this.finished = true;
       this.iterator.return(undefined);
-      return { status: "error", output, input: null, error: error.diagnostic(), title: this.windowTitle(), target: this.currentTarget() };
+      return this.withDebug({ status: "error", output, input: null, error: error.diagnostic(), title: this.windowTitle(), target: this.currentTarget() });
     }
   }
   private currentTarget(): number {
@@ -1244,8 +1251,9 @@ export class Runtime {
         if (name === "__INT_MAX__") return 0x7fff_ffff_ffff_ffffn;
         if (name === "__INT_MIN__") return -0x8000_0000_0000_0000n;
         // Debug variables are only populated in Emuera's debug mode.
-        if (name === "__FILE__" || name === "__FUNCTION__") return "";
-        if (name === "__LINE__") return 0n;
+        if (name === "__FILE__") return this.game.debug ? this.currentSource?.file ?? "" : "";
+        if (name === "__FUNCTION__") { const routine = this.game.debug ? this.doing.at(-1) : undefined; return routine ? routine.label ?? routine.name : ""; }
+        if (name === "__LINE__") return this.game.debug ? BigInt(this.currentSource?.line ?? 0) : 0n;
         if (name === "DRAWLINESTR") return "-".repeat(this.columns);
         if (name === "GAMEBASE_VERSION") {
           const version = [...(this.game.tables.get("GAMEBASE")?.values() ?? [])].find((row) => row[0] === "バージョン")?.[1];
@@ -1490,6 +1498,8 @@ export class Runtime {
           }
           // Only the configured font is known to exist in the browser; scripts fall back to it otherwise.
           case "CHKFONT": return key(argText(args, name, 0)) === key(this.display.font) ? 1n : 0n;
+          // The function form returns the instruction's RESULT state without touching RESULT/RESULTS.
+          case "CHKDATA": return this.checkSave(this.saveFile(argInt(args, name, 0))).state;
           case "LINEISEMPTY": return this.printedLine === "" && this.printingHtml === "" ? 1n : 0n;
           case "HTML_GETPRINTEDSTR": {
             const lineNo = args[0] === undefined ? 0 : Number(argInt(args, name, 0));
@@ -1635,7 +1645,7 @@ export class Runtime {
             const size = imageSize(file);
             if (!size) return 0n;
             const whole: Rect = [0, 0, size.width, size.height];
-            this.graphics.set(argInt(args, name, 0), { ...size, ops: [{ op: "image", url: resourceUrl(path.relative(resources, file)), src: whole, dest: whole }] });
+            this.graphics.set(argInt(args, name, 0), { ...size, ops: [{ op: "image", url: this.resourceUrl(path.relative(resources, file)), src: whole, dest: whole }] });
             return 1n;
           }
           case "GCREATED": return this.graphics.has(argInt(args, name, 0)) ? 1n : 0n;
@@ -2059,6 +2069,29 @@ export class Runtime {
     if (!expr) { expr = parseFormat(source); this.formatCache.set(source, expr); }
     return text(evaluate(expr, frame.context));
   }
+  private debugInstruction(op: string, args: string, frame: Frame): void {
+    if (op === "ASSERT") {
+      if (integer(evaluate(this.parse(args), frame.context)) === 0n) throw new EraError("ASSERT文の引数が0です");
+    } else if (op === "DEBUGCLEAR") {
+      this.debugText = "";
+      this.debugClear = true;
+    } else {
+      const form = op.startsWith("DEBUGPRINTFORM");
+      this.debugText += (form ? this.formatted(args, frame) : args) + (op.endsWith("L") ? "\n" : "");
+      if (this.debugText.length > 200_000) this.debugText = this.debugText.slice(-100_000);
+    }
+  }
+  /** Adds the debug window text gathered since the last snapshot. */
+  private withDebug(snapshot: Snapshot): Snapshot {
+    if (this.debugClear) snapshot.debugClear = true;
+    if (this.debugText) snapshot.debug = this.debugText;
+    this.debugText = "";
+    this.debugClear = false;
+    return snapshot;
+  }
+  private resourceUrl(file: string): string {
+    return `${this.game.resourceBase}${file.split(/[\\/]/).map(encodeURIComponent).join("/")}`;
+  }
   private assignment(source: string): Assignment {
     let assignment = this.assignmentCache.get(source);
     if (assignment) return assignment;
@@ -2070,7 +2103,7 @@ export class Runtime {
       if (c === '"') quoted = true;
       else if (c === "(") depth++;
       else if (c === ")") depth--;
-      else if (depth === 0 && (match = (this.fullWidthSpace ? /^(\+\+|--|'=|[+\-*/%&|^]?=)\s*/ : /^(\+\+|--|'=|[+\-*/%&|^]?=)[ \t]*/).exec(source.slice(at)))) break;
+      else if (depth === 0 && (match = (this.fullWidthSpace ? /^(\+\+|--|'=|<<=|>>=|[+\-*/%&|^]?=)\s*/ : /^(\+\+|--|'=|<<=|>>=|[+\-*/%&|^]?=)[ \t]*/).exec(source.slice(at)))) break;
     }
     if (!match) throw new EraError("Invalid assignment");
     const target = source.slice(0, at).trim();
@@ -2368,8 +2401,9 @@ export class Runtime {
       try {
         const { op, args, target } = line;
         const special = !HOT_OPS.has(op);
-        if (special && (op.startsWith("DEBUGPRINT") || op === "DEBUGCLEAR")) {
-          // The loader runs release mode; debug output is not evaluated.
+        if (special && (op.startsWith("DEBUGPRINT") || op === "DEBUGCLEAR" || op === "ASSERT")) {
+          // Outside debug mode Emuera skips debug instructions (DEBUG_FUNC) without evaluating them.
+          if (this.game.debug) this.debugInstruction(op, args, frame);
         } else if (special && this.skipDisplay && SKIPPED_INPUTS.has(op)) {
           // Emuera skips input instructions while output is skipped, but a script's own SKIPDISP makes that an error.
           if (this.userSkip) throw new EraError("SKIPDISP中にユーザー入力が求められました。NOSKIP～ENDNOSKIPで囲ってください");
@@ -2441,7 +2475,7 @@ export class Runtime {
               ? this.formatted(source, frame) : ev(source);
             if ((operator === "++" || operator === "--") && source) throw new EraError("Unexpected text after increment/decrement");
             const value = operator === "=" || operator === "'=" ? rhs : evaluate({
-              kind: "binary", op: operator === "++" ? "+" : operator === "--" ? "-" : operator[0]!,
+              kind: "binary", op: operator === "++" ? "+" : operator === "--" ? "-" : operator.slice(0, -1),
               left: literal(evaluate(reference, frame.context)), right: literal(rhs),
             }, frame.context);
             this.assign(frame, reference, value);
@@ -2521,6 +2555,13 @@ export class Runtime {
           case "ADDCHARA":
             for (const part of this.arguments(args)) this.addCharacter(Number(num(part)), frame.context);
             break;
+          case "ADDVOIDCHARA": {
+            // Emuera's pseudo character: template 0 with no CSV data, so NO is 0 and every value is empty.
+            if (args.trim()) throw new EraError("ADDVOIDCHARA takes no arguments");
+            const index = this.globals.addCharacter();
+            this.globals.set("CHARANUM", [], BigInt(index + 1), frame.context);
+            break;
+          }
           case "DELCHARA": case "DELALLCHARA": case "COPYCHARA": case "ADDCOPYCHARA": case "SWAPCHARA": case "PICKUPCHARA":
             this.characterOperation(op, op === "DELALLCHARA" ? [] : this.arguments(args).map((part) => Number(num(part))), frame.context);
             break;

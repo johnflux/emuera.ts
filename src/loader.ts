@@ -1,11 +1,46 @@
 import { readdir, readFile } from "node:fs/promises";
-import { closeSync, existsSync, openSync, readFileSync, readSync } from "node:fs";
+import { closeSync, existsSync, openSync, readdirSync, readFileSync, readSync } from "node:fs";
 import path from "node:path";
 import { EraError, key, allowsFullWidthSpace, stripComment, splitArguments, type Diagnostic, type Line, type Routine } from "./model.js";
 
-export const GAME_ROOT = path.resolve("anon-tw-anon-tw_eng-modding");
-/** Browser-presentation ERB layered over the bundled game without editing its files (see docs/hotpatches.md). */
+/** Browser-presentation ERB layered over eraToho The World without editing its files (see docs/hotpatches.md). */
 export const HOTPATCH_ROOT = path.resolve("hotpatch");
+/** A game the server offers when its directory exists; the first is the default. */
+export interface GameDefinition { id: string; title: string; root: string; hotpatch?: string }
+/** Games with a fixed id (used in ?game= addresses), title or hotpatch; other folders in GAMES/ are discovered. */
+export const KNOWN_GAMES: readonly GameDefinition[] = [
+  { id: "tw", title: "eraToho The World", root: path.resolve("GAMES/anon-tw-anon-tw_eng-modding"), hotpatch: HOTPATCH_ROOT },
+  { id: "k", title: "eraTohoK", root: path.resolve("GAMES/eraTohoK/eraTohoK-master") },
+  { id: "rancek", title: "eraRanceK", root: path.resolve("GAMES/eraRanceK") },
+];
+const isGameRoot = (dir: string): boolean => existsSync(path.join(dir, "ERB")) && existsSync(path.join(dir, "CSV"));
+const subdirectories = (dir: string): string[] => {
+  try { return readdirSync(dir, { withFileTypes: true }).filter((entry) => entry.isDirectory() && !entry.name.startsWith(".")).map((entry) => entry.name).sort(); }
+  catch { return []; }
+};
+/**
+ * Known games, then every other folder in `gamesDir` holding ERB/ and CSV/ directly or one level down (as in an
+ * unzipped `name/name-master`). A discovered game is titled and identified by its top-level folder name.
+ */
+export function discoverGames(gamesDir = path.resolve("GAMES"), known: readonly GameDefinition[] = KNOWN_GAMES): GameDefinition[] {
+  const games = [...known];
+  const roots = new Set(known.map((game) => game.root));
+  const ids = new Set(known.map((game) => game.id));
+  for (const name of subdirectories(gamesDir)) {
+    const dir = path.join(gamesDir, name);
+    const root = isGameRoot(dir) ? dir : subdirectories(dir).map((child) => path.join(dir, child)).find(isGameRoot);
+    if (!root || roots.has(root) || [...roots].some((known) => known.startsWith(dir + path.sep))) continue;
+    const base = name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "") || "game";
+    let id = base;
+    for (let n = 2; ids.has(id); n++) id = `${base}-${n}`;
+    games.push({ id, title: name, root });
+    roots.add(root);
+    ids.add(id);
+  }
+  return games;
+}
+export const GAMES: readonly GameDefinition[] = discoverGames();
+export const GAME_ROOT = GAMES[0]!.root;
 /** A CSV sprite: a crop of a resource image. width/height 0 mean the whole image. */
 /** What a static renderer draws for a sprite: itself, or an animation's first frame (undefined while it has none). */
 export function stillFrame(sprite: Sprite): Sprite | undefined {
@@ -72,6 +107,10 @@ export interface Game {
   replacements: Map<string, string>;
   /** CSV/VarExt*.csv: which MAP, XmlDocument and DataTable names are saved, global or static. */
   containers: Record<ContainerScope, ContainerNames>;
+  /** URL path the browser fetches resources/ files from. */
+  resourceBase: string;
+  /** Emuera's debug mode (-Debug): [IF_DEBUG] code is loaded and DEBUG_FUNC instructions such as DEBUGPRINT and ASSERT run. */
+  debug?: boolean;
 }
 export type ContainerScope = "SAVE" | "GLOBAL" | "STATIC";
 export interface ContainerNames { MAPS: Set<string>; XMLS: Set<string>; DTS: Set<string> }
@@ -124,7 +163,7 @@ export function csvRows(source: string): string[][] {
   });
 }
 export function emptyGame(root = ""): Game {
-  return { root, routines: new Map(), headers: [], tables: new Map(), names: new Map(), sprites: new Map(), diagnostics: [], scriptFiles: 0, variableSizes: new Map(), macros: new Map(), characters: new Map(), renames: new Map(), money: { label: "\u00a5", first: true }, config: new Map(), replacements: new Map(), containers: { SAVE: containerNames(), GLOBAL: containerNames(), STATIC: containerNames() } };
+  return { root, routines: new Map(), headers: [], tables: new Map(), names: new Map(), sprites: new Map(), diagnostics: [], scriptFiles: 0, variableSizes: new Map(), macros: new Map(), characters: new Map(), renames: new Map(), money: { label: "\u00a5", first: true }, config: new Map(), replacements: new Map(), containers: { SAVE: containerNames(), GLOBAL: containerNames(), STATIC: containerNames() }, resourceBase: "/resources/" };
 }
 function* logicalLines(source: string, file: string): Generator<Line> {
   const rows = source.replace(/^\uFEFF/, "").split(/\r?\n/);
@@ -169,8 +208,8 @@ export function indexScript(game: Game, source: string, file: string, header = f
     if (content === "[SKIPSTART]") { skipBlock = true; continue; }
     if (content === "[SKIPEND]") { skipBlock = false; continue; }
     if (skipBlock) continue;
-    if (content === "[IF_DEBUG]") { pushCondition(false); continue; }
-    if (content === "[IF_NDEBUG]") { pushCondition(true); continue; }
+    if (content === "[IF_DEBUG]") { pushCondition(!!game.debug); continue; }
+    if (content === "[IF_NDEBUG]") { pushCondition(!game.debug); continue; }
     const conditional = /^\[(IF|ELSEIF)\s+([\p{L}\p{N}_\p{M}]+)\]$/iu.exec(content);
     if (conditional) {
       const active = defined(conditional[2]!);
@@ -251,8 +290,9 @@ export async function applyHotpatches(game: Game, dir = HOTPATCH_ROOT): Promise<
   }
   return replaced;
 }
-export async function loadGame(root = GAME_ROOT): Promise<Game> {
+export async function loadGame(root = GAME_ROOT, options: { debug?: boolean } = {}): Promise<Game> {
   const game = emptyGame(root);
+  if (options.debug) game.debug = true;
   const configFile = path.join(root, "emuera.config");
   if (existsSync(configFile)) {
     for (const row of (await readText(configFile)).split(/\r?\n/)) {

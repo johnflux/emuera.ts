@@ -8,10 +8,32 @@ const report = document.querySelector("#compatibility");
 const tooltip = document.querySelector("#game-tooltip");
 let tooltipTarget = null;
 const translation = createTranslation({ onChange: (status) => showTranslation(status) });
-const startButtons = [document.querySelector("#demo"), document.querySelector("#game")];
+const demoButton = document.querySelector("#demo");
+/** The menu's run buttons: the demo, then one per game (#game is the default game's; see showGames()). */
+const startButtons = [demoButton, document.querySelector("#game")];
 const restartButton = document.querySelector("#restart");
-const GAME_TITLE = "eraToho The World";
+/** The games the server offers ({ id, title, display, metrics }, from /api/runtime); the first is the default. */
+let games = [{ id: null, title: "eraToho The World" }];
 let runMode = "game";
+/** The game the current run plays; the demo runs on the default game. */
+let runGame = null;
+/** Whether the current run is in Emuera's debug mode; new runs use the saved preference. */
+let runDebug = false;
+const DEBUG_KEY = "era-typescript.debug";
+const debugPreferred = () => localStorage.getItem(DEBUG_KEY) === "1";
+const debugButton = document.querySelector("#debug-toggle");
+const debugPanel = document.querySelector("#debug-output");
+const debugLog = document.querySelector("#debug-log");
+/** Appends a snapshot's debug window text (DEBUGPRINT), after emptying it for DEBUGCLEAR. */
+function showDebugOutput(snapshot) {
+  if (snapshot.debugClear) debugLog.textContent = "";
+  if (!snapshot.debug) return;
+  const atEnd = debugLog.scrollTop + debugLog.clientHeight >= debugLog.scrollHeight - 4;
+  debugLog.append(snapshot.debug);
+  if (debugLog.textContent.length > 200_000) debugLog.textContent = debugLog.textContent.slice(-100_000);
+  if (atEnd) debugLog.scrollTop = debugLog.scrollHeight;
+}
+const gameTitle = (id) => (games.find((game) => game.id === id) ?? games[0]).title;
 let session = null;
 /** Steps the server has delivered for this session; sent with input so a stale duplicate tab is refused. */
 let step = 0;
@@ -20,11 +42,27 @@ const RUN_KEY = "era-typescript.run";
 function savedRun() {
   try {
     const run = JSON.parse(sessionStorage.getItem(RUN_KEY) ?? "null");
-    return typeof run?.session === "string" && (run.mode === "game" || run.mode === "demo") ? run : null;
+    return typeof run?.session === "string" && (run.mode === "game" || run.mode === "demo")
+      && (run.game === undefined || typeof run.game === "string") ? run : null;
   } catch { return null; }
 }
+/** The address names the current game (?game=k, or ?demo), so reloads and dev hot reloads keep to it. */
+function urlRun() {
+  const params = new URLSearchParams(location.search);
+  if (params.has("demo")) return { mode: "demo" };
+  const game = params.get("game");
+  return game ? { mode: "game", game } : null;
+}
+function showRunInUrl() {
+  const url = new URL(location.href);
+  url.searchParams.delete("game");
+  url.searchParams.delete("demo");
+  if (runMode === "demo") url.searchParams.set("demo", "");
+  else if (runGame) url.searchParams.set("game", runGame);
+  window.history.replaceState(window.history.state, "", url.href.replace(/([?&]demo)=(?=&|#|$)/, "$1"));
+}
 function rememberRun() {
-  if (session && input) sessionStorage.setItem(RUN_KEY, JSON.stringify({ session, mode: runMode }));
+  if (session && input) sessionStorage.setItem(RUN_KEY, JSON.stringify({ session, mode: runMode, game: runGame }));
   else sessionStorage.removeItem(RUN_KEY);
 }
 let input = null;
@@ -44,7 +82,8 @@ const sprites = new Map();
 const SETTINGS_KEY = "era-typescript.settings";
 /** Emuera's configured font size and line height (emuera.config), the units game image layouts are written in. */
 let metrics = { fontSize: 18, lineHeight: 19, columns: 20 };
-let gameDefaults = { foreground: "#c0c0c0", background: "#000000", selection: "#ffff00", font: "ＭＳ ゴシック" };
+const BASE_DEFAULTS = { foreground: "#c0c0c0", background: "#000000", selection: "#ffff00", font: "ＭＳ ゴシック" };
+let gameDefaults = { ...BASE_DEFAULTS };
 let settings = { ...gameDefaults };
 function savedSettings() {
   try { return JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "{}") ?? {}; } catch { return {}; }
@@ -82,14 +121,39 @@ const settingsLoaded = (async () => {
   applySettings();
   try {
     const runtime = await api("/api/runtime");
-    gameDefaults = { ...gameDefaults, ...runtime.display };
-    if (runtime.metrics) metrics = runtime.metrics;
-    settings = { ...gameDefaults, ...savedSettings() };
-    applySettings();
+    if (runtime.games?.length) games = runtime.games;
+    showGames();
+    useGameDisplay(games[0].id);
     await document.fonts.ready;
     terminalColumns();
   } catch { /* the development watcher reports connection errors */ }
 })();
+/** Emuera's colors, font and layout metrics come from each game's emuera.config; the player's settings override them. */
+function useGameDisplay(id) {
+  const game = games.find((entry) => entry.id === id) ?? games[0];
+  gameDefaults = { ...BASE_DEFAULTS, ...game.display };
+  if (game.metrics) metrics = game.metrics;
+  // Emuera spaces lines by the configured line height; images that span lines are laid out against it.
+  document.documentElement.style.setProperty("--line-height", String(Math.min(3, Math.max(1, metrics.lineHeight / metrics.fontSize))));
+  settings = { ...gameDefaults, ...savedSettings() };
+  applySettings();
+}
+/** Lists the server's games in the menu, before the demo. */
+function showGames() {
+  const [first, ...others] = games;
+  const button = startButtons[1];
+  button.dataset.game = first.id;
+  button.textContent = first.title;
+  for (const game of others) {
+    const extra = document.createElement("button");
+    extra.dataset.game = game.id;
+    extra.setAttribute("aria-pressed", "false");
+    extra.textContent = game.title;
+    demoButton.before(extra);
+    startButtons.push(extra);
+    extra.addEventListener("click", () => { void chooseRun("game", game.id); });
+  }
+}
 new ResizeObserver(() => {
   // scrollIntoView would also scroll an open dialog's body to its end.
   if (input && !busy && !terminal.querySelector(".era-dialog:popover-open")) lastOutputLine()?.scrollIntoView({ block: "nearest" });
@@ -106,7 +170,7 @@ async function watchDevelopment() {
   if (!runtime.development) return;
   if (sessionStorage.getItem("era-dev-reloaded")) {
     sessionStorage.removeItem("era-dev-reloaded");
-    if (!session && !busy) message("Development reload complete. Starting a fresh bundled-game run.");
+    if (!session && !busy) message("Development reload complete. Starting a fresh run.");
   }
   let disconnected = false;
   async function poll() {
@@ -543,17 +607,27 @@ function appendText(parent, value) {
   appendCells(parent, value.slice(start));
 }
 /**
- * Block elements (▀▄█…) aren't in Shift-JIS, so Emuera counts them as one column and MS Gothic draws them half-width.
- * Our font lacks them and the fallback glyphs are wider, which would push bars out of their columns.
+ * Block elements (▀▄█…) and the corner triangles ◢◣◤◥ aren't in Shift-JIS, so Emuera counts them as one column and
+ * MS Gothic draws them half-width. Our fonts draw them wider, which would push bars (and sliders) out of their columns.
+ * Blocks are clipped to a column; triangles are squeezed so they keep their shape.
  */
 function appendCells(parent, value) {
   let start = 0;
-  for (const match of value.matchAll(/[\u2580-\u259F]+/g)) {
+  for (const match of value.matchAll(/[\u2580-\u259F]+|[\u25E2-\u25E5]+/g)) {
     parent.append(document.createTextNode(value.slice(start, match.index)));
     const cells = document.createElement("span");
-    cells.className = "half-cells";
     cells.style.width = `${match[0].length}ch`;
-    cells.textContent = match[0];
+    if (match[0] >= "\u25E2") {
+      // Spaces carry the line's strikeout at its usual height while the glyphs are scaled over them.
+      cells.className = "half-cells squeezed";
+      cells.textContent = " ".repeat(match[0].length);
+      const glyphs = document.createElement("span");
+      glyphs.textContent = match[0];
+      cells.append(glyphs);
+    } else {
+      cells.className = "half-cells";
+      cells.textContent = match[0];
+    }
     parent.append(cells);
     start = match.index + match[0].length;
   }
@@ -755,10 +829,11 @@ async function image(source, token, suppliedSprite, scale = imageScale(), suppli
   const hover = source.getAttribute("srcb");
   // Builds one clipped picture; src and srcb (the mouse-over picture) share the img's size and ypos.
   const clipFor = async (name, supplied) => {
-    let promise = supplied ? Promise.resolve(supplied) : sprites.get(name);
+    const cacheKey = `${runGame}\n${name}`;
+    let promise = supplied ? Promise.resolve(supplied) : sprites.get(cacheKey);
     if (!promise) {
-      promise = api(`/api/sprite?name=${encodeURIComponent(name)}`);
-      sprites.set(name, promise);
+      promise = api(`/api/sprite?name=${encodeURIComponent(name)}${runGame ? `&game=${encodeURIComponent(runGame)}` : ""}`);
+      sprites.set(cacheKey, promise);
     }
     const sprite = await promise;
     if (token !== generation) return undefined;
@@ -1220,6 +1295,7 @@ function markTarget(target) {
 async function renderSnapshot(snapshot, advanceScreen) {
   hideTooltip();
   document.title = snapshot.title || "Emuera.ts";
+  showDebugOutput(snapshot);
   const previousScreen = currentScreen;
   const previousLine = currentLine;
   if (advanceScreen === "continue") {
@@ -1371,10 +1447,13 @@ function showReport(visible) {
   report.hidden = !visible;
   const mode = document.querySelector("#mode");
   mode.hidden = !runMode;
-  mode.textContent = runMode === "demo" ? "Demo" : "Game";
+  mode.textContent = (runMode === "demo" ? "Demo" : "Game") + (runDebug ? " · Debug" : "");
+  debugButton.setAttribute("aria-pressed", String(runDebug));
+  debugPanel.hidden = !runDebug;
   document.querySelector("#report").setAttribute("aria-expanded", String(visible));
-  startButtons[0].setAttribute("aria-pressed", String(!visible && runMode === "demo"));
-  startButtons[1].setAttribute("aria-pressed", String(!visible && runMode === "game"));
+  demoButton.setAttribute("aria-pressed", String(!visible && runMode === "demo"));
+  for (const button of startButtons.slice(1))
+    button.setAttribute("aria-pressed", String(!visible && runMode === "game" && (button.dataset.game ?? "") === (runGame ?? "")));
   restartButton.textContent = runMode === "demo" ? "Restart demo…" : "Restart game…";
 }
 function terminalColumns() {
@@ -1434,16 +1513,22 @@ function resetRun() {
   command.value = "";
   currentLine = null;
 }
-async function start(mode) {
+async function start(mode, game = runGame, debug = debugPreferred()) {
   if (busy) return;
   runMode = mode;
-  showReport(false);
+  runDebug = debug;
+  debugLog.textContent = "";
   resetRun();
-  message(`Starting ${mode === "demo" ? "conformance demo" : GAME_TITLE}...`);
   try {
+    await settingsLoaded;
+    runGame = mode === "game" && games.some((entry) => entry.id === game) ? game : games[0].id;
+    showReport(false);
+    message(`Starting ${runName(mode, runGame)}${debug ? " in debug mode" : ""}...`);
+    useGameDisplay(runGame);
+    showRunInUrl();
     await terminalReady();
     const columns = terminalColumns();
-    const snapshot = await api("/api/start", { mode, previousSession: session, columns, display: displaySettings() });
+    const snapshot = await api("/api/start", { mode, game: runGame ?? undefined, debug, previousSession: session, columns, display: displaySettings() });
     activityResponded();
     await render(snapshot, false, true);
   }
@@ -1464,6 +1549,11 @@ async function resume(id) {
     const data = await api("/api/resume", { session: id });
     activityResponded();
     runMode = data.mode;
+    runGame = data.game ?? games[0].id;
+    runDebug = !!data.debug;
+    debugLog.textContent = "";
+    useGameDisplay(runGame);
+    showRunInUrl();
     showReport(false);
     const advance = { start: false, timeout: false, continue: "continue", input: true };
     await renderSteps(data.history.map(({ advance: how, snapshot }, i) =>
@@ -1708,20 +1798,32 @@ confirmation.addEventListener("keydown", (event) => {
   event.preventDefault();
   confirmation.close();
 });
-function runName(mode) { return mode === "demo" ? "the conformance demo" : GAME_TITLE; }
+function runName(mode, game) { return mode === "demo" ? "the conformance demo" : gameTitle(game); }
 /** Starting a run discards one in progress, so that is confirmed first. */
-async function chooseRun(mode) {
+async function chooseRun(mode, game = games[0].id) {
   if (busy) return;
   const active = !!(session && input);
-  if (active && mode === runMode && !report.hidden) { showReport(false); return; }
-  if (active && !await confirmAction(mode === runMode ? `Restart ${runName(mode)}?` : `Switch to ${runName(mode)}?`,
-    `Progress in the current run of ${runName(runMode)} that has not been saved in the game will be lost.`,
-    mode === runMode ? "Restart" : "Switch")) return;
-  void start(mode);
+  const same = mode === runMode && (mode === "demo" || game === runGame);
+  if (active && same && !report.hidden) { showReport(false); return; }
+  if (active && !await confirmAction(same ? `Restart ${runName(mode, game)}?` : `Switch to ${runName(mode, game)}?`,
+    `Progress in the current run of ${runName(runMode, runGame)} that has not been saved in the game will be lost.`,
+    same ? "Restart" : "Switch")) return;
+  void start(mode, game);
 }
-startButtons[0].addEventListener("click", () => { void chooseRun("demo"); });
-startButtons[1].addEventListener("click", () => { void chooseRun("game"); });
-restartButton.addEventListener("click", () => { void chooseRun(runMode); });
+demoButton.addEventListener("click", () => { void chooseRun("demo"); });
+startButtons[1].addEventListener("click", () => { void chooseRun("game", games[0].id); });
+restartButton.addEventListener("click", () => { void chooseRun(runMode, runGame); });
+// Debug mode changes what the game loads ([IF_DEBUG]), so switching it restarts the run.
+debugButton.addEventListener("click", async () => {
+  if (busy) return;
+  const debug = !runDebug;
+  if (session && input && !await confirmAction(debug ? "Turn on debug mode?" : "Turn off debug mode?",
+    `${runName(runMode, runGame)} restarts${debug ? " in Emuera's debug mode" : ""}. Progress in the current run that has not been saved in the game will be lost.`,
+    "Restart")) return;
+  localStorage.setItem(DEBUG_KEY, debug ? "1" : "0");
+  void start(runMode, runGame, debug);
+});
+document.querySelector("#debug-clear").addEventListener("click", () => { debugLog.textContent = ""; });
 document.querySelector("#font-size").addEventListener("input", (event) => {
   updateSetting("fontSize", Number(event.target.value));
 });
@@ -1762,10 +1864,10 @@ document.querySelector("#report").addEventListener("click", async () => {
     return;
   }
   try {
-    const data = await api("/api/compatibility");
+    const data = await api(`/api/compatibility${runGame ? `?game=${encodeURIComponent(runGame)}` : ""}`);
     report.replaceChildren();
     const heading = document.createElement("h2");
-    heading.textContent = `${GAME_TITLE}: compatibility inventory`;
+    heading.textContent = `${gameTitle(runGame)}: compatibility inventory`;
     const summary = document.createElement("p");
     summary.textContent = `${data.scriptFiles} scripts / ${data.functions} functions / ${data.csvTables} CSV tables / ${data.sprites} sprites`;
     const note = document.createElement("p");
@@ -1792,8 +1894,12 @@ document.querySelector("#report").addEventListener("click", async () => {
 });
 // A reload reattaches to this tab's run if the server still has it; otherwise a fresh game starts.
 void (async () => {
-  const saved = savedRun();
+  await settingsLoaded;
+  const requested = urlRun();
+  let saved = savedRun();
+  // An address naming a different game than this tab's run (edited or pasted) starts that game instead.
+  if (saved && requested && (requested.mode !== saved.mode || (requested.mode === "game" && requested.game !== (saved.game ?? games[0]?.id)))) saved = null;
   if (saved && await resume(saved.session)) return;
-  await start(saved?.mode ?? "game");
+  await start(requested?.mode ?? saved?.mode ?? "game", requested?.game ?? saved?.game);
   if (saved && session) message(`The previous run had ended or expired (or the server restarted), so a new run started. ${status.textContent}`);
 })();

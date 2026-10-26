@@ -1,6 +1,6 @@
 # Game patches
 
-Emuera.ts runs `anon-tw-anon-tw_eng-modding` as-is and implements Emuera's
+Emuera.ts runs `GAMES/anon-tw-anon-tw_eng-modding` (eraToho The World) as-is and implements Emuera's
 behaviour faithfully, including when the game itself is wrong. The fixes below
 are for **bugs in the game's own data and scripts**. Each one was checked
 against EvilMask's Emuera (EM) source, so the same symptom appears in the real
@@ -86,7 +86,7 @@ Accept `RESULT < LOCAL`, so every listed bet, and only those, can be chosen.
 
 ## Patch
 
-Apply from inside `anon-tw-anon-tw_eng-modding` with `git apply -p1` or
+Apply from inside `GAMES/anon-tw-anon-tw_eng-modding` with `git apply -p1` or
 `patch -p1`. The files are UTF-8 with LF line endings. `Chara153 美天.csv`
 starts with a BOM, which the patch leaves untouched.
 
