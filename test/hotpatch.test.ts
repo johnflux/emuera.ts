@@ -67,6 +67,75 @@ WAIT`, "<stub>");
   assert.equal(Number(texts.at(-1)) - Number(texts[0]), 2, "the Palam block is one logical line");
 });
 
+test("occupants show a non-interactive cage entry at Miracle Mallet's remote-access locations", {
+  skip: !existsSync(GAME_ROOT),
+}, async () => {
+  const game = await loadGame();
+  await applyHotpatches(game);
+  const scenarios: {
+    name: string;
+    room: number;
+    setup?: string;
+    caged: boolean;
+    able: boolean;
+    normal?: boolean;
+  }[] = [
+    { name: "living room", room: 9, caged: true, able: true },
+    { name: "veranda", room: 10, caged: true, able: true },
+    { name: "other room", room: 8, caged: false, able: false },
+    { name: "away living room", room: 8009, caged: false, able: false },
+    { name: "away veranda", room: 8010, caged: false, able: false },
+    { name: "not at home", room: 9, setup: "MAIN_MAP = 1", caged: false, able: false },
+    { name: "cage empty", room: 9, setup: "CFLAG:71:現在位置 = 11", caged: false, able: false },
+    { name: "asleep", room: 9, setup: "CFLAG:71:睡眠 = 1", caged: true, able: false },
+    { name: "cooldown", room: 10, setup: "CFLAG:MASTER:魔力回収 = 3", caged: true, able: false },
+    { name: "time stopped", room: 9, setup: "FLAG:70 = 1", caged: true, able: false },
+    { name: "playing Shinmyoumaru", room: 9, setup: "FLAG:なりきり = 71", caged: false, able: true },
+    { name: "physically present", room: 9, setup: "CFLAG:71:現在位置 = 9\nTARGET = 71\nTARGET:1 = 71", caged: false, able: true, normal: true },
+    { name: "accompanying", room: 9, setup: "TARGET = 71\nTARGET:1 = 71\nCFLAG:71:同行 = 1", caged: false, able: true, normal: true },
+    { name: "carried", room: 10, setup: "TARGET = 1\nTARGET:1 = 1\nTFLAG:運搬 = 71", caged: false, able: true, normal: true },
+    { name: "with another occupant", room: 9, setup: "TARGET = 1\nTARGET:1 = 1\nCFLAG:1:現在位置 = 9", caged: true, able: true },
+  ];
+  for (const scenario of scenarios) {
+    const stub = emptyGame(game.root);
+    indexScript(stub, `@SYSTEM_TITLE
+FOR LOCAL, 0, 72
+  ADDCHARA LOCAL
+NEXT
+MASTER = 0
+TARGET = 0
+MAIN_MAP = 0
+MAXROOM = 57
+TFLAG:100 = 1
+CFLAG:MASTER:現在位置 = ${scenario.room}
+CFLAG:71:現在位置 = 54
+CALLNAME:71 = Shinmyoumaru
+${scenario.setup ?? ""}
+CALL HOTPATCH_OCCUPANTS
+CALL COM_ABLE428
+PRINTFORML Mallet available: {RESULT}
+WAIT`, "<cage-test>");
+    game.routines.set("SYSTEM_TITLE", stub.routines.get("SYSTEM_TITLE")!);
+    const snapshot = new Runtime(game, GAME_INSTRUCTION_LIMIT).start();
+    assert.equal(snapshot.error, null, `${scenario.name}: ${JSON.stringify(snapshot.error)}`);
+    const markup = snapshot.output.flatMap((item) => item.type === "html" ? [item.text] : []).join("");
+    const text = snapshot.output.flatMap((item) => "text" in item ? [item.text] : []).join("");
+    assert.equal(markup.includes("era-occupant-caged"), scenario.caged, scenario.name);
+    assert.match(text, new RegExp(`Mallet available: ${Number(scenario.able)}`), scenario.name);
+    if (scenario.caged) {
+      assert.match(markup, /<span class='era-occupant era-occupant-caged'>/);
+      assert.match(markup, /In her cage · Miracle Mallet only/);
+      assert.doesNotMatch(markup, /<button[^>]*era-occupant-caged|value='1071'|Just you/);
+      assert.equal((markup.match(/era-occupant-name'>Shinmyoumaru</g) ?? []).length, 1, scenario.name);
+      if (scenario.name === "asleep") assert.match(markup, /Miracle Mallet only · Asleep/);
+    }
+    if (scenario.normal) {
+      assert.equal((markup.match(/era-occupant-name'>Shinmyoumaru</g) ?? []).length, 1, scenario.name);
+      if (scenario.name !== "carried") assert.match(markup, /value='1071'/);
+    }
+  }
+});
+
 test("main screen hotpatch opens and closes its panel boxes in balance", {
   skip: !existsSync(GAME_ROOT),
 }, async () => {
