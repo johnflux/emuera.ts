@@ -306,6 +306,8 @@ function visibleBox(element) {
   return { left, top, right, bottom };
 }
 function describe(element, description) {
+  // Emuera.EM/EE show a literal "<br>" in tooltip text as a line break (and interpret no other markup there).
+  description = description.replaceAll("<br>", "\n");
   element.classList.add("has-tooltip");
   element.dataset.tooltip = description;
   if (!element.matches("button, a[href]")) element.tabIndex = 0;
@@ -313,7 +315,10 @@ function describe(element, description) {
     if (busy || !element.closest(".screen.is-active") || element.matches(".is-stale")) return;
     hideTooltip();
     tooltipTarget = element;
-    tooltip.textContent = translation.text(description, (text) => { if (tooltipTarget === element) tooltip.textContent = text; });
+    // Each line is translated on its own so line breaks survive translation.
+    const lines = description.split("\n");
+    const translated = () => lines.map((line) => translation.text(line, () => { if (tooltipTarget === element) tooltip.textContent = translated(); })).join("\n");
+    tooltip.textContent = translated();
     tooltip.hidden = false;
     // In the top layer, so it shows above an open dialog.
     if (tooltip.popover && !tooltip.matches(":popover-open")) tooltip.showPopover();
@@ -363,7 +368,7 @@ document.addEventListener("keydown", (event) => {
 });
 // Backdrop clicks target the root element rather than the popover.
 document.addEventListener("click", (event) => {
-  if (!event.detail || event.target !== document.documentElement) return;
+  if (!event.detail || event.target !== document.documentElement || settling()) return;
   const dialog = outputRoot.querySelector(".screen.is-active .era-dialog:popover-open");
   if (dialog) dialogClose(dialog)?.click();
 });
@@ -466,6 +471,22 @@ function applyLineStyle(element, style) {
   if (style.background.toLowerCase() !== settings.background) element.style.setProperty("--line-background", style.background);
   else element.style.removeProperty("--line-background");
 }
+/**
+ * When clicking through dialogue reaches a real input, the next click or bare Enter may already be on its way, and
+ * would land on whichever choice is now under the pointer (or submit a default value). Those are ignored for a moment.
+ * 400ms covers a typical click-through rhythm (clicks ~150-300ms apart) plus the ~250ms it takes to notice the
+ * screen has changed, without delaying a deliberate choice, which takes longer to read and aim at.
+ */
+const SETTLE_MS = 400;
+let settleUntil = 0;
+let settleTimer = null;
+function settle() {
+  settleUntil = performance.now() + SETTLE_MS;
+  terminal.classList.add("is-settling");
+  clearTimeout(settleTimer);
+  settleTimer = setTimeout(() => terminal.classList.remove("is-settling"), SETTLE_MS);
+}
+function settling() { return performance.now() < settleUntil; }
 function choice(label, value, title = "") {
   const button = document.createElement("button");
   button.type = "button";
@@ -474,7 +495,9 @@ function choice(label, value, title = "") {
   button.textContent = label;
   if (title) describe(button, title);
   decorateLabel(button);
-  button.addEventListener("click", () => {
+  button.addEventListener("click", (event) => {
+    // detail is 0 for keyboard activation, which is deliberate.
+    if (event.detail > 0 && settling()) return;
     if (button.closest(".screen.is-active")) void submit(value, button);
   });
   return button;
@@ -1052,6 +1075,7 @@ function render(snapshot, advanceScreen = false, fresh = false, keepFocus = fals
 }
 /** Renders steps in order and shows the result at once; several steps rebuild a reloaded run's output. */
 async function renderSteps(steps, fresh = false, keepFocus = false, toBottom = fresh) {
+  const clickingThrough = input?.kind === "wait";
   const scrollTop = terminal.scrollTop;
   const followBottom = toBottom || terminal.scrollHeight - terminal.clientHeight - scrollTop < 2;
   const live = pageTranslated();
@@ -1089,6 +1113,7 @@ async function renderSteps(steps, fresh = false, keepFocus = false, toBottom = f
     if (followBottom) terminal.scrollTop = terminal.scrollHeight;
     else terminal.scrollTop = scrollTop;
     scheduleTimedWait();
+    if (clickingThrough && input && input.kind !== "wait") settle();
   }
   if (input && !keepFocus) command.focus({ preventScroll: true });
 }
@@ -1492,7 +1517,7 @@ terminal.addEventListener("click", (event) => {
   const label = event.target instanceof Element ? event.target.closest(".screen.is-active .era-map-label") : null;
   const labelled = label && labelButtons.get(label);
   if (labelled) {
-    if (!dragged(event) && !labelled.disabled) labelled.click();
+    if (!dragged(event) && !labelled.disabled && !settling()) labelled.click();
     return;
   }
   if (event.target instanceof Element && event.target.closest("button, a[href]")) return;
@@ -1552,6 +1577,7 @@ function markMapLabels() {
 }
 document.querySelector("#input-form").addEventListener("submit", (event) => {
   event.preventDefault();
+  if (command.value === "" && settling()) return;
   void submit(command.value);
 });
 function submitCharacter() {
@@ -1582,6 +1608,7 @@ document.addEventListener("keydown", (event) => {
   if ((event.key === "Enter" || event.key === " ") && target instanceof Element && target.closest("button, a[href]")) return;
   if (event.key === "Enter") {
     event.preventDefault();
+    if (command.value === "" && settling()) return;
     void submit(command.value);
   } else if (Array.from(event.key).length === 1) {
     event.preventDefault();

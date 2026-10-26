@@ -63,6 +63,8 @@ main { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 1
 #terminal::before { content: ""; margin-top: auto; }
 #terminal > * { flex-shrink: 0; min-width: var(--logical-width, 0); }
 #terminal.is-waiting { cursor: pointer; }
+/* Briefly after clicking through to a menu, its choices ignore clicks (see settle() in app.js). */
+#terminal.is-settling button.choice { cursor: default; }
 .screen.is-history { filter: grayscale(1); opacity: .4; pointer-events: none; }
 .screen.is-history:has(.choice.is-selected) { opacity: 1; }
 .screen.is-history .history-dimmed { opacity: .4; }

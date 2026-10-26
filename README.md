@@ -194,6 +194,10 @@ buttons, so the client detects the press and release itself.
 A terminal click (or Enter) made while a step is still running is remembered:
 if that step ends at a click-to-continue wait, it continues straight away.
 Only one is kept, and it is discarded if the step ends at any other input.
+When clicking through dialogue reaches a real input (a menu), mouse clicks on
+its choices and a bare Enter are ignored for 400ms, so a click meant to continue
+doesn't land on whichever choice is now under the pointer. Typed input and
+keyboard-activated choices are accepted at once.
 Once a click-to-continue screen is shown (and its images loaded), the browser
 asks the server to run ahead (`POST /api/prefetch`, `Runtime.prefetch()`): the
 next step runs while the player reads, so the click is answered at once. The
@@ -219,7 +223,9 @@ and the revived output (up to where the new output starts) moves back into a
 history screen of its own, greyed like any older screen.
 Game HTML `title` descriptions (including trait `<nonbutton>` tags) appear in
 immediate, multiline tooltips on hover or keyboard focus. Descriptions are plain
-text, not executable HTML. Tooltip targets have a `has-tooltip` class and a subtle
+text, not executable HTML; as in Emuera.EM/EE, a literal lowercase `<br>` in
+the description becomes a line break, and each line is translated separately.
+Tooltip targets have a `has-tooltip` class and a subtle
 dashed underline that brightens on hover or keyboard focus without moving.
 A subtle CSS text glow adds emphasis while preserving the game's text colors.
 Tooltip text and bracketed choice labels are wrapped in `.interactive-label`
