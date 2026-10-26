@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { emptyGame, indexScript } from "../src/loader.js";
+import { emptyGame, indexScript, loadGame } from "../src/loader.js";
 import { Runtime, type Snapshot } from "../src/runtime.js";
 import { FileGlobalStore, MemoryGlobalStore } from "../src/storage.js";
 import { EraError, splitArguments, stripComment } from "../src/model.js";
@@ -17,6 +17,41 @@ function game(source: string, headers = "") {
 function printed(snapshot: Snapshot): string {
   return snapshot.output.filter((item) => item.type === "text").map((item) => item.text).join("\n");
 }
+test("CURRENTALIGN reports the active alignment in expressions and statements", () => {
+  const result = new Runtime(game(`@SYSTEM_TITLE
+PRINTSL CURRENTALIGN()
+ALIGNMENT CENTER
+PRINTSL CURRENTALIGN()
+ALIGNMENT RIGHT
+CURRENTALIGN
+PRINTSL RESULTS
+ALIGNMENT LEFT
+PRINTSL CURRENTALIGN()`)).start();
+  assert.equal(result.status, "halted", JSON.stringify(result.error));
+  assert.equal(printed(result), "LEFT\nCENTER\nRIGHT\nLEFT");
+  const invalid = new Runtime(game("@SYSTEM_TITLE\nPRINTSL CURRENTALIGN(1)")).start();
+  assert.equal(invalid.status, "error");
+  assert.match(invalid.error!.message, /Invalid number of arguments for CURRENTALIGN/);
+});
+test("Anchor compatibility conversion defaults do not leak to other games or override explicit config", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "era-anchor-"));
+  try {
+    await mkdir(path.join(root, "ERB"));
+    await mkdir(path.join(root, "CSV"));
+    await writeFile(path.join(root, "ERB", "title.erb"), "@SYSTEM_TITLE\nCALL SHOW(42)\nRETURN\n@SHOW(ARGS)\nPRINTSL ARGS");
+    const standard = new Runtime(await loadGame(root)).start();
+    assert.equal(standard.status, "error");
+    assert.match(standard.error!.message, /cannot convert an integer to a string/);
+    await writeFile(path.join(root, "Emuera-Anchor.exe"), "");
+    const anchor = new Runtime(await loadGame(root)).start();
+    assert.equal(anchor.status, "halted", JSON.stringify(anchor.error));
+    assert.equal(printed(anchor), "42");
+    await writeFile(path.join(root, "emuera.config"), "ユーザー関数の引数に自動的にTOSTRを補完する:NO");
+    const configured = new Runtime(await loadGame(root)).start();
+    assert.equal(configured.status, "error");
+    assert.match(configured.error!.message, /cannot convert an integer to a string/);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
 test("RESTART repeats the current frame, retaining arguments and locals but resetting loop bookkeeping", () => {
   const result = new Runtime(game(`@SYSTEM_TITLE
 CALL MENU(7)
@@ -255,6 +290,63 @@ DEBUGPRINTFORML ------------------------------
 PRINTL done`)).start();
   assert.equal(result.status, "halted", JSON.stringify(result.error));
   assert.equal(printed(result), "2\n[one] [two]\nbc\n3\nok\ndone");
+});
+test("REDRAW reads bit 0, accepts refresh flags and ignores higher bits like Emuera", () => {
+  for (const jit of [false, true]) {
+    const result = new Runtime(game(`@SYSTEM_TITLE
+FOR LOCAL, 0, 34
+REDRAW LOCAL
+CURRENTREDRAW
+PRINTFORML {RESULT}:{CURRENTREDRAW()}
+NEXT
+REDRAW -1
+PRINTFORML {CURRENTREDRAW()}
+REDRAW -2
+PRINTFORML {CURRENTREDRAW()}`), 50_000, { jit }).start();
+    assert.equal(result.status, "halted", JSON.stringify(result.error));
+    assert.equal(printed(result), [...Array.from({ length: 34 }, (_, i) => `${i & 1}:${i & 1}`), "1", "0"].join("\n"));
+  }
+});
+test("slider tracks retain struck-through spaces and their colors after the routine becomes hot", () => {
+  for (const jit of [false, true]) {
+    const result = new Runtime(game(`@SYSTEM_TITLE
+REPEAT 3
+CALL SLIDER
+REND
+@SLIDER
+FOR LOCAL, 0, 30
+IF LOCAL == 15
+PRINTFORM %UNICODE(0x2588)%
+ELSE
+IF LOCAL < 15
+SETCOLOR 0x40C040
+ELSE
+SETCOLOR 0xC040C0
+ENDIF
+FONTSTYLE 4
+IF LOCAL == 0
+PRINTFORM %UNICODE(0x25E3)%
+ELSEIF LOCAL == 29
+PRINTFORM %UNICODE(0x25E2)%
+ELSE
+PRINTFORM${"  "}
+ENDIF
+FONTSTYLE 0
+ENDIF
+RESETCOLOR
+NEXT
+PRINTL`), 50_000, { jit }).start();
+    assert.equal(result.status, "halted", JSON.stringify(result.error));
+    const runs = result.output.filter((item) => item.type === "text");
+    for (let row = 0; row < 3; row++) {
+      const slider = runs.slice(row * 31, row * 31 + 30);
+      assert.equal(slider.map((item) => item.text).join(""), `◣${" ".repeat(14)}█${" ".repeat(13)}◢`);
+      slider.forEach((item, i) => {
+        assert.equal(item.style.fontStyle, i === 15 ? 0 : 4);
+        if (i !== 15) assert.equal(item.style.color.toLowerCase(), i < 15 ? "#40c040" : "#c040c0");
+      });
+    }
+  }
 });
 test("PRINTDATA selects real entries and print styling, redraw and memory cleanup are executable", () => {
   const data = game(`@SYSTEM_TITLE

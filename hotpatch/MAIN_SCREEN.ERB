@@ -275,6 +275,7 @@ ENDIF
 #DIM DYNAMIC nChara
 #DIM DYNAMIC nCount
 #DIM DYNAMIC nColor
+#DIM DYNAMIC bShinmyoumaruShown
 #DIMS DYNAMIC sItems
 #DIMS DYNAMIC sClass
 #DIMS DYNAMIC sState
@@ -326,13 +327,27 @@ IF TARGET > 0
 		sItems += @"<span class='era-occupant-text'><span class='era-occupant-name'>%HTML_ESCAPE(CALLNAME:nChara)%</span>"
 		sItems += @"<span class='era-occupant-state'>%sState%</span></span></button>"
 		nCount++
+		SIF nChara == 71
+			bShinmyoumaruShown = 1
 	NEXT
 	IF TFLAG:運搬 > 0 && FINDELEMENT(TARGET, TFLAG:運搬, 1) == -1
 		CALL HOTPATCH_FACE(TFLAG:運搬)
 		sItems += @"<span class='era-occupant'><span class='era-face'>%RESULTS%</span><span class='era-occupant-text'>"
 		sItems += @"<span class='era-occupant-name'>%HTML_ESCAPE(CALLNAME:(TFLAG:運搬))%</span><span class='era-occupant-state'>Being carried</span></span></span>"
 		nCount++
+		SIF TFLAG:運搬 == 71
+			bShinmyoumaruShown = 1
 	ENDIF
+ENDIF
+; COM_ABLE428 allows reaching her cage from the home living room and veranda.
+IF CHARANUM > 71 && !bShinmyoumaruShown && FLAG:なりきり != 71 && CFLAG:71:現在位置 == 54 && GROUPMATCH(CFLAG:MASTER:現在位置, 9, 10) && AT_HOME(MASTER)
+	CALL HOTPATCH_FACE(71)
+	sState '= "In her cage · Miracle Mallet only"
+	SIF CFLAG:71:睡眠
+		sState += " · Asleep"
+	sItems += @"<span class='era-occupant era-occupant-caged'><span class='era-face'>%RESULTS%</span><span class='era-occupant-text'>"
+	sItems += @"<span class='era-occupant-name'>%HTML_ESCAPE(CALLNAME:71)%</span><span class='era-occupant-state'>%sState%</span></span></span>"
+	nCount++
 ENDIF
 SIF !nCount
 	sItems '= "<span class='era-occupant era-occupant-none'><span class='era-face'></span><span class='era-occupant-text'><span class='era-occupant-name'>Just you</span><span class='era-occupant-state'>No one else is in the room</span></span></span>"

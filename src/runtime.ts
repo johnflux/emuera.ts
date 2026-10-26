@@ -216,7 +216,7 @@ const BUILTIN_ARITIES: Record<string, [number, number]> = {
     GROUPMATCH: [2, 1000], GETBIT: [2, 2],
     UNICODE: [1, 1],
     TOLOWER: [1, 1], TOUPPER: [1, 1], STRLENSU: [1, 1], HTML_ESCAPE: [1, 1],
-    CURRENTREDRAW: [0, 0],
+    CURRENTREDRAW: [0, 0], CURRENTALIGN: [0, 0],
     SPRITECREATED: [1, 1], SPRITEWIDTH: [1, 1], SPRITEHEIGHT: [1, 1], SPRITEPOSX: [1, 1], SPRITEPOSY: [1, 1],
     SPRITECREATE: [2, 6], SPRITEDISPOSE: [1, 1], SPRITEANIMECREATE: [3, 3], SPRITEANIMEADDFRAME: [9, 9], SPRITESETPOS: [3, 3], SPRITEMOVE: [3, 3],
     GCREATE: [3, 3], GCREATEFROMFILE: [2, 3], GCREATED: [1, 1], GWIDTH: [1, 1], GHEIGHT: [1, 1], GDISPOSE: [1, 1], GCLEAR: [2, 6],
@@ -284,7 +284,8 @@ export interface RuntimeOptions {
   /** Compiles hot routines to JavaScript (default on); see src/jit.ts. */
   jit?: boolean;
 }
-export const GAME_INSTRUCTION_LIMIT = 20_000_000;
+// RanceK's default scenario builds its diplomacy maps in ~187 million instructions before asking for input.
+export const GAME_INSTRUCTION_LIMIT = 250_000_000;
 
 /** Emuera computes POWER with Math.Pow on doubles and rejects NaN, infinities and results outside Int64. */
 /** Emuera's double-to-long conversion with its NaN, infinity and range errors. */
@@ -413,7 +414,7 @@ export class Runtime {
     this.globals.defineCharacter("DOWNBASE", false, game.variableSizes.get("BASE") ?? [100]);
     for (const name of ["CUP", "CDOWN"]) this.globals.defineCharacter(name, false, game.variableSizes.get("PALAM") ?? [200]);
     this.globals.define("TSTR", true, game.variableSizes.get("TSTR") ?? [100]);
-    ["STR", "SAVESTR", "GLOBALS", "RESULTS", "WINDOW_TITLE", "GAMEBASE_TITLE", "GAMEBASE_INFO", "GAMEBASE_YEAR", "GAMEBASE_AUTHOR"].forEach((name) => this.globals.define(name, true, game.variableSizes.get(name) ?? [1000]));
+    ["STR", "SAVESTR", "GLOBALS", "RESULTS", "WINDOW_TITLE", "GAMEBASE_TITLE", "GAMEBASE_INFO", "GAMEBASE_YEAR", "GAMEBASE_AUTHOR"].forEach((name) => this.globals.define(name, true, game.variableSizes.get(name) ?? [name === "STR" ? 20000 : 1000]));
     for (const name of ["GAMEBASE_VERSION", "GAMEBASE_CODE", "GAMEBASE_ALLOWVERSION", "GAMEBASE_DEFAULTCHARA", "GAMEBASE_NOITEM", "CHARANUM"]) this.globals.define(name);
     const base = new Map([...(game.tables.get("GAMEBASE")?.values() ?? [])].map((row) => [row[0], row[1] ?? ""]));
     for (const [variable, csv] of [["GAMEBASE_TITLE", "タイトル"], ["GAMEBASE_INFO", "追加情報"], ["GAMEBASE_YEAR", "製作年"], ["GAMEBASE_AUTHOR", "作者"], ["WINDOW_TITLE", "ウィンドウタイトル"]])
@@ -426,7 +427,7 @@ export class Runtime {
     }
     for (const [name, table] of game.tables) {
       if (name.includes("/") || name === "GAMEBASE" || !table.size) continue;
-      const size = Math.max(game.variableSizes.get(`${name}NAME`)?.at(-1) ?? game.variableSizes.get(name)?.at(-1) ?? 1000, Math.max(...table.keys()) + 1);
+      const size = Math.max(game.variableSizes.get(`${name}NAME`)?.at(-1) ?? game.variableSizes.get(name)?.at(-1) ?? (name === "STR" ? 20000 : 1000), Math.max(...table.keys()) + 1);
       if (size > 1_000_000) continue;
       this.globals.define(`${name}NAME`, true, [size], true);
       for (const [index, row] of table) this.globals.seed(`${name}NAME`, index, row[0] ?? "");
@@ -1718,6 +1719,7 @@ export class Runtime {
           case "GSETPEN": case "GSETFONT":
             return this.graphics.has(argInt(args, name, 0)) ? 1n : 0n;
           case "GSAVE": case "GLOAD": return 0n;
+          case "CURRENTALIGN": return this.style.alignment.toUpperCase();
           case "GETCOLOR": return BigInt("0x" + this.style.color.slice(1));
           case "POWER": return power(argInt(args, name, 0), argInt(args, name, 1));
           case "EXISTFUNCTION": {
@@ -2073,6 +2075,9 @@ export class Runtime {
       }
       // A later (?i) applies to the remainder of its group, which a scoped modifier group expresses.
       source = source.replace(/\(\?([ims]+)\)((?:[^()\\]|\\.|\((?:[^()\\]|\\.)*\))*)/g, "(?$1:$2)");
+      // .NET accepts escaped punctuation that JS rejects under the Unicode flag.
+      source = source.replace(/\\(.)/g, (escape: string, character: string) =>
+        /^[ ,#=!:%&@<>;"'`~]$/.test(character) ? character : escape);
       try { cached = new RegExp(source, flags); }
       catch (error) {
         if (!(error instanceof SyntaxError)) throw error;
@@ -2121,6 +2126,14 @@ export class Runtime {
   private assignment(source: string): Assignment {
     let assignment = this.assignmentCache.get(source);
     if (assignment) return assignment;
+    const prefix = /^(\+\+|--)\s*(.+)$/.exec(source);
+    if (prefix) {
+      const reference = this.parse(prefix[2]!);
+      if (reference.kind !== "variable") throw new EraError("Invalid assignment target");
+      assignment = { reference, operator: prefix[1]!, value: "" };
+      this.assignmentCache.set(source, assignment);
+      return assignment;
+    }
     // The operator is the first one outside parentheses/strings, so `A:(N++) = X` targets A.
     let depth = 0, quoted = false, match: RegExpExecArray | null = null, at = 0;
     for (; at < source.length; at++) {
@@ -2351,8 +2364,17 @@ export class Runtime {
       for (const variable of ["LOCAL", "ARG", "LOCALS", "ARGS"]) {
         const pattern = new RegExp(`^#${variable}SIZE\\s+(.+)$`, "i");
         const size = routine.directives.find((d) => pattern.test(d.text.trim()));
-        const dimensions = size ? [Number(integer(evaluate(this.parse(pattern.exec(size.text.trim())![1]!), this.context(this.globals))))] : this.game.variableSizes.get(variable) ?? [1000];
+        const dimensions = size ? [Number(integer(evaluate(this.parse(pattern.exec(size.text.trim())![1]!), this.context(this.globals))))] : [...(this.game.variableSizes.get(variable) ?? [1000])];
         if (dimensions.some((n) => !Number.isSafeInteger(n) || n < 1 || n > 1_000_000)) throw new EraError(`Invalid ${variable} size`, size);
+        if (variable === "ARG" || variable === "ARGS") {
+          for (const { target } of info.parameters) {
+            if (target.name !== variable) continue;
+            if (target.indices.length > 1) throw new EraError(`${variable} parameters require one dimension`, routine);
+            const index = target.indices.length ? integer(evaluate(target.indices[0]!, this.context(this.globals))) : 0n;
+            if (index < 0n || index >= 1_000_000n) throw new EraError(`Invalid ${variable} parameter index`, routine);
+            dimensions[0] = Math.max(dimensions[0]!, Number(index) + 1);
+          }
+        }
         variables.define(variable, variable.endsWith("S"), dimensions);
       }
       for (const directive of routine.directives) {
@@ -2608,6 +2630,36 @@ export class Runtime {
             this.pendingTrain = command;
             break;
           }
+          case "UPCHECK": {
+            if (args) throw new EraError("UPCHECK takes no arguments");
+            const up = this.globals.row("UP", [], frame.context);
+            const down = this.globals.row("DOWN", [], frame.context);
+            const character = integer(this.globals.get("TARGET", [], frame.context));
+            if (character >= 0n && character < BigInt(this.globals.characterCount())) {
+              const palam = this.globals.row("PALAM", [literal(character), literal(0n)], frame.context);
+              for (let i = 0; i < Math.min(palam.size, up.size, down.size); i++) {
+                const gain = integer(up.get(i)), loss = integer(down.get(i));
+                if (gain <= 0n && loss <= 0n) continue;
+                const before = integer(palam.get(i));
+                const after = BigInt.asIntN(64, before + gain - loss);
+                palam.set(i, after);
+                const name = this.game.tables.get("PALAM")?.get(i)?.[0] ?? "";
+                yield this.emit("text", `${name} ${before}${gain > 0n ? `+${gain}` : ""}${loss > 0n ? `-${loss}` : ""}=${after}`, true);
+              }
+            }
+            this.globals.clear("UP", frame.context);
+            this.globals.clear("DOWN", frame.context);
+            break;
+          }
+          case "OUTPUTLOG": {
+            if (args) throw new EraError("OUTPUTLOG takes no arguments");
+            const lines = this.printedLines.map(plainHtml);
+            if (this.printedLine) lines.push(plainHtml(this.printedLine));
+            this.saves.write("emuera.log", lines.join("\n") + (lines.length ? "\n" : ""));
+            if (this.lineOpen) yield this.emit("text", "", true);
+            yield this.emit("text", "Log written to emuera.log", true);
+            break;
+          }
           case "SAVEDATA": {
             const parts = this.arguments(args);
             if (parts.length !== 2) throw new EraError("SAVEDATA expects slot, text");
@@ -2663,7 +2715,9 @@ export class Runtime {
             this.saveInfo += this.formatted(args, frame);
             break;
           case "CALLF": case "TRYCALLF": {
-            const expr = this.parse(args.includes("(") ? args : `${args}()`);
+            const call = this.callTarget(args);
+            if (!call) throw new EraError(`${op} expects a function call`);
+            const expr = this.parse(`${call.name}(${call.parameters})`);
             if (expr.kind !== "call") throw new EraError(`${op} expects a function call`);
             if (op === "TRYCALLF" && !this.game.routines.has(key(expr.name)) && !(key(expr.name) in BUILTIN_ARITIES)) break;
             // The return value is discarded.
@@ -2682,7 +2736,11 @@ export class Runtime {
               else parameters = parameters.replace(/^,/, "");
               call = name ? { name, parameters: parameters.trim() } : null;
             } else call = this.callTarget(args);
-            if (!call) throw new EraError(`Missing ${op} target`);
+            if (!call) {
+              if (!op.startsWith("TRY") || !op.includes("FORM")) throw new EraError(`Missing ${op} target`);
+              if (/^TRYC(?:CALL|JUMP)/.test(op)) next = target + 1;
+              break;
+            }
             if (!this.game.routines.has(call.name)) {
               if (!op.startsWith("TRY")) throw new EraError(`Undefined function: ${call.name}`);
               if (/^TRYC(?:CALL|JUMP)/.test(op)) next = target + 1;
@@ -2742,10 +2800,8 @@ export class Runtime {
             break;
           }
           case "REDRAW": {
-            const mode = num(args);
-            if (mode !== 0n && mode !== 1n) throw new EraError("REDRAW expects 0 or 1");
-            this.redraw = mode;
-            // Output is already buffered in snapshots until INPUT/WAIT.
+            this.redraw = num(args) & 1n;
+            // Bit 1 requests an immediate refresh in Emuera; snapshots already flush at INPUT/WAIT.
             break;
           }
           case "SETFONT": {
@@ -2769,7 +2825,16 @@ export class Runtime {
             this.style.fontStyle = Number(style);
             break;
           }
-          case "HTML_PRINT": yield this.emit("html", text(ev(args)), true); break;
+          case "HTML_PRINT": {
+            const html = text(ev(args));
+            if (!html || this.skipDisplay) break;
+            // PrintHtml flushes pending plain text before adding its own display lines. Panel markers are
+            // our layout extension, not Emuera HTML, and retain their shared-line behavior.
+            const panel = /^\s*<era-(?:open|close)(?:\s+class\s*=\s*(?:'[^']*'|"[^"]*"))?\s*\/?>\s*$/i.test(html);
+            if (this.lineOpen && !panel) yield this.emit("text", "", true);
+            yield this.emit("html", html, true);
+            break;
+          }
           case "PRINT_RECT": case "PRINT_SPACE": {
             // ConsoleShapePart's alt text: params are percentages of the font size, drawn in the current color.
             const params = this.arguments(args).map((part) => num(part));

@@ -6,7 +6,7 @@
  * leave the routine (or that instruction) to the interpreter.
  */
 import { isPrintData, printVariant, type Compiled, type Instruction } from "./compiler.js";
-import { evaluate, type EvaluationContext, type Expr } from "./expression.js";
+import { evaluate, repeatString, type EvaluationContext, type Expr } from "./expression.js";
 import { parseFormat } from "./format.js";
 import { EraError, integer, key, text, type Routine, type Value } from "./model.js";
 import { stringWidth } from "./strings.js";
@@ -154,11 +154,8 @@ const H = {
   },
   sub: (a: Value, b: Value): bigint => BigInt.asIntN(64, integer(a) - integer(b)),
   mul(a: Value, b: Value): Value {
-    if (typeof a === "string") {
-      const count = integer(b);
-      if (count < 0n || count * BigInt(a.length) > 1_000_000n) throw new EraError("String repetition exceeds limit");
-      return a.repeat(Number(count));
-    }
+    if (typeof a === "string") return repeatString(a, integer(b));
+    if (typeof b === "string") return repeatString(b, a);
     return BigInt.asIntN(64, a * integer(b));
   },
   div(a: Value, b: Value): bigint {
@@ -408,7 +405,11 @@ class Generator {
       case "DEBUGPRINT": case "DEBUGPRINTL": case "DEBUGPRINTFORM": case "DEBUGPRINTFORML": case "DEBUGCLEAR": case "ASSERT": return this.host.debug ? this.single(k) : p;
       case "CALLF": case "TRYCALLF": {
         let expr: Expr;
-        try { expr = this.host.parse(args.includes("(") ? args : `${args}()`); } catch { return this.single(k); }
+        try {
+          const call = this.host.callTarget(args);
+          if (!call) return this.single(k);
+          expr = this.host.parse(`${call.name}(${call.parameters})`);
+        } catch { return this.single(k); }
         if (expr.kind !== "call") return this.single(k);
         if (op === "TRYCALLF" && !this.host.callable(expr.name)) return p;
         return `${p} ${this.expr(expr)};`;
@@ -434,7 +435,7 @@ class Generator {
       else parameters = parameters.replace(/^,/, "");
       parameters = parameters.trim();
       const sources = this.constant(parameters ? this.arguments(parameters) : []);
-      head = `${name} = H.key(H.txt(${this.expr(format)}).trim()); if (!${name}) throw new H.EraError(${JSON.stringify(`Missing ${op} target`)}); ` +
+      head = `${name} = H.key(H.txt(${this.expr(format)}).trim()); if (!${name}) { ${op.startsWith("TRY") ? missing : `throw new H.EraError(${JSON.stringify(`Missing ${op} target`)});`} } ` +
         `if (!R.game.routines.has(${name})) { ${op.startsWith("TRY") ? missing : `throw new H.EraError("Undefined function: " + ${name});`} } ` +
         `${values} = R.callArguments(${name}, ${sources}, F);`;
     } else {

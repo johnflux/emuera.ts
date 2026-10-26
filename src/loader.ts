@@ -13,7 +13,7 @@ export const KNOWN_GAMES: readonly GameDefinition[] = [
   { id: "k", title: "eraTohoK", root: path.resolve("GAMES/eraTohoK/eraTohoK-master") },
   { id: "rancek", title: "eraRanceK", root: path.resolve("GAMES/eraRanceK") },
 ];
-const isGameRoot = (dir: string): boolean => existsSync(path.join(dir, "ERB")) && existsSync(path.join(dir, "CSV"));
+export const isGameRoot = (dir: string): boolean => existsSync(path.join(dir, "ERB")) && existsSync(path.join(dir, "CSV"));
 const subdirectories = (dir: string): string[] => {
   try { return readdirSync(dir, { withFileTypes: true }).filter((entry) => entry.isDirectory() && !entry.name.startsWith(".")).map((entry) => entry.name).sort(); }
   catch { return []; }
@@ -29,7 +29,17 @@ export function discoverGames(gamesDir = path.resolve("GAMES"), known: readonly 
   for (const name of subdirectories(gamesDir)) {
     const dir = path.join(gamesDir, name);
     const root = isGameRoot(dir) ? dir : subdirectories(dir).map((child) => path.join(dir, child)).find(isGameRoot);
-    if (!root || roots.has(root) || [...roots].some((known) => known.startsWith(dir + path.sep))) continue;
+    const knownIndex = games.findIndex((game) => game.root === dir || game.root.startsWith(dir + path.sep));
+    if (knownIndex >= 0) {
+      const knownGame = games[knownIndex]!;
+      if (root && !isGameRoot(knownGame.root)) {
+        roots.delete(knownGame.root);
+        roots.add(root);
+        games[knownIndex] = { ...knownGame, root };
+      }
+      continue;
+    }
+    if (!root || roots.has(root)) continue;
     const base = name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "") || "game";
     let id = base;
     for (let n = 2; ids.has(id); n++) id = `${base}-${n}`;
@@ -306,6 +316,10 @@ export async function applyHotpatches(game: Game, dir = HOTPATCH_ROOT): Promise<
 export async function loadGame(root = GAME_ROOT, options: { debug?: boolean } = {}): Promise<Game> {
   const game = emptyGame(root);
   if (options.debug) game.debug = true;
+  // Anchor games such as Reverse rely on integer arguments to string parameters.
+  // Keep this compatibility default local to the detected fork; explicit config still wins.
+  if (existsSync(path.join(root, "Emuera-Anchor.exe")))
+    game.config.set("ユーザー関数の引数に自動的にTOSTRを補完する", "YES");
   const configFile = path.join(root, "emuera.config");
   if (existsSync(configFile)) {
     for (const row of (await readText(configFile)).split(/\r?\n/)) {
@@ -398,7 +412,8 @@ export async function loadGame(root = GAME_ROOT, options: { debug?: boolean } = 
       game.tables.set(name, new Map(rows.map((row, i) => [i, row])));
     }
   }
-  for (const file of await filesUnder(path.join(root, "resources"))) {
+  const resources = path.join(root, "resources");
+  for (const file of existsSync(resources) ? await filesUnder(resources) : []) {
     if (!/\.csv$/i.test(file)) continue;
     const warn = (message: string) => game.diagnostics.push({ file: path.relative(root, file), line: 0, message });
     // Emuera AppContents.CreateFromCsv: unparseable optional numbers keep their defaults rather than rejecting the row.

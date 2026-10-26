@@ -3,10 +3,52 @@ import { existsSync } from "node:fs";
 import { test } from "node:test";
 import { compatibility } from "../src/compatibility.js";
 import { demoGame } from "../src/demo.js";
-import { GAME_ROOT, indexScript, loadGame } from "../src/loader.js";
+import { GAME_ROOT, KNOWN_GAMES, indexScript, loadGame } from "../src/loader.js";
 import { GAME_INSTRUCTION_LIMIT, Runtime } from "../src/runtime.js";
 import { patchTitleImage } from "../src/render-patches.js";
 import { stringWidth } from "../src/strings.js";
+
+const ranceRoot = KNOWN_GAMES.find((game) => game.id === "rancek")!.root;
+const kRoot = KNOWN_GAMES.find((game) => game.id === "k")!.root;
+test("eraTohoK still renders its title and new-game scenario menu", {
+  skip: !existsSync(kRoot),
+}, async () => {
+  const game = await loadGame(kRoot);
+  const runtime = new Runtime(game, GAME_INSTRUCTION_LIMIT);
+  const title = runtime.start();
+  assert.equal(title.status, "waiting", JSON.stringify(title.error));
+  assert.ok(title.output.some((item) => "text" in item && item.text.includes("Custom Characters")));
+  const scenarios = runtime.input("0");
+  assert.equal(scenarios.status, "waiting", JSON.stringify(scenarios.error));
+  assert.ok(scenarios.output.some((item) => "text" in item && item.text.includes("Gathering of Heroes")));
+});
+
+test("eraRanceK default scenario completes its diplomacy setup within the server instruction budget", {
+  skip: !existsSync(ranceRoot),
+}, async () => {
+  const game = await loadGame(ranceRoot);
+  const runtime = new Runtime(game, GAME_INSTRUCTION_LIMIT);
+  let snapshot = runtime.start();
+  const waiting = () => assert.equal(snapshot.status, "waiting", JSON.stringify(snapshot.error));
+  waiting();
+  snapshot = runtime.input("0");
+  waiting();
+  assert.ok(snapshot.output.some((item) => item.type === "button" && item.value === "10"));
+  snapshot = runtime.input("10");
+  for (let i = 0; i < 40 && snapshot.input?.kind === "wait"; i++) {
+    waiting();
+    snapshot = runtime.input("");
+  }
+  waiting();
+  assert.ok(snapshot.output.some((item) => "text" in item && item.text.includes("Begin this scenario")));
+  snapshot = runtime.input("0");
+  waiting();
+  assert.ok(snapshot.output.some((item) => item.type === "button" && item.value === "1000" && item.text === "[Confirm]"));
+  snapshot = runtime.input("1000");
+  waiting();
+  assert.ok(snapshot.output.some((item) => "text" in item && item.text.includes("You can click a city")),
+    "The scenario should finish initializing and reach the faction map");
+});
 
 test("bundled game renders its title and runs real custom-character creation", {
   skip: !existsSync(GAME_ROOT),

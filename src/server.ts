@@ -1,4 +1,3 @@
-import { existsSync } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { randomUUID } from "node:crypto";
 import { readdir, readFile, realpath, stat } from "node:fs/promises";
@@ -6,7 +5,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { compatibility } from "./compatibility.js";
 import { demoGame } from "./demo.js";
-import { applyHotpatches, displayDefaults, displayMetrics, GAMES, loadGame, stillFrame, type DisplaySettings, type Game } from "./loader.js";
+import { applyHotpatches, displayDefaults, displayMetrics, discoverGames, emptyGame, GAMES, KNOWN_GAMES, isGameRoot, loadGame, stillFrame, type DisplaySettings, type Game } from "./loader.js";
+import { CATALOG_UPDATED, GAME_CATALOG, installGame } from "./library.js";
 import { EraError, key } from "./model.js";
 import { GAME_INSTRUCTION_LIMIT, Runtime, type BackgroundLayer, type Snapshot } from "./runtime.js";
 import { FileGlobalStore, FileSaveStore, MemoryGlobalStore, MemorySaveStore, type GlobalStore, type SaveStore } from "./storage.js";
@@ -143,24 +143,30 @@ function displaySettings(value: unknown): Partial<DisplaySettings> | undefined {
  * <game>/.era-typescript/, and its resources/ images are served at /resources/ (the default game) or
  * /games/<id>/resources/.
  */
-export function createApp(games: Game | readonly GameEntry[], development = false) {
+export function createApp(games: Game | readonly GameEntry[], development = false, gamesDir = path.resolve("GAMES")) {
+  gamesDir = path.resolve(gamesDir);
   const list = Array.isArray(games) ? games as readonly GameEntry[] : [{ id: "game", title: "Game", game: games as Game }];
-  if (!list.length) throw new Error("No games to serve");
-  const entries = new Map(list.map((entry, index) => {
+  function register(entry: GameEntry, index: number) {
     const { game } = entry;
     if (!/^[a-z0-9-]+$/.test(entry.id)) throw new Error(`Invalid game id: ${entry.id}`);
     game.resourceBase = index === 0 ? "/resources/" : `/games/${entry.id}/resources/`;
-    return [entry.id, {
+    return {
       ...entry,
       store: entry.store ?? (game.root ? new FileGlobalStore(path.join(game.root, ".era-typescript", "global.json")) : new MemoryGlobalStore()),
       saves: entry.saves ?? (game.root ? new FileSaveStore(path.join(game.root, ".era-typescript", "saves")) : new MemorySaveStore()),
       report: undefined as ReturnType<typeof compatibility> | undefined,
       debugGame: undefined as Promise<Game> | undefined,
-    }];
-  }));
-  const fallback = entries.get(list[0]!.id)!;
+    };
+  }
+  const entries = new Map(list.map((entry, index) => [entry.id, register(entry, index)]));
+  const demoEntry = register({ id: "demo", title: "Demo", game: emptyGame() }, 0);
+  const defaultEntry = () => entries.values().next().value ?? demoEntry;
   const entryFor = (id: unknown) => {
-    if (id === undefined || id === null) return fallback;
+    if (id === undefined || id === null) {
+      const entry = defaultEntry();
+      if (entry === demoEntry) throw new HttpError(404, "No installed games. Choose a game from the library.");
+      return entry;
+    }
     const entry = typeof id === "string" ? entries.get(id) : undefined;
     if (!entry) throw new HttpError(404, `Unknown game: ${String(id)}`);
     return entry;
@@ -180,16 +186,30 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
     }
     json(response, { session: id, step: session?.step ?? 0, ...patched });
   }
-  const demo = demoGame(fallback.game);
+  const demo = demoGame(defaultEntry().game);
   let debugDemo: Game | undefined;
   /** Debug-mode games are loaded the first time a debug run asks for one. */
-  const debugGame = (entry: typeof fallback): Promise<Game> => entry.debugGame ??= (async () => {
+  const debugGame = (entry: ReturnType<typeof register>): Promise<Game> => entry.debugGame ??= (async () => {
     const game = entry.loadDebug ? await entry.loadDebug() : { ...entry.game };
     game.debug = true;
     game.resourceBase = entry.game.resourceBase;
     return game;
   })().catch((error: unknown) => { entry.debugGame = undefined; throw error; });
   const instance = randomUUID();
+  let installing = false;
+  async function refreshGames() {
+    const known = KNOWN_GAMES.map((game) => ({ ...game, root: path.join(gamesDir, path.relative(path.resolve("GAMES"), game.root)) }));
+    for (const definition of discoverGames(gamesDir, known)) {
+      if (!isGameRoot(definition.root) || [...entries.values()].some((entry) => entry.game.root === definition.root)) continue;
+      if (entries.has(definition.id)) throw new HttpError(409, `Game id already in use: ${definition.id}`);
+      const load = async (debug = false) => {
+        const game = await loadGame(definition.root, { debug });
+        if (definition.hotpatch) await applyHotpatches(game, definition.hotpatch);
+        return game;
+      };
+      entries.set(definition.id, register({ id: definition.id, title: definition.title, game: await load(), loadDebug: () => load(true) }, entries.size));
+    }
+  }
   return createServer((request, response) => {
     void (async () => {
       response.setHeader("Cache-Control", "no-store");
@@ -201,9 +221,50 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
       const origin = request.headers.origin;
       if (origin && origin !== `http://${host}`) throw new HttpError(403, "Cross-origin requests are not allowed");
       const url = new URL(request.url ?? "/", `http://${host}`);
+      if (request.method === "GET" && url.pathname === "/api/library") {
+        json(response, {
+          installed: [...entries.values()].map(({ id, title, game }) => {
+            const relative = path.relative(gamesDir, game.root);
+            const catalog = GAME_CATALOG.find((item) => item.id === id || relative.split(path.sep)[0]?.toLowerCase() === item.folder.toLowerCase());
+            return { id, title: catalog?.title ?? title, blurb: catalog?.blurb ?? "A locally installed ERB game. Launch it to explore its world.", genre: catalog?.genre ?? "Local game", catalogId: catalog?.id, monogram: catalog?.monogram };
+          }),
+          catalog: GAME_CATALOG,
+          catalogUpdated: CATALOG_UPDATED,
+        });
+        return;
+      }
+      if (request.method === "POST" && url.pathname === "/api/library/refresh") {
+        await body(request);
+        await refreshGames();
+        json(response, { ok: true });
+        return;
+      }
+      if (request.method === "POST" && url.pathname === "/api/library/install") {
+        const data = await body(request);
+        const game = GAME_CATALOG.find((item) => item.id === data.id);
+        if (!game || (!game.repository && !game.archive)) throw new HttpError(400, "Choose a catalog game with an available ZIP or Git repository.");
+        if (installing) throw new HttpError(409, "Another game is being installed. Please wait.");
+        installing = true;
+        try {
+          await installGame(game, gamesDir);
+          await refreshGames();
+          json(response, { ok: true });
+        } catch (error) {
+          console.error(`Installation failed for ${game.title}:`, error);
+          throw new HttpError(400, `Could not install ${game.title}: ${error instanceof Error ? error.message : String(error)} Use ${game.archive ? "Download ZIP manually" : "the project page"} to download it manually.`);
+        } finally { installing = false; }
+        return;
+      }
       if (request.method === "GET" && url.pathname === "/api/runtime") {
         const games = [...entries.values()].map(({ id, title, game }) => ({ id, title, display: displayDefaults(game), metrics: displayMetrics(game) }));
-        json(response, { instance, development, games, display: games[0]!.display, metrics: games[0]!.metrics });
+        json(response, { instance, development, games, display: displayDefaults(defaultEntry().game), metrics: displayMetrics(defaultEntry().game) });
+        return;
+      }
+      if (request.method === "POST" && url.pathname === "/api/stop") {
+        const data = await body(request);
+        if (typeof data.session !== "string") throw new HttpError(400, "Expected a session string");
+        sessions.delete(data.session);
+        json(response, { ok: true });
         return;
       }
       if (request.method === "GET" && url.pathname === "/api/compatibility") {
@@ -214,7 +275,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
       if (request.method === "POST" && url.pathname === "/api/start") {
         const data = await body(request);
         if (data.mode !== "game" && data.mode !== "demo") throw new HttpError(400, "mode must be game or demo");
-        const entry = data.mode === "demo" ? fallback : entryFor(data.game);
+        const entry = data.mode === "demo" ? defaultEntry() : entryFor(data.game);
         if (data.debug !== undefined && typeof data.debug !== "boolean") throw new HttpError(400, "debug must be a boolean");
         const debug = data.debug === true;
         const display = displaySettings(data.display);
@@ -325,6 +386,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
       }
       const pages: Record<string, string> = {
         "/": "index.html", "/app.js": "app.js", "/translate.js": "translate.js", "/style.css": "style.css",
+        "/library.js": "library.js", "/library.css": "library.css",
         "/fonts/BIZUDGothic-Regular.ttf": "fonts/BIZUDGothic-Regular.ttf",
         "/fonts/OFL.txt": "fonts/OFL.txt",
       };
@@ -355,8 +417,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     const rawPort = process.env.PORT ?? "3000";
     const port = Number(rawPort);
     if (!/^\d+$/.test(rawPort) || port < 1 || port > 65535) throw new Error("PORT must be an integer from 1 to 65535");
-    const available = GAMES.filter((definition) => existsSync(definition.root));
-    if (!available.length) throw new Error(`No game directory found; expected one of ${GAMES.map((definition) => definition.root).join(", ")}`);
+    const available = GAMES.filter((definition) => isGameRoot(definition.root));
     const loaded: GameEntry[] = [];
     for (const definition of available) {
       console.log(`Loading ${definition.title} from ${definition.root} ...`);

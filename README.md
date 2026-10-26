@@ -7,7 +7,7 @@ the default), eraTohoK (`GAMES/eraTohoK/eraTohoK-master`) and eraRanceK
 and hotpatches; the server offers each one whose directory exists. At startup it
 also offers any other folder in `GAMES/` that holds `ERB/` and `CSV/`, directly
 or one level down (e.g. an unzipped `name/name-master`), titled and identified
-by the folder name. Restart the server after adding a game.
+by the folder name. Use **Refresh library** after adding a game; a restart is not required.
 ERB files load in Emuera's order: in each directory, subdirectories first, then
 files, each sorted case-insensitively. As in Emuera, a non-event function defined
 twice keeps its first definition and the later one is reported in the
@@ -33,6 +33,28 @@ a location and room can be chosen, and the run reaches the pre-game settings
 menu ("Re-customize yourself") before the day-to-day game loop. Pre-defined-character
 selection and loading existing saves are not yet supported end to end.
 Unsupported operations stop with their source filename and line.
+
+**eraToho Reverse:** the installed `GAMES/eratohoreverse` is tested through its
+title, Normal-mode character creation, character-template and game saving, trainer selection,
+the shop, and several initial training turns. This is not a claim of complete gameplay
+or Anchor-fork compatibility. ARG/ARGS arrays grow to fit each routine's declared
+parameter indices without enlarging other routines or changing `VariableSize.csv`.
+Spaced array references, prefix increments, comma-style `CALLF`, empty optional
+`TRYCALLFORM` hooks, `CURRENTALIGN()` and integer-times-string repetition work in
+both interpreted and JIT execution. Games containing `Emuera-Anchor.exe` default
+to automatic integer-to-string conversion for user-function string arguments;
+an explicit `emuera.config` setting overrides this, and other games keep their
+existing defaults. No game scripts or data are patched for these fixes.
+`STR` and its default name-table capacity follow Emuera's 20,000-element default,
+so Reverse's training-message scratch ranges above index 1,000 are valid.
+Explicit variable sizes still take precedence, and out-of-range accesses still fail.
+
+`UPCHECK` applies the current target's `UP`/`DOWN` deltas and clears those arrays.
+`OUTPUTLOG` writes the retained console text (up to 4,096 completed lines plus
+pending text) as plain text to the game's
+`.era-typescript/saves/emuera.log`, replacing the previous log and reporting the
+write. Write failures stop execution rather than pretending the export succeeded.
+
 The separate conformance demo is an original ERB program exercising the supported
 subset; it is not the game's title screen. Its character-portraits page composites the
 game's highres sprites, swaps to a smile on hover (`srcb`), toggles face close-ups when the current
@@ -51,6 +73,48 @@ npm start
 ```
 
 Open **http://127.0.0.1:3000**. Set `PORT` to choose another port.
+
+Fresh visits open the **game library**, with **Installed** and **Not installed**
+tabs, short game descriptions, and a Play button for each local game. The library
+also works with an empty `GAMES/` folder: TW, K, and Rance are catalog entries,
+not required bundled games, and appear under Not installed when absent. Their
+monograms include **TW** for The World and **K** for eraTohoK.
+
+The catalog contains the ten highest-starred public era-game repositories found
+through [GitGud's era search](https://gitgud.io/explore/projects?name=era&sort=stars_desc),
+excluding tools and unrelated projects, plus TW, K, and Rance. The star counts
+are a **2026-10-26 snapshot**, not a live ranking or a compatibility rating.
+The ten are EraUma, Pops TW, eraTW Sub-modding, eraToho Reverse, eraAS,
+erablue_resort, eraOCG2, eraFL, eraSQN, and eraMegaten. Descriptions are short
+summaries, except eraAS and erablue_resort, which use the era-games group's
+published blurbs. EraUma requires its own engine, so it has download instructions
+rather than an install button. Other known engine requirements are noted on
+the cards. The catalog is bundled locally; browsing it makes no requests to GitGud.
+
+When TW is absent, **Install TW** is available directly on the home screen.
+One click downloads the
+[English modding-branch ZIP](https://gitgud.io/Legis1998/anon-tw/-/archive/anon-tw_eng-modding/anon-tw-anon-tw_eng-modding.zip)
+and installs it into `GAMES/anon-tw-anon-tw_eng-modding`, with no Git executable
+or account setup in the app. The archive wrapper folder is removed automatically.
+This is a large download (about 250 MB at the snapshot date), so allow a few
+minutes. ZIP extraction is handled in Node.js, without external unzip tools,
+and rejects unsafe paths, links, special files, and oversized archives (512 MiB
+download / 1 GiB extracted / 100,000 entries). Network errors are reported with
+a manual ZIP-download alternative; existing folders are never overwritten.
+
+**Install with Git** asks before cloning a catalog repository into `GAMES/`.
+It requires Git and an internet connection, uses a shallow clone (the repository's
+default branch), and may take several minutes. Failed downloads/clones are cleaned
+up. Only catalog sources can be installed, not arbitrary URLs. Downloaded game
+scripts are third-party code: only install games you trust. For manual installs,
+follow **Project page** or **Find downloads**, download an archive, and extract
+the game under `GAMES/`, keeping `ERB/` and `CSV/` together directly or one folder
+down. Then use **Refresh library**. Games can be launched immediately after
+installation; interpreter compatibility is not guaranteed.
+
+The **Game library** button returns from a game to the home screen, asking first
+before discarding unsaved progress. Direct `?game=...` / `?demo` links and page
+reloads still open or restore the requested run rather than the library.
 
 `npm start` (or its equivalent `npm run dev`) watches imported TypeScript modules, `web/`, and the game's
 `ERB/`, `CSV/`, and `resources/` trees (including new and deleted files).
@@ -79,7 +143,7 @@ longer); hover it for the split between script time (server) and render time
   real cropped title-image resource from the local game, and animated sprites (menu option 4: a script-built
   `SPRITEANIMECREATE` animation and the game's CSV `ANIME` halo `30_BG1`).
 - **eraToho The World**: execute the real `SYSTEM_TITLE` and display its menu.
-  This is the default and starts automatically on page load.
+  This is the default for a direct game launch; fresh visits show the library.
   Invalid menu choices return to the menu; Start Game reaches custom-character
   creation, but later setup and Continue are not yet supported end to end.
 - **eraTohoK**: run eraTohoK's title. It reaches its new-game scenario selection;
@@ -162,7 +226,8 @@ Emuera's Shift-JIS byte count: JIS characters (`×`, `─`, kana, kanji) are two
 and characters CP932 can't encode (such as the `▄` block in status bars) are one;
 block elements are drawn clipped to one cell each so bars stay in their columns, and the
 corner triangles `◢◣◤◥` (slider ends) are squeezed to one cell. Lines are spaced by the
-game's configured line height (`一行の高さ` over `フォントサイズ`, at least 1), as in
+game's configured line height (`一行の高さ` over `フォントサイズ`, at least 1),
+including empty lines and HTML paragraphs, as in
 Emuera, so pictures that span lines line up with the text beside them. This is not
 MS Gothic or a pixel-identical recreation of native Emuera. The font is served
 locally, with no external requests, and startup waits for it before measuring
@@ -512,10 +577,14 @@ declarations and the expression evaluator. No single routine dominates.
   `INPUTMOUSEKEY`, `WAIT`, `FORCEWAIT`, `PRINTBUTTON`/`PRINTBUTTONC`,
   `HTML_PRINT`, line drawing/clearing, RGB colors, alignment, `THROW`, `QUIT`.
   Output and input requests are structured events, independent of the browser.
+  `HTML_PRINT` finishes any pending plain-text line before printing its HTML,
+  as Emuera does; empty HTML prints nothing. This keeps upward-offset portraits
+  below preceding controls when scripts reserve their space with `<br>` lines.
   `FONTSTYLE` carries bold (1), italic (2), strikeout (4) and underline (8);
   `FONTBOLD`/`FONTITALIC`/`FONTREGULAR` adjust it. The `PRINT` family (including
   `S`/`V`/`FORMS`, `C`/`LC` alignment, `K`/`D` modes, `PRINTSINGLE*`, `PRINTPLAIN*`),
-  `CUSTOMDRAWLINE`/`DRAWLINEFORM` are supported; `REDRAW 0/1` uses the existing
+  `CUSTOMDRAWLINE`/`DRAWLINEFORM` are supported; `REDRAW` reads bit 0 (off/on),
+  accepting refresh bit 1 and ignoring higher bits as Emuera does, and uses the existing
   snapshot buffering. Release-mode debug instructions (`DEBUGPRINT*`,
   `DEBUGCLEAR`, `ASSERT`) do not evaluate their arguments; in debug mode they
   write to the debug output panel or check the assertion. `CLEARMEMORY` clears interpreter parser/compiler caches and
@@ -607,9 +676,11 @@ Malformed function signatures are diagnosed during indexing and rejected if
 called. Unsupported directives remain visible in the inventory. Function-local
 unsupported directives stop execution when entering that function.
 
-Bundled-game execution is bounded to 20,000,000 instructions between input requests
-to accommodate its real class/item/cast initialization (validated within that
-budget); the server's demo shares that budget because its scenarios run the game. Direct runtimes default to
+Game execution on the server is bounded to 250,000,000 instructions between input requests.
+eraRanceK's default scenario uses about 187 million while repeatedly rebuilding
+its diplomacy maps (around 11 seconds on the development machine); this is finite
+setup work, not an infinite loop. Its real new-game path is regression-tested
+within that budget. The server's demo shares the budget because its scenarios run the game. Direct runtimes default to
 50,000. All runs retain a 2 MB
 output limit between input
 requests, 128 call frames, 16 KB request bodies, and eight active sessions

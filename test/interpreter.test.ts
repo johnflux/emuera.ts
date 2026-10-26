@@ -30,6 +30,101 @@ test("cached identifier normalization preserves Unicode and case equivalence", (
     assert.equal(key(long), long.toUpperCase());
   }
 });
+test("spaced array references and prefix increments are assignments in interpreted and JIT execution", () => {
+  for (const jit of [false, true]) {
+    const game = emptyGame();
+    indexScript(game, `@SYSTEM_TITLE
+FOR A, 0, 50
+  CALL UPDATE
+NEXT
+PRINTFORML {RESULT}
+RETURN
+@UPDATE
+#DIM TOTAL, 3
+LOCAL = 1
+TOTAL :LOCAL += 2
+++TOTAL:1
+--TOTAL :1
+LOCAL :2 = TOTAL :LOCAL
+++LOCAL:2
+LOCAL :2--
+RETURN LOCAL:2`, "test.ERB");
+    assert.deepEqual(compatibility(game).gaps, []);
+    const result = new Runtime(game, 50_000, { jit }).start();
+    assert.equal(result.status, "halted", JSON.stringify(result.error));
+    assert.equal(output(result), "100");
+  }
+});
+test("routine signatures grow ARG and ARGS without changing other routines or configured sizes", () => {
+  for (const jit of [false, true]) {
+    const game = emptyGame();
+    game.variableSizes.set("ARG", [1]);
+    game.variableSizes.set("ARGS", [1]);
+    indexScript(game, `@SYSTEM_TITLE
+FOR A, 0, 50
+  CALL SHOW(7, "label")
+NEXT
+PRINTFORML {RESULT}
+PRINTFORML {VARSIZE("ARG")} {VARSIZE("ARGS")}
+RETURN
+@SHOW(ARG:2, ARGS:1, ARG:4=9, ARGS:3="default")
+RETURN ARG:2 + ARG:4 + STRLENS(ARGS:1) + STRLENS(ARGS:3)`, "test.ERB");
+    const result = new Runtime(game, 50_000, { jit }).start();
+    assert.equal(result.status, "halted", JSON.stringify(result.error));
+    assert.equal(output(result), "28\n1 1");
+    assert.deepEqual(game.variableSizes.get("ARG"), [1]);
+    assert.deepEqual(game.variableSizes.get("ARGS"), [1]);
+  }
+});
+test("empty dynamic TRY calls skip optional hooks and enter CATCH without evaluating arguments", () => {
+  for (const jit of [false, true]) {
+    const game = emptyGame();
+    indexScript(game, `@SYSTEM_TITLE
+FOR A, 0, 50
+  CALL HOOKS
+NEXT
+RETURN
+@HOOKS
+TRYCALLFORM %LOCALS%(MISSING())
+TRYCALLFORMF %LOCALS%(MISSING())
+TRYJUMPFORM %LOCALS%(MISSING())
+TRYCCALLFORM %LOCALS%(MISSING())
+  THROW "Must not run"
+CATCH
+  PRINTFORM c
+ENDCATCH
+TRYCJUMPFORM %LOCALS%(MISSING())
+  THROW "Must not run"
+CATCH
+  PRINTFORM j
+ENDCATCH`, "test.ERB");
+    const result = new Runtime(game, 50_000, { jit }).start();
+    assert.equal(result.status, "halted", JSON.stringify(result.error));
+    assert.equal(result.output.filter((item) => item.type === "text").map((item) => item.text).join(""), "cj".repeat(50));
+  }
+});
+test("CALLF accepts comma arguments with nested calls in interpreted and JIT execution", () => {
+  for (const jit of [false, true]) {
+    const game = emptyGame();
+    indexScript(game, `@SYSTEM_TITLE
+FOR A, 0, 50
+  CALL UPDATE
+NEXT
+PRINTFORML %GLOBALS%
+RETURN
+@UPDATE
+CALLF RECORD, 3, TOSTR(7, "00")
+TRYCALLF MISSING, 1
+RETURN
+@RECORD(ARG, ARGS)
+#FUNCTION
+GLOBALS '= ARG * ARGS
+RETURNF 1`, "test.ERB");
+    const result = new Runtime(game, 50_000, { jit }).start();
+    assert.equal(result.status, "halted", JSON.stringify(result.error));
+    assert.equal(output(result), "070707");
+  }
+});
 test("cached arguments retain omitted fields and reevaluate values without mutation", () => {
   const result = runtime(`@SYSTEM_TITLE
 FOR A, 0, 3
@@ -75,6 +170,7 @@ test("signed 64-bit arithmetic, precedence, ternary and short circuit without ev
   for (const [source, expected] of [
     ["2 + 3 * 4", 14n], ["-7 / 3", -2n], ["9223372036854775807 + 1", -9223372036854775808n],
     ["0 && BAD()", 0n], ["1 || BAD()", 1n], ["1 ? 4 # BAD()", 4n], ["0 ? BAD() # 8", 8n],
+    ['3 * "ab"', "ababab"], ['9223372036854775807 * ""', ""],
     ["1 << 40", 1099511627776n], ['"a" + "b"', "ab"], ['"a" * 3', "aaa"],
     ["1 || 0 && 0", 0n],
     ["1p1 + 3P2", 14n], ["2e3 + 5E-1", 2000n], ["0x10p2", 64n], ["-8p-2", -2n],
@@ -378,6 +474,33 @@ WAIT`).start();
   assert.equal(result.input?.kind, "wait");
   assert.equal(result.output[0]?.type, "html");
   assert.equal(result.output[1]?.type, "button");
+});
+test("HTML_PRINT flushes pending text before portrait padding and keeps empty HTML a no-op", () => {
+  const source = `@SYSTEM_TITLE
+PRINTBUTTON "[Randomize]", 1
+PRINTFORM % " " %
+PRINTBUTTON "[Select]", 2
+HTML_PRINT ""
+REPEAT 6
+HTML_PRINT "<br>"
+REND
+HTML_PRINT "<img src='face' height='800' ypos='-600'>"
+HTML_PRINT "<img src='frame' height='800' ypos='-700'>"
+PRINTFORML {LINECOUNT}
+WAIT`;
+  for (const jit of [false, true]) {
+    const game = emptyGame();
+    indexScript(game, source, "portrait.ERB");
+    const result = new Runtime(game, 50_000, { jit }).start();
+    assert.equal(result.status, "waiting", JSON.stringify(result.error));
+    const firstHtml = result.output.findIndex((item) => item.type === "html");
+    assert.deepEqual(result.output[firstHtml - 1], {
+      type: "text", text: "", newline: true,
+      style: { color: "#c0c0c0", background: "#000000", alignment: "left", fontStyle: 0 },
+    });
+    assert.equal(result.output.filter((item) => item.type === "html").length, 8);
+    assert.equal(result.output.filter((item) => item.type === "text").at(-1)?.text, "9");
+  }
 });
 test("multiline statements join before classification, including declarations and function signatures", () => {
   const game = emptyGame();

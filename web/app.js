@@ -1,4 +1,5 @@
 import { createTranslation } from "./translate.js";
+import { createLibrary } from "./library.js";
 
 const terminal = document.querySelector("#terminal");
 const status = document.querySelector("#status");
@@ -13,7 +14,7 @@ const demoButton = document.querySelector("#demo");
 const startButtons = [demoButton, document.querySelector("#game")];
 const restartButton = document.querySelector("#restart");
 /** The games the server offers ({ id, title, display, metrics }, from /api/runtime); the first is the default. */
-let games = [{ id: null, title: "eraToho The World" }];
+let games = [];
 let runMode = "game";
 /** The game the current run plays; the demo runs on the default game. */
 let runGame = null;
@@ -33,7 +34,7 @@ function showDebugOutput(snapshot) {
   if (debugLog.textContent.length > 200_000) debugLog.textContent = debugLog.textContent.slice(-100_000);
   if (atEnd) debugLog.scrollTop = debugLog.scrollHeight;
 }
-const gameTitle = (id) => (games.find((game) => game.id === id) ?? games[0]).title;
+const gameTitle = (id) => (games.find((game) => game.id === id) ?? games[0])?.title ?? "Game";
 let session = null;
 /** Steps the server has delivered for this session; sent with input so a stale duplicate tab is refused. */
 let step = 0;
@@ -121,16 +122,17 @@ const settingsLoaded = (async () => {
   applySettings();
   try {
     const runtime = await api("/api/runtime");
-    if (runtime.games?.length) games = runtime.games;
+    games = runtime.games ?? [];
     showGames();
-    useGameDisplay(games[0].id);
+    if (games.length) useGameDisplay(games[0].id);
     await document.fonts.ready;
     terminalColumns();
-  } catch { /* the development watcher reports connection errors */ }
+  } catch (error) { message(`Could not load game settings: ${error.message}`, true); }
 })();
 /** Emuera's colors, font and layout metrics come from each game's emuera.config; the player's settings override them. */
 function useGameDisplay(id) {
   const game = games.find((entry) => entry.id === id) ?? games[0];
+  if (!game) return;
   gameDefaults = { ...BASE_DEFAULTS, ...game.display };
   if (game.metrics) metrics = game.metrics;
   // Emuera spaces lines by the configured line height; images that span lines are laid out against it.
@@ -140,8 +142,11 @@ function useGameDisplay(id) {
 }
 /** Lists the server's games in the menu's Run section, in catalogue order. */
 function showGames() {
+  for (const button of startButtons.splice(2)) button.remove();
   const [first, ...others] = games;
   const button = startButtons[1];
+  button.hidden = !first;
+  if (!first) return;
   button.dataset.game = first.id;
   button.textContent = first.title;
   let last = button;
@@ -1563,13 +1568,14 @@ function resetRun() {
 }
 async function start(mode, game = runGame, debug = debugPreferred()) {
   if (busy) return;
+  library.hide();
   runMode = mode;
   runDebug = debug;
   debugLog.textContent = "";
   resetRun();
   try {
     await settingsLoaded;
-    runGame = mode === "game" && games.some((entry) => entry.id === game) ? game : games[0].id;
+    runGame = mode === "game" && games.some((entry) => entry.id === game) ? game : games[0]?.id ?? null;
     showReport(false);
     message(`Starting ${runName(mode, runGame)}${debug ? " in debug mode" : ""}...`);
     useGameDisplay(runGame);
@@ -1589,6 +1595,7 @@ async function start(mode, game = runGame, debug = debugPreferred()) {
  */
 async function resume(id) {
   if (busy) return false;
+  library.hide();
   resetRun();
   message("Restoring the current run...");
   let restored = false;
@@ -1597,7 +1604,7 @@ async function resume(id) {
     const data = await api("/api/resume", { session: id });
     activityResponded();
     runMode = data.mode;
-    runGame = data.game ?? games[0].id;
+    runGame = data.game ?? games[0]?.id ?? null;
     runDebug = !!data.debug;
     debugLog.textContent = "";
     useGameDisplay(runGame);
@@ -1800,6 +1807,7 @@ command.addEventListener("input", (event) => {
 });
 command.addEventListener("compositionend", submitCharacter);
 document.addEventListener("keydown", (event) => {
+  if (document.body.classList.contains("is-home")) return;
   if (busy && !expiring && session && event.key === "Enter" && !event.repeat && !event.isComposing && !event.defaultPrevented
     && !(event.target instanceof Element && event.target.closest("input:not(#command), textarea, select, button, a[href], .menu"))) {
     event.preventDefault();
@@ -1891,7 +1899,7 @@ confirmation.addEventListener("keydown", (event) => {
 });
 function runName(mode, game) { return mode === "demo" ? "the conformance demo" : gameTitle(game); }
 /** Starting a run discards one in progress, so that is confirmed first. */
-async function chooseRun(mode, game = games[0].id) {
+async function chooseRun(mode, game = games[0]?.id) {
   if (busy) return;
   const active = !!(session && input);
   const same = mode === runMode && (mode === "demo" || game === runGame);
@@ -1902,7 +1910,7 @@ async function chooseRun(mode, game = games[0].id) {
   void start(mode, game);
 }
 demoButton.addEventListener("click", () => { void chooseRun("demo"); });
-startButtons[1].addEventListener("click", () => { void chooseRun("game", games[0].id); });
+startButtons[1].addEventListener("click", () => { void chooseRun("game", games[0]?.id); });
 restartButton.addEventListener("click", () => { void chooseRun(runMode, runGame); });
 // Debug mode changes what the game loads ([IF_DEBUG]), so switching it restarts the run.
 debugButton.addEventListener("click", async () => {
@@ -1983,7 +1991,35 @@ document.querySelector("#report").addEventListener("click", async () => {
     report.scrollIntoView({ block: "start" });
   } catch (error) { message(error.message, true); }
 });
-// A reload reattaches to this tab's run if the server still has it; otherwise a fresh game starts.
+const library = createLibrary({
+  api, launch: (id) => { void chooseRun("game", id); }, confirmAction,
+  gamesChanged: async () => {
+    const runtime = await api("/api/runtime");
+    games = runtime.games ?? [];
+    showGames();
+  },
+});
+document.querySelector("#library-toggle").addEventListener("click", async () => {
+  if (busy) return;
+  if (session && input && !await confirmAction("Return to your library?",
+    "Progress that has not been saved in the game will be lost.", "Return to library")) return;
+  try {
+    if (session) await api("/api/stop", { session });
+    clearTimedWait();
+    generation++;
+    input = null;
+    session = null;
+    sessionStorage.removeItem(RUN_KEY);
+    const url = new URL(location.href);
+    url.searchParams.delete("game");
+    url.searchParams.delete("demo");
+    window.history.replaceState(window.history.state, "", url);
+    updateControls();
+    await library.show();
+    document.querySelector("#installed-tab").focus();
+  } catch (error) { message(error.message, true); }
+});
+// Fresh visits open the library; explicit game links and reloads retain the existing run behavior.
 void (async () => {
   await settingsLoaded;
   const requested = urlRun();
@@ -1991,6 +2027,8 @@ void (async () => {
   // An address naming a different game than this tab's run (edited or pasted) starts that game instead.
   if (saved && requested && (requested.mode !== saved.mode || (requested.mode === "game" && requested.game !== (saved.game ?? games[0]?.id)))) saved = null;
   if (saved && await resume(saved.session)) return;
+  if (!requested && !saved) { await library.show(); return; }
+  if (requested?.mode !== "demo" && !games.length) { await library.show(); return; }
   await start(requested?.mode ?? saved?.mode ?? "game", requested?.game ?? saved?.game);
   if (saved && session) message(`The previous run had ended or expired (or the server restarted), so a new run started. ${status.textContent}`);
 })();

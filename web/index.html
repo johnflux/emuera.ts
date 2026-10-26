@@ -5,14 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Emuera.ts</title>
   <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/library.css">
   <script type="module" src="/app.js"></script>
 </head>
-<body>
+<body class="is-home">
   <header>
     <h1 class="brand"><span class="brand-mark" aria-hidden="true">壱</span><span>Emuera<span class="brand-ts">.ts</span></span></h1>
     <span id="mode" class="mode" hidden></span>
     <span id="activity" class="activity" hidden></span>
-    <p id="status" role="status">Ready. Title and custom-character creation are supported; full gameplay is not yet implemented.</p>
+    <p id="status" role="status">Select a game.</p>
+    <button id="library-toggle" class="library-toggle" hidden>Game library</button>
     <div class="menu">
       <button id="menu-toggle" class="menu-toggle" aria-haspopup="true" aria-expanded="false" aria-controls="menu-panel" title="Menu">
         <span aria-hidden="true">☰</span><span class="visually-hidden">Menu</span>
@@ -31,13 +33,30 @@
       </nav>
     </div>
   </header>
+  <section id="library" class="library" aria-label="Game library">
+    <br/>
+    <div class="library-toolbar">
+      <div class="library-tabs" role="tablist" aria-label="Game library">
+        <button id="installed-tab" role="tab" aria-selected="true" aria-controls="game-grid" tabindex="0">Installed <span id="installed-count">0</span></button>
+        <button id="catalog-tab" role="tab" aria-selected="false" aria-controls="game-grid" tabindex="-1">Not installed <span id="catalog-count">0</span></button>
+      </div>
+      <button id="library-refresh" class="library-refresh">Refresh library</button>
+    </div>
+    <p id="library-message" class="library-message" role="status">Loading games...</p>
+    <p id="catalog-note" class="library-note catalog-note" hidden></p>
+    <div id="game-grid" class="game-grid" role="tabpanel" aria-labelledby="installed-tab" tabindex="0"></div>
+    <footer class="library-footer">
+      <p>To add a game, put its folder in <code>GAMES/</code> and click Refresh library.<br>The game's <code>ERB/</code> and <code>CSV/</code> folders should be inside that folder or one subfolder down.</p>
+      <a href="https://gitgud.io/era-games" target="_blank" rel="noopener noreferrer">era-games on GitGud ↗</a>
+    </footer>
+  </section>
   <main>
     <div id="cbg-back" class="cbg-layer" aria-hidden="true"></div>
     <div id="cbg-front" class="cbg-layer" aria-hidden="true"></div>
     <section id="terminal" lang="ja" role="log" aria-label="Interpreter output" tabindex="0">
       <div class="screen is-active">
-      <div class="line">Black background. White text. Real ERB execution.</div>
-      <div class="line">Choose a game from the ☰ menu, or try the conformance demo. Full gameplay is not supported yet.</div>
+      <div class="line">Emuera.ts</div>
+      <div class="line">Select a game from the library to start.</div>
       </div>
     </section>
     <form id="input-form" autocomplete="off" hidden>
@@ -51,7 +70,7 @@
     </aside>
     <aside id="settings" hidden aria-labelledby="settings-heading">
       <h2 id="settings-heading">Settings</h2>
-      <p>Defaults come from the game's <code>emuera.config</code>. Your changes are saved in this browser only.</p>
+      <p>Uses the game's <code>emuera.config</code> settings unless changed here. Changes are saved only in this browser.</p>
       <form id="settings-form">
         <label>Text color <input name="foreground" type="color"></label>
         <label>Background color <input name="background" type="color"></label>

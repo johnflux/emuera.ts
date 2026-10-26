@@ -80,7 +80,7 @@ main { position: relative; flex: 1; min-height: 0; display: flex; flex-direction
 .screen.is-history button.choice:disabled { opacity: 1; }
 .screen.is-history button.choice.is-selected { opacity: .7; }
 .screen.is-history button.choice.history-dimmed { opacity: .4; }
-.line { min-height: 1.25em; white-space: pre-wrap; overflow-wrap: anywhere; background-color: var(--line-background, var(--terminal-background)); }
+.line { min-height: 1lh; white-space: pre-wrap; overflow-wrap: anywhere; background-color: var(--line-background, var(--terminal-background)); }
 .align-left { text-align: left; }
 .align-center { text-align: center; }
 .align-right { text-align: right; }
@@ -93,7 +93,7 @@ main { position: relative; flex: 1; min-height: 0; display: flex; flex-direction
 .font-strikeout { text-decoration: line-through; }
 .font-underline.font-strikeout { text-decoration: underline line-through; }
 .title-image { overflow: hidden; }
-.line p { margin: 0; min-height: 1.25em; }
+.line p { margin: 0; min-height: 1lh; }
 .line.single-line { white-space: pre; overflow: hidden; }
 /* Emuera <div> sub-areas (app.js subarea): placed from the print position without taking room in the line. */
 .subarea-anchor { position: relative; display: inline-block; width: 0; height: 0; vertical-align: top; }
@@ -434,6 +434,9 @@ a { color: #8ddaff; }
 .era-occupant.era-occupant-none { border: 1px dashed #2c353d; background: transparent; cursor: default; }
 .era-occupant-none .era-face { border: 2px dashed #33414d; background: transparent; }
 .era-occupant-none .era-occupant-name { color: #9aa5ad; }
+.era-occupant.era-occupant-caged { width: calc(100% - 8px); border: 1px dashed #667581; background: transparent; cursor: default; }
+.era-occupant-caged .era-face { border-radius: 6px; filter: saturate(.4); }
+.era-occupant-caged .era-occupant-name { color: #aab8c4; }
 .era-face { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 44px; height: 44px; overflow: hidden; border-radius: 50%; background: #222; }
 .era-face-letter { color: #aaa; font-weight: bold; font-size: 1.3em; }
 .era-occupant-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }

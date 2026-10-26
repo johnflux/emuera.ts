@@ -7,7 +7,7 @@ export const SUPPORTED = new Set([
   ...TABLE_OPERATIONS,
   "PRINT", "PRINTL", "PRINTW", "PRINTFORM", "PRINTFORML", "PRINTFORMW",
   "PRINTPLAIN", "PRINTPLAINFORM",
-  "SAVEDATA", "LOADDATA", "DELDATA", "CHKDATA", "SAVECHARA", "LOADCHARA", "PUTFORM", "DOTRAIN", "RESET_STAIN",
+  "SAVEDATA", "LOADDATA", "DELDATA", "CHKDATA", "SAVECHARA", "LOADCHARA", "PUTFORM", "DOTRAIN", "RESET_STAIN", "UPCHECK", "OUTPUTLOG",
   "STRLEN", "STRLENU", "STRLENS", "STRLENSU", "STRLENFORM", "STRLENFORMU", "SUBSTRING", "SUBSTRINGU", "STRFIND", "STRFINDU", "STRCOUNT",
   "PRINTV", "PRINTVL", "PRINTVW", "PRINTS", "PRINTSL", "PRINTSW", "HTML_PRINT",
   "PRINTBUTTON", "PRINTBUTTONC", "PRINTBUTTONLC", "FORCEKANA", "DRAWLINE", "CUSTOMDRAWLINE", "DRAWLINEFORM", "CLEARLINE",
@@ -83,7 +83,7 @@ export function classify(line: Line): { op: string; args: string } {
   // Instructions match whole identifiers: "printNum ++" assigns a variable, it is not a PRINT variant.
   if (isSupported(op) || op.startsWith("DEBUGPRINT")) return { op, args: command[2]! };
   // `VALUE ,= ,` is still an assignment line in Emuera (rejected for the extra left-hand comma).
-  if (/^[^\s=,]+(?::.*?)?(?:\s*,[\s\w]*)?\s*(?:\+\+|--|(?:'|<<|>>|[+\-*/%&|^])?=)(?!=)/u.test(line.text))
+  if (/^(?:\+\+|--)\s*\S/u.test(line.text) || /^[^\s=,]+(?:\s*:.*?)?(?:\s*,[\s\w]*)?\s*(?:\+\+|--|(?:'|<<|>>|[+\-*/%&|^])?=)(?!=)/u.test(line.text))
     return { op: "ASSIGN", args: line.text };
   return { op, args: command[2]! };
 }

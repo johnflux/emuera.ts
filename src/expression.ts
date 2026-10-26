@@ -23,6 +23,10 @@ const precedence: Record<string, number> = {
 let macros: ReadonlyMap<string, string> = new Map();
 /** Activates a game's #DEFINE table; Emuera expands macros only inside expressions. */
 export function useMacros(table: ReadonlyMap<string, string>): void { macros = table; }
+export function repeatString(value: string, count: bigint): string {
+  if (count < 0n || count * BigInt(value.length) > 1_000_000n) throw new EraError("String repetition exceeds limit");
+  return value ? value.repeat(Number(count)) : "";
+}
 function tokenize(source: string, depth = 0): Token[] {
   const tokens: Token[] = [];
   let i = 0;
@@ -217,11 +221,8 @@ export function evaluate(expr: Expr, context: EvaluationContext): Value {
       if (expr.op === "||" && integer(a) !== 0n) return 1n;
       const b = evaluate(expr.right, context);
       if (expr.op === "+" && typeof a === "string") return a + text(b);
-      if (expr.op === "*" && typeof a === "string") {
-        const count = integer(b);
-        if (count < 0n || count * BigInt(a.length) > 1_000_000n) throw new EraError("String repetition exceeds limit");
-        return a.repeat(Number(count));
-      }
+      if (expr.op === "*" && typeof a === "string") return repeatString(a, integer(b));
+      if (expr.op === "*" && typeof b === "string") return repeatString(b, integer(a));
       if (COMPARISONS.has(expr.op)) {
         if (typeof a !== typeof b) throw new EraError("Cannot compare strings and integers");
         const yes = expr.op === "==" ? a === b : expr.op === "!=" ? a !== b : expr.op === "<" ? a < b

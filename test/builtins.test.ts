@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { displayDefaults, emptyGame, indexScript, type Game } from "../src/loader.js";
 import { BUILTIN_FUNCTIONS, Runtime, type RuntimeOptions, type Snapshot } from "../src/runtime.js";
+import { EraError } from "../src/model.js";
 
 function runtime(source: string, configure?: (game: Game) => void, options: RuntimeOptions = {}): Runtime {
   const game = emptyGame();
@@ -17,6 +18,112 @@ const template = (game: Game) => game.characters.set(0, { file: "Chara0.csv", ro
   ["番号", "0"], ["名前", "Name"], ["呼び名", "Call"], ["あだ名", "Nick"], ["主人の呼び方", "Master"],
   ["フラグ", "3", "42"], ["刻印", "1", "2"], ["CSTR", "1", "text"],
 ] });
+
+test(".NET escaped commas work in Unicode regexes without changing escaped backslashes or invalid escapes", () => {
+  const result = runtime(String.raw`@SYSTEM_TITLE
+PRINTSL REPLACE("a,b,c", "\,(?!.*\,)", " and ")
+PRINTSL REPLACE("a,b", "\\\\,", "|")
+PRINTFORML {STRCOUNT("日,月", "\,")}`).start();
+  assert.deepEqual(texts(result), ["a,b and c", "a,b", "1"]);
+  const invalid = runtime(String.raw`@SYSTEM_TITLE
+PRINTSL REPLACE("x", "\q", "")`).start();
+  assert.equal(invalid.status, "error");
+  assert.match(invalid.error!.message, /Invalid regular expression/);
+});
+
+test("STR defaults to 20000 elements, preserves CSV defaults on reset, and respects explicit sizes", () => {
+  for (const jit of [false, true]) {
+    const result = runtime(`@SYSTEM_TITLE
+PRINTFORML {VARSIZE("STR")} {VARSIZE("STRNAME")}
+FOR A, 0, 50
+  CALL CLEAR_STR
+NEXT
+PRINTFORML [%STR:1029%][%STR:1030%][%STR:1037%][%STR:1038%][%STR:1040%][%STR:1048%]
+STR:19999 = last
+RESETDATA
+PRINTFORML [%STR:19999%][%STR:1030%]
+RETURN
+@CLEAR_STR
+STR:1029 = before
+STR:1030 = clear
+STR:1037 = clear
+STR:1038 = boundary
+STR:1040 = clear
+STR:1048 = after
+VARSET STR, "", 1030, 1038
+VARSET STR, "", 1040, 1048`, (game) => {
+      game.tables.set("STR", new Map([[1030, ["csv default"]]]));
+    }, { jit }).start();
+    assert.deepEqual(texts(result), [
+      "20000 20000", "[before][][][boundary][][after]", "[][csv default]",
+    ]);
+    const configured = runtime(`@SYSTEM_TITLE
+PRINTFORML {VARSIZE("STR")}
+VARSET STR, "", 1030, 1038`, (game) => {
+      game.variableSizes.set("STR", [1000]);
+    }, { jit }).start();
+    assert.equal(configured.status, "error");
+    assert.equal(configured.error!.message, "Invalid VARSET range 1030-1038 for STR");
+    assert.equal(configured.output.find((item) => item.type === "text")?.text, "1000");
+    const invalid = runtime("@SYSTEM_TITLE\nSTR:20000 = outside", undefined, { jit }).start();
+    assert.equal(invalid.status, "error");
+    assert.match(invalid.error!.message, /Index 20000 out of range for STR/);
+  }
+});
+
+test("UPCHECK applies and prints target deltas, wraps Int64, and clears changes even without a target", () => {
+  const result = runtime(`@SYSTEM_TITLE
+ADDCHARA 0
+PALAM:0:0 = 10, 9223372036854775807, 30
+UP = 5, 2, -3
+DOWN = 2, -1, -4
+UPCHECK
+PRINTFORML {PALAM:0:0},{PALAM:0:1},{PALAM:0:2};{SUMARRAY(UP)},{SUMARRAY(DOWN)}
+UP = 7
+TARGET = -1
+UPCHECK
+PRINTFORML {UP},{DOWN}
+TARGET = 0
+SKIPDISP 1
+UP = 2
+UPCHECK
+SKIPDISP 0
+PRINTFORML {PALAM:0:0}`, (game) => {
+    template(game);
+    game.tables.set("PALAM", new Map([[0, ["Joy"]], [1, ["Trust"]]]));
+    game.variableSizes.set("PALAM", [3]);
+    game.variableSizes.set("UP", [5]);
+    game.variableSizes.set("DOWN", [4]);
+  }).start();
+  assert.deepEqual(texts(result), [
+    "Joy 10+5-2=13", "Trust 9223372036854775807+2=-9223372036854775806",
+    "13,-9223372036854775806,30;0,0", "0,0", "15",
+  ]);
+  const invalid = runtime("@SYSTEM_TITLE\nUPCHECK 1").start();
+  assert.equal(invalid.status, "error");
+  assert.match(invalid.error!.message, /UPCHECK takes no arguments/);
+});
+
+test("OUTPUTLOG persists visible plain text including pending output and reports storage failures", async () => {
+  const { MemorySaveStore } = await import("../src/storage.js");
+  const saves = new MemorySaveStore();
+  const result = runtime(`@SYSTEM_TITLE
+PRINTL removed
+CLEARLINE 1
+PRINTL kept
+HTML_PRINT "<b>styled &amp; decoded</b>"
+PRINT pending
+OUTPUTLOG`, undefined, { saves }).start();
+  assert.equal(result.status, "halted", JSON.stringify(result.error));
+  assert.equal(saves.read("emuera.log"), "kept\nstyled & decoded\npending\n");
+  assert.ok(texts(result).includes("Log written to emuera.log"));
+  const failed = runtime("@SYSTEM_TITLE\nOUTPUTLOG", undefined, { saves: {
+    read: () => null, list: () => [], remove: () => {},
+    write: () => { throw new EraError("Disk full"); },
+  } }).start();
+  assert.equal(failed.status, "error");
+  assert.match(failed.error!.message, /Disk full/);
+});
 
 test("ADDVOIDCHARA adds an empty character and ASSERT is skipped like other debug instructions", () => {
   const source = `@SYSTEM_TITLE
