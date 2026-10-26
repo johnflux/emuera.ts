@@ -1,0 +1,544 @@
+;-------------------------------------------------------------------------------
+; Hotpatch for the character sheet (ERB/TRANSLATION/LIST.ERB @SINGLE_CHARA_STATE_TR and @LIST_CHARA_STATE_TR, and
+; ERB/ステータス表示関連/能力表示.ERB @TARGET_LIST_STATE). The sheet opens as a dialog over the screen behind it
+; (<era-open class='era-dialog'>, see web/style.css): a header with a tab per character (‹ › arrows for long lists)
+; and a tab per page, a close button, and the game's own page (CHARA_STATE_TR) in a scrolling body.
+;
+; The input loops are copied unchanged, plus [5000 + n] to pick the nth character of a list. Dropped: the DRAWLINE
+; and the [77]/[88] buttons when the characters fit as tabs (the values still work).
+;
+; The main screen's "See more" button (hotpatch/MAIN_SCREEN.ERB) sends [803], which shows you and everyone in the
+; room; TARGET_LIST_STATE now starts on you instead of the selected character.
+;-------------------------------------------------------------------------------
+@TARGET_LIST_STATE
+#DIM TARGET_LIST, キャラクタ数上限
+#DIM TARGET_NUM
+VARSET TARGET_LIST
+TARGET_NUM = FINDELEMENT(TARGET, 0) - 1
+SIF TARGET_NUM <= 0
+	RETURN
+ARRAYCOPY "TARGET", "TARGET_LIST"
+TARGET_LIST:0 = MASTER
+CALL LIST_CHARA_STATE_TR(TARGET_LIST, 0, TARGET_NUM + 1, "「調教中」")
+
+
+@SINGLE_CHARA_STATE_TR(C_ID,OP)
+#DIMS    OP         ;実行オプション
+#DIM     C_ID       ;登録番号
+#DIM     PAGE       ;表示中のページ
+#DIM CREDRAW
+#DIM FIRST_LINE
+FIRST_LINE = LINECOUNT
+$REPRINT
+CLEARLINE LINECOUNT - FIRST_LINE
+CREDRAW = CURRENTREDRAW()
+REDRAW 0
+HTML_PRINT "<era-open class='era-dialog era-sheet'>"
+HTML_PRINT HOTPATCH_SHEET_HEADER(HOTPATCH_SHEET_PERSON(C_ID, 0, 1), C_ID, PAGE, 6)
+HTML_PRINT "<era-open class='era-sheet-body'>"
+CALL CHARA_STATE_TR(C_ID, PAGE, OP)
+HTML_PRINT "<era-close>"
+SIF STRCOUNT(OP, "「最終確認」")
+	HTML_PRINT "<div class='era-sheet-footer'><button value='1' class='era-sheet-choose'>[1] Choose this character</button><button value='0'>[0] Return</button></div>"
+HTML_PRINT "<era-close>"
+DO
+	INPUT
+	SELECTCASE RESULT
+	CASE 0
+		RETURN 0
+	CASE 1
+		SIF STRCOUNT(OP, "「最終確認」")
+			RETURN C_ID
+		GOTO RETRY
+	CASE 2 TO 7
+		PAGE = RESULT-2
+	CASE 98
+		CFLAG:C_ID:差し替え適用 ++
+		IF FLAG:立ち絵種類
+			SIF CFLAG:C_ID:別顔有 < CFLAG:C_ID:差し替え適用
+				CFLAG:C_ID:差し替え適用 = 0
+		ELSE
+			SIF CFLAG:C_ID:別立ち有 < CFLAG:C_ID:差し替え適用
+				CFLAG:C_ID:差し替え適用 = 0
+		ENDIF
+	;表示・非表示の切替
+	CASE 160 TO 169, 900, 904, 909
+		TFLAG:RESULT = !TFLAG:RESULT
+	CASE 画像切り替え
+		IF !FLAG:画像表示
+			FLAG:画像表示 = !FLAG:画像表示
+			SIF FLAG:画像表示 && nStoreImageCount > 0 ;restore previous value if enabled
+				FLAG:画像表示 = nStoreImageCount
+			
+			FLAG:立ち絵種類 = 0
+			CFLAG:C_ID:差し替え適用 = 0
+		ELSEIF !FLAG:立ち絵種類
+			FLAG:立ち絵種類 = !FLAG:立ち絵種類
+		ELSEIF FLAG:立ち絵種類
+			SIF FLAG:画像表示 ;store previous value if it's going to be disabled
+				nStoreImageCount = FLAG:画像表示
+				
+			FLAG:画像表示 = !FLAG:画像表示
+		ENDIF
+	CASE 9997 ;custom code
+		CALL Qol_Info_ChildList(C_ID, 1)
+		WAIT
+	CASE 9998 ;custom code
+		CALL Qol_MC_CHILD_LIST
+		;switch to a mother's page when clicked
+		IF INRANGE(RESULT, 10000, 11000)
+			RESULT -= 10000
+			IF EXISTCSV(NO:RESULT)
+				PAGE = 0
+				C_ID = RESULT
+			ENDIF
+		ENDIF
+		BREAK
+	CASE 9999
+		qol_Relation_AscendingOrder = !qol_Relation_AscendingOrder
+	CASE 3500 TO 3505
+		SFSR_PAGE = RESULT-3500
+	CASEELSE
+		$RETRY
+		REUSELASTLINE Invalid Input
+		CONTINUE
+	ENDSELECT
+	BREAK
+LOOP 1
+GOTO REPRINT
+
+
+@LIST_CHARA_STATE_TR(CHARA_LIST, C_VIEW, CHARA_CNT, OP)
+#DIM REF CHARA_LIST ;リスト本体、登録番号にて記録
+#DIM     C_VIEW     ;表示中キャラのリスト上の位置
+#DIM     CHARA_CNT  ;リストに該当したキャラの数
+#DIMS    OP         ;実行オプション
+#DIM     C_ID       ;登録番号
+#DIM     PAGE       ;表示中のページ
+#DIM CREDRAW
+#DIM FIRST_LINE
+#DIM nSettingsEnable
+#DIMS sPeople
+FIRST_LINE = LINECOUNT
+$REPRINT
+
+;conditions for the setting page
+LOCAL = 0
+CALL KOJO_SETTINGS_EXIST(CHARA_LIST:C_VIEW)
+SIF RESULT
+	SETBIT LOCAL, 1
+;disable the button for MASTER
+nSettingsEnable = CHARA_LIST:C_VIEW != MASTER && OP != "「調教中」" 
+;reset the page if outside of sleep menu/looking at yourself (pending: might add special settings under PC?)
+SIF PAGE == 6 && (OP == "「調教中」" || CHARA_LIST:C_VIEW == MASTER)
+	PAGE = 0
+;--------------------------------
+
+CLEARLINE LINECOUNT - FIRST_LINE
+CREDRAW = CURRENTREDRAW()
+REDRAW 0
+sPeople '= ""
+IF CHARA_CNT <= 12
+	FOR LOCAL, 0, CHARA_CNT
+		sPeople += HOTPATCH_SHEET_PERSON(CHARA_LIST:LOCAL, 5000 + LOCAL, LOCAL == C_VIEW)
+	NEXT
+ELSE
+	sPeople '= @"<button value='77' class='era-sheet-step'>‹</button>%HOTPATCH_SHEET_PERSON(CHARA_LIST:C_VIEW, 0, 1)%"
+	sPeople += @"<span class='era-sheet-count'>{C_VIEW + 1} / {CHARA_CNT}</span><button value='88' class='era-sheet-step'>›</button>"
+ENDIF
+HTML_PRINT "<era-open class='era-dialog era-sheet'>"
+HTML_PRINT HOTPATCH_SHEET_HEADER(sPeople, CHARA_LIST:C_VIEW, PAGE, nSettingsEnable ? 7 # 6)
+HTML_PRINT "<era-open class='era-sheet-body'>"
+CALL CHARA_STATE_TR(CHARA_LIST:C_VIEW, PAGE, OP)
+HTML_PRINT "<era-close>"
+SIF STRCOUNT(OP, "「最終確認」")
+	HTML_PRINT "<div class='era-sheet-footer'><button value='1' class='era-sheet-choose'>[1] Choose this character</button><button value='0'>[0] Return</button></div>"
+HTML_PRINT "<era-close>"
+
+DO
+	INPUT
+	SELECTCASE RESULT
+	CASE 0
+		RETURN 0
+	CASE 1
+		SIF STRCOUNT(OP, "「最終確認」")
+			RETURN CHARA_LIST:C_VIEW
+		GOTO RETRY
+	CASE 2 TO 7
+		PAGE = RESULT-2
+	CASE 8
+		SIF !nSettingsEnable
+			GOTO RETRY
+		PAGE = RESULT-2 
+	CASE 77
+		C_VIEW = (C_VIEW - 1 + CHARA_CNT) % MAX(1,CHARA_CNT)
+	CASE 88
+		C_VIEW = (C_VIEW + 1 + CHARA_CNT) % MAX(1,CHARA_CNT)
+	CASE 5000 TO 5999
+		SIF RESULT - 5000 >= CHARA_CNT
+			GOTO RETRY
+		C_VIEW = RESULT - 5000
+	CASE 98
+		CFLAG:(CHARA_LIST:C_VIEW):差し替え適用 ++
+		IF FLAG:立ち絵種類
+			SIF CFLAG:(CHARA_LIST:C_VIEW):別顔有 < CFLAG:(CHARA_LIST:C_VIEW):差し替え適用
+				CFLAG:(CHARA_LIST:C_VIEW):差し替え適用 = 0
+		ELSE
+			SIF CFLAG:(CHARA_LIST:C_VIEW):別立ち有 < CFLAG:(CHARA_LIST:C_VIEW):差し替え適用
+				CFLAG:(CHARA_LIST:C_VIEW):差し替え適用 = 0
+		ENDIF
+	;表示・非表示の切替
+	CASE 160 TO 169, 900, 904, 909
+		TFLAG:RESULT = !TFLAG:RESULT
+	CASE 画像切り替え
+		IF !FLAG:画像表示
+			FLAG:画像表示 = !FLAG:画像表示
+			SIF FLAG:画像表示 && nStoreImageCount > 0 ;restore previous value if enabled
+				FLAG:画像表示 = nStoreImageCount
+			
+			FLAG:立ち絵種類 = 0
+			CFLAG:(CHARA_LIST:C_VIEW):差し替え適用 = 0
+		ELSEIF !FLAG:立ち絵種類
+			FLAG:立ち絵種類 = !FLAG:立ち絵種類
+		ELSEIF FLAG:立ち絵種類
+			SIF FLAG:画像表示
+				nStoreImageCount = FLAG:画像表示
+			
+			FLAG:画像表示 = !FLAG:画像表示
+		ENDIF
+	CASE 7000 TO 7051 ;qol custom code
+		CALL KOJO_OPTION_RESULT(CHARA_LIST:C_VIEW, RESULT)
+		SIF RESULT == -1
+			GOTO RETRY
+		SIF RESULT
+			ResetList = 1
+	CASE 9997 ;custom code
+		CALL Qol_Info_ChildList(CHARA_LIST:C_VIEW, 1)
+		WAIT
+	CASE 9998 ;custom code
+		CALL Qol_MC_CHILD_LIST
+		;switch to a mother's page when clicked
+		IF INRANGE(RESULT, 10000, 11000)
+			RESULT -= 10000
+			IF RESULT < CHARANUM && EXISTCSV(NO:RESULT)
+				PAGE = 0
+				C_VIEW = RESULT
+			ENDIF
+		ENDIF
+		BREAK
+	CASE 9999
+		qol_Relation_AscendingOrder = !qol_Relation_AscendingOrder
+	CASE 3500 TO 3505
+		SFSR_PAGE = RESULT-3500
+    CASE -999
+	CASE 90000 TO 90005
+		CALL CHECK_BODYGRAPH_RECORD("set",RESULT-90000)
+	CASEELSE
+		$RETRY
+		REUSELASTLINE Invalid Input
+		CONTINUE
+	ENDSELECT
+	BREAK
+LOOP 1
+GOTO REPRINT
+
+;-------------------------------------------------------------------------------
+; A character's tab: a button sending nValue, or the plain current name when nValue is 0.
+;-------------------------------------------------------------------------------
+@HOTPATCH_SHEET_PERSON(nChara, nValue, bCurrent)
+#FUNCTIONS
+#DIM DYNAMIC nChara
+#DIM DYNAMIC nValue
+#DIM DYNAMIC bCurrent
+#DIMS DYNAMIC sLabel
+sLabel '= HTML_ESCAPE(CALLNAME:nChara)
+SIF nChara == MASTER
+	sLabel += "<span class='era-sub'>You</span>"
+SIF !nValue
+	RETURNF @"<span class='era-sheet-person era-current'>%sLabel%</span>"
+RETURNF @"<button value='{nValue}' class='era-sheet-person%(bCurrent ? " era-current" # "")%'>%sLabel%</button>"
+
+;-------------------------------------------------------------------------------
+; The dialog header: the character tabs (sPeople), the close button and nPages page tabs ([2]..).
+;-------------------------------------------------------------------------------
+@HOTPATCH_SHEET_HEADER(sPeople, nChara, nPage, nPages)
+#FUNCTIONS
+#DIMS DYNAMIC sPeople
+#DIM DYNAMIC nChara
+#DIM DYNAMIC nPage
+#DIM DYNAMIC nPages
+#DIM DYNAMIC nIndex
+#DIMS DYNAMIC sTabs
+#DIMS CONST sName = "Clothes &amp; Abilities", "Exp &amp; Gems", "Personal Info", "Preferences", "Body", "Falling Conditions", "Character Settings"
+sTabs '= ""
+FOR nIndex, 0, nPages
+	sTabs += @"<button value='{nIndex + 2}' class='era-sheet-page%(nIndex == nPage ? " era-current" # "")%'>%(nChara == MASTER && nIndex == 5 ? "Skill Acquisition" # sName:nIndex)%</button>"
+NEXT
+RETURNF @"<div class='era-sheet-header'><div class='era-sheet-people'>%sPeople%<button value='0' class='era-dialog-close'>×</button></div><div class='era-sheet-pages'>%sTabs%</div></div>"
+
+;-------------------------------------------------------------------------------
+; BASIC_STATE (ERB/ステータス表示関連/能力表示.ERB), the top of every page: verbatim, except that the Sta/Ene/Drunk/
+; Vig/TSP bars, which the game prints with uneven spacing, are the main screen's meters in a grid (value / maximum,
+; aqua when buffed and yellow when debuffed as in BASE_BAR).
+;-------------------------------------------------------------------------------
+@BASIC_STATE(C_ID, OP)
+#DIM C_ID
+#DIMS OP
+#DIMS DYNAMIC sClass
+#DIMS DYNAMIC sHtml
+DRAWLINEFORM ━
+PRINTFORM ■%NAME:C_ID%
+;custom code
+[IF_DEBUG]
+PRINTFORM (ID:{C_ID}, NO:{NO:C_ID})
+[ENDIF]
+;MASTERならば所持金を記載
+IF C_ID == MASTER
+	PRINTFORM (Money: %金額表示(MONEY)%)
+	PRINTFORM  (Charisma: %三桁区切(MONEY:2)%CM)
+	;addition custom code
+	PRINTFORM  (Bullet Money: %DIGIT_GROUP(MONEY:弾貨)%BM)
+	PRINTFORM  (Moriya Blanks: {ITEM:131})
+	SIF KOMAFUDA:MASTER
+		PRINTFORM  (Chips: {KOMAFUDA:MASTER})
+ELSE
+	CALL PRINT_STATE_FAVOR_TRUST(C_ID)
+ENDIF
+IF FLAG:生理周期可視化 && TALENT:C_ID:性別 != 2
+	IF STRCOUNT(OP, "「調教中」")
+		CALL CYCLE_PRINT(C_ID)
+;モブ物色中判定
+	ELSEIF SELECTCOM == 444
+		CALL CYCLE_PRINT(C_ID)
+	ELSE
+		CALL CYCLE_PRINT翌日(C_ID)
+	ENDIF
+ENDIF
+SIF C_ID != MASTER && NOTICE_CYCLE(C_ID)
+	SETCOLOR C_AQUA
+IF CFLAG:C_ID:生解禁 == 2
+	PRINT  Allows unprotected sex on dangerous day
+ELSEIF CFLAG:C_ID:生解禁 == 1
+	PRINT  Allows unprotected sex
+ELSEIF GETBIT(CFLAG:C_ID:既成事実, 1)
+	PRINT  Has consented to sex
+ENDIF
+
+;Added
+SIF GETBIT(CFLAG:C_ID:既成事実, 5)
+	PRINT  Has consented to time stop sex
+SIF GETBIT(CFLAG:C_ID:既成事実, 6)
+	PRINT  Has consented to being hypnotized
+
+RESETCOLOR
+PRINTL 　
+sClass '= "era-sta"
+SIF CFLAG:C_ID:睡眠 && C_ID != MASTER && !CFLAG:MASTER:313
+	sClass += " era-asleep"
+sHtml '= HOTPATCH_BAR("Sta", BASE:C_ID:0 - 500, MAXBASE:C_ID:0 - 500, sClass, "Stamina", 1)
+sHtml += HOTPATCH_BAR("Ene", BASE:C_ID:気力, MAXBASE:C_ID:気力, "era-ene" + HOTPATCH_BUFF_CLASS(C_ID, GETNUM(BASE, "気力")), "Energy", 1)
+SIF BASE:C_ID:酒気
+	sHtml += HOTPATCH_BAR("Drnk", BASE:C_ID:酒気, MAXBASE:C_ID:酒気, "era-drnk" + HOTPATCH_BUFF_CLASS(C_ID, GETNUM(BASE, "酒気")), "Drunkenness", 1)
+SIF C_ID == MASTER || HAS_PENIS(C_ID) ;qol custom code
+	sHtml += HOTPATCH_BAR("Vig", BASE:C_ID:精力, MAXBASE:C_ID:精力, "era-vig" + HOTPATCH_BUFF_CLASS(C_ID, GETNUM(BASE, "精力")), "Vigor", 1)
+SIF C_ID == MASTER
+	sHtml += HOTPATCH_BAR("TSP", BASE:C_ID:TSP, MAXBASE:C_ID:TSP, "era-tsp" + HOTPATCH_BUFF_CLASS(C_ID, GETNUM(BASE, "TSP")), "Time Stop Points", 1)
+HTML_PRINT @"<div class='era-bars era-sheet-bars'>%sHtml%</div>"
+
+IF C_ID != MASTER
+	IF NOTICE_LUST(C_ID)
+		;記述が整理できるという理由で微妙に閾値変更
+		SELECTCASE CFLAG:C_ID:溜まってる度
+		CASE IS >= 665
+			SETCOLOR C_RED
+		CASE IS >= 332
+			SETCOLOR C_YELLOW
+		ENDSELECT
+		PRINTFORMD Sexual Frustration: 
+		PRINTFORM {CFLAG:C_ID:溜まってる度 / 10}
+		PRINTFORMD ％
+		RESETCOLOR
+	ENDIF
+	PRINTFORM 　　
+	SIF CFLAG:(C_ID):弾幕勝負勝利 == 1
+		PRINTFORM ★Beaten In Danmaku
+	SIF CFLAG:(C_ID):ムシバトル直接勝利 == 1
+		PRINTFORM ★Beaten At Bug Battle
+	SIF CFLAG:(C_ID):料理勝負勝利 == 1
+		PRINTFORM ★Beaten In Cooking Competition
+	;qol custom code, show currently used dialogue
+	;first see if we have something on the current line to determine if we want to add extra spacing
+	SIF CFLAG:(C_ID):弾幕勝負勝利 || CFLAG:(C_ID):ムシバトル直接勝利 == 1 || CFLAG:(C_ID):料理勝負勝利 == 1
+		PRINTFORM 　　　　
+	CALL QoL_DetailedInfo(Qol_Info_Dialogue, C_ID)
+	PRINTFORML
+ENDIF
+
+; BASE_BAR colours a value aqua when it is buffed and yellow when it is debuffed.
+@HOTPATCH_BUFF_CLASS(nChara, nBase)
+#FUNCTIONS
+#DIM DYNAMIC nChara
+#DIM DYNAMIC nBase
+SIF BUFF:nChara:nBase > 0
+	RETURNF " era-buffed"
+SIF BUFF:nChara:nBase < 0
+	RETURNF " era-debuffed"
+RETURNF ""
+
+;-------------------------------------------------------------------------------
+; SHOW_FALL_STATE_REV_REQUIREMENTS_TR (ERB/TRANSLATION/ANON/BetterUI.ERB), the Falling Conditions / Skill Acquisition
+; page: verbatim, except that its row of page buttons ([3500 + n], current in aqua), printed under the list, is a row
+; of sub-tabs above it, and the conditions are separated by rules rather than boxed in by them.
+;-------------------------------------------------------------------------------
+@SHOW_FALL_STATE_REV_REQUIREMENTS_TR(ARG,NO_FALLS=0)
+;third option is for the rape route and is in a different PR
+#DIMS DISP_NAME = "Love Route", "Lust Route", "", "Body Parts", "Skill Acquisition", "Musicality"
+#DIM SFSR_LINECOUNT
+#DIM NO_FALLS
+#DIMS DYNAMIC sTabs
+#DIM DYNAMIC nShown
+REDRAW 0
+SFSR_LINECOUNT = LINECOUNT
+SIF GROUPMATCH(LOCAL,0,1,2) && NO_FALLS
+    SFSR_PAGE = 3
+sTabs '= ""
+FOR LOCAL, 0, VARSIZE("DISP_NAME")
+	SIF GROUPMATCH(LOCAL,0,1,2) && NO_FALLS
+        CONTINUE
+	SIF GROUPMATCH(LOCAL,2) && !RAPEOPTION
+		CONTINUE
+	SIF !STRLENS(DISP_NAME:LOCAL)
+		CONTINUE
+	sTabs += @"<button value='{LOCAL + 3500}' class='era-sheet-subpage%(SFSR_PAGE == LOCAL ? " era-current" # "")%'>%HTML_ESCAPE(DISP_NAME:LOCAL)%</button>"
+NEXT
+HTML_PRINT @"<div class='era-sheet-subpages'>%sTabs%</div>"
+nShown = 0
+FOR LOCAL,1,SFSR_MAX
+    VARSET SFSR_NAME
+    VARSET SFSR_STRING
+    TRYCCALLFORM SHOW_FALL_STATE_REV_INFO_{LOCAL}(ARG)
+        SIF TOLOWER(SFSR_TYPE) != TOLOWER(DISP_NAME:SFSR_PAGE)
+            CONTINUE
+        SIF !SFSR_CANDO
+            CONTINUE
+        SIF SFSR_STRING == ""
+            SFSR_STRING '= @"Condition to acquire %SFSR_NAME%"
+    CATCH
+        CONTINUE
+    ENDCATCH
+    SIF nShown
+        DRAWLINE
+    nShown ++
+    CALL COLORMESSAGE(SFSR_STRING,C_AQUA,1)
+    PRINTFORML 
+    TRYCALLFORM SHOW_FALL_STATE_REV_{LOCAL}(ARG)
+NEXT
+
+;-------------------------------------------------------------------------------
+; The page itself (ERB/TRANSLATION/LIST.ERB @CHARA_STATE_TR, only called by the sheet), copied with page 0 tidied:
+; "Unmeasured" and the Abilities table (@PRINT_ABL_MOD below) use the Clothing labels' indent, and Personality
+; gets the blank line the other sections have.
+;-------------------------------------------------------------------------------
+@CHARA_STATE_TR(C_ID, PAGE, OP)
+#DIM  C_ID
+#DIM  PAGE
+#DIMS OP
+CALL BASIC_STATE(C_ID, OP)
+SELECTCASE PAGE
+CASE 0
+	IF CFLAG:C_ID:身体測定
+		CALL SHOW_SIZE(C_ID)
+	ELSE
+		CALL MAKE_SIZE, C_ID
+		PRINTL
+		CALL PRINTLINE, "Measurements"
+		PRINTL  　Unmeasured
+	ENDIF
+	CALL PRINT_STATE_IMAGE(C_ID)
+	IF FLAG:画像表示
+		;the 65, 75, 149 and 75 are based on the normal 50, 60, 120, and 60 presumably being related to screen width
+		IF FLAG:立ち絵種類
+			IF キャラ画像表示サイズ比 <= 65
+				PRINTL 
+				PRINTL 
+			ELSEIF キャラ画像表示サイズ比 <= 75
+				PRINTL 
+			ELSEIF キャラ画像表示サイズ比 >= 149
+				CLEARLINE 1
+			ENDIF
+			SIF TALENT:C_ID:行きずり
+				PRINTL 
+		ELSE
+			SIF キャラ画像表示サイズ比 <= 75
+				PRINTL 
+		ENDIF
+	ENDIF
+	CALL PRINT_STATE_CLOTH(C_ID)
+	PRINTL
+	CALL PRINT_STATE_TALENT(C_ID)
+	PRINTL
+	;CALL PRINT_ABL_TR(C_ID)
+	CALL PRINT_ABL_MOD(C_ID)
+CASE 1
+	PRINTL
+	CALL PRINT_STATE_EXP(C_ID)
+	;PRINTL
+	;現状マスターは妊娠しないはずだが将来の機能拡張を考えるとこれでいいのか？
+	SIF !(C_ID == MASTER) && (TALENT:C_ID:妊娠 || CFLAG:C_ID:子供人数 > 0)
+		CALL 妊娠関連(C_ID)
+	SIF (C_ID == MASTER) && (CFLAG:MASTER:子供人数 > 0)	;custom code
+		CALL Qol_MC_CHILD
+	IF STRCOUNT(OP, "「調教中」")
+		CALL PRINT_STATE_EX(C_ID)
+	ELSEIF !(C_ID == MASTER)
+		CALL PRINT_STATE_JUEL_TR(C_ID)
+	ENDIF
+	PRINTL
+	IF C_ID == MASTER
+		CALL 予定
+	ELSE
+		CALL パンツ収集状況(C_ID)
+	ENDIF
+
+    SIF C_ID != MASTER ;custom code
+        CALL QOL_CHARA_SCORES(C_ID)
+CASE 2
+	CALL PRINT_STATE_PERSONAL(C_ID)
+	CALL SHOW_RELATION(C_ID)
+CASE 3
+	CALL PRINT_STATE_PREFERENCE(C_ID)
+	CALL PRINT_STATE_GIFTDATA(C_ID, 15)
+CASE 4
+	CALL 肉体情報(C_ID)
+CASE 5
+	IF C_ID == MASTER
+		CALL SHOW_ALLITEM_INFO
+	ELSE
+		CALL SHOW_FALL_STATE_REV_REQUIREMENTS(C_ID)
+		CALL 浮気把握状況(C_ID)
+	ENDIF
+CASE 6
+	CALL KOJO_OPTION(C_ID)
+CASEELSE
+	THROW 異常なPAGE {PAGE}
+ENDSELECT
+
+;-------------------------------------------------------------------------------
+; ERB/TRANSLATION/LIST.ERB @PRINT_ABL_MOD (only called by the sheet), with each row indented like the Clothing labels.
+;-------------------------------------------------------------------------------
+@PRINT_ABL_MOD(C_ID)
+#DIM C_ID
+#DIMS OUTPUT
+OUTPUT = 
+CALL PRINTBUTTON_EX("Abilities", 162, TFLAG:162, , , 1)
+SIF TFLAG:能力表示
+	RETURN
+PRINTL  　    Marks            H Abilities       Non-H Abilities       Sensitivity          Technique      Disposition            Addiction
+FOR LOCAL, 0, 70 ;Added
+	SIF LOCAL % 7 == 0
+		OUTPUT += " 　"
+	OUTPUT += PRINT_SPECIFIC_HTML(C_ID, LOCAL)
+	SIF LOCAL % 7 == 6
+		OUTPUT += "\n"
+NEXT
+HTML_PRINT OUTPUT

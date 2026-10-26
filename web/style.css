@@ -47,10 +47,19 @@ button:disabled { color: #666; cursor: default; }
 .menu-panel button[aria-pressed="true"]::before, .menu-panel button[aria-expanded="true"]::before { content: "●"; position: absolute; left: 10px; color: #8ddaff; font-size: 9px; line-height: 19px; }
 .menu-font { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 4px; padding: 8px 10px 4px; border-top: 1px solid #2a2a2a; color: #bbb; font-size: 12px; white-space: nowrap; }
 .menu-font input { width: 110px; accent-color: #8ddaff; }
+.confirm { max-width: min(420px, calc(100vw - 32px)); padding: 18px 20px 16px; border: 1px solid #3a3a3a; border-radius: 10px; background: #121212; color: #ddd; box-shadow: 0 12px 40px #000e; font-size: 14px; }
+.confirm::backdrop { background: #000a; }
+.confirm h2 { margin: 0 0 8px; font-size: 16px; color: #fff; }
+.confirm p { margin: 0 0 16px; line-height: 1.45; color: #bbb; }
+.confirm-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.confirm-actions button { border-radius: 6px; padding: 6px 14px; }
+.confirm-actions .danger { background: #3a1616; border-color: #a04a4a; color: #fff; }
+.confirm-actions .danger:hover:enabled, .confirm-actions .danger:focus-visible { background: #522020; border-color: #e07070; }
 #status.error { color: #ff9d9d; }
-main { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 16px 20px; color: var(--terminal-foreground); background: var(--terminal-background); }
+main { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 16px 0 16px 20px; color: var(--terminal-foreground); background: var(--terminal-background); }
 #terminal, #input-form { font-family: var(--terminal-font); }
-#terminal { flex: 1; min-height: 0; display: flex; flex-direction: column; font-size: var(--font-size); line-height: 1.25; overflow: auto; scrollbar-gutter: stable; container-type: inline-size; }
+/* main has no right padding: the scrollbar takes its place, and the output keeps a 20px margin like the left one. */
+#terminal { flex: 1; min-height: 0; display: flex; flex-direction: column; padding-right: max(6px, calc(20px - var(--scrollbar-width, 0px))); font-size: var(--font-size); line-height: 1.25; overflow: auto; scrollbar-gutter: stable; container-type: inline-size; }
 #terminal::before { content: ""; margin-top: auto; }
 #terminal > * { flex-shrink: 0; min-width: var(--logical-width, 0); }
 #terminal.is-waiting { cursor: pointer; }
@@ -75,6 +84,11 @@ main { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 1
 .title-image { overflow: hidden; }
 .line p { margin: 0; min-height: 1.25em; }
 .line.single-line { white-space: pre; overflow: hidden; }
+/* Emuera <div> sub-areas (app.js subarea): placed from the print position without taking room in the line. */
+.subarea-anchor { position: relative; display: inline-block; width: 0; height: 0; vertical-align: top; }
+.subarea-anchor.subarea-fixed { position: static; }
+.subarea-fixed > .subarea { position: fixed; }
+.subarea { position: absolute; box-sizing: border-box; overflow: hidden; border: 0 solid currentColor; text-align: left; white-space: pre-wrap; }
 .print-cell { display: inline-block; white-space: pre; }
 .half-cells { display: inline-block; overflow: hidden; vertical-align: top; white-space: pre; }
 .title-image, .title-image p { min-height: 0; line-height: 0; }
@@ -101,7 +115,7 @@ a { color: #8ddaff; }
 .screen.is-active .has-tooltip:hover .interactive-label, .screen.is-active .has-tooltip:focus-visible .interactive-label { text-decoration-color: #ddd; text-shadow: 0 0 4px currentColor; }
 .has-tooltip:focus-visible { outline: 1px dotted #aaa; outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { .has-tooltip, .line button.choice.has-tooltip, .has-tooltip .interactive-label { transition: none; } }
-#game-tooltip { position: fixed; z-index: 10; max-width: min(480px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow: auto; padding: 10px 12px; border: 1px solid #777; background: #181818; color: #fff; font-size: 14px; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; pointer-events: none; box-shadow: 0 3px 12px #000; }
+#game-tooltip { position: fixed; z-index: 10; inset: auto; margin: 0; max-width: min(480px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow: auto; padding: 10px 12px; border: 1px solid #777; background: #181818; color: #fff; font-size: 14px; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; pointer-events: none; box-shadow: 0 3px 12px #000; }
 /* Emuera images don't size their line: the holder is zero-height at the line top and the picture overflows below. */
 .sprite { display: inline-block; position: relative; height: 0; vertical-align: top; }
 .sprite-clip { position: absolute; left: 0; overflow: hidden; }
@@ -119,17 +133,17 @@ a { color: #8ddaff; }
 .shape-rect { position: relative; height: 1em; vertical-align: text-top; }
 .shape-rect > span { position: absolute; background: currentColor; }
 .missing { color: #ff9d9d; font-size: 12px; }
-#compatibility { border: 1px solid #444; padding: 16px; margin-top: 20px; font-size: 13px; overflow: auto; max-height: 65vh; }
+#compatibility { border: 1px solid #444; padding: 16px; margin: 20px 20px 0 0; font-size: 13px; overflow: auto; max-height: 65vh; }
 #compatibility h2 { font-size: 16px; }
 #compatibility table { border-collapse: collapse; width: 100%; }
 #compatibility td, #compatibility th { border-bottom: 1px solid #333; padding: 8px; text-align: left; vertical-align: top; white-space: pre-wrap; }
-#settings { border: 1px solid #444; padding: 16px; margin-top: 20px; font-size: 13px; color: #fff; background: #090909; font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace; }
+#settings { border: 1px solid #444; padding: 16px; margin: 20px 20px 0 0; font-size: 13px; color: #fff; background: #090909; font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace; }
 #settings h2 { font-size: 16px; margin-top: 0; }
 #settings-form { display: grid; grid-template-columns: max-content; gap: 10px; }
 #settings-form label { display: flex; gap: 10px; align-items: center; justify-content: space-between; }
 #settings-form input[type="text"] { background: #101010; border: 1px solid #555; padding: 3px 6px; width: 16em; }
 #settings-form input[type="color"] { background: none; border: 1px solid #555; padding: 0; width: 3em; height: 1.6em; }
-#input-form { order: 1; flex-shrink: 0; display: flex; align-items: center; gap: 10px; font-size: var(--font-size); line-height: 1.25; }
+#input-form { order: 1; flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding-right: 20px; font-size: var(--font-size); line-height: 1.25; }
 #input-form[hidden] { display: none; }
 #command { flex: 1; min-width: 0; background: transparent; border: 0; padding: 0; line-height: inherit; outline: none; }
 #submit { font-size: 12px; padding: 2px 8px; }
@@ -291,6 +305,37 @@ a { color: #8ddaff; }
 .era-card-title { display: flex; align-items: baseline; gap: 1ch; margin-bottom: 6px; color: #8fc8ff; font-weight: bold; }
 .era-sub { margin-left: 1.75ch; color: #888; font-weight: normal; font-size: .85em; }
 .era-funds { margin-left: auto; color: #ffd866; font-weight: normal; font-variant-numeric: tabular-nums; cursor: help; }
+.era-card-title button.era-see-more { align-self: center; padding: 1px 9px; border: 1px solid #2f4a63; border-radius: 999px; color: #8fc8ff; font-size: .8em; font-weight: normal; }
+.era-card-title button.era-see-more:enabled:hover { border-color: #8fc8ff; }
+/* Dialogs (era-dialog boxes) are shown by app.js as popovers in the top layer while their screen is active. */
+.era-dialog:popover-open { display: flex; flex-direction: column; width: min(calc(var(--logical-width, 1200px) + 64px), calc(100vw - 48px)); height: calc(100dvh - 48px); margin: auto; padding: 0;
+  overflow: hidden; border: 1px solid #2f4a63; border-radius: 12px; background: #0b0e11; color: var(--terminal-foreground); box-shadow: 0 12px 48px #000; }
+.era-dialog::backdrop { background: #000000b0; }
+.era-dialog > .line { flex: none; }
+.era-sheet-header { display: flex; flex-direction: column; gap: 8px; padding: 10px 16px 0; border-bottom: 1px solid #2a3138; background: #111518; }
+.era-sheet-people { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.line .era-sheet-people .era-sheet-person { padding: 3px 12px; border: 1px solid transparent; border-radius: 999px; color: #ddd; font-weight: bold; }
+.line .era-sheet-people .era-sheet-person.era-current { border-color: #2f4a63; background: #1b2a38; color: #8fc8ff; }
+.era-sheet-person .era-sub { margin-left: 1ch; }
+.line button.choice.era-sheet-step { padding: 0 8px; color: #8fc8ff; font-size: 1.3em; }
+.era-sheet-count { color: #888; font-size: .85em; }
+.line button.choice.era-dialog-close { margin-left: auto; padding: 0 10px; border-radius: 6px; color: #aaa; font-size: 1.5em; line-height: 1.2; }
+.era-sheet-pages { display: flex; flex-wrap: wrap; gap: 2px; }
+.line button.choice.era-sheet-page { padding: 6px 14px 7px; border-bottom: 2px solid transparent; color: #9aa5ad; }
+.line button.choice.era-sheet-page.era-current { border-bottom-color: #66ffff; color: #66ffff; }
+.era-sheet-body { flex: 1; min-height: 0; overflow: auto; padding: 10px 16px 16px; scrollbar-gutter: stable; }
+.era-sheet-body > * { min-width: var(--logical-width, 0); }
+/* BASIC_STATE opens every page with a heavy rule, which the header's border already draws. */
+.era-sheet-body > :nth-child(1 of .line:not(.era-marker)).single-line { display: none; }
+.era-sheet-footer { display: flex; justify-content: flex-end; gap: 3ch; padding: 10px 16px; border-top: 1px solid #2a3138; }
+.era-sheet-subpages { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 14px; }
+.line button.choice.era-sheet-subpage { padding: 2px 14px; border: 1px solid #2a3138; border-radius: 999px; color: #9aa5ad; }
+.line button.choice.era-sheet-subpage.era-current { border-color: #2f6060; background: #102a2c; color: #66ffff; }
+.era-sheet-bars { display: grid; grid-template-columns: repeat(2, 44ch); column-gap: 6ch; row-gap: 2px; margin: 4px 0 6px 2ch; }
+.era-sheet-bars .era-bar { grid-template-columns: 4ch minmax(0, 1fr) 13ch; }
+.era-bar-max { color: #7a848c; }
+.era-bar.era-buffed .era-bar-value { color: #0ff; }
+.era-bar.era-debuffed .era-bar-value { color: #ff0; }
 .era-empty { color: #777; font-style: italic; }
 .era-stats .era-section-title { display: none; }
 .era-stats .era-palam-grid { grid-template-columns: repeat(auto-fill, minmax(36ch, 1fr)); }
@@ -418,6 +463,8 @@ a { color: #8ddaff; }
 .era-character-state { color: #bbb; }
 /* The target's name (SHOW_EQUIP_2) in the card-title blue, unless the game colours it for their mood; species after it. */
 .era-character-state > .line:not(.era-marker) > .text-color-neutral:first-child { color: #8fc8ff; font-weight: bold; }
+.era-player-kind { margin: -4px 0 6px; color: #8a8a8a; font-size: .8em; }
+.era-player-kind .era-size.era-unusual { color: #ffd27f; }
 .era-race { margin-left: 1ch; color: #8a8a8a; font-size: .8em; font-weight: normal; }
 .era-facts { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 4px 0; }
 .era-fact-label { margin-right: .75ch; color: #8a949c; }

@@ -68,15 +68,27 @@ longer); hover it for the split between script time (server) and render time
   arithmetic, text input, single-character input (menu option 3), HTML choices, an external documentation link, a
   real cropped title-image resource from the local game, and animated sprites (menu option 4: a script-built
   `SPRITEANIMECREATE` animation and the game's CSV `ANIME` halo `30_BG1`).
-- **Bundled game**: execute the real `SYSTEM_TITLE` and display its menu.
-  This is the default and starts automatically on page load (including development
-  reloads). The selected run mode is marked in the menu; choosing either run item
-  starts a fresh run. While the compatibility panel is open, only its item is
-  marked; closing it restores the current run mode's mark.
+- **eraToho The World**: execute the real `SYSTEM_TITLE` and display its menu.
+  This is the default and starts automatically on page load. The selected run
+  mode is marked in the menu. Choosing the other run item switches to it, and
+  **Restart game…** (or **Restart demo…**) starts the current one afresh; both
+  ask for confirmation first while a run is in progress. While the compatibility
+  panel is open, only its item is marked; choosing the current run item, or
+  closing the panel, returns to the run.
   Invalid menu choices return to the menu; Start Game reaches custom-character
   creation, but later setup and Continue are not yet supported end to end.
 - **Compatibility report**: inspect unsupported instruction names, directives,
   duplicate function/event definitions, and loader diagnostics.
+
+**Reloading the page continues the current run.** The run lives on the server;
+the tab remembers its session in `sessionStorage`, and on reload asks
+`/api/resume` for the steps shown so far (up to the most recent 8 MB per run)
+and replays them, restoring the screen and the pending input without advancing
+the game. A run is lost, and a fresh one starts, when it has finished, has been
+idle for 30 minutes and been expired, or the server has restarted (including
+development reloads). Each response carries a step count that input requests
+echo back; if a duplicated tab has moved the same run on, the stale tab is
+refused (HTTP 409) and catches up by resuming.
 
 The interface uses the game's configured colors and font, scrollback, keyboard
 input, clickable choices, and a font-size slider in the menu. **Settings** edits the text,
@@ -118,12 +130,28 @@ fallback. Customize `--terminal-font` in `web/style.css` to change the font stac
 The game's configured window width (`ウィンドウ幅`, less Emuera's shape shift, in
 half-width cells of `フォントサイズ`; 149 columns for this game) is the minimum
 layout width: a narrower browser keeps that layout and scrolls the terminal
-sideways instead of squeezing lines the game expects to fit.
+sideways instead of squeezing lines the game expects to fit. The terminal's
+scrollbar sits in the page's right margin (`--scrollbar-width`, measured with the
+columns), so the text has the same space on both sides.
 With `ボタンの途中で行を折りかえさない` (ButtonWrap) on, a `PRINTC` item holding a
 numeric `[n]` button is laid out as one unbreakable fixed-width cell, so a row of
 them (like the game's command menu) wraps between items as Emuera does and lines
 up in columns: 5 per line at 149 columns with `PRINTCの文字数` 29. Wrapped rows are
 still one logical line for `LINECOUNT`.
+A line ending in a run of one rule character (`DRAWLINE`, or a heading padded with
+dashes to `DRAWLINESTR`'s width) is clipped rather than wrapped when it is wider
+than its box, e.g. after the window was made narrower or in a dialog. HTML keeps
+its leading spaces, as in Emuera, so tables built from padded `HTML_PRINT` rows
+line up.
+An HTML `<div>` with EM+EE sub-area attributes (`width`, `height`, `xpos`, `ypos`,
+`size`, `rect`, `depth`, `color`, `display`, `margin`, `padding`, `border`,
+`bcolor`, `radius`) is a box placed at the print position plus its offset,
+without taking room in the line, as in Emuera (the game prints blank lines
+under it, as for images); `display='absolute'` places it against the window's
+bottom-left. Games size these from the window width, so sub-areas and the
+images in them are scaled to the text columns (149 columns are 1200 px wide)
+rather than to the line height, keeping the Body page's layout within the
+column width.
 
 Browser snapshots are buffered: the previous completed display remains visible
 while clears, HTML and image decoding are prepared off-screen, then the finished

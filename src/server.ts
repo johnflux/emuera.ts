@@ -7,9 +7,11 @@ import { compatibility } from "./compatibility.js";
 import { demoGame } from "./demo.js";
 import { applyHotpatches, displayDefaults, displayMetrics, GAME_ROOT, loadGame, stillFrame, type DisplaySettings, type Game } from "./loader.js";
 import { EraError, key } from "./model.js";
-import { GAME_INSTRUCTION_LIMIT, Runtime } from "./runtime.js";
+import { GAME_INSTRUCTION_LIMIT, Runtime, type Snapshot } from "./runtime.js";
 import { FileGlobalStore, FileSaveStore, MemoryGlobalStore, MemorySaveStore, type GlobalStore, type SaveStore } from "./storage.js";
 import { patchTitleImage } from "./render-patches.js";
+
+type BrowserSnapshot = ReturnType<typeof patchTitleImage>;
 
 const WEB_ROOT = fileURLToPath(new URL("../web/", import.meta.url));
 /** Drop-in pictures that replace the game's text maps: web/maps/<map key>.(webp|svg|png|jpg) plus optional <key>.json. */
@@ -39,6 +41,19 @@ const mime: Record<string, string> = {
   ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".bmp": "image/bmp",
   ".ttf": "font/ttf", ".txt": "text/plain; charset=utf-8", ".svg": "image/svg+xml",
 };
+/** How the browser renders a step: a fresh run, after a submitted input, after a click-to-continue, or a timeout. */
+type Advance = "start" | "input" | "continue" | "timeout";
+interface Session {
+  runtime: Runtime;
+  used: number;
+  mode: "game" | "demo";
+  /** The delivered steps, oldest first, trimmed to HISTORY_BYTES. */
+  history: { advance: Advance; snapshot: BrowserSnapshot; bytes: number }[];
+  bytes: number;
+  /** Steps delivered so far (not trimmed), so a stale tab's input can be refused. */
+  step: number;
+}
+const HISTORY_BYTES = 8 * 1024 * 1024;
 class HttpError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
@@ -97,7 +112,20 @@ function displaySettings(value: unknown): Partial<DisplaySettings> | undefined {
 export function createApp(game: Game, development = false, store: GlobalStore = game.root
   ? new FileGlobalStore(path.join(game.root, ".era-typescript", "global.json")) : new MemoryGlobalStore(),
   saves: SaveStore = game.root ? new FileSaveStore(path.join(game.root, ".era-typescript", "saves")) : new MemorySaveStore()) {
-  const sessions = new Map<string, { runtime: Runtime; used: number }>();
+  const sessions = new Map<string, Session>();
+  /** Delivers a step's snapshot and records it so a reloaded page can replay the run (see /api/resume). */
+  function deliver(response: ServerResponse, id: string, session: Session | undefined, advance: Advance, snapshot: Snapshot): void {
+    const patched = patchTitleImage(game, snapshot);
+    if (session) {
+      session.step++;
+      const bytes = JSON.stringify(patched).length;
+      session.history.push({ advance, snapshot: patched, bytes });
+      session.bytes += bytes;
+      // The oldest steps go first; the browser keeps a bounded scrollback anyway.
+      while (session.bytes > HISTORY_BYTES && session.history.length > 1) session.bytes -= session.history.shift()!.bytes;
+    }
+    json(response, { session: id, step: session?.step ?? 0, ...patched });
+  }
   const report = compatibility(game);
   const demo = demoGame(game);
   const instance = randomUUID();
@@ -136,8 +164,10 @@ export function createApp(game: Game, development = false, store: GlobalStore = 
             ...(display ? { display } : {}),
           });
           const snapshot = runtime.start();
-          if (snapshot.status === "waiting") sessions.set(id, { runtime, used: now });
-          json(response, { session: id, ...patchTitleImage(game, snapshot) });
+          const session: Session | undefined = snapshot.status === "waiting"
+            ? { runtime, used: now, mode: data.mode, history: [], bytes: 0, step: 0 } : undefined;
+          if (session) sessions.set(id, session);
+          deliver(response, id, session, "start", snapshot);
         } catch (error) {
           if (!(error instanceof EraError)) throw error;
           json(response, { session: id, status: "error", output: [], input: null, error: error.diagnostic() });
@@ -153,17 +183,30 @@ export function createApp(game: Game, development = false, store: GlobalStore = 
         const display = displaySettings(data.display);
         const session = sessions.get(data.session);
         if (!session) throw new HttpError(404, "Session expired or does not exist; start a new run");
+        // Another tab (a duplicate of this one) has moved the run on; this page must resume to catch up.
+        if (data.step !== undefined && data.step !== session.step) throw new HttpError(409, "This run was continued in another tab");
         session.used = Date.now();
         try {
           if (typeof data.columns === "number") session.runtime.setColumns(data.columns);
           if (display) session.runtime.setDisplay(display);
+          const waiting = session.history.at(-1)?.snapshot.input?.kind === "wait";
           const snapshot = timeout ? session.runtime.timeout() : session.runtime.input(data.value as string);
           if (snapshot.status !== "waiting") sessions.delete(data.session);
-          json(response, { session: data.session, ...patchTitleImage(game, snapshot) });
+          deliver(response, data.session, session, timeout ? "timeout" : waiting ? "continue" : "input", snapshot);
         } catch (error) {
           if (!(error instanceof EraError)) throw error;
           throw new HttpError(400, error.message);
         }
+        return;
+      }
+      if (request.method === "POST" && url.pathname === "/api/resume") {
+        // Lets a reloaded page reattach to its still-running session: replays what was shown, without advancing it.
+        const data = await body(request);
+        if (typeof data.session !== "string") throw new HttpError(400, "Expected a session string");
+        const session = sessions.get(data.session);
+        if (!session) throw new HttpError(404, "Session expired or does not exist; start a new run");
+        session.used = Date.now();
+        json(response, { session: data.session, mode: session.mode, step: session.step, history: session.history.map(({ advance, snapshot }) => ({ advance, snapshot })) });
         return;
       }
       if (request.method === "POST" && url.pathname === "/api/prefetch") {

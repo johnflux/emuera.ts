@@ -9,8 +9,24 @@ const tooltip = document.querySelector("#game-tooltip");
 let tooltipTarget = null;
 const translation = createTranslation({ onChange: (status) => showTranslation(status) });
 const startButtons = [document.querySelector("#demo"), document.querySelector("#game")];
+const restartButton = document.querySelector("#restart");
+const GAME_TITLE = "eraToho The World";
 let runMode = "game";
 let session = null;
+/** Steps the server has delivered for this session; sent with input so a stale duplicate tab is refused. */
+let step = 0;
+// The running session survives a page reload through this tab's sessionStorage (see resume()).
+const RUN_KEY = "era-typescript.run";
+function savedRun() {
+  try {
+    const run = JSON.parse(sessionStorage.getItem(RUN_KEY) ?? "null");
+    return typeof run?.session === "string" && (run.mode === "game" || run.mode === "demo") ? run : null;
+  } catch { return null; }
+}
+function rememberRun() {
+  if (session && input) sessionStorage.setItem(RUN_KEY, JSON.stringify({ session, mode: runMode }));
+  else sessionStorage.removeItem(RUN_KEY);
+}
 let input = null;
 let busy = false;
 let timedWait = null;
@@ -75,7 +91,8 @@ const settingsLoaded = (async () => {
   } catch { /* the development watcher reports connection errors */ }
 })();
 new ResizeObserver(() => {
-  if (input && !busy) lastOutputLine()?.scrollIntoView({ block: "nearest" });
+  // scrollIntoView would also scroll an open dialog's body to its end.
+  if (input && !busy && !terminal.querySelector(".era-dialog:popover-open")) lastOutputLine()?.scrollIntoView({ block: "nearest" });
 }).observe(terminal);
 
 async function watchDevelopment() {
@@ -123,7 +140,7 @@ async function api(url, data) {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data),
   });
   const result = await response.json();
-  if (!response.ok) throw new Error(result.error ?? `HTTP ${response.status}`);
+  if (!response.ok) throw Object.assign(new Error(result.error ?? `HTTP ${response.status}`), { status: response.status });
   return result;
 }
 // Activity feedback: the cursor changes at once; the progress bar and timer fade in
@@ -178,6 +195,7 @@ function updateControls() {
     ? input.kind === "integer" ? "Type one digit (no Enter needed)" : "Type one character (no Enter needed)"
     : input.kind === "integer" ? "Enter a whole number" : input.kind === "wait" ? "Press Enter to continue" : "Enter text";
   startButtons.forEach((button) => { button.setAttribute("aria-disabled", String(busy)); });
+  restartButton.setAttribute("aria-disabled", String(busy));
   document.querySelector("#input-form").hidden = !input;
   terminal.querySelectorAll("button.choice").forEach((button) => {
     button.disabled = !button.closest(".screen.is-active") || button.classList.contains("is-stale") || (busy && !expiring) || !input || input.kind === "wait" || !!input.blocking;
@@ -274,6 +292,7 @@ function hideTooltip() {
   tooltipTarget?.removeAttribute("aria-describedby");
   tooltipTarget = null;
   tooltip.hidden = true;
+  if (tooltip.matches(":popover-open")) tooltip.hidePopover();
   tooltip.textContent = "";
 }
 /** An element's box including any pictures inside it, which overflow their zero-height line. */
@@ -296,6 +315,8 @@ function describe(element, description) {
     tooltipTarget = element;
     tooltip.textContent = translation.text(description, (text) => { if (tooltipTarget === element) tooltip.textContent = text; });
     tooltip.hidden = false;
+    // In the top layer, so it shows above an open dialog.
+    if (tooltip.popover && !tooltip.matches(":popover-open")) tooltip.showPopover();
     element.setAttribute("aria-describedby", tooltip.id);
     const anchor = visibleBox(element);
     const box = tooltip.getBoundingClientRect();
@@ -315,6 +336,37 @@ function describe(element, description) {
   element.addEventListener("blur", () => { if (tooltipTarget === element) hideTooltip(); });
 }
 document.addEventListener("keydown", (event) => { if (event.key === "Escape") hideTooltip(); });
+/**
+ * Hotpatch extension: a box with the era-dialog class shows as a modal panel in the top layer while its screen is
+ * active, and is hidden once the screen is history. It stays in place in the output, so line counting is unchanged.
+ * Escape or a click outside the panel presses its .era-dialog-close button.
+ */
+function syncDialogs() {
+  for (const dialog of terminal.querySelectorAll(".era-dialog")) {
+    if (!dialog.popover) dialog.popover = "manual";
+    const open = !!dialog.closest(".screen.is-active");
+    if (open === dialog.matches(":popover-open")) continue;
+    if (open) dialog.showPopover();
+    else dialog.hidePopover();
+  }
+}
+function dialogClose(dialog) {
+  return dialog.querySelector(".era-dialog-close:enabled");
+}
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape" || event.defaultPrevented) return;
+  const dialog = outputRoot.querySelector(".screen.is-active .era-dialog:popover-open");
+  const close = dialog && dialogClose(dialog);
+  if (!close) return;
+  event.preventDefault();
+  close.click();
+});
+// Backdrop clicks target the root element rather than the popover.
+document.addEventListener("click", (event) => {
+  if (!event.detail || event.target !== document.documentElement) return;
+  const dialog = outputRoot.querySelector(".screen.is-active .era-dialog:popover-open");
+  if (dialog) dialogClose(dialog)?.click();
+});
 document.addEventListener("scroll", hideTooltip, true);
 window.addEventListener("resize", hideTooltip);
 function line() {
@@ -332,6 +384,9 @@ function line() {
  * the runtime counts every HTML_PRINT as one.
  */
 const boxMarker = /^\s*<era-(open|close)(?:\s+class\s*=\s*(?:'([^']*)'|"([^"]*)"))?\s*\/?>\s*$/i;
+// A line ending in a run of one rule character (DRAWLINE, or a "□ Title □-----" heading padded to the width) is
+// clipped rather than wrapped when it is wider than its box, e.g. after the window was made narrower.
+const ruleTail = /([-─━═=＝～~_])\1{9,}$/u;
 /** The innermost box still open in the current screen, or the screen. */
 function container() {
   let parent = screen();
@@ -486,6 +541,12 @@ function imageScale() {
   const style = getComputedStyle(terminal);
   const lineHeight = Number.parseFloat(style.lineHeight);
   return (Number.isFinite(lineHeight) ? lineHeight : Number.parseFloat(style.fontSize) * 1.25) / metrics.lineHeight;
+}
+/** CSS pixels per Emuera pixel across the line: a column is half the configured font size wide in Emuera. */
+function columnScale() {
+  const width = Number.parseFloat(getComputedStyle(terminal).getPropertyValue("--logical-width"));
+  const columns = Math.max(20, Math.min(1000, metrics.columns));
+  return Number.isFinite(width) && width > 0 ? width / (columns * metrics.fontSize / 2) : imageScale();
 }
 function sizeAttribute(value, fallback, scale) {
   if (value === null) return fallback;
@@ -862,17 +923,61 @@ function meter(node) {
   element.append(fill);
   return element;
 }
+/**
+ * Emuera EM+EE <div> sub-area: drawn at the current print position, offset by xpos/ypos, without taking room in the
+ * line (scripts print blank lines to make room, as for images). Sizes are px or percentages of the font size.
+ * Games lay sub-areas out against the window width, so they and their images use the column scale: the layout then
+ * spans the same columns as in Emuera even though our lines are taller.
+ */
+const subareaAttributes = ["width", "height", "xpos", "ypos", "size", "rect", "depth", "color", "display", "margin", "padding", "border", "bcolor", "radius"];
+function subarea(node, scale) {
+  const size = (value) => sizeAttribute(value, 0, scale);
+  const list = (name, count = 4) => {
+    const value = node.getAttribute(name);
+    if (value === null) return null;
+    const parts = value.split(",");
+    if (parts.length > count) throw new Error(`Unsupported div ${name}: ${value}`);
+    return parts.map((part) => size(part));
+  };
+  const box = (name) => list(name)?.map((part) => `${Math.max(0, part)}px`).join(" ");
+  const rect = list("rect"), pair = list("size", 2);
+  const [x, y, width, height] = rect?.length === 4 ? rect : [
+    size(node.getAttribute("xpos")), size(node.getAttribute("ypos")),
+    pair?.[0] ?? size(node.getAttribute("width")), pair?.[1] ?? size(node.getAttribute("height")),
+  ];
+  const anchor = document.createElement("span");
+  anchor.className = "subarea-anchor";
+  const area = document.createElement("div");
+  area.className = "subarea";
+  const absolute = node.getAttribute("display")?.toLowerCase() === "absolute";
+  if (absolute) anchor.classList.add("subarea-fixed");
+  Object.assign(area.style, {
+    left: `${x}px`, [absolute ? "bottom" : "top"]: `${y}px`, width: `${Math.max(0, width)}px`, height: `${Math.max(0, height)}px`,
+    margin: box("margin") ?? "", padding: box("padding") ?? "", borderWidth: box("border") ?? "", borderRadius: box("radius") ?? "",
+  });
+  const depth = Number(node.getAttribute("depth") ?? 0);
+  if (Number.isFinite(depth) && depth) area.style.zIndex = String(-Math.trunc(depth));
+  const colour = /^(?:#[0-9a-f]{6}|[a-z]+)$/i;
+  const background = node.getAttribute("color");
+  if (background && colour.test(background)) area.style.background = background;
+  const borderColours = node.getAttribute("bcolor")?.split(",").map((part) => part.trim());
+  if (borderColours?.length && borderColours.length <= 4 && borderColours.every((part) => colour.test(part))) area.style.borderColor = borderColours.join(" ");
+  anchor.append(area);
+  anchor.subareaContent = area;
+  return anchor;
+}
 async function renderHtml(markup, parent, sprites) {
   // Parse inertly, then rebuild an allowlisted DOM. Never attach game HTML directly.
-  const documentNode = new DOMParser().parseFromString(markup, "text/html");
+  // The explicit <body> keeps leading spaces, which the parser otherwise drops before the body starts (Emuera keeps them).
+  const documentNode = new DOMParser().parseFromString(`<body>${markup}`, "text/html");
   if (documentNode.head.children.length)
     throw new Error(`Unsupported HTML tag: <${documentNode.head.firstElementChild.tagName.toLowerCase()}>`);
   const token = generation;
-  async function copy(node, destination) {
+  async function copy(node, destination, scale) {
     if (node.nodeType === Node.TEXT_NODE) { destination.append(document.createTextNode(node.textContent)); return; }
     if (!(node instanceof Element)) return;
     let element;
-    if (node.tagName === "IMG") element = await image(node, token, sprites?.[node.getAttribute("src")], undefined, sprites?.[node.getAttribute("srcb")]);
+    if (node.tagName === "IMG") element = await image(node, token, sprites?.[node.getAttribute("src")], scale, sprites?.[node.getAttribute("srcb")]);
     else if (node.tagName === "SHAPE") {
       const type = node.getAttribute("type")?.toLowerCase();
       const fontSize = Number.parseFloat(getComputedStyle(terminal).fontSize);
@@ -897,6 +1002,7 @@ async function renderHtml(markup, parent, sprites) {
       } else throw new Error(`Unsupported HTML shape: ${type} ${node.getAttribute("param")}`);
     }
     else if (node.tagName === "METER") element = meter(node);
+    else if (node.tagName === "DIV" && subareaAttributes.some((name) => node.hasAttribute(name))) element = subarea(node, scale = columnScale());
     else if (node.tagName === "BUTTON") {
       const value = node.getAttribute("value");
       if (value !== null) element = choice("", value, node.getAttribute("title") ?? "");
@@ -930,9 +1036,9 @@ async function renderHtml(markup, parent, sprites) {
     const title = node.getAttribute("title");
     if (title && !element.dataset.tooltip) describe(element, title);
     destination.append(element);
-    if (node.tagName !== "IMG" && node.tagName !== "METER") for (const child of node.childNodes) await copy(child, node.tagName === "SHAPE" ? destination : element);
+    if (node.tagName !== "IMG" && node.tagName !== "METER") for (const child of node.childNodes) await copy(child, node.tagName === "SHAPE" ? destination : element.subareaContent ?? element, scale);
   }
-  for (const child of documentNode.body.childNodes) await copy(child, parent);
+  for (const child of documentNode.body.childNodes) await copy(child, parent, undefined);
   parent.querySelectorAll("button.choice, .has-tooltip").forEach(decorateLabel);
 }
 // A browser's page translator (Chrome/Edge mark <html> with translated-ltr/-rtl and wrap
@@ -941,7 +1047,11 @@ async function renderHtml(markup, parent, sprites) {
 function pageTranslated() {
   return /\btranslated-(ltr|rtl)\b/.test(document.documentElement.className) || terminal.querySelector("font") !== null;
 }
-async function render(snapshot, advanceScreen = false, fresh = false, keepFocus = false, toBottom = fresh) {
+function render(snapshot, advanceScreen = false, fresh = false, keepFocus = false, toBottom = fresh) {
+  return renderSteps([{ snapshot, advanceScreen }], fresh, keepFocus, toBottom);
+}
+/** Renders steps in order and shows the result at once; several steps rebuild a reloaded run's output. */
+async function renderSteps(steps, fresh = false, keepFocus = false, toBottom = fresh) {
   const scrollTop = terminal.scrollTop;
   const followBottom = toBottom || terminal.scrollHeight - terminal.clientHeight - scrollTop < 2;
   const live = pageTranslated();
@@ -958,17 +1068,19 @@ async function render(snapshot, advanceScreen = false, fresh = false, keepFocus 
     });
     staged.append(...terminal.childNodes);
     terminal.replaceChildren(...visible.childNodes);
+    syncDialogs();
   }
   outputRoot = staged;
   pendingImages = [];
   terminal.setAttribute("aria-busy", "true");
   try {
-    await renderSnapshot(snapshot, advanceScreen);
+    for (const { snapshot, advanceScreen } of steps) await renderSnapshot(snapshot, advanceScreen);
     await Promise.all(pendingImages);
   } finally {
     if (!live) terminal.replaceChildren(...staged.childNodes);
     outputRoot = terminal;
     pendingImages = [];
+    syncDialogs();
     layoutMapPictures();
     markMapLabels();
     translation.translateTree(terminal);
@@ -1008,9 +1120,9 @@ async function expire() {
   busy = true;
   expiring = true;
   try {
-    const snapshot = await api("/api/timeout", { session, columns: terminalColumns(), display: displaySettings() });
+    const snapshot = await api("/api/timeout", { session, step, columns: terminalColumns(), display: displaySettings() });
     if (current === generation) await render(snapshot, false, false, true);
-  } catch (error) { message(error.message, true); }
+  } catch (error) { if (!staleTab(error)) message(error.message, true); }
   finally {
     busy = false;
     expiring = false;
@@ -1118,7 +1230,7 @@ async function renderSnapshot(snapshot, advanceScreen) {
         if (i) currentLine = null;
         const textLine = line();
         applyLineStyle(textLine, output.style);
-        if (output.single) textLine.classList.add("single-line");
+        if (output.single || ruleTail.test(parts[i])) textLine.classList.add("single-line");
         const fragment = document.createElement("span");
         applyStyle(fragment, output.style);
         // A PRINTC button item is padded to a fixed width and wraps only as a whole, so a row of them lines up like a grid.
@@ -1171,6 +1283,8 @@ async function renderSnapshot(snapshot, advanceScreen) {
   }
   session = snapshot.session;
   input = snapshot.input;
+  if (snapshot.step !== undefined) step = snapshot.step;
+  rememberRun();
   if (snapshot.error) {
     const { file, line: sourceLine, message: reason, trace = [] } = snapshot.error;
     message(`Stopped at ${file}:${sourceLine}: ${reason}`, true);
@@ -1199,6 +1313,7 @@ function showReport(visible) {
   document.querySelector("#report").setAttribute("aria-expanded", String(visible));
   startButtons[0].setAttribute("aria-pressed", String(!visible && runMode === "demo"));
   startButtons[1].setAttribute("aria-pressed", String(!visible && runMode === "game"));
+  restartButton.textContent = runMode === "demo" ? "Restart demo…" : "Restart game…";
 }
 function terminalColumns() {
   const probe = document.createElement("span");
@@ -1210,7 +1325,11 @@ function terminalColumns() {
   // The game's configured window width is the narrowest layout; a thinner browser scrolls sideways instead.
   const minimum = Math.max(20, Math.min(1000, metrics.columns));
   terminal.style.setProperty("--logical-width", `${Math.ceil(minimum * cellWidth)}px`);
-  return Math.max(minimum, Math.min(1000, Math.floor(terminal.clientWidth / cellWidth)));
+  // The scrollbar sits in main's right padding (see --scrollbar-width in style.css).
+  terminal.style.setProperty("--scrollbar-width", `${terminal.offsetWidth - terminal.clientWidth}px`);
+  const style = getComputedStyle(terminal);
+  const width = terminal.clientWidth - Number.parseFloat(style.paddingLeft) - Number.parseFloat(style.paddingRight);
+  return Math.max(minimum, Math.min(1000, Math.floor(width / cellWidth)));
 }
 /**
  * A click (or Enter) made while a step is running continues the next wait, so clicking ahead isn't lost.
@@ -1231,28 +1350,36 @@ function runQueuedContinue() {
     void fetch("/api/prefetch", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ session }) }).catch(() => {});
   }
 }
-async function start(mode) {
-  if (busy) return;
+/** Waits for the settings and the terminal font, which terminal measurements depend on. */
+async function terminalReady() {
+  await settingsLoaded;
+  await document.fonts.load(`${getComputedStyle(terminal).fontSize} "BIZ UD Gothic"`);
+  if (!document.fonts.check(`${getComputedStyle(terminal).fontSize} "BIZ UD Gothic"`))
+    throw new Error("The bundled terminal font could not be loaded.");
+}
+/** Clears the run's client state before a new or resumed run is shown. */
+function resetRun() {
   continueQueued = false;
-  runMode = mode;
-  showReport(false);
   hideTooltip();
   busy = true;
   input = null;
   clearTimedWait();
   generation++;
   updateControls();
-  message(`Starting ${mode === "demo" ? "conformance demo" : "bundled game"}...`);
   beginActivity();
   currentScreen = null;
   continuedScreens = [];
   command.value = "";
   currentLine = null;
+}
+async function start(mode) {
+  if (busy) return;
+  runMode = mode;
+  showReport(false);
+  resetRun();
+  message(`Starting ${mode === "demo" ? "conformance demo" : GAME_TITLE}...`);
   try {
-    await settingsLoaded;
-    await document.fonts.load(`${getComputedStyle(terminal).fontSize} "BIZ UD Gothic"`);
-    if (!document.fonts.check(`${getComputedStyle(terminal).fontSize} "BIZ UD Gothic"`))
-      throw new Error("The bundled terminal font could not be loaded.");
+    await terminalReady();
     const columns = terminalColumns();
     const snapshot = await api("/api/start", { mode, previousSession: session, columns, display: displaySettings() });
     activityResponded();
@@ -1260,6 +1387,45 @@ async function start(mode) {
   }
   catch (error) { message(error.message, true); }
   finally { busy = false; endActivity(); updateControls(); if (input) command.focus({ preventScroll: true }); runQueuedContinue(); }
+}
+/**
+ * Reattaches to a session still running on the server (after a page reload, or when another tab moved it on) by
+ * replaying the steps it has shown. Returns false if the session is gone, e.g. expired or the server restarted.
+ */
+async function resume(id) {
+  if (busy) return false;
+  resetRun();
+  message("Restoring the current run...");
+  let restored = false;
+  try {
+    await terminalReady();
+    const data = await api("/api/resume", { session: id });
+    activityResponded();
+    runMode = data.mode;
+    showReport(false);
+    const advance = { start: false, timeout: false, continue: "continue", input: true };
+    await renderSteps(data.history.map(({ advance: how, snapshot }, i) =>
+      ({ snapshot: { ...snapshot, session: id }, advanceScreen: i === 0 ? false : advance[how] })), true);
+    step = data.step;
+    restored = true;
+  } catch (error) {
+    if (error.status !== 404) message(`Could not restore the current run: ${error.message}`, true);
+  } finally {
+    busy = false;
+    endActivity();
+    updateControls();
+    if (input) command.focus({ preventScroll: true });
+    if (restored) runQueuedContinue();
+  }
+  return restored;
+}
+/** A 409 means a duplicate of this tab continued the run; catch up with it instead of reporting an error. */
+function staleTab(error) {
+  if (error.status !== 409) return false;
+  const id = session;
+  // After the caller's finally block has cleared busy.
+  setTimeout(() => { void resume(id).then((ok) => { if (ok) message("This run was continued in another tab; caught up with it."); }); });
+  return true;
 }
 async function submit(value, selectedChoice = null) {
   // Input made while an animation frame is loading is sent once that frame is shown.
@@ -1276,13 +1442,13 @@ async function submit(value, selectedChoice = null) {
   beginActivity();
   updateControls();
   try {
-    const snapshot = await api("/api/input", { session, value, columns: terminalColumns(), display: displaySettings() });
+    const snapshot = await api("/api/input", { session, step, value, columns: terminalColumns(), display: displaySettings() });
     activityResponded();
     selectedChoice?.classList.add("is-selected");
     command.value = "";
     // Anything the player sends (typed or clicked) jumps to the newest output.
     await render(snapshot, waiting ? "continue" : true, false, false, true);
-  } catch (error) { message(error.message, true); }
+  } catch (error) { if (!staleTab(error)) message(error.message, true); }
   finally {
     busy = false;
     pending?.classList.remove("is-pending");
@@ -1455,8 +1621,43 @@ document.addEventListener("keydown", (event) => {
     setMenu(false, { restoreFocus: true });
   }
 }, true);
-startButtons[0].addEventListener("click", () => { void start("demo"); });
-startButtons[1].addEventListener("click", () => { void start("game"); });
+const confirmation = document.querySelector("#confirm");
+/** Asks with the confirmation dialog; resolves true only if the action button was chosen. */
+function confirmAction(title, text, action) {
+  confirmation.querySelector("#confirm-title").textContent = title;
+  confirmation.querySelector("#confirm-text").textContent = text;
+  confirmation.querySelector("#confirm-ok").textContent = action;
+  confirmation.returnValue = "";
+  confirmation.showModal();
+  return new Promise((resolve) => {
+    confirmation.addEventListener("close", () => {
+      resolve(confirmation.returnValue === "ok");
+      if (input) command.focus({ preventScroll: true });
+    }, { once: true });
+  });
+}
+// A click on the backdrop (outside the dialog box) cancels.
+confirmation.addEventListener("click", (event) => { if (event.target === confirmation) confirmation.close(); });
+// Escape cancels natively, but some embedded browsers (VS Code's) swallow it before the dialog sees it.
+confirmation.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") return;
+  event.preventDefault();
+  confirmation.close();
+});
+function runName(mode) { return mode === "demo" ? "the conformance demo" : GAME_TITLE; }
+/** Starting a run discards one in progress, so that is confirmed first. */
+async function chooseRun(mode) {
+  if (busy) return;
+  const active = !!(session && input);
+  if (active && mode === runMode && !report.hidden) { showReport(false); return; }
+  if (active && !await confirmAction(mode === runMode ? `Restart ${runName(mode)}?` : `Switch to ${runName(mode)}?`,
+    `Progress in the current run of ${runName(runMode)} that has not been saved in the game will be lost.`,
+    mode === runMode ? "Restart" : "Switch")) return;
+  void start(mode);
+}
+startButtons[0].addEventListener("click", () => { void chooseRun("demo"); });
+startButtons[1].addEventListener("click", () => { void chooseRun("game"); });
+restartButton.addEventListener("click", () => { void chooseRun(runMode); });
 document.querySelector("#font-size").addEventListener("input", (event) => {
   updateSetting("fontSize", Number(event.target.value));
 });
@@ -1500,7 +1701,7 @@ document.querySelector("#report").addEventListener("click", async () => {
     const data = await api("/api/compatibility");
     report.replaceChildren();
     const heading = document.createElement("h2");
-    heading.textContent = "Bundled game: compatibility inventory";
+    heading.textContent = `${GAME_TITLE}: compatibility inventory`;
     const summary = document.createElement("p");
     summary.textContent = `${data.scriptFiles} scripts / ${data.functions} functions / ${data.csvTables} CSV tables / ${data.sprites} sprites`;
     const note = document.createElement("p");
@@ -1525,4 +1726,10 @@ document.querySelector("#report").addEventListener("click", async () => {
     report.scrollIntoView({ block: "start" });
   } catch (error) { message(error.message, true); }
 });
-void start("game");
+// A reload reattaches to this tab's run if the server still has it; otherwise a fresh game starts.
+void (async () => {
+  const saved = savedRun();
+  if (saved && await resume(saved.session)) return;
+  await start(saved?.mode ?? "game");
+  if (saved && session) message(`The previous run had ended or expired (or the server restarted), so a new run started. ${status.textContent}`);
+})();

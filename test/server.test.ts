@@ -73,7 +73,7 @@ test("HTTP UI, isolated sessions, real image bytes, sprite metadata, errors and 
       method: "POST", headers: { "Content-Type": "application/json", ...headers }, body: JSON.stringify(data),
     });
     const page = await fetch(base);
-    assert.match(await page.text(), /id="game"[^>]*>Bundled game</);
+    assert.match(await page.text(), /id="game"[^>]*>eraToho The World</);
     assert.match(page.headers.get("content-security-policy")!, /script-src 'self'/);
     const font = await fetch(base + "/fonts/BIZUDGothic-Regular.ttf");
     assert.equal(font.status, 200);
@@ -108,12 +108,23 @@ test("HTTP UI, isolated sessions, real image bytes, sprite metadata, errors and 
     for (const columns of [0, 1001, 1.5, "120"]) {
       assert.equal((await post("/api/input", { session: session.session, value: "17", columns })).status, 400);
     }
-    const resumed = await (await post("/api/input", { session: session.session, value: "17", columns: 90, display: { foreground: "#ABCDEF" } })).json();
+    assert.equal(session.step, 1);
+    const restored = await (await post("/api/resume", { session: session.session })).json();
+    assert.equal(restored.mode, "game");
+    assert.equal(restored.step, 1);
+    assert.deepEqual(restored.history.map((entry: { advance: string }) => entry.advance), ["start"]);
+    assert.deepEqual(restored.history[0].snapshot.input, session.input);
+    assert.equal((await post("/api/input", { session: session.session, step: 0, value: "17" })).status, 409);
+    assert.equal((await post("/api/resume", { session: "missing" })).status, 404);
+    assert.equal((await post("/api/resume", {})).status, 400);
+    const resumed = await (await post("/api/input", { session: session.session, step: 1, value: "17", columns: 90, display: { foreground: "#ABCDEF" } })).json();
     assert.equal(resumed.status, "halted");
+    assert.equal(resumed.step, 2);
     assert.equal(resumed.output[0].text, "17");
     assert.equal(resumed.output[0].style.color, "#abcdef");
     assert.equal(resumed.output[2].text, "-".repeat(90));
     assert.equal((await post("/api/input", { session: session.session, value: "0" })).status, 404);
+    assert.equal((await post("/api/resume", { session: session.session })).status, 404);
     const sprite = await (await fetch(base + "/api/sprite?name=pixel")).json();
     assert.equal(sprite.url, "/resources/pixel.png");
     const image = await fetch(base + sprite.url);
@@ -140,6 +151,11 @@ test("HTTP UI, isolated sessions, real image bytes, sprite metadata, errors and 
     const menu = await (await post("/api/input", { session: demo.session, value: "x" })).json();
     assert.ok(menu.output.some((item: { text?: string }) => item.text === "Received character: x"));
     assert.deepEqual(menu.input, { kind: "integer" });
+    const demoRun = await (await post("/api/resume", { session: demo.session })).json();
+    assert.equal(demoRun.mode, "demo");
+    assert.equal(demoRun.step, 5);
+    assert.deepEqual(demoRun.history.map((entry: { advance: string }) => entry.advance), ["start", "input", "input", "input", "input"]);
+    assert.deepEqual(demoRun.history.at(-1).snapshot.output, menu.output);
   } finally {
     if (app.listening) await new Promise<void>((resolve, reject) => app.close((error) => error ? reject(error) : resolve()));
     await rm(root, { recursive: true });

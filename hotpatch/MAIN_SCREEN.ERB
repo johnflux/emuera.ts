@@ -9,7 +9,7 @@
 ; date, weather, situation, place, states and counters, and HOTPATCH_* rewrites of INFO_TARGET_BUTTON, INFO_BASE,
 ; INFO_EMOTION, INFO_TARGET_SITUATION and INFO_TIMESTOP that keep their rules and side effects (TFLAG:102,
 ; TFLAG:パンツ収奪, 押し倒され) but print HTML. Dropped: the clock's line-wrapping width, the [Status] collapse
-; toggle [3001] (always expanded) and [Abilities Display] [803] (in the menu as Abilities).
+; toggle [3001] (always expanded) and [Abilities Display] [803] (now the "See more" button on your card).
 ;-------------------------------------------------------------------------------
 @SHOW_STATUS
 #DIM 天気非表示
@@ -194,7 +194,8 @@ HTML_PRINT "<era-close>"
 HTML_PRINT "<era-open class='era-main-right'>"
 HTML_PRINT "<era-open class='era-card era-player'>"
 LOCALS '= "Funds" + COND_STR(@"&#10;Charisma: %DIGIT_GROUP(MONEY:2)% CM", MONEY:2) + COND_STR(@"&#10;Bullet Money: %DIGIT_GROUP(MONEY:弾貨)% BM", MONEY:弾貨)
-HTML_PRINT @"<div class='era-card-title'>%HTML_ESCAPE(CALLNAME:MASTER)%<span class='era-sub'>You</span><span class='era-funds' title='%LOCALS%'>%HTML_ESCAPE(金額表示(MONEY))%</span></div>"
+HTML_PRINT @"<div class='era-card-title'>%HTML_ESCAPE(CALLNAME:MASTER)%<span class='era-sub'>You</span><button value='803' class='era-see-more' title='Abilities, experience, personal info and more, for you and everyone here'>See more</button><span class='era-funds' title='%LOCALS%'>%HTML_ESCAPE(金額表示(MONEY))%</span></div>"
+HTML_PRINT HOTPATCH_PLAYER_KIND()
 CALL HOTPATCH_BASE(MASTER)
 CALL HOTPATCH_PLAYER_STATUS
 CALL SHOW_EQUIP_SP
@@ -220,6 +221,27 @@ SIF REFRESH_STATUS() ;Custom code, cycle again if nRefreshStatus is set to 1.
 ;-------------------------------------------------------------------------------
 ; INFO_TARGET_DATAGROUP without its display: the display moved to the occupant list and the character card.
 ;-------------------------------------------------------------------------------
+;-------------------------------------------------------------------------------
+; The player card's race and body size (TALENT 体型: the race talents and size names of the sheet's Personality
+; section, where a normal size has no name). Sizes other than normal are highlighted.
+;-------------------------------------------------------------------------------
+@HOTPATCH_PLAYER_KIND()
+#FUNCTIONS
+#DIMS DYNAMIC sRace
+#DIMS DYNAMIC sSize
+sRace '= GET_CHARA_TALENT_BY_CATEGORY_TR(MASTER, "RACE")
+sRace '= REPLACE(sRace, "＠$", "")
+sRace '= REPLACE(sRace, "＠", " · ")
+sSize '= GET_TALENTNAME_TR(GETNUM(TALENT, "体型"), TALENT:MASTER:体型)
+IF STRLENS(sSize)
+	sSize '= @"<span class='era-size era-unusual' title='Body size; a mallet can change it'>%HTML_ESCAPE(sSize)%</span>"
+ELSE
+	sSize '= "<span class='era-size' title='Body size; a mallet can change it'>Normal size</span>"
+ENDIF
+SIF STRLENS(sRace)
+	sRace '= @"<span class='era-player-race'>%HTML_ESCAPE(sRace)%</span><span class='era-sep'> · </span>"
+RETURNF @"<div class='era-player-kind'>%sRace%%sSize%</div>"
+
 @HOTPATCH_TARGET_DATAGROUP
 IF TARGET <= 0
 	TFLAG:102 = 0
@@ -500,14 +522,15 @@ SIF STRLENS(sState)
 HTML_PRINT @"<div class='era-bars'>%sHtml%</div>"
 
 ; One labelled meter row, its tooltip giving the full name; "era-low"/"era-critical" are added below half and a
-; quarter for stamina and energy.
-@HOTPATCH_BAR(sLabel, nValue, nMax, sClass, sName)
+; quarter for stamina and energy. With bTotal the value is shown against the maximum ("1000 / 1500").
+@HOTPATCH_BAR(sLabel, nValue, nMax, sClass, sName, bTotal)
 #FUNCTIONS
 #DIMS DYNAMIC sLabel
 #DIM DYNAMIC nValue
 #DIM DYNAMIC nMax
 #DIMS DYNAMIC sClass
 #DIMS DYNAMIC sName
+#DIM DYNAMIC bTotal
 nValue = MAX(nValue, 0)
 nMax = MAX(nMax, 1)
 IF GROUPMATCH(sLabel, "Sta", "Ene")
@@ -517,7 +540,7 @@ IF GROUPMATCH(sLabel, "Sta", "Ene")
 		sClass += " era-low"
 	ENDIF
 ENDIF
-RETURNF @"<div class='era-bar %sClass%' title='%sName%: {nValue} / {nMax}'><span class='era-bar-label'>%sLabel%</span><meter value='{nValue}' max='{nMax}'></meter><span class='era-bar-value'>%HOTPATCH_SHORT_NUMBER(nValue)%</span></div>"
+RETURNF @"<div class='era-bar %sClass%' title='%sName%: {nValue} / {nMax}'><span class='era-bar-label'>%sLabel%</span><meter value='{nValue}' max='{nMax}'></meter><span class='era-bar-value'>%HOTPATCH_SHORT_NUMBER(nValue)%%(bTotal ? @"<span class='era-bar-max'> / %HOTPATCH_SHORT_NUMBER(nMax)%</span>" # "")%</span></div>"
 
 ;-------------------------------------------------------------------------------
 ; INFO_EMOTION as meters: the target's mood (OverDrive!! at full on a date) and composure (LimitBreak!! at
