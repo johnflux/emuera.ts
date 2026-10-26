@@ -56,10 +56,19 @@ button:disabled { color: #666; cursor: default; }
 .confirm-actions .danger { background: #3a1616; border-color: #a04a4a; color: #fff; }
 .confirm-actions .danger:hover:enabled, .confirm-actions .danger:focus-visible { background: #522020; border-color: #e07070; }
 #status.error { color: #ff9d9d; }
-main { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 16px 0 16px 20px; color: var(--terminal-foreground); background: var(--terminal-background); }
+main { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 16px 0 16px 20px; color: var(--terminal-foreground); background: var(--terminal-background); }
 #terminal, #input-form { font-family: var(--terminal-font); }
 /* main has no right padding: the scrollbar takes its place, and the output keeps a 20px margin like the left one. */
 #terminal { flex: 1; min-height: 0; display: flex; flex-direction: column; padding-right: max(6px, calc(20px - var(--scrollbar-width, 0px))); font-size: var(--font-size); line-height: var(--line-height, 1.25); overflow: auto; scrollbar-gutter: stable; container-type: inline-size; }
+/* CBGSETG/CBGSETSPRITE pictures: positioned over the terminal's visible box by placeBackground() in app.js. */
+#terminal { position: relative; z-index: 1; }
+.cbg-layer { position: absolute; overflow: hidden; pointer-events: none; }
+.cbg-layer:empty { display: none; }
+#cbg-back { z-index: 0; }
+#cbg-front { z-index: 2; }
+.cbg-layer canvas { position: absolute; }
+/* Text and line backgrounds would hide the pictures behind the text; Emuera draws text over them. */
+#terminal.has-cbg-back { --terminal-background: transparent; }
 #terminal::before { content: ""; margin-top: auto; }
 #terminal > * { flex-shrink: 0; min-width: var(--logical-width, 0); }
 #terminal.is-waiting { cursor: pointer; }

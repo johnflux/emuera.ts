@@ -138,23 +138,26 @@ function useGameDisplay(id) {
   settings = { ...gameDefaults, ...savedSettings() };
   applySettings();
 }
-/** Lists the server's games in the menu, before the demo. */
+/** Lists the server's games in the menu's Run section, in catalogue order. */
 function showGames() {
   const [first, ...others] = games;
   const button = startButtons[1];
   button.dataset.game = first.id;
   button.textContent = first.title;
+  let last = button;
   for (const game of others) {
     const extra = document.createElement("button");
     extra.dataset.game = game.id;
     extra.setAttribute("aria-pressed", "false");
     extra.textContent = game.title;
-    demoButton.before(extra);
+    last.after(extra);
+    last = extra;
     startButtons.push(extra);
     extra.addEventListener("click", () => { void chooseRun("game", game.id); });
   }
 }
 new ResizeObserver(() => {
+  placeBackground();
   // scrollIntoView would also scroll an open dialog's body to its end.
   if (input && !busy && !terminal.querySelector(".era-dialog:popover-open")) lastOutputLine()?.scrollIntoView({ block: "nearest" });
 }).observe(terminal);
@@ -260,7 +263,8 @@ function updateControls() {
     : input.kind === "integer" ? "Enter a whole number" : input.kind === "wait" ? "Press Enter to continue" : "Enter text";
   startButtons.forEach((button) => { button.setAttribute("aria-disabled", String(busy)); });
   restartButton.setAttribute("aria-disabled", String(busy));
-  document.querySelector("#input-form").hidden = !input;
+  document.querySelector("#input-form").hidden = !input || input.kind === "mousekey";
+  command.placeholder = input?.defaultValue !== undefined && input.kind !== "wait" ? `Enter for ${JSON.stringify(input.defaultValue)}` : "";
   terminal.querySelectorAll("button.choice").forEach((button) => {
     button.disabled = !button.closest(".screen.is-active") || button.classList.contains("is-stale") || (busy && !expiring) || !input || input.kind === "wait" || !!input.blocking;
   });
@@ -562,7 +566,12 @@ function choice(label, value, title = "") {
   button.addEventListener("click", (event) => {
     // detail is 0 for keyboard activation, which is deliberate.
     if (event.detail > 0 && settling()) return;
-    if (button.closest(".screen.is-active")) void submit(value, button);
+    if (!button.closest(".screen.is-active")) return;
+    if (input?.kind === "mousekey") {
+      // RESULT:5 is an integer button's value; a string button sets RESULTS instead.
+      const numeric = /^-?\d+$/.test(value) && Number.isSafeInteger(Number(value));
+      void submitMouseKey([1, MOUSE_BUTTONS[0], ...clientPoint(event), -1, numeric ? Number(value) : 0], numeric ? undefined : value, button);
+    } else void submit(value, button);
   });
   return button;
 }
@@ -808,6 +817,42 @@ function animate(name, holder, layers, delays, token) {
   layers.forEach((layer, i) => { layer.hidden = i !== index; });
   animations.add({ holder, layers, delays, total, start, token, index, shown: false });
   animationLoop ||= requestAnimationFrame(tickAnimations);
+}
+const backgroundLayers = { back: document.querySelector("#cbg-back"), front: document.querySelector("#cbg-front") };
+let backgroundVersion = 0;
+/** Puts the CBG layers over the terminal's visible box (Emuera's client area, without the scrollbar). */
+function placeBackground() {
+  for (const layer of Object.values(backgroundLayers)) {
+    Object.assign(layer.style, {
+      left: `${terminal.offsetLeft + terminal.clientLeft}px`, top: `${terminal.offsetTop + terminal.clientTop}px`,
+      width: `${terminal.clientWidth}px`, height: `${terminal.clientHeight}px`,
+    });
+  }
+  const scale = imageScale();
+  for (const canvas of document.querySelectorAll(".cbg-layer canvas")) {
+    const { x, y, width, height } = canvas.dataset;
+    Object.assign(canvas.style, { left: `${x * scale}px`, bottom: `${-y * scale}px`, width: `${width * scale}px`, height: `${height * scale}px` });
+  }
+}
+/** Shows the CBG layers (back to front; z > 0 behind the text, z < 0 in front), replacing the previous ones. */
+async function showBackground(layers) {
+  const version = ++backgroundVersion;
+  let canvases;
+  try {
+    canvases = await Promise.all(layers.map(async (layer) => {
+      const canvas = await pictureCopy(layer.picture);
+      Object.assign(canvas.dataset, { x: layer.x, y: layer.y, width: layer.picture.width, height: layer.picture.height });
+      return { canvas, front: layer.z < 0 };
+    }));
+  } catch (error) {
+    message(`Could not draw a background picture: ${error.message}`, true);
+    return;
+  }
+  if (version !== backgroundVersion) return;
+  backgroundLayers.back.replaceChildren(...canvases.filter((entry) => !entry.front).map((entry) => entry.canvas));
+  backgroundLayers.front.replaceChildren(...canvases.filter((entry) => entry.front).map((entry) => entry.canvas));
+  terminal.classList.toggle("has-cbg-back", backgroundLayers.back.childElementCount > 0);
+  placeBackground();
 }
 /** A private copy of a painted picture: the painted canvas is cached and shared. */
 async function pictureCopy(picture) {
@@ -1296,6 +1341,7 @@ async function renderSnapshot(snapshot, advanceScreen) {
   hideTooltip();
   document.title = snapshot.title || "Emuera.ts";
   showDebugOutput(snapshot);
+  if (snapshot.cbg) void showBackground(snapshot.cbg);
   const previousScreen = currentScreen;
   const previousLine = currentLine;
   if (advanceScreen === "continue") {
@@ -1431,7 +1477,8 @@ async function renderSnapshot(snapshot, advanceScreen) {
     currentLine.classList.add("missing");
     currentLine = null;
   } else message(snapshot.status !== "waiting" ? "Execution finished."
-    : input.kind === "wait" ? "Click or press Enter to continue." : `Waiting for ${input.kind} input.`);
+    : input.kind === "wait" ? "Click or press Enter to continue."
+    : input.kind === "mousekey" ? "Click, scroll or press a key." : `Waiting for ${input.kind} input.`);
   // Keep DOM memory bounded during repeated demo / script runs.
   const lines = [...outputRoot.querySelectorAll(".screen .line")];
   if (lines.length > 5000) {
@@ -1512,6 +1559,7 @@ function resetRun() {
   continuedScreens = [];
   command.value = "";
   currentLine = null;
+  void showBackground([]);
 }
 async function start(mode, game = runGame, debug = debugPreferred()) {
   if (busy) return;
@@ -1558,6 +1606,8 @@ async function resume(id) {
     const advance = { start: false, timeout: false, continue: "continue", input: true };
     await renderSteps(data.history.map(({ advance: how, snapshot }, i) =>
       ({ snapshot: { ...snapshot, session: id }, advanceScreen: i === 0 ? false : advance[how] })), true);
+    // The trimmed history may have lost the step that set them.
+    void showBackground(data.cbg ?? []);
     step = data.step;
     restored = true;
   } catch (error) {
@@ -1590,7 +1640,7 @@ async function submit(value, selectedChoice = null) {
   const pending = selectedChoice ?? (value === "" ? null : [...terminal.querySelectorAll(".screen.is-active button.choice")]
     .find((button) => button.dataset.value === value) ?? null);
   pending?.classList.add("is-pending");
-  message(input.kind === "wait" ? "Continuing..." : `Sending ${JSON.stringify(pending?.textContent.replace(/\s+/g, " ").trim() || value)}...`);
+  message(input.kind === "wait" ? "Continuing..." : input.kind === "mousekey" ? "Sending input..." : `Sending ${JSON.stringify(pending?.textContent.replace(/\s+/g, " ").trim() || value)}...`);
   beginActivity();
   updateControls();
   try {
@@ -1610,7 +1660,25 @@ async function submit(value, selectedChoice = null) {
     runQueuedContinue();
   }
 }
-function clickToContinue() {
+/** Emuera's MouseButtons values for the left, middle and right buttons (event.button 0, 1, 2). */
+const MOUSE_BUTTONS = [0x100000, 0x400000, 0x200000];
+/** A pointer position in Emuera client pixels: from the client area's bottom-left, so y is negative. */
+function clientPoint(event) {
+  const rect = terminal.getBoundingClientRect();
+  const scale = imageScale();
+  if (event.detail === 0 && event.clientX === 0 && event.clientY === 0) return [0, 0];
+  return [Math.round((event.clientX - rect.left - terminal.clientLeft) / scale), Math.round((event.clientY - (rect.top + terminal.clientTop + terminal.clientHeight)) / scale)];
+}
+/** Answers INPUTMOUSEKEY with RESULT:0-5 (and RESULTS for a string button). */
+function submitMouseKey(result, results, button = null) {
+  if (input?.kind !== "mousekey") return;
+  void submit(JSON.stringify(results === undefined ? { result } : { result, results }), button);
+}
+function clickToContinue(event) {
+  if (input?.kind === "mousekey" && event) {
+    if (!busy && !settling()) submitMouseKey([1, MOUSE_BUTTONS[event.button] ?? MOUSE_BUTTONS[0], ...clientPoint(event), -1, 0]);
+    return;
+  }
   if (busy && !expiring) { if (session) queueContinue(); return; }
   if (input?.kind !== "wait") return;
   void submit("");
@@ -1653,12 +1721,26 @@ terminal.addEventListener("click", (event) => {
     if (dragged(event)) return;
     if ((busy && !expiring) || input?.kind === "wait") selection.removeAllRanges();
   }
-  clickToContinue();
+  clickToContinue(event);
 });
+terminal.addEventListener("contextmenu", (event) => {
+  if (input?.kind !== "mousekey" || (event.target instanceof Element && event.target.closest("a[href]"))) return;
+  event.preventDefault();
+  if (!busy && !settling()) submitMouseKey([1, MOUSE_BUTTONS[2], ...clientPoint(event), -1, 0]);
+});
+terminal.addEventListener("auxclick", (event) => {
+  if (input?.kind === "mousekey" && event.button === 1 && !busy && !settling()) submitMouseKey([1, MOUSE_BUTTONS[1], ...clientPoint(event), -1, 0]);
+});
+// While INPUTMOUSEKEY waits the wheel is input (one notch of 120 per event, up positive), not scrolling.
+terminal.addEventListener("wheel", (event) => {
+  if (input?.kind !== "mousekey" || event.ctrlKey || !event.deltaY) return;
+  event.preventDefault();
+  if (!busy && !settling()) submitMouseKey([2, event.deltaY < 0 ? 120 : -120, ...clientPoint(event)]);
+}, { passive: false });
 terminal.addEventListener("pointerup", (event) => {
   const pressed = press?.disabled;
   if (!pressed || event.button !== 0 || dragged(event) || !(event.target instanceof Element) || event.target.closest("button:disabled") !== pressed) return;
-  clickToContinue();
+  clickToContinue(event);
 });
 // On the map screens a room's number on the map, its label beside it, its legend entry, its "Walk to" entry and
 // "You are here" are separate elements for the same room; pointing at (or focusing) one highlights the others.
@@ -1722,6 +1804,15 @@ document.addEventListener("keydown", (event) => {
     && !(event.target instanceof Element && event.target.closest("input:not(#command), textarea, select, button, a[href], .menu"))) {
     event.preventDefault();
     queueContinue();
+    return;
+  }
+  if (input?.kind === "mousekey" && !event.defaultPrevented && !event.isComposing && !event.metaKey && !event.ctrlKey
+    && !["Shift", "Control", "Alt", "Meta", "Tab"].includes(event.key) && event.keyCode
+    && !(event.target instanceof Element && event.target.closest("input, textarea, select, [contenteditable]:not([contenteditable='false']), .menu, dialog"))
+    && !((event.key === "Enter" || event.key === " ") && event.target instanceof Element && event.target.closest("button, a[href]"))) {
+    // RESULT:1 is the Windows key code (keyCode); RESULT:2 adds Shift 0x10000 and Alt 0x40000.
+    event.preventDefault();
+    if (!busy && !settling()) submitMouseKey([3, event.keyCode, event.keyCode | (event.shiftKey ? 0x10000 : 0) | (event.altKey ? 0x40000 : 0)]);
     return;
   }
   if ((busy && !expiring) || !input || event.defaultPrevented || event.isComposing || event.ctrlKey || event.metaKey || event.altKey) return;

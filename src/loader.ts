@@ -1,7 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { closeSync, existsSync, openSync, readdirSync, readFileSync, readSync } from "node:fs";
 import path from "node:path";
-import { EraError, key, allowsFullWidthSpace, stripComment, splitArguments, type Diagnostic, type Line, type Routine } from "./model.js";
+import { characterField, EraError, EVENT_FUNCTIONS, isCharacterNumberField, key, allowsFullWidthSpace, stripComment, splitArguments, type Diagnostic, type Line, type Routine } from "./model.js";
 
 /** Browser-presentation ERB layered over eraToho The World without editing its files (see docs/hotpatches.md). */
 export const HOTPATCH_ROOT = path.resolve("hotpatch");
@@ -115,13 +115,21 @@ export interface Game {
 export type ContainerScope = "SAVE" | "GLOBAL" | "STATIC";
 export interface ContainerNames { MAPS: Set<string>; XMLS: Set<string>; DTS: Set<string> }
 const containerNames = (): ContainerNames => ({ MAPS: new Set(), XMLS: new Set(), DTS: new Set() });
+const ordinalIgnoreCase = (a: string, b: string): number => {
+  const x = a.toUpperCase(), y = b.toUpperCase();
+  return x < y ? -1 : x > y ? 1 : 0;
+};
+/**
+ * Emuera's load order (Config.getFiles with ファイル名順にソート): each directory's subdirectories first, then its
+ * files, both ordered case-insensitively by code unit. Event functions run, and duplicates resolve, in this order.
+ */
 export async function filesUnder(root: string): Promise<string[]> {
+  const entries = await readdir(root, { withFileTypes: true });
+  const names = (directory: boolean): string[] =>
+    entries.filter((entry) => directory ? entry.isDirectory() : entry.isFile()).map((entry) => entry.name).sort(ordinalIgnoreCase);
   const result: string[] = [];
-  for (const entry of (await readdir(root, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name, "en"))) {
-    const full = path.join(root, entry.name);
-    if (entry.isDirectory()) result.push(...await filesUnder(full));
-    else if (entry.isFile()) result.push(full);
-  }
+  for (const name of names(true)) result.push(...await filesUnder(path.join(root, name)));
+  for (const name of names(false)) result.push(path.join(root, name));
   return result;
 }
 export async function readText(file: string): Promise<string> {
@@ -260,8 +268,13 @@ export function indexScript(game: Game, source: string, file: string, header = f
       }
       routine = { ...line, name: key(match[1]!), label: match[1]!, parameters, lines: [], directives };
       const list = game.routines.get(routine.name) ?? [];
-      list.push(routine);
-      game.routines.set(routine.name, list);
+      // Like Emuera, a non-event function defined again keeps its first definition; the later one is parsed but unused.
+      if (list.length && !EVENT_FUNCTIONS.has(routine.name))
+        game.diagnostics.push({ ...line, message: `Function @${routine.label} is already defined (${list[0]!.file}:${list[0]!.line}); this definition is ignored` });
+      else {
+        list.push(routine);
+        game.routines.set(routine.name, list);
+      }
     } else if (routine) {
       if (content.startsWith("#")) routine.directives.push(line);
       else routine.lines.push(line);
@@ -349,11 +362,15 @@ export async function loadGame(root = GAME_ROOT, options: { debug?: boolean } = 
       }
     }
     if (/(?:^|\/)CHARA\d/i.test(name)) {
-      const number = rows.find((row) => row[0] === "番号")?.[1];
+      const number = rows.find((row) => isCharacterNumberField(row[0]))?.[1];
       if (!number || !/^\d+$/.test(number)) throw new EraError("Character CSV requires a numeric 番号", { file, line: 0 });
       const id = Number(number);
       if (game.characters.has(id)) throw new EraError(`Duplicate character number: ${id}`, { file, line: 0 });
       game.characters.set(id, { file: path.relative(root, file), rows });
+      // Like Emuera, an unknown key only warns and its row is skipped.
+      for (const row of rows) {
+        if (!isCharacterNumberField(row[0]) && !characterField(row[0])) game.diagnostics.push({ file: path.relative(root, file), line: 0, message: `Unknown character CSV field "${row[0]}"; this row is ignored` });
+      }
     }
     if (name === "VARIABLESIZE") {
       for (const row of rows) {

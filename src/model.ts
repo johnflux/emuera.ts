@@ -79,6 +79,18 @@ export function integerLiteral(source: string): bigint {
   return value;
 }
 // Instructions whose argument is raw text: ';' and further spaces are output.
+/** Emuera's event functions: the only names that may be defined repeatedly (all definitions run; see Runtime.dispatch). */
+/** Character CSV keys (Emuera matches them case-insensitively) and the variables they fill; 番号/NO is the number. */
+export const CHARACTER_FIELDS: ReadonlyMap<string, string> = new Map([
+  ["名前", "NAME"], ["呼び名", "CALLNAME"], ["あだ名", "NICKNAME"], ["主人の呼び方", "MASTERNAME"],
+  ["基礎", "MAXBASE"], ["能力", "ABL"], ["素質", "TALENT"], ["経験", "EXP"], ["フラグ", "CFLAG"],
+  ["相性", "RELATION"], ["刻印", "MARK"], ["装着物", "EQUIP"], ["珠", "JUEL"],
+  ...["NAME", "CALLNAME", "NICKNAME", "MASTERNAME", "ABL", "TALENT", "EXP", "CFLAG", "RELATION", "MARK", "EQUIP", "JUEL", "CSTR"].map((name) => [name, name] as const),
+  ["BASE", "MAXBASE"],
+]);
+export const characterField = (name: string | undefined): string | undefined => name === undefined ? undefined : CHARACTER_FIELDS.get(name.toUpperCase());
+export const isCharacterNumberField = (name: string | undefined): boolean => name === "番号" || name?.toUpperCase() === "NO";
+export const EVENT_FUNCTIONS: ReadonlySet<string> = new Set(["EVENTFIRST", "EVENTTRAIN", "EVENTSHOP", "EVENTBUY", "EVENTCOM", "EVENTTURNEND", "EVENTCOMEND", "EVENTEND", "EVENTLOAD"]);
 export const LITERAL_TEXT_INSTRUCTION = /^(?:(?:DEBUG)?PRINT(?:SINGLE)?(?:FORM)?(?:C|LC)?[KD]?[LW]?|PRINTPLAIN(?:FORM)?|DATA(?:FORM)?)$/i;
 /**
  * Emuera whitespace is space and tab; the full-width space U+3000 counts only when the

@@ -3,7 +3,6 @@ import { BUILTIN_FUNCTIONS } from "./runtime.js";
 import type { Game } from "./loader.js";
 import { key, LITERAL_TEXT_INSTRUCTION, type Diagnostic, type Line } from "./model.js";
 
-const EVENT_FUNCTIONS = new Set(["EVENTFIRST", "EVENTTRAIN", "EVENTSHOP", "EVENTBUY", "EVENTCOM", "EVENTTURNEND", "EVENTCOMEND", "EVENTEND", "EVENTLOAD"]);
 // Emuera calls are written NAME( with no space; text such as "Hero (x)" is not a call.
 const CALL = /(?<![\p{L}\p{N}_@.$])([\p{L}_][\p{L}\p{N}_]*)\(/gu;
 export interface Gap { feature: string; count: number; examples: Diagnostic[] }
@@ -19,9 +18,7 @@ export function compatibility(game: Game) {
   for (const line of game.headers) {
     if (!/^#(?:DIMS?|DEFINE)\s/i.test(line.text)) record(`Header directive: ${line.text.split(/\s/)[0]}`, line);
   }
-  for (const [name, routines] of game.routines) {
-    // Event functions may be defined repeatedly and are dispatched in #PRI/regular/#LATER order.
-    if (routines.length > 1 && !EVENT_FUNCTIONS.has(name)) record("Duplicate non-event functions", { ...routines[0]!, text: "" });
+  for (const routines of game.routines.values()) {
     for (const routine of routines) {
       functions++;
       for (const directive of routine.directives) {

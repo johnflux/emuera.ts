@@ -211,8 +211,8 @@ PRINTFORML %RESULTS%`);
 });
 test("single-character input defaults and empty strings follow ONEINPUT semantics", () => {
   for (const [op, fallback, expected] of [
-    ["ONEINPUT", "42", "4"], ["ONEINPUTS", '"hello"', "h"],
-    ["ONEINPUTS", '""', ""], ["ONEINPUTS", "", ""],
+    // ONEINPUTS's argument is FORM text, as in Emuera.
+    ["ONEINPUT", "42", "4"], ["ONEINPUTS", "hello", "h"], ["ONEINPUTS", "%\"he\"%", "h"], ["ONEINPUTS", "", ""],
   ]) {
     const rt = runtime(`@SYSTEM_TITLE\n${op} ${fallback}\nPRINTFORML ${op === "ONEINPUT" ? "{RESULT}" : "%RESULTS%"}`);
     assert.equal(rt.start().status, "waiting");

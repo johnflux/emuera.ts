@@ -3,7 +3,7 @@ import { evaluate, parseExpression, settleIndices, useMacros, type EvaluationCon
 import { displayDefaults, imageSize, readTextFileSync, type Sprite, type ContainerScope, type DisplaySettings, type Game } from "./loader.js";
 import path from "node:path";
 import { readdirSync, statSync } from "node:fs";
-import { allowsFullWidthSpace, EraError, integer, integerLiteral, numericString, INTEGER_LITERAL, key, splitArguments, text, type Diagnostic, type Routine, type Source, type Value } from "./model.js";
+import { allowsFullWidthSpace, characterField, EraError, integer, integerLiteral, numericString, INTEGER_LITERAL, key, splitArguments, text, type Diagnostic, type Routine, type Source, type Value } from "./model.js";
 import { symbolTable, Variables, type GlobalData, type SaveData } from "./variables.js";
 import { parseFormat } from "./format.js";
 import { MemoryGlobalStore, MemorySaveStore, StagedStores, type GlobalStore, type SaveStore } from "./storage.js";
@@ -65,9 +65,21 @@ export type Output =
   | { type: "text" | "html" | "input"; text: string; newline: boolean; style: Style; plain?: boolean; single?: boolean; cell?: boolean; sprites?: Record<string, SpriteDefinition> }
   | { type: "button"; text: string; value: string; style: Style }
   | { type: "clear"; count: number };
+/**
+ * A CBGSETG/CBGSETSPRITE layer: a picture fixed to the client area, its bottom-left at (x, y) from the area's
+ * bottom-left (y down). z > 0 is behind the text (further back as z grows), z < 0 in front of it.
+ */
+export interface BackgroundLayer { z: number; x: number; y: number; picture: Picture }
+/**
+ * INPUTMOUSEKEY's answer, sent as the input value: RESULT:0-5 (type 1 click, 2 wheel, 3 key, 4 timeout) and,
+ * for a click on a string button, its RESULTS.
+ */
+export interface MouseKeyInput { result: number[]; results?: string }
 export interface InputRequest {
-  kind: "integer" | "string" | "wait";
+  /** mousekey: INPUTMOUSEKEY, answered with a JSON MouseKeyInput. */
+  kind: "integer" | "string" | "wait" | "mousekey";
   singleCharacter?: boolean;
+  /** What an empty input gives (INPUT/INPUTS/ONEINPUT(S) argument). */
   defaultValue?: string;
   /** Milliseconds before the browser should call the timeout endpoint. */
   timeout?: number;
@@ -88,6 +100,8 @@ export interface Snapshot {
   /** Debug mode: text for Emuera's debug window since the previous snapshot; `debugClear` (DEBUGCLEAR) empties it first. */
   debug?: string;
   debugClear?: boolean;
+  /** Every CBG layer, in drawing order, when they changed during this step. */
+  cbg?: BackgroundLayer[];
 }
 interface RoutineInfo {
   returnType: "integer" | "string" | undefined;
@@ -145,6 +159,17 @@ interface SavedContainers { maps: Record<string, [string, string][]>; xmls: Reco
 interface SaveRecord { version: 1; code: string; gameVersion: string; text: string; data: SaveData; containers?: SavedContainers }
 interface CharacterRecord { version: 1; code: string; gameVersion: string; text: string; characters: GlobalData[] }
 const literal = (value: Value): Expr => ({ kind: "literal", value });
+/** Parses and checks an INPUTMOUSEKEY answer; RESULT:0 must be 1-4 and the values 32-bit (RESULT:5 a button value). */
+function mouseKeyInput(value: string): MouseKeyInput {
+  let parsed: unknown;
+  try { parsed = JSON.parse(value); } catch { parsed = undefined; }
+  const input = parsed as Partial<MouseKeyInput> | undefined;
+  const result = input?.result;
+  if (!Array.isArray(result) || result.length < 1 || result.length > 6 || !result.every((n) => Number.isSafeInteger(n))
+    || ![1, 2, 3, 4].includes(result[0]!) || (input!.results !== undefined && typeof input!.results !== "string"))
+    throw new EraError("Expected a mouse or key input");
+  return { result, ...(input!.results !== undefined ? { results: input!.results } : {}) };
+}
 /** Emuera ReadColor: 0xAARRGGBB as a CSS color. */
 function argbColor(value: bigint, name: string): string {
   if (value < 0n || value > 0xFFFFFFFFn) throw new EraError(`${name}: invalid ARGB color ${value}`);
@@ -328,6 +353,9 @@ export class Runtime {
   /** Debug mode's DEBUGPRINT output since the last snapshot, and whether DEBUGCLEAR ran meanwhile. */
   private debugText = "";
   private debugClear = false;
+  /** CBG layers ordered back to front (descending z, then insertion), and whether they changed since the last snapshot. */
+  private background: BackgroundLayer[] = [];
+  private backgroundChanged = false;
   private forceKana = 0;
   private printCLength: number;
   private deferred: Output[] = [];
@@ -1043,8 +1071,9 @@ export class Runtime {
     if (this.pending.blocking) throw new EraError("This wait cannot be skipped");
     if (this.pending.singleCharacter) {
       value = Array.from(value)[0] ?? this.pending.defaultValue ?? "";
-    }
+    } else if (value === "" && this.pending.defaultValue !== undefined) value = this.pending.defaultValue;
     if (this.pending.kind === "integer" && !/^-?\d+$/.test(value.trim())) throw new EraError("Enter a whole number");
+    if (this.pending.kind === "mousekey") mouseKeyInput(value);
     if (this.pending.kind === "integer") {
       const n = BigInt(value.trim());
       if (n < -(1n << 63n) || n >= (1n << 63n)) throw new EraError("Input is outside signed 64-bit range");
@@ -1126,15 +1155,10 @@ export class Runtime {
     const index = this.globals.addCharacter();
     this.globals.set("CHARANUM", [], BigInt(index + 1), context);
     this.globals.set("NO", [literal(BigInt(index))], BigInt(number), context);
-    const fields: Record<string, string> = {
-      名前: "NAME", 呼び名: "CALLNAME", あだ名: "NICKNAME", 主人の呼び方: "MASTERNAME",
-      基礎: "MAXBASE", 能力: "ABL", 素質: "TALENT", 経験: "EXP", フラグ: "CFLAG",
-      相性: "RELATION", 刻印: "MARK", 装着物: "EQUIP", CSTR: "CSTR",
-    };
     for (const row of template.rows) {
-      if (row[0] === "番号") continue;
-      const name = fields[row[0]!];
-      if (!name) throw new EraError(`Unsupported character CSV field: ${row[0]}`, { file: template.file, line: 0 });
+      // Unknown keys were reported when the game loaded.
+      const name = characterField(row[0]);
+      if (!name) continue;
       const scalar = ["NAME", "CALLNAME", "NICKNAME", "MASTERNAME"].includes(name);
       const value = row[scalar ? 1 : 2] ?? "";
       const indices = [literal(BigInt(index))];
@@ -2087,6 +2111,8 @@ export class Runtime {
     if (this.debugText) snapshot.debug = this.debugText;
     this.debugText = "";
     this.debugClear = false;
+    if (this.backgroundChanged) snapshot.cbg = this.background.slice();
+    this.backgroundChanged = false;
     return snapshot;
   }
   private resourceUrl(file: string): string {
@@ -2793,9 +2819,14 @@ export class Runtime {
             loopStates.clear();
             next = 0;
             break;
-          case "GOTO": {
-            const destination = labels.get(key(args));
-            if (destination === undefined) throw new EraError(`Unknown label: ${args}`);
+          case "GOTO": case "GOTOFORM": case "TRYGOTO": case "TRYGOTOFORM": {
+            const label = op.endsWith("FORM") ? this.formatted(args, frame).trim() : args;
+            const destination = labels.get(key(label));
+            if (destination === undefined) {
+              // TRYGOTO and TRYGOTOFORM continue with the next line when the label does not exist.
+              if (op.startsWith("TRY")) break;
+              throw new EraError(`Unknown label: ${label}`);
+            }
             if (loops.some((loop) => destination > loop.start && destination <= loop.end && !(pc > loop.start && pc <= loop.end)))
               throw new EraError("GOTO into a loop is not supported");
             for (const start of loopStates.keys()) {
@@ -2872,22 +2903,68 @@ export class Runtime {
             const singleCharacter = op.startsWith("ONE");
             const numeric = !op.endsWith("S");
             const request: InputRequest = { kind: numeric ? "integer" : "string" };
-            if (singleCharacter) {
-              request.singleCharacter = true;
-              if (args) {
-                const fallback = numeric ? integer(ev(args)) : text(ev(args));
-                if (typeof fallback === "string" || fallback >= 0n) {
-                  const first = Array.from(fallback.toString())[0];
-                  if (first !== undefined) request.defaultValue = first;
-                }
+            if (singleCharacter) request.singleCharacter = true;
+            // The argument is the value an empty input gives: an integer expression, or FORM text for the S forms.
+            if (args.trim()) {
+              const fallback = numeric ? integer(ev(args)) : this.formatted(args, frame);
+              if (!singleCharacter) request.defaultValue = fallback.toString();
+              else if (typeof fallback === "string" || fallback >= 0n) {
+                const first = Array.from(fallback.toString())[0];
+                if (first !== undefined) request.defaultValue = first;
               }
-            } else if (args) throw new EraError(`Arguments for ${op} are not yet supported`);
+            }
             const value = yield { input: request };
             yield this.emit("input", value, true);
             this.globals.set(numeric ? "RESULT" : "RESULTS", [], numeric ? BigInt(value.trim()) : value, frame.context);
             break;
           }
           case "WAIT": case "FORCEWAIT": yield { input: { kind: "wait" } }; break;
+          case "INPUTMOUSEKEY": {
+            // Prints nothing, not even the timeout message; the script reads RESULT:0-5.
+            const time = args.trim() ? Number(num(args)) : 0;
+            const request: InputRequest = { kind: "mousekey" };
+            if (time > 0) {
+              request.timeout = Math.min(time, 2 ** 31 - 1);
+              this.timed = { value: JSON.stringify({ result: [4, 0, 0, 0, 0, 0] } satisfies MouseKeyInput), message: undefined, countdown: false };
+            }
+            const { result, results } = mouseKeyInput(yield { input: request });
+            result.forEach((value, i) => this.globals.set("RESULT", [literal(BigInt(i))], BigInt(value), frame.context));
+            if (results !== undefined) this.globals.set("RESULTS", [], results, frame.context);
+            break;
+          }
+          case "CBGCLEAR":
+            if (args.trim()) throw new EraError("CBGCLEAR does not accept arguments");
+            this.background = [];
+            this.backgroundChanged = true;
+            break;
+          case "CBGREMOVERANGE": {
+            const parts = this.arguments(args);
+            if (parts.length !== 2 || !parts[0] || !parts[1]) throw new EraError("CBGREMOVERANGE expects zmin, zmax");
+            const from = Number(num(parts[0])), to = Number(num(parts[1]));
+            this.background = this.background.filter((layer) => layer.z < from || layer.z > to);
+            this.backgroundChanged = true;
+            break;
+          }
+          case "CBGSETG": case "CBGSETSPRITE": {
+            const parts = this.arguments(args);
+            if (parts.length !== 4 || parts.some((part) => !part)) throw new EraError(`${op} expects ${op === "CBGSETG" ? "gID" : "sprite"}, x, y, zDepth`);
+            const z = Number(num(parts[3]!));
+            if (z === 0) throw new EraError(`${op}: zDepth must not be 0 (the text layer)`);
+            let picture: Picture | undefined;
+            if (op === "CBGSETG") picture = this.picture(num(parts[0]!));
+            else {
+              const sprite = this.sprite(text(ev(parts[0]!)));
+              const draw = sprite && this.spriteOp(sprite, [0, 0, sprite.width, sprite.height]);
+              if (sprite && draw) picture = { width: sprite.width, height: sprite.height, ops: [draw] };
+            }
+            this.globals.set("RESULT", [], picture ? 1n : 0n, frame.context);
+            if (!picture) break;
+            const layer = { z, x: Number(num(parts[1]!)), y: Number(num(parts[2]!)), picture };
+            const at = this.background.findIndex((other) => other.z < z);
+            this.background.splice(at < 0 ? this.background.length : at, 0, layer);
+            this.backgroundChanged = true;
+            break;
+          }
           case "TWAIT": {
             const parts = this.arguments(args);
             if (parts.length !== 2 || !parts[0] || !parts[1]) throw new EraError("TWAIT expects time and flag");
@@ -3139,7 +3216,7 @@ export class Runtime {
           case "INITRAND": if (this.dumpedRandom !== undefined) this.randomState = this.dumpedRandom; break;
           case "WAITANYKEY": yield { input: { kind: "wait" } }; break;
           // Sound, tooltip timing and animation timers have no effect in the terminal.
-          case "AWAIT": case "PLAYSOUND": case "STOPSOUND": case "SETANIMETIMER":
+          case "AWAIT": case "PLAYSOUND": case "STOPSOUND": case "PLAYBGM": case "STOPBGM": case "SETANIMETIMER":
           case "TOOLTIP_SETDELAY": case "TOOLTIP_SETDURATION": case "TOOLTIP_SETCOLOR":
             break;
           case "THROW": throw new EraError(this.formatted(args, frame));

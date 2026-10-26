@@ -30,6 +30,105 @@ PRINTFORML {CFLAG:1:3}`;
   assert.deepEqual(texts(runtime(source, template).start()), ["2 0 [] 0 42", "5"]);
   assert.match(runtime("@SYSTEM_TITLE\nADDVOIDCHARA 1").start().error?.message ?? "", /takes no arguments/);
 });
+test("character CSVs accept Emuera's English keys in any case, JUEL/珠, and skip unknown keys", () => {
+  const source = "@SYSTEM_TITLE\nADDCHARA 2\nPRINTFORML %NAME:0% %CALLNAME:0% {CFLAG:0:3} {JUEL:0:1} {JUEL:0:2} {MAXBASE:0:0} {BASE:0:0}";
+  const game = runtime(source, (game) => game.characters.set(2, { file: "Chara2.csv", rows: [
+    ["NO", "2"], ["name", "Eng"], ["CallName", "E"], ["CFLAG", "3", "7"], ["JUEL", "1", "4"], ["珠", "2", "5"], ["base", "0", "9"], ["UNKNOWN", "1", "1"],
+  ] }));
+  assert.deepEqual(texts(game.start()), ["Eng E 7 4 5 9 9"]);
+});
+test("INPUT and INPUTS take a default for an empty input; INPUTS's is FORM text", () => {
+  const source = `@SYSTEM_TITLE
+INPUT 9999
+PRINTFORML {RESULT}
+LOCAL = 3
+INPUTS name{LOCAL}
+PRINTFORML %RESULTS%
+INPUT 5
+PRINTFORML {RESULT}`;
+  const game = runtime(source);
+  assert.equal(game.start().input?.defaultValue, "9999");
+  assert.deepEqual(texts(game.input("")).slice(-1), ["9999"]);
+  assert.deepEqual(texts(game.input("")).slice(-1), ["name3"]);
+  assert.deepEqual(texts(game.input("12")).slice(-1), ["12"]);
+});
+test("a duplicated non-event function keeps its first definition and reports the later one, like Emuera", () => {
+  const game = emptyGame();
+  indexScript(game, "@SYSTEM_TITLE\nCALL FOO\nPRINTFORML {BAR()}\n@FOO\nPRINTL first\n@BAR\n#FUNCTION\nRETURNF 1", "A.ERB");
+  indexScript(game, "@FOO\nPRINTL second\n@BAR\n#FUNCTION\nRETURNF 2", "B.ERB");
+  assert.deepEqual(texts(new Runtime(game, 50_000).start()), ["first", "1"]);
+  assert.deepEqual(game.diagnostics.map((item) => item.message), [
+    "Function @FOO is already defined (A.ERB:4); this definition is ignored",
+    "Function @BAR is already defined (A.ERB:6); this definition is ignored",
+  ]);
+});
+test("GOTOFORM jumps to a formatted label and TRYGOTO/TRYGOTOFORM skip missing ones", () => {
+  const source = `@SYSTEM_TITLE
+LOCALS = TWO
+GOTOFORM LABEL_%LOCALS%
+$LABEL_ONE
+PRINTL one
+$LABEL_TWO
+PRINTL two
+TRYGOTO NOWHERE
+TRYGOTOFORM NO_{1}
+PRINTL after
+GOTOFORM MISSING_{1}`;
+  const snapshot = runtime(source).start();
+  assert.deepEqual(snapshot.output.flatMap((item) => "text" in item ? [item.text] : []), ["two", "after"]);
+  assert.match(snapshot.error?.message ?? "", /MISSING_1/);
+});
+test("INPUTMOUSEKEY sets RESULT:0-5 (and RESULTS for string buttons) and times out with RESULT:0 = 4", () => {
+  const source = `@SYSTEM_TITLE
+REPEAT 3
+  INPUTMOUSEKEY 500
+  PRINTFORML {RESULT:0} {RESULT:1} {RESULT:2} {RESULT:3} {RESULT:4} {RESULT:5} %RESULTS%
+REND
+PLAYBGM "x.ogg"
+STOPBGM
+INPUTMOUSEKEY
+PRINTFORML {RESULT:0} {RESULT:1} {RESULT:2}`;
+  const game = runtime(source);
+  assert.deepEqual(game.start().input, { kind: "mousekey", timeout: 500 });
+  assert.throws(() => game.input("1"), /mouse or key input/);
+  assert.throws(() => game.input(JSON.stringify({ result: [5] })), /mouse or key input/);
+  assert.deepEqual(texts(game.input(JSON.stringify({ result: [1, 0x100000, 10, -20, -1, 7] }))), ["1 1048576 10 -20 -1 7 "]);
+  assert.deepEqual(texts(game.input(JSON.stringify({ result: [1, 0x100000, 1, -2, -1, 0], results: "Yes" }))), ["1 1048576 1 -2 -1 0 Yes"]);
+  const last = game.timeout();
+  assert.deepEqual(texts(last), ["4 0 0 0 0 0 Yes"]);
+  assert.deepEqual(last.input, { kind: "mousekey" });
+  assert.deepEqual(texts(game.input(JSON.stringify({ result: [3, 38, 38 | 0x10000] }))), ["3 38 65574"]);
+});
+test("CBGSETG/CBGSETSPRITE layer pictures behind or in front of the text and CBGCLEAR/CBGREMOVERANGE remove them", () => {
+  const source = `@SYSTEM_TITLE
+GCREATE 1, 20, 10
+GCREATE 2, 5, 5
+CBGSETG 1, 0, 0, 10
+PRINTFORML {RESULT}
+CBGSETG 2, 3, -4, 20
+CBGSETG 2, 1, 1, -1
+CBGSETG 9, 0, 0, 5
+PRINTFORML {RESULT}
+WAIT
+CBGREMOVERANGE 15, 30
+WAIT
+PRINTL no change
+WAIT
+CBGCLEAR
+WAIT
+CBGSETG 1, 0, 0, 0`;
+  const game = runtime(source);
+  let snapshot = game.start();
+  assert.deepEqual(texts(snapshot), ["1", "0"]);
+  assert.deepEqual(snapshot.cbg?.map(({ z, x, y, picture }) => [z, x, y, picture.width]), [[20, 3, -4, 5], [10, 0, 0, 20], [-1, 1, 1, 5]]);
+  snapshot = game.input("");
+  assert.deepEqual(snapshot.cbg?.map(({ z }) => z), [10, -1]);
+  snapshot = game.input("");
+  assert.equal(snapshot.cbg, undefined);
+  snapshot = game.input("");
+  assert.deepEqual(snapshot.cbg, []);
+  assert.match(game.input("").error?.message ?? "", /must not be 0/);
+});
 test("debug mode loads [IF_DEBUG] code, sends DEBUGPRINT to the debug window, checks ASSERT and fills debug variables", () => {
   const source = `@SYSTEM_TITLE
 [IF_DEBUG]

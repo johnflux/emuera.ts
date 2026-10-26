@@ -8,7 +8,7 @@ import { compatibility } from "./compatibility.js";
 import { demoGame } from "./demo.js";
 import { applyHotpatches, displayDefaults, displayMetrics, GAMES, loadGame, stillFrame, type DisplaySettings, type Game } from "./loader.js";
 import { EraError, key } from "./model.js";
-import { GAME_INSTRUCTION_LIMIT, Runtime, type Snapshot } from "./runtime.js";
+import { GAME_INSTRUCTION_LIMIT, Runtime, type BackgroundLayer, type Snapshot } from "./runtime.js";
 import { FileGlobalStore, FileSaveStore, MemoryGlobalStore, MemorySaveStore, type GlobalStore, type SaveStore } from "./storage.js";
 import { patchTitleImage } from "./render-patches.js";
 
@@ -79,6 +79,8 @@ interface Session {
   bytes: number;
   /** Steps delivered so far (not trimmed), so a stale tab's input can be refused. */
   step: number;
+  /** The CBG layers as last delivered, which a trimmed history may no longer contain. */
+  cbg?: BackgroundLayer[];
 }
 const HISTORY_BYTES = 8 * 1024 * 1024;
 class HttpError extends Error {
@@ -169,6 +171,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
     const patched = patchTitleImage(game, snapshot);
     if (session) {
       session.step++;
+      if (patched.cbg) session.cbg = patched.cbg;
       const bytes = JSON.stringify(patched).length;
       session.history.push({ advance, snapshot: patched, bytes });
       session.bytes += bytes;
@@ -274,7 +277,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
         const session = sessions.get(data.session);
         if (!session) throw new HttpError(404, "Session expired or does not exist; start a new run");
         session.used = Date.now();
-        json(response, { session: data.session, mode: session.mode, game: session.game, debug: session.debug, step: session.step, history: session.history.map(({ advance, snapshot }) => ({ advance, snapshot })) });
+        json(response, { session: data.session, mode: session.mode, game: session.game, debug: session.debug, step: session.step, cbg: session.cbg ?? [], history: session.history.map(({ advance, snapshot }) => ({ advance, snapshot })) });
         return;
       }
       if (request.method === "POST" && url.pathname === "/api/prefetch") {

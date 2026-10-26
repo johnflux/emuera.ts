@@ -20,11 +20,11 @@
       <nav id="menu-panel" class="menu-panel" aria-label="Interpreter controls" hidden>
         <p class="menu-heading">Run</p>
         <button id="game" aria-pressed="true">eraToho The World</button>
-        <button id="demo" aria-pressed="false">Conformance demo</button>
-        <button id="restart" aria-haspopup="dialog">Restart game…</button>
-        <button id="debug-toggle" aria-pressed="false" aria-haspopup="dialog" title="Emuera's debug mode: restarts the run with [IF_DEBUG] code loaded, DEBUGPRINT output shown and ASSERT checked">Debug mode</button>
         <p class="menu-heading">Tools</p>
+        <button id="restart" aria-haspopup="dialog">Restart game…</button>
+        <button id="demo" aria-pressed="false">Conformance demo</button>
         <button id="report" aria-expanded="false" aria-controls="compatibility">Compatibility report</button>
+        <button id="debug-toggle" aria-pressed="false" aria-haspopup="dialog" title="Emuera's debug mode: restarts the run with [IF_DEBUG] code loaded, DEBUGPRINT output shown and ASSERT checked">Debug mode</button>
         <button id="settings-toggle" aria-expanded="false" aria-controls="settings">Settings</button>
         <button id="translate-toggle" aria-pressed="false" title="Translate the game's Japanese text on this device as it is printed">Translate Japanese <span id="translate-state" class="menu-state"></span></button>
         <label class="menu-font">Font size <input id="font-size" type="range" min="12" max="24" value="16"></label>
@@ -32,6 +32,8 @@
     </div>
   </header>
   <main>
+    <div id="cbg-back" class="cbg-layer" aria-hidden="true"></div>
+    <div id="cbg-front" class="cbg-layer" aria-hidden="true"></div>
     <section id="terminal" lang="ja" role="log" aria-label="Interpreter output" tabindex="0">
       <div class="screen is-active">
       <div class="line">Black background. White text. Real ERB execution.</div>

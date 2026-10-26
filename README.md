@@ -8,6 +8,10 @@ and hotpatches; the server offers each one whose directory exists. At startup it
 also offers any other folder in `GAMES/` that holds `ERB/` and `CSV/`, directly
 or one level down (e.g. an unzipped `name/name-master`), titled and identified
 by the folder name. Restart the server after adding a game.
+ERB files load in Emuera's order: in each directory, subdirectories first, then
+files, each sorted case-insensitively. As in Emuera, a non-event function defined
+twice keeps its first definition and the later one is reported in the
+loader diagnostics; only the system `EVENT*` functions may have several.
 Game scripts, data, and images are read in place and are not bundled or copied.
 Bugs in the game itself (reproducible in real Emuera) are fixed in the game
 files and recorded, with a reapplicable patch, in
@@ -91,7 +95,7 @@ longer); hover it for the split between script time (server) and render time
   terminal (`DEBUGCLEAR` empties it). Outside debug mode these instructions are
   skipped, as in Emuera. The status shows "Game · Debug" while it is on.
 - **Compatibility report**: for the current game, inspect unsupported instruction names, directives,
-  duplicate function/event definitions, and loader diagnostics. It also lists
+  and loader diagnostics (such as ignored duplicate functions). It also lists
   instructions that are supported as statements but are called as expression
   functions (for example `IF CHKDATA(0) == 0`) without an expression form, as
   `Expression function (instruction only): NAME`. Literal PRINT/DATA text is
@@ -387,7 +391,8 @@ declarations and the expression evaluator. No single routine dominates.
   lines with an extra left-hand comma (`VALUE ,= ,`) fail when executed, as in Emuera.
 - Literal `PRINT` / `PRINTFORM` arguments preserve layout whitespace after the
   single command separator, including leading, trailing and full-width spaces.
-- Indexed functions and labels; ordinary `CALL`, `JUMP`, `RETURN`, `GOTO`.
+- Indexed functions and labels; ordinary `CALL`, `JUMP`, `RETURN`, `GOTO`,
+  `GOTOFORM`, and `TRYGOTO`/`TRYGOTOFORM` (which go on when the label is missing).
   `RESTART` repeats the current routine without rebinding arguments or resetting
   locals, clearing active loop bookkeeping and retaining the instruction budget.
   Numeric parameter targets such as `ARG:0` and private declared parameter
@@ -461,7 +466,9 @@ declarations and the expression evaluator. No single routine dominates.
   numeric version `0`, allowing its ERB version formatter to run. Other
   non-numeric version markers still fail explicitly.
   Character CSV templates are instantiated by `ADDCHARA`, including initial
-  names, stats, flags, relationships and character strings.
+  names, stats, flags, relationships, juels and character strings. Keys may be
+  Japanese or Emuera's English names (`CFLAG`, `NAME`, `BASE`…, any case);
+  unknown keys are reported at load and skipped, as in Emuera.
 - `IF`/`ELSEIF`/`ELSE`, single-instruction `SIF`, `SELECTCASE` (values,
   inclusive `TO` ranges, `IS` comparisons, default), exclusive-end `FOR`,
   `WHILE`, `DO`/`LOOP`, `REPEAT`, `BREAK`, and `CONTINUE`.
@@ -495,7 +502,14 @@ declarations and the expression evaluator. No single routine dominates.
   empty Enter before expiry does not take the default, and `TWAIT` with a
   nonzero flag cannot be skipped. Input made while an animation frame is loading
   is sent once the frame is shown, so the animated colored map stays usable.
-- `INPUT`, `INPUTS`, `ONEINPUT`, `ONEINPUTS`, `WAIT`, `FORCEWAIT`, `PRINTBUTTON`/`PRINTBUTTONC`,
+- `INPUTMOUSEKEY [timeout]` hides the input box and sends the next click
+  (left/middle/right, with RESULT:4 = -1 and RESULT:5 the clicked button's value,
+  or RESULTS for a string button), wheel notch (±120) or key (its Windows key
+  code, plus Shift/Alt bits in RESULT:2) as RESULT:0-5. Positions are Emuera
+  client pixels from the bottom-left, so y is negative. A timeout gives RESULT:0 = 4.
+- `INPUT`, `INPUTS`, `ONEINPUT`, `ONEINPUTS` (their argument is the value an empty
+  input gives, shown as the input box placeholder; FORM text for the `S` forms),
+  `INPUTMOUSEKEY`, `WAIT`, `FORCEWAIT`, `PRINTBUTTON`/`PRINTBUTTONC`,
   `HTML_PRINT`, line drawing/clearing, RGB colors, alignment, `THROW`, `QUIT`.
   Output and input requests are structured events, independent of the browser.
   `FONTSTYLE` carries bold (1), italic (2), strikeout (4) and underline (8);
@@ -543,6 +557,12 @@ declarations and the expression evaluator. No single routine dominates.
   sprite carries a snapshot of its picture, which the browser paints on a
   `<canvas>`. `GGETCOLOR` cannot read pixels (it returns 0), `GSAVE`/`GLOAD`
   are unsupported, and animated sprites draw nothing.
+  `CBGSETG`/`CBGSETSPRITE` fix a snapshot of a G or sprite to the client area
+  (offset from its bottom-left; z > 0 behind the text, z < 0 in front) until
+  `CBGCLEAR`/`CBGREMOVERANGE`. A step's snapshot carries the full layer list
+  only when it changed, and the server keeps the latest so a reload restores it.
+  While back layers are shown, text backgrounds are transparent so they show
+  through. `PLAYBGM`/`STOPBGM`, like the sound instructions, are silent.
   See [docs/sprites.md](docs/sprites.md) for how sprites are stored, sent and painted.
 - A presentation-only patch recognizes the title's exact 35-strip HTML sequence
   and contiguous resource rectangles, rendering one cropped image instead of
