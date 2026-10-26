@@ -89,6 +89,13 @@ test("HTTP UI, isolated sessions, real image bytes, sprite metadata, errors and 
     assert.equal(area.headers.get("content-type"), "image/svg+xml");
     assert.match(await area.text(), /^<svg /);
     assert.equal((await fetch(base + "/areas/99-nowhere.svg")).status, 404);
+    const areas = await (await fetch(base + "/api/areas")).json();
+    assert.match(areas["0"]["spring-day"].middle, /^\/areas\/0-shrine\/spring-day-middle\.png\?v=\d+$/);
+    const areaPicture = await fetch(base + areas["0"]["spring-day"].left);
+    assert.equal(areaPicture.status, 200);
+    assert.equal(areaPicture.headers.get("content-type"), "image/png");
+    assert.equal((await fetch(base + "/areas/0-shrine/monsoon-day-left.png")).status, 404);
+    assert.equal((await fetch(base + "/areas/0-shrine/..%2f..%2fapp.js")).status, 404);
     const maps = await fetch(base + "/api/maps");
     assert.equal(maps.status, 200);
     assert.equal(typeof await maps.json(), "object");

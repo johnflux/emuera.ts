@@ -272,6 +272,15 @@ a { color: #8ddaff; }
 :is(.era-sky-night, .era-sky-dawn) .era-sky-landmark { --landmark-tint: brightness(.5) saturate(.75); }
 .era-sky-evening .era-sky-landmark { --landmark-tint: brightness(.75) saturate(.9); }
 .era-underground .era-sky-landmark { --landmark-tint: ; left: 0; right: 0; width: auto; background-size: auto 100%; background-position: right bottom; }
+/* Area pictures (web/areas/<map id>-<name>/<season>-<day|night>-<left|middle|right>.png, chosen by app.js): pixel art
+   at one art pixel per CSS pixel, scaled nearest-neighbour; the ends over the middle repeated along the header, which
+   grows to their height. Day pictures at night are dimmed as above; night pictures are not. */
+:is(.era-main, .era-shop) .era-main-header:has(.era-area-art) { min-height: calc(var(--area-art-height, 0px) + 2px); }
+.era-sky.era-area-art .era-sky-landmark { left: 0; right: 0; bottom: 0; width: auto; height: 100%; image-rendering: pixelated; -webkit-mask: none; mask: none;
+  background: var(--area-left, none) left bottom / auto no-repeat, var(--area-right, none) right bottom / auto no-repeat, var(--area-middle) left bottom / auto repeat-x;
+  filter: var(--landmark-tint, ); }
+.era-sky.era-area-art .era-sky-land { display: none; }
+.era-sky.era-area-art-night .era-sky-landmark { --landmark-tint: ; }
 .era-main-occupants { grid-area: occupants; }
 .era-main-left { grid-area: left; display: flex; flex-direction: column; gap: 10px; }
 .era-main > :is(.era-main-occupants, .era-main-center, .era-main-right, .era-main-left) { align-self: stretch; display: flex; flex-direction: column; }

@@ -823,6 +823,42 @@ async function image(source, token, suppliedSprite, scale = imageScale(), suppli
   return holder;
 }
 /**
+ * Hotpatch extension: area pictures. The main screen's sky (hotpatch/MAIN_SCREEN.ERB, HOTPATCH_SKY) names its area,
+ * season and hour in its classes. When web/areas/<area>-<name>/<season>-<day|night>-*.png exist (src/area-art.ts),
+ * they replace the area's SVG landmark: left and right ends over the middle one repeated along the header, one art
+ * pixel per CSS pixel, the header growing to their height. Dawn and night use the night pictures, or the day ones
+ * dimmed when there are none.
+ */
+let areaManifest;
+async function prepareAreaArt() {
+  const skies = [...outputRoot.querySelectorAll(".era-sky[class*='era-area-']:not([data-area-art])")];
+  if (!skies.length) return;
+  areaManifest ??= api("/api/areas").catch((error) => { console.warn("Area pictures unavailable:", error); return {}; });
+  const manifest = await areaManifest;
+  for (const sky of skies) {
+    sky.dataset.areaArt = "";
+    const area = [...sky.classList].find((name) => /^era-area-\d+$/.test(name))?.slice("era-area-".length);
+    const season = [...sky.classList].find((name) => name.startsWith("era-season-"))?.slice("era-season-".length);
+    const night = sky.matches(".era-sky-night, .era-sky-dawn");
+    const sets = manifest[area] ?? {};
+    const lit = night && sets[`${season}-night`]?.middle;
+    const set = lit ? sets[`${season}-night`] : sets[`${season}-day`];
+    if (!set?.middle) continue;
+    sky.dataset.areaArt = `${season}-${lit ? "night" : "day"}`;
+    sky.classList.add("era-area-art");
+    sky.classList.toggle("era-area-art-night", Boolean(lit));
+    const header = sky.closest(".era-main-header") ?? sky;
+    for (const part of ["left", "middle", "right"]) {
+      if (!set[part]) continue;
+      sky.style.setProperty(`--area-${part}`, `url("${set[part]}")`);
+      const img = new Image();
+      pendingImages.push(loadImage(img, set[part]).then(() => {
+        if (part === "middle") header.style.setProperty("--area-art-height", `${img.naturalHeight}px`);
+      }, (error) => console.warn(`Area picture ${set[part]}:`, error)));
+    }
+  }
+}
+/**
  * Hotpatch extension: map pictures. The map renderers (hotpatch/MOVE_MAP.ERB) wrap a text map in
  * <era-open class='era-map-art era-map-key-<key>'>. When web/maps/<key>.<ext> exists, the text map is swapped for the
  * picture and its room buttons are laid over it, each where its number sits in the text map (the picture is taken to
@@ -1301,6 +1337,7 @@ async function renderSnapshot(snapshot, advanceScreen) {
   }
   markTarget(snapshot.target);
   await prepareMapPictures();
+  await prepareAreaArt();
   const revived = outputRoot.querySelectorAll(".screen.is-active button.choice.is-revived");
   if (revived.length && outputRoot.querySelector(".screen.is-active button.choice:not(.is-revived)")) {
     revived.forEach((button) => { button.classList.replace("is-revived", "is-stale"); });

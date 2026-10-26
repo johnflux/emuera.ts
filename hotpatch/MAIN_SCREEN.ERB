@@ -661,8 +661,8 @@ SIF STRLENS(sHtml)
 ;-------------------------------------------------------------------------------
 ; The header's backdrop, drawn by CSS from its classes: the sky for the hour (TIME), the weather (TIME:5, abnormal
 ; weather FLAG:異常気象), the season's land (DAY:2), dimmer under a roof (!OUTROOF), or a cave where the game hides
-; the weather (underground); and the area's landmark (HOTPATCH_AREA, web/areas/*.svg). Decoration only: it prints one
-; HTML line.
+; the weather (underground); and the area's landmark (HOTPATCH_AREA, web/areas/*.svg, or the pictures for the season
+; and time of day in web/areas/<area>/, which app.js picks from these classes). Decoration only: it prints one HTML line.
 ;-------------------------------------------------------------------------------
 @HOTPATCH_SKY(nNoWeather)
 #DIM DYNAMIC nNoWeather
