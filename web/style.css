@@ -385,17 +385,20 @@ a { color: #8ddaff; }
 .era-inventory-tabs { margin: 14px 0 12px; gap: 5px; }
 .era-inventory-tools .era-chip-button, .era-inventory-footer .era-chip-button { padding: 3px 12px; border: 1px solid #35566d; border-radius: 4px; color: #8fc8ff; }
 .era-inventory-tools .era-current { background: #102a2c; color: #6ff; }
-.era-inventory-query { min-width: 0; overflow-wrap: anywhere; color: #a7bbc8; font-size: .85em; }
 .era-inventory-body { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 16px 20px; scrollbar-gutter: stable; }
-.era-inventory-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 270px), 1fr)); gap: 12px; }
+.era-inventory-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: 0 24px; align-content: start; }
 .era-inventory-grid > .line { min-width: 0; white-space: normal; }
-.era-inventory-item { height: 100%; padding: 12px 14px; border: 1px solid #244357; border-radius: 6px; background: linear-gradient(135deg, #0d202c, #09131c); }
-.era-inventory-item-heading { display: flex; align-items: baseline; gap: 12px; margin-bottom: 8px; }
-.era-inventory-name { min-width: 0; color: #b7deef; overflow-wrap: anywhere; }
-.era-inventory-quantity { margin-left: auto; padding: 1px 8px; border-radius: 4px; background: #193342; color: #ffd866; font-variant-numeric: tabular-nums; }
-.era-inventory-description { color: #92a7b5; font-size: .85em; line-height: 1.45; overflow-wrap: anywhere; }
-.era-inventory-empty, .era-inventory-prompt { padding: 32px 12px; color: #92a7b5; text-align: center; white-space: normal; }
+.era-inventory-grid > .line[hidden], .era-inventory-body > .line[hidden] { display: none; }
+.era-inventory-item { display: flex; align-items: baseline; gap: 12px; padding: 6px 2px; border-bottom: 1px solid #ffffff0a; }
+.era-inventory-item:is(:hover, :focus-visible) { background: #ffffff05; }
+.era-inventory-name { min-width: 0; color: #b5c5ce; overflow-wrap: anywhere; }
+.era-inventory-quantity { margin-left: auto; color: #8a9ba6; font-variant-numeric: tabular-nums; }
+.era-inventory-empty { padding: 32px 12px; color: #92a7b5; text-align: center; white-space: normal; }
 .era-inventory-footer { justify-content: space-between; padding: 10px 20px; border-top: 1px solid #245066; color: #92a7b5; font-size: .85em; white-space: normal; }
+.era-inventory-filter { flex: 1 1 180px; max-width: 320px; min-width: 0; }
+.era-inventory-search { width: 100%; min-width: 0; padding: 5px 8px; border: 1px solid #2a3943; border-radius: 4px; background: #0b1117; color: #c5d3dc; font: inherit; }
+.era-inventory-search::placeholder { color: #768894; }
+.era-inventory-search:focus { outline: 1px solid #63b6d2; outline-offset: 1px; }
 .era-bar-max { color: #7a848c; }
 .era-bar.era-buffed .era-bar-value { color: #0ff; }
 .era-bar.era-debuffed .era-bar-value { color: #ff0; }
@@ -409,7 +412,7 @@ a { color: #8ddaff; }
 .era-clock { line-height: 0; }
 /* Time stop: the big control. */
 .era-timestop { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
-.line button.choice.era-timestop-button, .era-timestop-button { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; min-width: 18ch; padding: 8px 18px 7px; border: 2px solid #3aa8d8; border-radius: 10px; background: linear-gradient(#173445, #0f2230); color: #bfeaff; font-weight: bold; font-size: 1.15em; letter-spacing: .05em; cursor: pointer; }
+.line button.choice.era-timestop-button, .era-timestop-button { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; min-width: 18ch; padding: 8px 18px 7px; border: 2px solid #3aa8d8; border-radius: 10px; background: linear-gradient(#173445aa, #0f2230ee); color: #bfeaff; font-weight: bold; font-size: 1.15em; letter-spacing: .05em; cursor: pointer; }
 .line button.choice.era-timestop-button.era-stopped { border-color: #c070ff; background: linear-gradient(#3a1d52, #24123a); color: #f0d8ff; box-shadow: 0 0 14px #b060ff66; }
 .era-timestop-button .era-sub { margin: 2px 0 0; font-size: .7em; font-weight: normal; letter-spacing: 0; color: inherit; opacity: .75; }
 .era-timestop-gauge { display: flex; flex-direction: column; align-items: stretch; gap: 3px; align-self: stretch; margin-top: 6px; }

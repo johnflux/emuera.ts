@@ -316,7 +316,7 @@ test("room lineup renders every portrait and preserves target selection", {
   }
 });
 
-test("inventory dialog preserves categories, search, mods and closing without changing items", {
+test("inventory dialog supplies a live-filter footer and preserves categories, mods and items", {
   skip: !existsSync(GAME_ROOT),
 }, async () => {
   const game = await loadGame();
@@ -347,22 +347,20 @@ WAIT`, "<inventory-test>");
   assert.match(html, /2 item types/);
   assert.equal((html.match(/class='era-inventory-item'/g) ?? []).length, 2);
   assert.match(html, /value='3020'/);
+  assert.match(html, /era-inventory-footer'><span class='era-inventory-filter'><\/span>/);
+  assert.match(html, /class='era-inventory-count'>2 item types</);
+  assert.match(html, /class='era-inventory-item' title='Protects from the elements/);
+  assert.match(html, /title='[^']*&#39;smoothly&#39;\.'/,
+    "apostrophes do not truncate description tooltips");
+  assert.doesNotMatch(html, /value='888'|era-inventory-description|Enter an item name/);
 
   html = markup(runtime.input("3002"));
   assert.match(html, /era-current'>Tools</);
-  assert.match(html, /1 item type · Tools/);
+  assert.match(html, /1 item type<\/span> · Tools/);
   html = markup(runtime.input("3016"));
-  assert.match(html, /No items match/);
-  html = markup(runtime.input("888"));
-  assert.match(html, /Enter an item name/);
+  assert.match(html, /No items in this category/);
+  assert.match(html, /0 item types/);
   assert.match(html, /value='999' class='era-dialog-close'/);
-  html = markup(runtime.input("uMbReLLa"));
-  assert.match(html, /1 item type · All/);
-  assert.match(html, /Search: uMbReLLa/);
-  html = markup(runtime.input("3001"));
-  assert.match(html, /No items match/);
-  html = markup(runtime.input("889"));
-  assert.doesNotMatch(html, /Search: uMbReLLa/);
   html = markup(runtime.input("3000"));
   assert.match(html, /2 item types/);
   const mods = runtime.input("777");
@@ -373,21 +371,7 @@ WAIT`, "<inventory-test>");
   assert.match(html, /2 item types/);
   html = markup(runtime.input("-1"));
   assert.match(html, /Invalid Input/);
-  markup(runtime.input("888"));
-  html = markup(runtime.input("<&>"));
-  assert.match(html, /Search: &lt;&amp;&gt;/);
-  assert.match(html, /No items match/);
-  markup(runtime.input("888"));
-  html = markup(runtime.input(""));
-  assert.match(html, /2 item types/);
-  let snapshot = runtime.input("999");
-  assert.equal(snapshot.error, null);
-  assert.match(snapshot.output.flatMap((item) => "text" in item ? [item.text] : []).join(""), /Returned: 3, 1/);
-
-  const cancelRuntime = new Runtime(game, GAME_INSTRUCTION_LIMIT);
-  cancelRuntime.start();
-  cancelRuntime.input("888");
-  snapshot = cancelRuntime.input("999");
+  const snapshot = runtime.input("999");
   assert.equal(snapshot.error, null);
   assert.match(snapshot.output.flatMap((item) => "text" in item ? [item.text] : []).join(""), /Returned: 3, 1/);
 
@@ -397,7 +381,7 @@ WAIT`, "<inventory-test>");
   const emptyRuntime = new Runtime(game, GAME_INSTRUCTION_LIMIT);
   html = markup(emptyRuntime.start());
   assert.match(html, /0 item types/);
-  assert.match(html, /No items match/);
+  assert.match(html, /No items in this category/);
   html = markup(emptyRuntime.input("777"));
   assert.match(html, /You do not own any moddable items/);
 });

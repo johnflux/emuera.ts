@@ -415,15 +415,58 @@ function describe(element, description) {
   element.addEventListener("blur", () => { if (tooltipTarget === element) hideTooltip(); });
 }
 document.addEventListener("keydown", (event) => { if (event.key === "Escape") hideTooltip(); });
+let inventoryQuery = "";
+function filterInventory(dialog) {
+  const query = inventoryQuery.trim().toLowerCase();
+  const items = dialog.querySelectorAll(".era-inventory-item");
+  let visible = 0;
+  for (const item of items) {
+    const matches = item.querySelector(".era-inventory-name").textContent.toLowerCase().includes(query);
+    item.closest(".line").hidden = !matches;
+    if (matches) visible++;
+  }
+  const count = dialog.querySelector(".era-inventory-count");
+  count.setAttribute("role", "status");
+  count.textContent = query ? `${visible} of ${items.length} item types` : `${items.length} item type${items.length === 1 ? "" : "s"}`;
+  const empty = dialog.querySelector(".era-inventory-empty");
+  empty.closest(".line").hidden = visible !== 0;
+  empty.textContent = items.length ? "No items match your filter." : "No items in this category.";
+}
+function syncInventory(dialog) {
+  const host = dialog.querySelector(".era-inventory-filter");
+  if (!host) return;
+  let filter = host.querySelector("input");
+  if (!filter) {
+    filter = document.createElement("input");
+    filter.type = "search";
+    filter.className = "era-inventory-search";
+    filter.placeholder = "Filter items...";
+    filter.setAttribute("aria-label", "Filter inventory by name");
+    filter.autocomplete = "off";
+    host.append(filter);
+  }
+  filter.value = inventoryQuery;
+  filterInventory(dialog);
+}
+document.addEventListener("input", (event) => {
+  const filter = event.target;
+  if (!(filter instanceof HTMLInputElement) || !filter.matches(".era-inventory-search")) return;
+  const dialog = filter.closest(".screen.is-active .era-inventory");
+  if (!dialog) return;
+  inventoryQuery = filter.value;
+  hideTooltip();
+  filterInventory(dialog);
+});
 /**
- * Hotpatch extension: a box with the era-dialog class shows as a modal panel in the top layer while its screen is
- * active, and is hidden once the screen is history. It stays in place in the output, so line counting is unchanged.
+ * Hotpatch extension: era-dialog boxes use the top layer while their screen is active, without changing line counts.
  * Escape or a click outside the panel presses its .era-dialog-close button.
  */
 function syncDialogs() {
+  if (!terminal.querySelector(".screen.is-active .era-inventory")) inventoryQuery = "";
   for (const dialog of terminal.querySelectorAll(".era-dialog")) {
     if (!dialog.popover) dialog.popover = "manual";
     const open = !!dialog.closest(".screen.is-active");
+    if (open && dialog.classList.contains("era-inventory")) syncInventory(dialog);
     if (open === dialog.matches(":popover-open")) continue;
     if (open) dialog.showPopover();
     else dialog.hidePopover();

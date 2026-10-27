@@ -1,4 +1,4 @@
-; Inventory presentation only: retain category IDs, name search and the game's item-mod printers.
+; Inventory presentation only: category IDs and item-mod printers stay in ERB; the browser filters names locally.
 @QoL_AllItemSort
 #DIMS CONST sCategory = "全て", "調教", "日用品", "素質", "体質変化", "調合物", "弾幕", "消耗品", "お酒", "食材", "野菜", "お肉", "チョコ", "回復", "園芸用品", "素材", "製材", "衣装", "書物", "特殊", "その他"
 #DIMS CONST sCategoryName = "All", "Sex", "Tools", "Traits", "Body", "Chems", "Danmaku", "Consumables", "Booze", "Ingredients", "Veggies", "Meat", "Chocolate", "Restoratives", "Gardening", "Materials", "Wood", "Clothes", "Book", "Special", "Misc"
@@ -7,7 +7,6 @@
 #DIM DYNAMIC nView
 #DIM DYNAMIC nIndex
 #DIM DYNAMIC nCount
-#DIMS DYNAMIC sSearch
 #DIMS DYNAMIC sTabs
 #DIMS DYNAMIC sHeader
 #DIMS DYNAMIC sError
@@ -16,21 +15,14 @@ DO
 	CLEARLINE LINECOUNT - nStart
 	HTML_PRINT "<era-open class='era-dialog era-inventory'>"
 	sHeader '= @"<div class='era-inventory-header'><div class='era-inventory-heading'><div><span class='era-inventory-title'>Inventory</span><span class='era-sub'>%HTML_ESCAPE(CALLNAME:MASTER)%</span></div><button value='999' class='era-dialog-close' title='Close inventory'>×</button></div>"
-	IF nView != 1
-		sTabs '= ""
-		FOR nIndex, 0, VARSIZE("sCategory")
-			sTabs += @"<button value='{3000 + nIndex}' class='era-sheet-subpage%(nView == 0 && nIndex == nCategory ? " era-current" # "")%'>%sCategoryName:nIndex%</button>"
-		NEXT
-		sHeader += @"<div class='era-sheet-subpages era-inventory-tabs'>%sTabs%</div><div class='era-inventory-tools'><button value='888' class='era-chip-button'>Search</button><button value='777' class='era-chip-button%(nView == 2 ? " era-current" # "")%'>Item mods</button>"
-		SIF STRLENS(sSearch)
-			sHeader += @"<span class='era-inventory-query'>Search: %HTML_ESCAPE(sSearch)%</span><button value='889' class='era-chip-button'>Clear search</button>"
-		sHeader += "</div>"
-	ENDIF
+	sTabs '= ""
+	FOR nIndex, 0, VARSIZE("sCategory")
+		sTabs += @"<button value='{3000 + nIndex}' class='era-sheet-subpage%(nView == 0 && nIndex == nCategory ? " era-current" # "")%'>%sCategoryName:nIndex%</button>"
+	NEXT
+	sHeader += @"<div class='era-sheet-subpages era-inventory-tabs'>%sTabs%</div><div class='era-inventory-tools'><button value='777' class='era-chip-button%(nView == 2 ? " era-current" # "")%'>Item mods</button></div>"
 	HTML_PRINT sHeader + "</div>"
 	HTML_PRINT "<era-open class='era-inventory-body'>"
 	SELECTCASE nView
-	CASE 1
-		HTML_PRINT "<div class='era-inventory-prompt'>Enter an item name below. Leave it empty to show all items.</div>"
 	CASE 2
 		HTML_PRINT "<div class='era-inventory-title'>Item mods</div>"
 		nCount = LINECOUNT
@@ -50,31 +42,19 @@ DO
 				SIF !RESULT
 					CONTINUE
 			ENDIF
-			SIF STRLENS(sSearch) && !STRCOUNT(TOLOWER(ITEMNAME_TR(nIndex)), TOLOWER(sSearch))
-				CONTINUE
 			nCount ++
-			HTML_PRINT @"<div class='era-inventory-item'><div class='era-inventory-item-heading'><span class='era-inventory-name'>%HTML_ESCAPE(ITEMNAME_TR(nIndex))%</span><span class='era-inventory-quantity' title='Quantity'>{ITEM:nIndex}</span></div><div class='era-inventory-description'>%HTML_ESCAPE(ITEM_EXPLANATION(nIndex))%</div></div>"
+			HTML_PRINT @"<div class='era-inventory-item' title='%HOTPATCH_ATTRIBUTE(HTML_ESCAPE(ITEM_EXPLANATION(nIndex)))%'><span class='era-inventory-name'>%HTML_ESCAPE(ITEMNAME_TR(nIndex))%</span><span class='era-inventory-quantity' title='Quantity'>{ITEM:nIndex}</span></div>"
 		NEXT
 		HTML_PRINT "<era-close>"
-		SIF !nCount
-			HTML_PRINT "<div class='era-inventory-empty'>No items match this view. Try another category or clear your search.</div>"
+		HTML_PRINT "<div class='era-inventory-empty'>No items in this category.</div>"
 	ENDSELECT
 	HTML_PRINT "<era-close>"
 	IF nView == 0
-		HTML_PRINT @"<div class='era-inventory-footer'><span>{nCount} item type%(nCount == 1 ? "" # "s")% · %sCategoryName:nCategory%</span><span class='era-tone-red'>%HTML_ESCAPE(sError)%</span><button value='999' class='era-chip-button'>Return</button></div>"
+		HTML_PRINT @"<div class='era-inventory-footer'><span class='era-inventory-filter'></span><span><span class='era-inventory-count'>{nCount} item type%(nCount == 1 ? "" # "s")%</span> · %sCategoryName:nCategory%</span><span class='era-tone-red'>%HTML_ESCAPE(sError)%</span><button value='999' class='era-chip-button'>Return</button></div>"
 	ELSEIF nView == 2
 		HTML_PRINT @"<div class='era-inventory-footer'><button value='889' class='era-chip-button'>Back to items</button><span class='era-tone-red'>%HTML_ESCAPE(sError)%</span><button value='999' class='era-chip-button'>Return</button></div>"
 	ENDIF
 	HTML_PRINT "<era-close>"
-	IF nView == 1
-		INPUTS
-		SIF RESULTS == "999"
-			RETURN
-		sSearch '= RESULTS
-		nCategory = 0
-		nView = 0
-		CONTINUE
-	ENDIF
 	INPUT
 	sError '= ""
 	SELECTCASE RESULT
@@ -82,10 +62,7 @@ DO
 		RETURN
 	CASE 777
 		nView = 2
-	CASE 888
-		nView = 1
 	CASE 889
-		sSearch '= ""
 		nView = 0
 	CASE 3000 TO 3020
 		nCategory = RESULT - 3000
