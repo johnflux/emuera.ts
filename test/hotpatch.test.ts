@@ -174,8 +174,15 @@ test("main screen hotpatch opens and closes its panel boxes in balance", {
     assert.ok(opens > 5, `screen ${index} draws the panels`);
     assert.equal(opens, closes, `screen ${index} closes every box`);
     assert.ok(screen.some((text) => text.includes("era-timestop-button")), `screen ${index} has the time stop control`);
+    const html = screen.join("");
+    assert.equal((html.match(/value='805'/g) ?? []).length, 1, "inventory has exactly one entry point");
+    assert.match(html, /era-player-actions'><button value='805'/, "inventory is on the player card");
   }
   assert.ok(screens[1]!.some((text) => /era-stopped'[^>]*value='999'|value='999'[^>]*era-stopped/.test(text)), "time stop switches to Resume Time");
+  step("805");
+  assert.ok(markup.some((text) => text.includes("era-dialog era-inventory")), "805 opens the inventory from the main screen");
+  step("999");
+  assert.ok(markup.some((text) => text.includes("era-player-actions")), "closing inventory returns to the player panel");
 });
 
 test("character info and player panels share body-size labels and highlights", {
@@ -307,4 +314,90 @@ test("room lineup renders every portrait and preserves target selection", {
     assert.equal(snapshot.target, Number(next[1]) - 1000);
     if (count > 1) assert.notEqual(snapshot.target, originalTarget);
   }
+});
+
+test("inventory dialog preserves categories, search, mods and closing without changing items", {
+  skip: !existsSync(GAME_ROOT),
+}, async () => {
+  const game = await loadGame();
+  assert.ok((await applyHotpatches(game)).includes("QoL_AllItemSort"));
+  const stub = emptyGame(game.root);
+  indexScript(stub, `@SYSTEM_TITLE
+ADDCHARA 0
+MASTER = 0
+CALLNAME:0 = Tester <&>
+VARSET ITEM
+ITEM:40 = 3
+ITEM:36 = 1
+CALL SHOW_ALLITEM
+PRINTFORML Returned: {ITEM:40}, {ITEM:36}
+WAIT`, "<inventory-test>");
+  game.routines.set("SYSTEM_TITLE", stub.routines.get("SYSTEM_TITLE")!);
+  const runtime = new Runtime(game, GAME_INSTRUCTION_LIMIT);
+  const markup = (snapshot: ReturnType<Runtime["start"]>) => {
+    assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
+    const html = snapshot.output.flatMap((item) => item.type === "html" ? [item.text] : []).join("");
+    assert.equal((html.match(/<era-open/g) ?? []).length, (html.match(/<era-close>/g) ?? []).length);
+    return html;
+  };
+  let html = markup(runtime.start());
+  assert.match(html, /era-dialog era-inventory/);
+  assert.match(html, /Tester &lt;&amp;&gt;/);
+  assert.match(html, /title='Quantity'>3</);
+  assert.match(html, /2 item types/);
+  assert.equal((html.match(/class='era-inventory-item'/g) ?? []).length, 2);
+  assert.match(html, /value='3020'/);
+
+  html = markup(runtime.input("3002"));
+  assert.match(html, /era-current'>Tools</);
+  assert.match(html, /1 item type · Tools/);
+  html = markup(runtime.input("3016"));
+  assert.match(html, /No items match/);
+  html = markup(runtime.input("888"));
+  assert.match(html, /Enter an item name/);
+  assert.match(html, /value='999' class='era-dialog-close'/);
+  html = markup(runtime.input("uMbReLLa"));
+  assert.match(html, /1 item type · All/);
+  assert.match(html, /Search: uMbReLLa/);
+  html = markup(runtime.input("3001"));
+  assert.match(html, /No items match/);
+  html = markup(runtime.input("889"));
+  assert.doesNotMatch(html, /Search: uMbReLLa/);
+  html = markup(runtime.input("3000"));
+  assert.match(html, /2 item types/);
+  const mods = runtime.input("777");
+  html = markup(mods);
+  assert.match(html, /Back to items/);
+  assert.match(mods.output.flatMap((item) => "text" in item ? [item.text] : []).join(""), /Umbrella/i);
+  html = markup(runtime.input("889"));
+  assert.match(html, /2 item types/);
+  html = markup(runtime.input("-1"));
+  assert.match(html, /Invalid Input/);
+  markup(runtime.input("888"));
+  html = markup(runtime.input("<&>"));
+  assert.match(html, /Search: &lt;&amp;&gt;/);
+  assert.match(html, /No items match/);
+  markup(runtime.input("888"));
+  html = markup(runtime.input(""));
+  assert.match(html, /2 item types/);
+  let snapshot = runtime.input("999");
+  assert.equal(snapshot.error, null);
+  assert.match(snapshot.output.flatMap((item) => "text" in item ? [item.text] : []).join(""), /Returned: 3, 1/);
+
+  const cancelRuntime = new Runtime(game, GAME_INSTRUCTION_LIMIT);
+  cancelRuntime.start();
+  cancelRuntime.input("888");
+  snapshot = cancelRuntime.input("999");
+  assert.equal(snapshot.error, null);
+  assert.match(snapshot.output.flatMap((item) => "text" in item ? [item.text] : []).join(""), /Returned: 3, 1/);
+
+  const emptyStub = emptyGame(game.root);
+  indexScript(emptyStub, "@SYSTEM_TITLE\nADDCHARA 0\nVARSET ITEM\nCALL SHOW_ALLITEM\nWAIT", "<empty-inventory-test>");
+  game.routines.set("SYSTEM_TITLE", emptyStub.routines.get("SYSTEM_TITLE")!);
+  const emptyRuntime = new Runtime(game, GAME_INSTRUCTION_LIMIT);
+  html = markup(emptyRuntime.start());
+  assert.match(html, /0 item types/);
+  assert.match(html, /No items match/);
+  html = markup(emptyRuntime.input("777"));
+  assert.match(html, /You do not own any moddable items/);
 });

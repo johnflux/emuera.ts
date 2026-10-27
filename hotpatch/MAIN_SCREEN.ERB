@@ -203,6 +203,8 @@ CALL HOTPATCH_PLAYER_STATUS
 CALL SHOW_EQUIP_SP
 CALL SHOW_EQUIP_3
 CALL INFO_GAUGEGROUP
+SIF !GETBIT (FLAG:USERCOMフィルタ, 4)
+	HTML_PRINT "<div class='era-player-actions'><button value='805' class='era-chip-button' title='Item list, quantities, categories and search'>Inventory</button></div>"
 HTML_PRINT "<era-close>"
 HTML_PRINT "<era-close>"
 

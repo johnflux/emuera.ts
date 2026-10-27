@@ -376,6 +376,26 @@ a { color: #8ddaff; }
 .line button.choice.era-sheet-subpage.era-current { border-color: #2f6060; background: #102a2c; color: #66ffff; }
 .era-sheet-bars { display: grid; grid-template-columns: repeat(2, 44ch); column-gap: 6ch; row-gap: 2px; margin: 4px 0 6px 2ch; }
 .era-sheet-bars .era-bar { grid-template-columns: 4ch minmax(0, 1fr) 13ch; }
+.era-player-actions { display: flex; margin-top: 12px; padding-top: 10px; border-top: 1px solid #20506a; }
+.line .era-player-actions button.choice { padding: 5px 16px; border: 1px solid #35566d; border-radius: 4px; background: linear-gradient(#102330, #0b1822); color: #8fc8ff; }
+.era-inventory:popover-open { width: min(1100px, calc(100vw - 32px)); height: min(820px, calc(100dvh - 32px)); }
+.era-inventory-header { padding: 16px 20px 12px; border-bottom: 1px solid #245066; background: linear-gradient(135deg, #102735, #0b141d); white-space: normal; }
+.era-inventory-heading, .era-inventory-tools, .era-inventory-footer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.era-inventory-title { color: #63d3f6; font-size: 1.15em; font-weight: bold; }
+.era-inventory-tabs { margin: 14px 0 12px; gap: 5px; }
+.era-inventory-tools .era-chip-button, .era-inventory-footer .era-chip-button { padding: 3px 12px; border: 1px solid #35566d; border-radius: 4px; color: #8fc8ff; }
+.era-inventory-tools .era-current { background: #102a2c; color: #6ff; }
+.era-inventory-query { min-width: 0; overflow-wrap: anywhere; color: #a7bbc8; font-size: .85em; }
+.era-inventory-body { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 16px 20px; scrollbar-gutter: stable; }
+.era-inventory-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 270px), 1fr)); gap: 12px; }
+.era-inventory-grid > .line { min-width: 0; white-space: normal; }
+.era-inventory-item { height: 100%; padding: 12px 14px; border: 1px solid #244357; border-radius: 6px; background: linear-gradient(135deg, #0d202c, #09131c); }
+.era-inventory-item-heading { display: flex; align-items: baseline; gap: 12px; margin-bottom: 8px; }
+.era-inventory-name { min-width: 0; color: #b7deef; overflow-wrap: anywhere; }
+.era-inventory-quantity { margin-left: auto; padding: 1px 8px; border-radius: 4px; background: #193342; color: #ffd866; font-variant-numeric: tabular-nums; }
+.era-inventory-description { color: #92a7b5; font-size: .85em; line-height: 1.45; overflow-wrap: anywhere; }
+.era-inventory-empty, .era-inventory-prompt { padding: 32px 12px; color: #92a7b5; text-align: center; white-space: normal; }
+.era-inventory-footer { justify-content: space-between; padding: 10px 20px; border-top: 1px solid #245066; color: #92a7b5; font-size: .85em; white-space: normal; }
 .era-bar-max { color: #7a848c; }
 .era-bar.era-buffed .era-bar-value { color: #0ff; }
 .era-bar.era-debuffed .era-bar-value { color: #ff0; }

@@ -335,8 +335,6 @@ CALL COM_ABLE604
 SIF RESULT
 	PRINTC Explore[604]
 RESETCOLOR
-SIF !GETBIT (FLAG:USERCOMフィルタ, 4)
-	PRINTC Item List[805]
 SIF FLAG:1005
 	PRINTC Config[810]
 SIF TALENT:MASTER:居場所察知 && (GETBIT(TALENT:MASTER:居場所察知, 1) || !(CFLAG:うふふ || CFLAG:イタズラ || CFLAG:添い寝中)) ;at_home check removed
