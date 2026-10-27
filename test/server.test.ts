@@ -6,6 +6,7 @@ import path from "node:path";
 import { once } from "node:events";
 import { createApp } from "../src/server.js";
 import { discoverGames, emptyGame, indexScript, loadGame, readText } from "../src/loader.js";
+import { EraError } from "../src/model.js";
 
 test("games are discovered in GAMES folders directly or one level down, after the known ones", async () => {
   const dir = await mkdtemp(path.join(tmpdir(), "era-games-"));
@@ -83,6 +84,29 @@ test("ERD tables allow unnamed indices while rejecting invalid numeric indices",
       await writeFile(file, row);
       await assert.rejects(loadGame(root), /Invalid ERD index definition/, row);
     }
+  } finally { await rm(root, { recursive: true }); }
+});
+test("character CSV multiline blocks become single fields and unknown-field diagnostics retain source lines", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "era-character-csv-"));
+  try {
+    await Promise.all(["ERB", "CSV"].map((dir) => mkdir(path.join(root, dir))));
+    await writeFile(path.join(root, "CSV", "Chara1.csv"), [
+      "番号,1", "名前,Example", "{", "CSTR,0,", "first", "second", "}",
+      "UNKNOWN,0,ignored", "CSTR,1,after",
+    ].join("\n"));
+    const game = await loadGame(root);
+    assert.deepEqual(game.characters.get(1)?.rows, [
+      ["番号", "1"], ["名前", "Example"], ["CSTR", "0", "first second"],
+      ["UNKNOWN", "0", "ignored"], ["CSTR", "1", "after"],
+    ]);
+    assert.deepEqual(game.diagnostics, [{
+      file: "CSV/Chara1.csv", line: 8,
+      message: 'Unknown character CSV field "UNKNOWN"; this row is ignored',
+    }]);
+    await writeFile(path.join(root, "CSV", "Chara1.csv"), "番号,1\n{\nCSTR,0,x");
+    await assert.rejects(loadGame(root), (error: unknown) =>
+      error instanceof EraError && error.message === "Unclosed multiline statement"
+      && error.source?.file === "CSV/Chara1.csv" && error.source.line === 2);
   } finally { await rm(root, { recursive: true }); }
 });
 test("HTTP UI, isolated sessions, real image bytes, sprite metadata, errors and traversal protection", async () => {

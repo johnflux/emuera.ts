@@ -191,6 +191,21 @@ test("compound shift assignments and GAMEBASE author, flags and window title", (
 test("CSV comments, escaped quotes, quoted commas and semicolons", () => {
   assert.deepEqual(csvRows('; comment\n0,"a,b"\n1,"x;""y"; ignored'), [["0", "a,b"], ["1", 'x;"y']]);
 });
+test("CSV brace blocks join physical lines before splitting fields and preserve quoted content", () => {
+  assert.deepEqual(csvRows('\uFEFF; comment\r\n{ ; block\r\n CSTR,0,\r\n first ; omit\r\n "second,semi;""quote"""\r\n} ; end\r\nCSTR,1,after'), [
+    ["CSTR", "0", 'first second,semi;"quote"'],
+    ["CSTR", "1", "after"],
+  ]);
+  assert.deepEqual(csvRows('0,"{"\n1,"}"\n{literal,value\n},value'), [
+    ["0", "{"], ["1", "}"], ["{literal", "value"], ["}", "value"],
+  ]);
+  for (const [source, message] of [
+    ["{\n{\nCSTR,0,x\n}\n}", /Nested multiline statement/],
+    ["}", /Unmatched multiline statement terminator/],
+    ["{\nCSTR,0,x", /Unclosed multiline statement/],
+    ['{\nCSTR,0,"unterminated\n}', /Unterminated CSV quote/],
+  ] as const) assert.throws(() => csvRows(source), message);
+});
 test("nested branches, SIF, loops, BREAK, CONTINUE, negative FOR and SELECTCASE", () => {
   const rt = runtime(`@SYSTEM_TITLE
 A = 0

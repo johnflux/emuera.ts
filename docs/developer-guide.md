@@ -63,6 +63,10 @@ Array accesses also resolve bare and string index names against the matching
 base name table when no dimension-specific table exists, in both interpreted
 and JIT execution. The game's party lookup through `BATTLE_STATE@2.ERD` is
 regression-tested separately from the new-game menu path.
+Brace-delimited multiline CSV records are joined with spaces before parsing,
+so character settings spread over several lines remain a single `CSTR` value
+instead of producing unknown-field warnings. Template lookups and `ADDCHARA`
+are regression-tested against Blue Resort's character 2075.
 This is not a claim of full gameplay compatibility; the lexical inventory does
 not find every missing expression function or validate every argument form.
 

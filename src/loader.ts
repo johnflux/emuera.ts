@@ -163,9 +163,21 @@ function decodeText(buffer: Buffer): string {
     return new TextDecoder("shift_jis", { fatal: true }).decode(buffer);
   }
 }
-export function csvRows(source: string): string[][] {
-  return source.replace(/^\uFEFF/, "").split(/\r?\n/).flatMap((raw) => {
-    if (!raw.trim() || raw.trimStart().startsWith(";")) return [];
+function* csvRecords(source: string, file: string): Generator<{ row: string[]; line: number }> {
+  // Strip each physical line's comments before multiline blocks are joined.
+  const cleaned = source.split(/\r?\n/).map((raw, line) => {
+    let quoted = false;
+    for (let i = 0; i < raw.length; i++) {
+      if (raw[i] === '"') {
+        if (quoted && raw[i + 1] === '"') i++;
+        else quoted = !quoted;
+      } else if (raw[i] === ";" && !quoted) return raw.slice(0, i);
+    }
+    if (quoted) throw new EraError("Unterminated CSV quote", { file, line: line + 1 });
+    return raw;
+  }).join("\n");
+  for (const { text: raw, line } of logicalLines(cleaned, file)) {
+    if (!raw.trim()) continue;
     const row: string[] = [];
     let value = "", quoted = false;
     for (let i = 0; i < raw.length; i++) {
@@ -177,10 +189,12 @@ export function csvRows(source: string): string[][] {
       else if (c === ";" && !quoted) break;
       else value += c;
     }
-    if (quoted) throw new EraError("Unterminated CSV quote");
     row.push(value.trim());
-    return [row];
-  });
+    yield { row, line };
+  }
+}
+export function csvRows(source: string): string[][] {
+  return Array.from(csvRecords(source, ""), ({ row }) => row);
 }
 export function emptyGame(root = ""): Game {
   return { root, routines: new Map(), headers: [], tables: new Map(), names: new Map(), erdNames: new Map(), sprites: new Map(), diagnostics: [], scriptFiles: 0, variableSizes: new Map(), macros: new Map(), characters: new Map(), renames: new Map(), money: { label: "\u00a5", first: true }, config: new Map(), replacements: new Map(), containers: { SAVE: containerNames(), GLOBAL: containerNames(), STATIC: containerNames() }, resourceBase: "/resources/" };
@@ -363,7 +377,8 @@ export async function loadGame(root = GAME_ROOT, options: { debug?: boolean } = 
   for (const file of csvFiles) {
     const relative = path.relative(path.join(root, "CSV"), file).split(path.sep).join("/");
     const name = key(relative.replace(/\.csv$/i, ""));
-    const rows = csvRows(await readText(file));
+    const records = [...csvRecords(await readText(file), path.relative(root, file))];
+    const rows = records.map(({ row }) => row);
     if (/^VAREXT/.test(path.basename(name))) {
       for (const row of rows) {
         const match = /^(SAVE|GLOBAL|STATIC)_(MAPS|XMLS|DTS)$/i.exec(row[0] ?? "");
@@ -389,8 +404,8 @@ export async function loadGame(root = GAME_ROOT, options: { debug?: boolean } = 
       if (game.characters.has(id)) throw new EraError(`Duplicate character number: ${id}`, { file, line: 0 });
       game.characters.set(id, { file: path.relative(root, file), rows });
       // Like Emuera, an unknown key only warns and its row is skipped.
-      for (const row of rows) {
-        if (!isCharacterNumberField(row[0]) && !characterField(row[0])) game.diagnostics.push({ file: path.relative(root, file), line: 0, message: `Unknown character CSV field "${row[0]}"; this row is ignored` });
+      for (const { row, line } of records) {
+        if (!isCharacterNumberField(row[0]) && !characterField(row[0])) game.diagnostics.push({ file: path.relative(root, file), line, message: `Unknown character CSV field "${row[0]}"; this row is ignored` });
       }
     }
     if (name === "VARIABLESIZE") {

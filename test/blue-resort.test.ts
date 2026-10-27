@@ -434,6 +434,29 @@ WAIT`).start();
 });
 
 const blueRoot = path.resolve("GAMES/erablue_resort");
+test("Blue Resort character CSV blocks load without diagnostics and retain settings in template lookups and ADDCHARA", {
+  skip: !existsSync(blueRoot),
+}, async () => {
+  const game = await loadGame(blueRoot);
+  assert.deepEqual(game.diagnostics, []);
+  const knowledge = "性知識Lv0 調合知識Lv0 魔法知識Lv0 機械知識Lv0 錬金知識Lv0 魔物知識Lv0 絵師Lv0 高貴Lv0 釣り好きLv0 踊り子Lv0 歌唱技能Lv0 料理人Lv0 歴史知識Lv0 経営知識Lv0 水泳技能Lv0 農業知識Lv0";
+  const battle = "属性_光 得意武器_杖 初期ステータスタイプ_サポート";
+  for (const jit of [false, true]) {
+    const s = runtime(`@CSV_REGRESSION
+ADDCHARA 2075
+REPEAT 4
+CALL CSV_CHECK
+REND
+RETURN
+@CSV_CHECK
+PRINTSL CSVCSTR(2075, GETNUM(CSTR, "知識素質設定"))
+PRINTSL CSTR:0:知識素質設定
+PRINTSL CSVCSTR(2075, GETNUM(CSTR, "戦闘基礎ステータス設定"))
+PRINTSL CSTR:0:戦闘基礎ステータス設定`, jit, game).start("CSV_REGRESSION");
+    assert.deepEqual(texts(s), Array.from({ length: 4 }, () => [knowledge, knowledge, battle, battle]).flat());
+  }
+});
+
 test("Blue Resort's party lookup resolves the character registration index in BATTLE_STATE@2", {
   skip: !existsSync(blueRoot),
 }, async () => {
