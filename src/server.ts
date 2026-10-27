@@ -246,7 +246,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
           installed: [...entries.values()].map(({ id, title, game }) => {
             const relative = path.relative(gamesDir, game.root);
             const catalog = GAME_CATALOG.find((item) => item.id === id || relative.split(path.sep)[0]?.toLowerCase() === item.folder.toLowerCase());
-            return { id, title: catalog?.title ?? title, blurb: catalog?.blurb ?? "A locally installed ERB game. Launch it to explore its world.", genre: catalog?.genre ?? "Local game", catalogId: catalog?.id, monogram: catalog?.monogram };
+            return { id, title: catalog?.title ?? title, blurb: catalog?.blurb ?? "A locally installed ERB game.", genre: catalog?.genre ?? "Local game", catalogId: catalog?.id, monogram: catalog?.monogram };
           }),
           downloaded: await downloadedCatalogGames(gamesDir),
           catalog: GAME_CATALOG,
