@@ -31,7 +31,8 @@ initialization now completes with real tables and legacy-achievement checks.
 The verified path continues through housing setup: the colored map renders,
 a location and room can be chosen, and the run reaches the pre-game settings
 menu ("Re-customize yourself") before the day-to-day game loop. Pre-defined-character
-selection and loading existing saves are not yet supported end to end.
+selection is not yet supported end to end. Native binary saves can be loaded;
+the bundled slot-0 regression reaches the game's `EVENTLOAD` output and wait.
 Unsupported operations stop with their source filename and line.
 
 **eraToho Reverse:** the installed `GAMES/eratohoreverse` is tested through its
@@ -52,7 +53,7 @@ Explicit variable sizes still take precedence, and out-of-range accesses still f
 `UPCHECK` applies the current target's `UP`/`DOWN` deltas and clears those arrays.
 `OUTPUTLOG` writes the retained console text (up to 4,096 completed lines plus
 pending text) as plain text to the game's
-`.era-typescript/saves/emuera.log`, replacing the previous log and reporting the
+save directory as `emuera.log`, replacing the previous log and reporting the
 write. Write failures stop execution rather than pretending the export succeeded.
 
 The separate conformance demo is an original ERB program exercising the supported
@@ -192,7 +193,7 @@ fresh run after a server or development reload starts the same game, and a link
 opens a particular game. Opening an address for a different game than the tab's
 run starts that game; an unknown id falls back to the first game.
 
-Each game keeps its own global data and saves in its `.era-typescript/` directory,
+Each game keeps its own global data and saves in Emuera's save directory,
 and its colors, font and window width from its `emuera.config`. Runs start with
 `POST /api/start {mode: "game", game: "<id>"}` (the id defaults to the first game;
 add `debug: true` for debug mode, whose snapshots carry `debug` text and
@@ -210,8 +211,19 @@ runtime with every request, so `GETDEFCOLOR`, `GETDEFBGCOLOR`, `GETFONT`,
 runtime picks them up on the next input. Each browser run has its own
 runtime. Restarting a run resets its ordinary variables. `SAVEGLOBAL` persists
 `GLOBAL`, `GLOBALS`, and header variables declared with the `GLOBAL` modifier
-to the game's `.era-typescript/global.json`. This is a separate, versioned JSON
-format, not Emuera's native `global.sav`; existing saves are never overwritten.
+to Emuera's native `global.sav`. `SAVEDATA`, `CHKDATA`, `LOADDATA` and `DELDATA`
+use native `save00.sav`, `save01.sav`, etc. Files are stored in the game's `sav/`
+directory when `UseSaveFolder` (`セーブデータをSAVフォルダ内に作成する`) is enabled,
+otherwise in the game root. Config keys and save filenames are matched
+case-insensitively. `SAVECHARA`/`LOADCHARA` use `dat/chara_<name>.dat`.
+The 1808 binary format supports sparse integer/string arrays through three
+dimensions, character variables and declared saved variables, and the EM
+MAP/XML/data-table tail. Gzip-compressed native saves are readable, and
+`ZipSaveData` controls compression on writes. Older text-format saves and the
+previous `.era-typescript/` JSON format are not supported.
+These are shared files, not imported copies: saving or deleting a slot affects
+Emuera's saves too. Back up saves before switching engines and avoid running
+both engines against the same save directory at once.
 Writes use atomic replacement, and corrupt files or I/O failures stop execution
 with a diagnostic. The demo uses isolated in-memory globals instead.
 
@@ -656,7 +668,7 @@ For example, this game uses millions of instructions, macros, game-save loading,
 character-management operations, additional engine lifecycle transitions, drawing
 APIs, and extensions that are not implemented yet.
 
-Not supported: native Emuera saves and game-slot persistence, `BEGIN` states other
+Not supported: older text-format Emuera saves, `BEGIN` states other
 than `FIRST`, full character-management APIs, general random APIs, other event
 dispatch or overloaded functions, general macro expansion and replace tables,
 the full configuration and
@@ -703,6 +715,7 @@ symlinks). No game-supplied scripts or event attributes are attached to the DOM.
 - `src/format.ts`, `src/strings.ts`, `src/html.ts`: FORM and text parsing.
 - `src/storage.ts`: memory/file global storage adapters.
 - `src/data-tables.ts`: session-local typed data-table storage and lookups.
+- `src/save-format.ts`, `src/storage.ts`: native binary save encoding and atomic file persistence.
 - `src/compiler.ts`, `src/runtime.ts`: control-flow compilation and execution.
 - `src/compatibility.ts`: unsupported-feature inventory.
 - `src/server.ts`: HTTP/session/resource adapter.
@@ -711,8 +724,9 @@ symlinks). No game-supplied scripts or event attributes are attached to the DOM.
 
 Next work should follow the verified new-game path into housing's colored-map
 renderer, then housing/options and the `BEGIN SHOP` game loop.
-Pre-defined character selection needs additional character-management operations;
-Continue needs native save-format/slot handling.
+Pre-defined character selection needs additional character-management operations.
+Native Continue is covered through the bundled save's initial post-load wait;
+later gameplay can still encounter unsupported operations.
 Keep unsupported behavior explicit and add conformance tests for each feature
 before claiming more of the game is supported.
 

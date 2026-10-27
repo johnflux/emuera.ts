@@ -2,13 +2,13 @@ import { compile, isPrintData, printVariant, PRINTDATA_PATTERN, type Compiled, t
 import { evaluate, parseExpression, settleIndices, useMacros, type EvaluationContext, type Expr } from "./expression.js";
 import { displayDefaults, imageSize, readTextFileSync, type Sprite, type ContainerScope, type DisplaySettings, type Game } from "./loader.js";
 import path from "node:path";
-import { readdirSync, statSync } from "node:fs";
-import { allowsFullWidthSpace, characterField, EraError, integer, integerLiteral, numericString, INTEGER_LITERAL, key, splitArguments, text, type Diagnostic, type Routine, type Source, type Value } from "./model.js";
+import { readdirSync, realpathSync, statSync } from "node:fs";
+import { allowsFullWidthSpace, characterField, EraError, EVENT_FUNCTIONS, integer, integerLiteral, numericString, INTEGER_LITERAL, key, splitArguments, text, type Diagnostic, type Routine, type Source, type Value } from "./model.js";
 import { symbolTable, Variables, type GlobalData, type SaveData } from "./variables.js";
 import { parseFormat } from "./format.js";
 import { MemoryGlobalStore, MemorySaveStore, StagedStores, type GlobalStore, type SaveStore } from "./storage.js";
 import { randomInt } from "node:crypto";
-import { escapeHtml, htmlTagSplit, htmlWidth, plainHtml } from "./html.js";
+import { escapeHtml, htmlButtons, htmlTagSplit, htmlWidth, plainHtml } from "./html.js";
 import { formatInteger, stringWidth, toFullWidth, toHalfWidth } from "./strings.js";
 import { DataTables, TABLE_OPERATIONS } from "./data-tables.js";
 import { CONFIG_ITEMS, configSetting } from "./config-items.js";
@@ -78,7 +78,9 @@ export interface BackgroundLayer { z: number; x: number; y: number; picture: Pic
 export interface MouseKeyInput { result: number[]; results?: string }
 export interface InputRequest {
   /** mousekey: INPUTMOUSEKEY, answered with a JSON MouseKeyInput. */
-  kind: "integer" | "string" | "wait" | "mousekey";
+  kind: "integer" | "string" | "any" | "wait" | "mousekey";
+  /** BINPUT(S) accepts only the currently displayed button values, including keyboard submissions. */
+  buttonValues?: string[];
   singleCharacter?: boolean;
   /** What an empty input gives (INPUT/INPUTS/ONEINPUT(S) argument). */
   defaultValue?: string;
@@ -103,6 +105,8 @@ export interface Snapshot {
   debugClear?: boolean;
   /** Every CBG layer, in drawing order, when they changed during this step. */
   cbg?: BackgroundLayer[];
+  /** Present only when SETTEXTBOX changed the command field during this step. */
+  textbox?: string;
 }
 interface RoutineInfo {
   returnType: "integer" | "string" | undefined;
@@ -152,7 +156,7 @@ class Halt {}
 const BEGIN_STATES = new Set(["SHOP", "TRAIN", "AFTERTRAIN", "ABLUP", "TURNEND", "FIRST", "TITLE"]);
 // Executed most often; they skip the PRINT/DATA/table prefix checks and sit at the head of runFrame's switch.
 const HOT_OPS = new Set(["ASSIGN", "SIF", "RETURNF", "IF", "ELSEIF", "ELSE", "ENDIF", "FOR", "REPEAT", "NEXT", "REND", "SELECTCASE", "CASE", "CASEELSE", "ENDSELECT", "LABEL"]);
-const SKIPPED_INPUTS = new Set(["INPUT", "INPUTS", "ONEINPUT", "ONEINPUTS", "TINPUT", "TINPUTS", "TONEINPUT", "TONEINPUTS"]);
+const SKIPPED_INPUTS = new Set(["INPUT", "INPUTS", "ONEINPUT", "ONEINPUTS", "TINPUT", "TINPUTS", "TONEINPUT", "TONEINPUTS", "BINPUT", "BINPUTS", "INPUTANY"]);
 /** Variables that start a new turn of training at zero. */
 const TRAIN_RESET = { global: ["TFLAG", "TSTR"], character: ["GOTJUEL", "TEQUIP", "EX", "PALAM", "SOURCE", "TCVAR"] };
 const COMMAND_RESET = { global: ["UP", "DOWN", "LOSEBASE"], character: ["DOWNBASE", "CUP", "CDOWN"] };
@@ -217,6 +221,7 @@ const BUILTIN_ARITIES: Record<string, [number, number]> = {
     CURRENTREDRAW: [0, 0], CURRENTALIGN: [0, 0],
     SPRITECREATED: [1, 1], SPRITEWIDTH: [1, 1], SPRITEHEIGHT: [1, 1], SPRITEPOSX: [1, 1], SPRITEPOSY: [1, 1],
     SPRITECREATE: [2, 6], SPRITEDISPOSE: [1, 1], SPRITEANIMECREATE: [3, 3], SPRITEANIMEADDFRAME: [9, 9], SPRITESETPOS: [3, 3], SPRITEMOVE: [3, 3],
+    SPRITEDISPOSEALL: [1, 1], SETTEXTBOX: [1, 1], MAP_REMOVE: [2, 2],
     GCREATE: [3, 3], GCREATEFROMFILE: [2, 3], GCREATED: [1, 1], GWIDTH: [1, 1], GHEIGHT: [1, 1], GDISPOSE: [1, 1], GCLEAR: [2, 6],
     GSETCOLOR: [4, 4], GGETCOLOR: [3, 3], GDRAWG: [10, 11], GDRAWGWITHMASK: [5, 5], GDRAWSPRITE: [2, 7], GFILLRECTANGLE: [5, 5],
     GSETBRUSH: [2, 2], GSETPEN: [3, 3], GSETFONT: [3, 4], GSAVE: [2, 2], GLOAD: [2, 2],
@@ -255,7 +260,7 @@ function optionalInteger(expr: Expr | undefined, fallback: number, context: Eval
   return expr && expr.kind !== "omitted" ? Number(integer(evaluate(expr, context))) : fallback;
 }
 /** Builtin expression functions evaluated outside BUILTIN_ARITIES; all of them may also be used as statements. */
-const RAW_FUNCTIONS = ["ARRAYMSORT", "FINDCHARA", "FINDLASTCHARA", "REGEXPMATCH", "STRJOIN", "INRANGEARRAY", "INRANGECARRAY", "GDRAWG", "GDRAWSPRITE", "GETNUM"];
+const RAW_FUNCTIONS = ["ARRAYMSORT", "ARRAYMSORTEX", "ENUMFUNCBEGINSWITH", "ENUMFILES", "MAP_GETKEYS", "FINDCHARA", "FINDLASTCHARA", "REGEXPMATCH", "STRJOIN", "INRANGEARRAY", "INRANGECARRAY", "GDRAWG", "GDRAWSPRITE", "GETNUM"];
 const ARRAY_SCANS = new Set(["SUMARRAY", "MATCH", "MAXARRAY", "MINARRAY", "FINDELEMENT", "FINDLASTELEMENT"]);
 const CHARACTER_SCANS = new Set(["SUMCARRAY", "CMATCH", "MAXCARRAY", "MINCARRAY"]);
 const XML_FUNCTIONS = new Set([
@@ -347,6 +352,10 @@ export class Runtime {
   /** HTML_GETPRINTEDSTR's record of completed lines (EM DisplayLine2Html format) and the line being printed. */
   private printedLines: string[] = [];
   private printedLine = "";
+  private buttonLines: string[][] = [];
+  private lineButtons: string[] = [];
+  private textbox = "";
+  private textboxChanged = false;
   /** Routines currently executing, innermost last. */
   private doing: Routine[] = [];
   /** Debug mode's DEBUGPRINT output since the last snapshot, and whether DEBUGCLEAR ran meanwhile. */
@@ -386,6 +395,7 @@ export class Runtime {
   /** SPRITECREATE sprites reference their G by id, live like Emuera's SpriteG; SPRITEANIMECREATE sprites have no graphics. */
   private dynamicSprites = new Map<string, SpriteInfo>();
   private spriteSizes = new Map<string, SpriteInfo>();
+  private disposedSprites = new Set<string>();
   constructor(public game: Game, private maxSteps = 50_000, options: RuntimeOptions = {}) {
     this.fullWidthSpace = allowsFullWidthSpace(game.config);
     let shared = COMPILED.get(game);
@@ -856,6 +866,7 @@ export class Runtime {
     const dynamic = this.dynamicSprites.get(id);
     // Emuera keeps a SpriteG whose G was disposed, but it is not "created" until the G exists again.
     if (dynamic) return dynamic.graphics === undefined || this.graphics.has(dynamic.graphics) ? dynamic : undefined;
+    if (this.disposedSprites.has(id)) return undefined;
     let cached = this.spriteSizes.get(id);
     if (cached) return cached;
     const sprite = this.game.sprites.get(id);
@@ -996,6 +1007,43 @@ export class Runtime {
     }
     try { return statSync(current).isFile() ? current : undefined; } catch { return undefined; }
   }
+  private enumerateFiles(directory: string, pattern: string, recursive: boolean): string[] | undefined {
+    const parts = directory.replaceAll("\\", "/").split("/").filter((part) => part && part !== ".");
+    if (parts.includes("..") || path.isAbsolute(directory) || /^[A-Za-z]:/.test(directory))
+      throw new EraError("ENUMFILES requires a path within the game directory");
+    if (!pattern || /[\\/]/.test(pattern)) throw new EraError("ENUMFILES pattern must be a file name wildcard");
+    if (!this.game.root) return undefined;
+    const missing = (error: unknown): boolean => error instanceof Error && "code" in error && (error.code === "ENOENT" || error.code === "ENOTDIR");
+    const root = realpathSync(this.game.root);
+    const inside = (file: string): boolean => file === root || file.startsWith(root + path.sep);
+    let current = root;
+    try {
+      for (const part of parts) {
+        const entries = readdirSync(current);
+        const match = entries.find((entry) => entry === part) ?? entries.find((entry) => key(entry) === key(part));
+        if (!match) return undefined;
+        current = realpathSync(path.join(current, match));
+        if (!inside(current)) throw new EraError("ENUMFILES cannot follow a link outside the game directory");
+      }
+      const wildcard = pattern === "*.*" ? "*" : pattern;
+      const matcher = new RegExp("^" + wildcard.split("").map((c) => c === "*" ? ".*" : c === "?" ? "." : c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("") + "$", "iu");
+      const files: string[] = [];
+      const visit = (dir: string): void => {
+        for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) => key(a.name) < key(b.name) ? -1 : key(a.name) > key(b.name) ? 1 : 0)) {
+          const file = path.join(dir, entry.name);
+          // Do not follow directory links (cycles) or expose files outside the game.
+          if (entry.isSymbolicLink()) continue;
+          if (entry.isDirectory() && recursive) visit(file);
+          else if (entry.isFile() && matcher.test(entry.name)) files.push(path.relative(root, file).split(path.sep).join("\\"));
+        }
+      };
+      visit(current);
+      return files;
+    } catch (error) {
+      if (missing(error)) return undefined;
+      throw new EraError(`ENUMFILES: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
   private textFile(value: Value | undefined): { store: string; game?: string } | undefined {
     if (typeof value === "bigint") return value >= 0n ? { store: `text${value}.txt` } : undefined;
     if (typeof value !== "string") return undefined;
@@ -1085,6 +1133,14 @@ export class Runtime {
       const n = BigInt(value.trim());
       if (n < -(1n << 63n) || n >= (1n << 63n)) throw new EraError("Input is outside signed 64-bit range");
     }
+    if (this.pending.kind === "any" && /^-?\d+$/.test(value.trim())) {
+      const n = BigInt(value.trim());
+      if (n < -(1n << 63n) || n >= (1n << 63n)) throw new EraError("Input is outside signed 64-bit range");
+    }
+    const accepted = this.pending.kind === "integer" ? BigInt(value.trim()).toString() : value;
+    if (this.pending.buttonValues && !this.pending.buttonValues.includes(accepted)) throw new EraError("Choose one of the displayed button values");
+    this.textbox = "";
+    if (this.pending.kind !== "wait") { this.buttonLines = []; this.lineButtons = []; }
     this.pending = null;
     this.timed = undefined;
     return this.advance(value);
@@ -1429,6 +1485,73 @@ export class Runtime {
           const values = args.slice(0, -1).map((arg) => evaluate(arg, context));
           return this.draw(name, values, this.colorMatrix(args.at(-1), variables, context, name));
         }
+        if (name === "ENUMFUNCBEGINSWITH" || name === "ENUMFILES") {
+          const outputIndex = name === "ENUMFILES" ? 3 : 1;
+          if (args.length < 1 || args.length > outputIndex + 1) throw new EraError(`Invalid number of arguments for ${name}`);
+          const output = args[outputIndex];
+          const destination = output && output.kind !== "omitted" ? output : { kind: "variable", name: "RESULTS", indices: [] } as const;
+          if (destination.kind !== "variable" || destination.indices.length || !variables.isString(destination.name, context)
+            || variables.isCharacter(destination.name, context) || variables.dimensions(destination.name, context).length !== 1)
+            throw new EraError(`${name} output must be a one-dimensional string array`);
+          const first = text(evaluate(args[0]!, context));
+          const values = name === "ENUMFILES"
+            ? this.enumerateFiles(first, args[1] && args[1].kind !== "omitted" ? text(evaluate(args[1], context)) : "*", optionalInteger(args[2], 0, context) !== 0)
+            : first ? [...this.game.routines].filter(([id]) => !EVENT_FUNCTIONS.has(id) && id.startsWith(key(first))).map(([id, routines]) => routines[0]?.label ?? id) : [];
+          if (!values) return -1n;
+          const count = Math.min(values.length, variables.dimensions(destination.name, context)[0]!);
+          this.writeArray(variables, context, destination, values.slice(0, count));
+          return BigInt(count);
+        }
+        if (name === "MAP_GETKEYS") {
+          if (args.length < 1 || args.length > 3) throw new EraError("MAP_GETKEYS expects map[, output, split]");
+          const keys = [...(this.maps.get(text(evaluate(args[0]!, context)))?.keys() ?? [])];
+          this.globals.set("RESULT", [], BigInt(keys.length), context);
+          if (args.length < 2) return keys.join(",");
+          const output = args.length === 3 ? args[1] : undefined;
+          const destination = output ?? { kind: "variable", name: "RESULTS", indices: [] } as const;
+          if (destination.kind !== "variable" || destination.indices.length || !variables.isString(destination.name, context)
+            || variables.dimensions(destination.name, context).length !== 1 || variables.isCharacter(destination.name, context))
+            throw new EraError("MAP_GETKEYS output must be a one-dimensional string array");
+          const split = optionalInteger(args.at(-1), 0, context) !== 0;
+          const values = split ? keys : [keys.join(",")];
+          const count = Math.min(values.length, variables.dimensions(destination.name, context)[0]!);
+          this.writeArray(variables, context, destination, values.slice(0, count));
+          return output ? "" : values[0] ?? "";
+        }
+        if (name === "ARRAYMSORTEX") {
+          if (args.length < 2 || args.length > 4) throw new EraError("ARRAYMSORTEX expects key array, array names[, ascending, count]");
+          const first = args[0]!;
+          const keyName = first.kind === "variable" && !first.indices.length ? first.name : key(text(evaluate(first, context)));
+          const list = args[1]!;
+          if (list.kind !== "variable" || list.indices.length || !variables.isString(list.name, context)
+            || variables.isCharacter(list.name, context) || variables.dimensions(list.name, context).length !== 1)
+            throw new EraError("ARRAYMSORTEX targets must be a one-dimensional string array of variable names");
+          if (variables.dimensions(keyName, context).length !== 1 || variables.isCharacter(keyName, context))
+            throw new EraError("ARRAYMSORTEX key must be a non-character one-dimensional array");
+          const keys = variables.row(keyName, [], context), requested = optionalInteger(args[3], -1, context);
+          if (requested < -1 || requested > keys.size) throw new EraError("ARRAYMSORTEX count out of range");
+          if (requested === 0) return 0n;
+          const names = variables.row(list.name, [], context);
+          const targets: string[] = [];
+          for (let i = 0; i < names.size; i++) {
+            const target = text(names.get(i));
+            if (target) targets.push(key(target));
+          }
+          const order: number[] = [];
+          for (let i = 0; i < (requested < 0 ? keys.size : requested); i++) {
+            if (requested < 0 && (keys.get(i) === "" || keys.get(i) === 0n)) break;
+            order.push(i);
+          }
+          const ascending = optionalInteger(args[2], 1, context) !== 0;
+          order.sort((a, b) => (keys.get(a) < keys.get(b) ? -1 : keys.get(a) > keys.get(b) ? 1 : 0) * (ascending ? 1 : -1));
+          for (const target of new Set(targets)) {
+            const { variable } = variables.slot(target, context);
+            if (variable.constant || variable.character) throw new EraError(`ARRAYMSORTEX cannot reorder ${target}`);
+            if (variable.dimensions[0]! < order.length) return 0n;
+          }
+          for (const target of new Set(targets)) variables.permute(target, order, context);
+          return 1n;
+        }
         if (name === "ARRAYMSORT") {
           // Sorts the first array ascending up to its first 0/"" and applies that order to every array's first dimension.
           if (args.length < 2 || args.some((arg) => arg.kind !== "variable" || arg.indices.length)) throw new EraError("ARRAYMSORT expects at least two array variables");
@@ -1550,7 +1673,11 @@ export class Runtime {
           case "PRINTCLENGTH": return BigInt(this.printCLength);
           case "MOUSEB": return "";
           // The text box is emptied when input is accepted, so scripts always observe an empty box.
-          case "GETTEXTBOX": return "";
+          case "GETTEXTBOX": return this.textbox;
+          case "SETTEXTBOX":
+            this.textbox = argText(args, name, 0);
+            this.textboxChanged = true;
+            return 1n;
           case "ESCAPE": return argText(args, name, 0).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
           case "ISNUMERIC": return numericString(argText(args, name, 0)) === undefined ? 0n : 1n;
           case "GROUPMATCH": return BigInt(args.slice(1).filter((value) => value === args[0]).length);
@@ -1661,6 +1788,15 @@ export class Runtime {
             return 1n;
           }
           case "SPRITEDISPOSE": return this.dynamicSprites.delete(key(argText(args, name, 0))) ? 1n : 0n;
+          case "SPRITEDISPOSEALL": {
+            let count = this.dynamicSprites.size;
+            this.dynamicSprites.clear();
+            if (argInt(args, name, 0) !== 0n) {
+              for (const id of this.game.sprites.keys()) if (!this.disposedSprites.has(id)) { this.disposedSprites.add(id); count++; }
+              this.spriteSizes.clear();
+            }
+            return BigInt(count);
+          }
           case "GCREATE": {
             if (this.graphics.has(argInt(args, name, 0))) return 0n;
             const width = Number(argInt(args, name, 1)), height = Number(argInt(args, name, 2));
@@ -1789,7 +1925,7 @@ export class Runtime {
             const names = this.saves.list().flatMap((file) => {
               const match = /^chara_(.*)\.dat$/i.exec(file);
               const name = match?.[1] ?? "";
-              return name && this.charaFile(name) === file && glob.test(name) ? [name] : [];
+              return name && glob.test(name) ? [name] : [];
             }).sort();
             const size = this.globals.dimensions("RESULTS", context)[0]!;
             names.slice(0, size).forEach((name, i) => this.globals.set("RESULTS", [literal(BigInt(i))], name, context));
@@ -1839,6 +1975,11 @@ export class Runtime {
           case "MAP_SIZE": return BigInt(this.map(argText(args, name, 0)).size);
           case "MAP_HAS": return this.maps.get(argText(args, name, 0))?.has(argText(args, name, 1)) ? 1n : 0n;
           case "MAP_GET": return this.map(argText(args, name, 0)).get(argText(args, name, 1)) ?? "";
+          case "MAP_REMOVE": {
+            const map = this.maps.get(argText(args, name, 0));
+            if (!map) return -1n;
+            return map.delete(argText(args, name, 1)) ? 1n : 0n;
+          }
           case "HTML_POPPRINTINGSTR": {
             const html = this.printingHtml;
             if (html) this.deferred.push({ type: "clear", count: 1 });
@@ -2124,6 +2265,8 @@ export class Runtime {
     this.debugClear = false;
     if (this.backgroundChanged) snapshot.cbg = this.background.slice();
     this.backgroundChanged = false;
+    if (this.textboxChanged) snapshot.textbox = this.textbox;
+    this.textboxChanged = false;
     return snapshot;
   }
   private resourceUrl(file: string): string {
@@ -2206,6 +2349,7 @@ export class Runtime {
   private dropLines(count: number): void {
     this.lineCount = Math.max(0, this.lineCount - count);
     if (count > 0) this.printedLines.splice(-count, count);
+    if (count > 0) this.buttonLines.splice(-count, count);
   }
   /** Mirrors EM HtmlManager.DisplayLine2Html: styled runs inside <p align><nobr>, an empty line holding one space. */
   private recordPrinted(type: "text" | "html" | "input", value: string, newline: boolean, style: Style): void {
@@ -2226,10 +2370,15 @@ export class Runtime {
     segments.forEach((segment, i) => {
       if (i > 0) this.flushPrinted();
       this.printedLine += type === "html" ? segment : styled(segment);
+      if (type === "html") this.lineButtons.push(...htmlButtons(segment));
+      else if (type === "text") this.lineButtons.push(...[...segment.matchAll(/\[[ \t]*(-?\d+)[ \t]*\]/g)].map((match) => match[1]!));
     });
     if (newline) this.flushPrinted();
   }
   private flushPrinted(): void {
+    this.buttonLines.push(this.lineButtons);
+    this.lineButtons = [];
+    if (this.buttonLines.length > 4096) this.buttonLines.splice(0, this.buttonLines.length - 4096);
     this.printedLines.push(`<p align='${this.style.alignment}'><nobr>${this.printedLine || " "}</nobr></p>`);
     if (this.printedLines.length > 4096) this.printedLines.splice(0, this.printedLines.length - 4096);
     this.printedLine = "";
@@ -2858,7 +3007,9 @@ export class Runtime {
             const label = this.printC(text(ev(parts[0]!)), op === "PRINTBUTTON" ? "" : op === "PRINTBUTTONC" ? "C" : "LC");
             if (this.skipDisplay) break;
             this.lineOpen = true;
-            yield { output: { type: "button", text: label, value: String(ev(parts[1]!)), style: { ...this.style } } };
+            const value = String(ev(parts[1]!));
+            this.lineButtons.push(value);
+            yield { output: { type: "button", text: label, value, style: { ...this.style } } };
             break;
           }
           case "DRAWLINE": yield this.emit("text", "-".repeat(this.columns), true); break;
@@ -2972,6 +3123,37 @@ export class Runtime {
             break;
           }
           case "QUIT": this.finished = true; return;
+          case "BINPUT": case "BINPUTS": {
+            const numeric = op === "BINPUT";
+            const parts = args.trim() ? this.arguments(args) : [];
+            if (parts.length > 3) throw new EraError(`${op} expects default[, allowClick, canSkip]`);
+            // Mouse side-channel extensions must not be silently accepted without implementing their result slots.
+            if (parts[1] && num(parts[1]) !== 0n) throw new EraError(`${op} mouse side-channel mode is not supported`);
+            if (parts[2]) num(parts[2]);
+            const fallback = parts[0] ? numeric ? integer(ev(parts[0])).toString() : text(ev(parts[0])) : undefined;
+            const values = [...new Set([...this.buttonLines.flat(), ...this.lineButtons])]
+              .filter((value) => !numeric || /^-?\d+$/.test(value))
+              .map((value) => numeric ? BigInt(value).toString() : value);
+            if (!values.length) {
+              if (fallback === undefined) throw new EraError(`${op} requires a displayed button or a default value`);
+              this.globals.set(numeric ? "RESULT" : "RESULTS", [], numeric ? BigInt(fallback) : fallback, frame.context);
+              break;
+            }
+            const request: InputRequest = { kind: numeric ? "integer" : "string", buttonValues: values };
+            if (fallback !== undefined) request.defaultValue = fallback;
+            const value = yield { input: request };
+            yield this.emit("input", value, true);
+            this.globals.set(numeric ? "RESULT" : "RESULTS", [], numeric ? BigInt(value.trim()) : value, frame.context);
+            break;
+          }
+          case "INPUTANY": {
+            if (args.trim()) throw new EraError("INPUTANY does not accept arguments");
+            const value = yield { input: { kind: "any" } };
+            yield this.emit("input", value, true);
+            const numeric = /^-?\d+$/.test(value.trim());
+            this.globals.set(numeric ? "RESULT" : "RESULTS", [], numeric ? BigInt(value.trim()) : value, frame.context);
+            break;
+          }
           case "INPUT": case "INPUTS": case "ONEINPUT": case "ONEINPUTS": {
             const singleCharacter = op.startsWith("ONE");
             const numeric = !op.endsWith("S");

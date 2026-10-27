@@ -6,6 +6,7 @@ import { compatibility } from "../src/compatibility.js";
 import { loadGame } from "../src/loader.js";
 import { GAME_INSTRUCTION_LIMIT, Runtime, type Snapshot } from "../src/runtime.js";
 import { MemoryGlobalStore, MemorySaveStore } from "../src/storage.js";
+import { readNativeSave } from "../src/save-format.js";
 
 const root = path.resolve("GAMES/eratohoreverse");
 const text = (snapshot: Snapshot) => snapshot.output.filter((item) => "text" in item).map((item) => item.text).join("\n");
@@ -62,7 +63,9 @@ test("Reverse boots, saves its character template and game, selects a trainer an
   assert.match(text(snapshot), /value='200'/);
   choose("200");
   choose("0");
-  assert.ok(saves.read("save0.json")?.includes("Tester"));
+  const saved = saves.read("save00.sav");
+  assert.ok(Buffer.isBuffer(saved));
+  assert.ok(Object.values(readNativeSave(saved).data.variables.NAME ?? {}).includes("Tester"));
   assert.match(text(snapshot), /value='100'/);
   choose("100");
   assert.match(text(snapshot), /\[88\] Apply/);

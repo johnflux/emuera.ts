@@ -68,6 +68,7 @@ const CALL_OPS = new Set([
 // instruction runs to completion when single-stepped (output is deferred as `advance` would have collected it).
 const INPUT_OPS = new Set([
   "INPUT", "INPUTS", "ONEINPUT", "ONEINPUTS", "TINPUT", "TINPUTS", "TONEINPUT", "TONEINPUTS",
+  "BINPUT", "BINPUTS", "INPUTANY",
   "WAIT", "FORCEWAIT", "TWAIT", "WAITANYKEY", "STOPCALLTRAIN", "INPUTMOUSEKEY",
 ]);
 /** Whether running this (non-call) instruction may wait for input. */

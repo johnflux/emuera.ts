@@ -14,6 +14,21 @@ export function plainHtml(value: string): string {
   return visit(parseFragment(value));
 }
 
+/** Values exposed by HTML buttons, with entities decoded as they are in the browser. */
+export function htmlButtons(value: string): string[] {
+  const values: string[] = [];
+  function visit(node: DefaultTreeAdapterMap["node"]): void {
+    if (node.nodeName === "button" && "attrs" in node) {
+      const value = node.attrs.find((attribute) => attribute.name === "value")?.value;
+      if (value !== undefined) values.push(value);
+      return;
+    }
+    if ("childNodes" in node) node.childNodes.forEach(visit);
+  }
+  visit(parseFragment(value));
+  return values;
+}
+
 /**
  * HTML_STRINGLEN's measurement: the first displayed line's width in pixels, with half-width
  * characters at fontSize/2 and <img>/<shape> sizes as font-size percentages or "px" values.

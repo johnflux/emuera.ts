@@ -66,7 +66,7 @@ class Reader {
   }
   variable(type: number): Record<string, string> {
     const string = (type & 0x10) !== 0, rank = type & 15;
-    if (type !== rank && type !== 0x10 + rank || rank > 3)
+    if ((type !== rank && type !== 0x10 + rank) || rank > 3)
       throw new EraError(`Unsupported Emuera variable type: ${type}`);
     const values: Record<string, string> = Object.create(null);
     if (!rank) {

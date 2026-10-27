@@ -8,7 +8,8 @@ import { configSetting } from "./config-items.js";
 
 function savePath(directory: string, name: string): string {
   try {
-    const found = readdirSync(directory).find((entry) => entry.toUpperCase() === name.toUpperCase());
+    const entries = readdirSync(directory);
+    const found = entries.includes(name) ? name : entries.find((entry) => entry.toUpperCase() === name.toUpperCase());
     return path.join(directory, found ?? name);
   } catch (error) {
     if (error instanceof Error && "code" in error && error.code === "ENOENT") return path.join(directory, name);
@@ -51,10 +52,10 @@ export class FileGlobalStore implements GlobalStore {
       type: 1, code: metadata.code, gameVersion: metadata.gameVersion, text: "",
       data: { characters: 0, variables: data }, characters: [], containers: { maps: {}, xmls: {}, dts: {} },
     }, metadata);
-    const file = savePath(path.dirname(this.file), path.basename(this.file));
-    const temporary = `${file}.${randomUUID()}.tmp`;
+    const temporary = `${this.file}.${randomUUID()}.tmp`;
     let created = false;
     try {
+      const file = savePath(path.dirname(this.file), path.basename(this.file));
       mkdirSync(path.dirname(this.file), { recursive: true });
       writeFileSync(temporary, bytes, { mode: 0o600, flag: "wx" });
       created = true;
@@ -105,10 +106,10 @@ export class FileSaveStore implements SaveStore {
   }
   write(name: string, data: string | Buffer): void {
     const directory = this.directoryFor(name);
-    const file = savePath(directory, checkSaveName(name));
-    const temporary = `${file}.${randomUUID()}.tmp`;
+    const temporary = `${path.join(directory, checkSaveName(name))}.${randomUUID()}.tmp`;
     let created = false;
     try {
+      const file = savePath(directory, name);
       mkdirSync(directory, { recursive: true });
       writeFileSync(temporary, data, { mode: 0o600, flag: "wx" });
       created = true;
