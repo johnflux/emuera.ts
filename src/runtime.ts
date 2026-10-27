@@ -1,6 +1,6 @@
-import { compile, isPrintData, printVariant, PRINTDATA_PATTERN, type Compiled, type Instruction } from "./compiler.js";
+import { compile, inlineDeclaration, isPrintData, printVariant, PRINTDATA_PATTERN, type Compiled, type InlineDeclaration, type Instruction } from "./compiler.js";
 import { evaluate, parseExpression, settleIndices, useMacros, type EvaluationContext, type Expr } from "./expression.js";
-import { displayDefaults, imageSize, readTextFileSync, type Sprite, type ContainerScope, type DisplaySettings, type Game } from "./loader.js";
+import { displayDefaults, gameDirectory, imageSize, readTextFileSync, type Sprite, type ContainerScope, type DisplaySettings, type Game } from "./loader.js";
 import path from "node:path";
 import { readdirSync, realpathSync, statSync } from "node:fs";
 import { allowsFullWidthSpace, characterField, EraError, EVENT_FUNCTIONS, integer, integerLiteral, numericString, INTEGER_LITERAL, key, splitArguments, text, type Diagnostic, type Routine, type Source, type Value } from "./model.js";
@@ -13,7 +13,7 @@ import { formatInteger, stringWidth, toFullWidth, toHalfWidth } from "./strings.
 import { DataTables, TABLE_OPERATIONS } from "./data-tables.js";
 import { CONFIG_ITEMS, configSetting } from "./config-items.js";
 import type { Document as XmlDocument } from "@xmldom/xmldom";
-import { addNode, nodeOutput, parseXml, removeNode, selectNodes, serializeXml } from "./xml.js";
+import { addAttribute, addNode, nodeOutput, parseXml, removeAttributes, removeNode, replaceNodes, selectNodes, serializeXml, setNodes } from "./xml.js";
 import { DECLINE, loadIntrinsics, type Intrinsic } from "./intrinsics.js";
 import { ASYNC, Jit, type CallAnalysis } from "./jit.js";
 import { readNativeSave, writeNativeSave, type NativeSave, type SavedContainers, type SaveMetadata } from "./save-format.js";
@@ -25,10 +25,11 @@ type Rect = [x: number, y: number, width: number, height: number];
 type ColorMatrix = number[][];
 /** Paint operations, replayed in order on a transparent canvas of the picture's size. */
 export type GraphicOp =
+  | { op: "rotate"; angle: number; x: number; y: number }
   | { op: "image"; url: string; src: Rect; dest: Rect; matrix?: ColorMatrix }
   | { op: "graphics"; source: Picture; src: Rect; dest: Rect; matrix?: ColorMatrix }
   /** Blends a CSS color over rect; replace first clears it (GCLEAR, GSETCOLOR). */
-  | { op: "fill"; color: string; rect: Rect; replace?: boolean }
+  | { op: "fill"; color: string; rect: Rect; replace?: boolean; absolute?: boolean }
   | { op: "line"; color: string; width: number; from: [number, number]; to: [number, number] }
   | { op: "text"; text: string; color: string; x: number; y: number; font: GraphicFont }
   /** GDRAWGWITHMASK: the mask's blue channel blends source over the destination. */
@@ -76,7 +77,13 @@ export type Output =
  */
 export interface BackgroundLayer { z: number; x: number; y: number; picture: Picture; hover?: Picture; buttonValue?: number; tooltip?: string }
 interface BackgroundSource { z: number; x: number; y: number; graphics?: bigint; sprite?: string; hover?: string; buttonValue?: number; tooltip?: string }
-export interface TooltipSettings { custom: boolean; font: string; fontSize: number; delay: number; duration: number; color: string; background: string }
+export interface TooltipSettings { custom: boolean; font: string; fontSize: number; delay: number; duration: number; color: string; background: string; format?: number }
+export interface AudioSettings {
+  soundVolume: number; bgmVolume: number;
+  bgm: { id: string; url: string } | null;
+  sounds: { id: string; url: string; repeat: number }[];
+  stopSounds: boolean;
+}
 /**
  * INPUTMOUSEKEY's answer, sent as the input value: RESULT:0-5 (type 1 click, 2 wheel, 3 key, 4 timeout) and,
  * for a click on a string button, its RESULTS.
@@ -96,6 +103,10 @@ export interface InputRequest {
   countdown?: boolean;
   /** TWAIT with a nonzero flag: input cannot end the wait early. */
   blocking?: boolean;
+  /** FORCEWAIT stops automatic message skipping without disabling click-to-continue. */
+  stopSkipping?: boolean;
+  /** AWAIT yields to the host even when SKIPDISP is hiding output. */
+  sleep?: boolean;
 }
 type Yield = { output: Output } | { input: InputRequest };
 export interface Snapshot {
@@ -114,12 +125,14 @@ export interface Snapshot {
   /** Present only when SETTEXTBOX changed the command field during this step. */
   textbox?: string;
   tooltip?: TooltipSettings;
+  audio?: AudioSettings;
   /** CBG hit map, independent of the visible layers; null removes it. */
   cbgMap?: Picture | null;
 }
 interface RoutineInfo {
   returnType: "integer" | "string" | undefined;
   dynamic: Routine["directives"];
+  inline: Map<string, InlineDeclaration>;
   references: boolean[];
   parameters: { target: Extract<Expr, { kind: "variable" }>; defaultSource: string | undefined }[];
 }
@@ -159,6 +172,7 @@ type Argument = Value | undefined | ReferenceArgument;
 class StateChange {
   constructor(public state: string) {}
 }
+class RestartTransition {}
 /** Thrown by LOADDATA after the save has been restored; Emuera discards the whole call stack. */
 class LoadTransition {}
 class Halt {}
@@ -221,7 +235,7 @@ const BUILTIN_ARITIES: Record<string, [number, number]> = {
     ABS: [1, 1], MIN: [1, 1000], MAX: [1, 1000], LIMIT: [3, 3], BARSTR: [3, 3], SAVENOS: [0, 0],
     TOSTR: [1, 2], MONEYSTR: [1, 2], TOINT: [1, 1], STRLENU: [1, 1], MAXWIDTH: [0, 0],
     GETCOLOR: [0, 0], GETSTYLE: [0, 0], GETCONFIG: [1, 1], GETCONFIGS: [1, 1], GETMETH: [1, 10000], GETMETHS: [1, 10000], POWER: [2, 2], HTML_STRINGLEN: [1, 2], EXISTVAR: [1, 1], GETVAR: [1, 1], GETVARS: [1, 1], VARSIZE: [1, 2],
-    MAP_EXIST: [1, 1], MAP_SIZE: [1, 1], MAP_HAS: [2, 2], MAP_GET: [2, 2],
+    MAP_EXIST: [1, 1], MAP_SIZE: [1, 1], MAP_HAS: [2, 2], MAP_GET: [2, 2], MAP_CLEAR: [1, 1], MAP_FROMXML: [2, 2],
     HTML_POPPRINTINGSTR: [0, 0], STRFIND: [2, 3], STRFINDU: [2, 3], TOFULL: [1, 1], TOHALF: [1, 1], HTML_TOPLAINTEXT: [1, 1], STRLENS: [1, 1],
     STRCOUNT: [2, 2], REPLACE: [3, 3], SUBSTRING: [2, 3],
     EXISTCSV: [1, 2], RAND: [1, 2], ISSKIP: [0, 0], GETPALAMLV: [2, 2], GETEXPLV: [2, 2], MOUSESKIP: [0, 0], GETCHARA: [1, 2], CSVNAME: [1, 2], CSVCALLNAME: [1, 2], CSVNICKNAME: [1, 2], CSVMASTERNAME: [1, 2],
@@ -238,13 +252,13 @@ const BUILTIN_ARITIES: Record<string, [number, number]> = {
     GETNUMB: [2, 2], MAP_TOXML: [1, 1], EXISTSOUND: [1, 1], STRFORM: [1, 1],
     HTML_STRINGLINES: [2, 2],
     GCREATE: [3, 3], GCREATEFROMFILE: [2, 3], GCREATED: [1, 1], GWIDTH: [1, 1], GHEIGHT: [1, 1], GDISPOSE: [1, 1], GCLEAR: [2, 6],
-    GSETCOLOR: [4, 4], GGETCOLOR: [3, 3], GDRAWG: [10, 11], GDRAWGWITHMASK: [5, 5], GDRAWSPRITE: [2, 7], GFILLRECTANGLE: [5, 5],
+    GSETCOLOR: [4, 4], GGETCOLOR: [3, 3], GDRAWG: [10, 11], GDRAWGWITHMASK: [5, 5], GDRAWGWITHROTATE: [3, 5], GDRAWSPRITE: [2, 7], GFILLRECTANGLE: [5, 5],
     GSETBRUSH: [2, 2], GSETPEN: [3, 3], GSETFONT: [3, 4], GSAVE: [2, 2], GLOAD: [2, 2],
     GDRAWTEXT: [2, 4], GDRAWLINE: [5, 5], GGETTEXTSIZE: [3, 4], GGETFONT: [1, 1], GGETFONTSIZE: [1, 1], GGETFONTSTYLE: [1, 1],
   GETTIME: [0, 0], GETTIMES: [0, 0], EXISTFUNCTION: [1, 1], CLIENTWIDTH: [0, 0], CLIENTHEIGHT: [0, 0], FIND_CHARADATA: [0, 1], EXISTFILE: [1, 1], SQRT: [1, 1], CBRT: [1, 1], LOG: [1, 1], LOG10: [1, 1], EXPONENT: [1, 1], GETMILLISECOND: [0, 0], GETSECOND: [0, 0], GETDEFCOLOR: [0, 0], GETBGCOLOR: [0, 0], GETDEFBGCOLOR: [0, 0], GETFONT: [0, 0],
   CONVERT: [2, 2], SUBSTRINGU: [2, 3], CHARATU: [2, 2],
   SIGN: [1, 1], ALLSAMES: [1, 10000], NOSAMES: [1, 10000], COLOR_FROMNAME: [1, 1], COLOR_FROMRGB: [3, 3], ENCODETOUNI: [1, 2], CHKFONT: [1, 1], CHKDATA: [1, 1],
-  LINEISEMPTY: [0, 0], HTML_GETPRINTEDSTR: [0, 1], GETDOINGFUNCTION: [0, 0], MESSKIP: [0, 0], GETKEY: [1, 1], GETKEYTRIGGERED: [1, 1],
+  LINEISEMPTY: [0, 0], HTML_GETPRINTEDSTR: [0, 1], GETDOINGFUNCTION: [0, 0], MESSKIP: [0, 0], ISACTIVE: [0, 0], GETKEY: [1, 1], GETKEYTRIGGERED: [1, 1],
   MOUSEB: [0, 0], GETTEXTBOX: [0, 0], REGEXPMATCH: [2, 3], CLEARMEMORY: [0, 0], GETMEMORYUSAGE: [0, 0], PRINTCPERLINE: [0, 0], PRINTCLENGTH: [0, 0],
     CSVCSTR: [2, 3], CSVABL: [2, 3], CSVTALENT: [2, 3], CSVBASE: [2, 3], CSVEXP: [2, 3], CSVRELATION: [2, 3], CSVFLAG: [2, 3],
     CSVCFLAG: [2, 3], CSVMARK: [2, 3], CSVJUEL: [2, 3], CSVEQUIP: [2, 3],
@@ -283,6 +297,8 @@ const CHARACTER_SCANS = new Set(["SUMCARRAY", "CMATCH", "MAXCARRAY", "MINCARRAY"
 const XML_FUNCTIONS = new Set([
   "XML_DOCUMENT", "XML_RELEASE", "XML_EXIST", "XML_TOSTR", "XML_GET", "XML_GET_BYNAME",
   "XML_ADDNODE", "XML_ADDNODE_BYNAME", "XML_REMOVENODE", "XML_REMOVENODE_BYNAME",
+  "XML_SET", "XML_SET_BYNAME", "XML_REPLACE", "XML_REPLACE_BYNAME",
+  "XML_ADDATTRIBUTE", "XML_ADDATTRIBUTE_BYNAME", "XML_REMOVEATTRIBUTE", "XML_REMOVEATTRIBUTE_BYNAME",
 ]);
 /** Table operations whose arguments include output references or bare keywords. */
 const TABLE_REFERENCE_OPERATIONS = new Set(["DT_TOXML", "DT_COLUMN_NAMES", "DT_COLUMN_OPTIONS", "DT_SELECT"]);
@@ -297,8 +313,11 @@ export const BUILTIN_FUNCTIONS: ReadonlySet<string> = new Set([
   ...Object.keys(BUILTIN_ARITIES), ...Object.keys(CSV_FIELDS), ...RAW_FUNCTIONS, ...ARRAY_SCANS, ...CHARACTER_SCANS,
   ...XML_FUNCTIONS, ...TABLE_REFERENCE_OPERATIONS, ...TABLE_OPERATIONS,
 ]);
+export interface ClientState { width: number; height: number; active: boolean }
 export interface RuntimeOptions {
   store?: GlobalStore; saves?: SaveStore; columns?: number; display?: Partial<DisplaySettings>;
+  /** Drawable client area in game pixels; omitted for headless runs using the configured window size. */
+  client?: ClientState;
   /** Native replacements for recognised game routines (default on); see src/intrinsics.ts. */
   intrinsics?: boolean;
   /** Compiles hot routines to JavaScript (default on); see src/jit.ts. */
@@ -335,7 +354,9 @@ export class Runtime {
   private steps = 0;
   private randomState = BigInt.asUintN(64, (BigInt(randomInt(2 ** 47)) << 17n) ^ BigInt(randomInt(2 ** 17)));
   private dumpedRandom: bigint | undefined;
+  private lastLoad = { version: -1n, slot: -1n, text: "" };
   private skipDisplay = false;
+  private messageSkip = false;
   private noSkip: boolean[] = [];
   /** The last line came from REUSELASTLINE and is replaced by the next output. */
   private temporaryLine = false;
@@ -363,6 +384,7 @@ export class Runtime {
   private maps = new Map<string, Map<string, string>>();
   private store: GlobalStore;
   private columns: number;
+  private client: ClientState | undefined;
   private printingHtml = "";
   /** Emuera's print buffer holds text or buttons not yet ended by a newline (PrintFlush(false) only ends such a line). */
   private lineOpen = false;
@@ -386,6 +408,7 @@ export class Runtime {
   private backgroundMap: bigint | undefined;
   private tooltipSettings: TooltipSettings = { custom: false, font: "", fontSize: 12, delay: 500, duration: 5000, color: "#000000", background: "#ffffe1" };
   private tooltipChanged = false;
+  private audio: AudioSettings | undefined;
   private forceKana = 0;
   private printCLength: number;
   private deferred: Output[] = [];
@@ -428,49 +451,10 @@ export class Runtime {
     const printCLength = Number(game.config.get("PRINTCの文字数") ?? 25);
     this.printCLength = Number.isSafeInteger(printCLength) && printCLength > 0 ? printCLength : 25;
     this.setColumns(options.columns ?? 120);
+    if (options.client) this.setClient(options.client);
     this.display = { ...displayDefaults(game), ...options.display };
     this.style = { color: this.display.foreground, background: this.display.background, alignment: "left", fontStyle: 0 };
-    this.globals = new Variables(game);
-    const numeric = ["RESULT", "FLAG", "TFLAG", "GLOBAL", "DAY", "TIME", "MONEY", "ITEM", "TARGET", "MASTER", "PLAYER", "ASSI", "COUNT", ...Array.from("ABCDEFGHIJKLMNOPQRSTUVWXYZ")];
-    numeric.forEach((name) => this.globals.define(name, false, game.variableSizes.get(name) ?? [name === "FLAG" ? 10000 : 1000]));
-    for (const name of ["ITEMSALES", "NOITEM", "BOUGHT", "PBAND", "ASSIPLAY", "UP", "DOWN", "LOSEBASE", "PALAMLV", "EXPLV", "EJAC", "PREVCOM", "SELECTCOM", "NEXTCOM"])
-      this.globals.define(name, false, game.variableSizes.get(name) ?? [1000]);
-    for (const name of ["BASE", "MAXBASE", "ABL", "TALENT", "EXP", "MARK", "PALAM", "SOURCE", "EX", "CFLAG", "JUEL", "RELATION", "EQUIP", "TEQUIP", "STAIN", "GOTJUEL", "NOWEX", "TCVAR"])
-      this.globals.defineCharacter(name, false, game.variableSizes.get(name) ?? [1000]);
-    for (const name of ["NO", "ISASSI"]) this.globals.defineCharacter(name);
-    for (const name of ["NAME", "CALLNAME", "NICKNAME", "MASTERNAME"]) this.globals.defineCharacter(name, true);
-    this.globals.defineCharacter("CSTR", true, game.variableSizes.get("CSTR") ?? [100]);
-    this.globals.defineCharacter("DOWNBASE", false, game.variableSizes.get("BASE") ?? [100]);
-    for (const name of ["CUP", "CDOWN"]) this.globals.defineCharacter(name, false, game.variableSizes.get("PALAM") ?? [200]);
-    this.globals.define("TSTR", true, game.variableSizes.get("TSTR") ?? [100]);
-    this.globals.define("SAVEDATA_TEXT", true, [1]);
-    ["STR", "SAVESTR", "GLOBALS", "RESULTS", "WINDOW_TITLE", "GAMEBASE_TITLE", "GAMEBASE_INFO", "GAMEBASE_YEAR", "GAMEBASE_AUTHOR"].forEach((name) => this.globals.define(name, true, game.variableSizes.get(name) ?? [name === "STR" ? 20000 : 1000]));
-    for (const name of ["GAMEBASE_VERSION", "GAMEBASE_CODE", "GAMEBASE_ALLOWVERSION", "GAMEBASE_DEFAULTCHARA", "GAMEBASE_NOITEM", "CHARANUM"]) this.globals.define(name);
-    const base = new Map([...(game.tables.get("GAMEBASE")?.values() ?? [])].map((row) => [row[0], row[1] ?? ""]));
-    for (const [variable, csv] of [["GAMEBASE_TITLE", "タイトル"], ["GAMEBASE_INFO", "追加情報"], ["GAMEBASE_YEAR", "製作年"], ["GAMEBASE_AUTHOR", "作者"], ["WINDOW_TITLE", "ウィンドウタイトル"]])
-      this.globals.seed(variable!, 0, base.get(csv!) ?? "");
-    for (const [variable, csv] of [["GAMEBASE_CODE", "コード"], ["GAMEBASE_VERSION", "バージョン"], ["GAMEBASE_ALLOWVERSION", "バージョン違い認める"],
-      ["GAMEBASE_DEFAULTCHARA", "最初からいるキャラ"], ["GAMEBASE_NOITEM", "アイテムなし"]]) {
-      const value = base.get(csv!);
-      if (value && /^-?\d+$/.test(value)) this.globals.seed(variable!, 0, BigInt(value));
-      else if (variable === "GAMEBASE_VERSION" && value === "proto") this.globals.seed(variable, 0, 0n);
-    }
-    for (const [name, table] of game.tables) {
-      if (name.includes("/") || name === "GAMEBASE" || !table.size) continue;
-      const size = Math.max(game.variableSizes.get(`${name}NAME`)?.at(-1) ?? game.variableSizes.get(name)?.at(-1) ?? (name === "STR" ? 20000 : 1000), Math.max(...table.keys()) + 1);
-      if (size > 1_000_000) continue;
-      this.globals.define(`${name}NAME`, true, [size], true);
-      for (const [index, row] of table) this.globals.seed(`${name}NAME`, index, row[0] ?? "");
-    }
-    for (const line of game.headers) {
-      if (/^#DIMS?\s/i.test(line.text)) this.globals.declare(line);
-      // Other header directives are diagnosed by the compatibility report.
-    }
-    // Macros apply to ERB expressions only, so ERH declarations above are read unexpanded.
-    useMacros(game.macros);
-    const items = game.tables.get("ITEM");
-    this.globals.define("ITEMPRICE", false, [Math.max(game.variableSizes.get("ITEM")?.[0] ?? 1000, ...[...items?.keys() ?? []].map((i) => i + 1))], true);
-    for (const [index, row] of items ?? []) if (/^-?\d+$/.test(row[1]?.trim() ?? "")) this.globals.seed("ITEMPRICE", index, BigInt(row[1]!.trim()));
+    this.globals = this.createGlobals();
     const stain = game.replacements.get("汚れの初期値");
     this.stainDefault = stain ? stain.split("/").map((n) => /^-?\d+$/.test(n.trim()) ? BigInt(n.trim()) : 0n) : [0n, 0n, 2n, 1n, 8n];
     const maxShopItem = Number(game.replacements.get("販売アイテム数") ?? 100);
@@ -509,6 +493,51 @@ export class Runtime {
       analysis: shared.analysis,
       debug: !!game.debug,
     });
+  }
+  private createGlobals(): Variables {
+    const game = this.game;
+    const globals = new Variables(game);
+    const numeric = ["RESULT", "FLAG", "TFLAG", "GLOBAL", "DAY", "TIME", "MONEY", "ITEM", "TARGET", "MASTER", "PLAYER", "ASSI", "COUNT", ...Array.from("ABCDEFGHIJKLMNOPQRSTUVWXYZ")];
+    numeric.forEach((name) => globals.define(name, false, game.variableSizes.get(name) ?? [name === "FLAG" ? 10000 : 1000]));
+    for (const name of ["ITEMSALES", "NOITEM", "BOUGHT", "PBAND", "ASSIPLAY", "UP", "DOWN", "LOSEBASE", "PALAMLV", "EXPLV", "EJAC", "PREVCOM", "SELECTCOM", "NEXTCOM"])
+      globals.define(name, false, game.variableSizes.get(name) ?? [1000]);
+    for (const name of ["BASE", "MAXBASE", "ABL", "TALENT", "EXP", "MARK", "PALAM", "SOURCE", "EX", "CFLAG", "JUEL", "RELATION", "EQUIP", "TEQUIP", "STAIN", "GOTJUEL", "NOWEX", "TCVAR"])
+      globals.defineCharacter(name, false, game.variableSizes.get(name) ?? [1000]);
+    for (const name of ["NO", "ISASSI"]) globals.defineCharacter(name);
+    for (const name of ["NAME", "CALLNAME", "NICKNAME", "MASTERNAME"]) globals.defineCharacter(name, true);
+    globals.defineCharacter("CSTR", true, game.variableSizes.get("CSTR") ?? [100]);
+    globals.defineCharacter("DOWNBASE", false, game.variableSizes.get("BASE") ?? [100]);
+    for (const name of ["CUP", "CDOWN"]) globals.defineCharacter(name, false, game.variableSizes.get("PALAM") ?? [200]);
+    globals.define("TSTR", true, game.variableSizes.get("TSTR") ?? [100]);
+    globals.define("SAVEDATA_TEXT", true, [1]);
+    ["STR", "SAVESTR", "GLOBALS", "RESULTS", "WINDOW_TITLE", "GAMEBASE_TITLE", "GAMEBASE_INFO", "GAMEBASE_YEAR", "GAMEBASE_AUTHOR"].forEach((name) => globals.define(name, true, game.variableSizes.get(name) ?? [name === "STR" ? 20000 : 1000]));
+    for (const name of ["GAMEBASE_VERSION", "GAMEBASE_CODE", "GAMEBASE_ALLOWVERSION", "GAMEBASE_DEFAULTCHARA", "GAMEBASE_NOITEM", "CHARANUM"]) globals.define(name);
+    const base = new Map([...(game.tables.get("GAMEBASE")?.values() ?? [])].map((row) => [row[0], row[1] ?? ""]));
+    for (const [variable, csv] of [["GAMEBASE_TITLE", "タイトル"], ["GAMEBASE_INFO", "追加情報"], ["GAMEBASE_YEAR", "製作年"], ["GAMEBASE_AUTHOR", "作者"], ["WINDOW_TITLE", "ウィンドウタイトル"]])
+      globals.seed(variable!, 0, base.get(csv!) ?? "");
+    for (const [variable, csv] of [["GAMEBASE_CODE", "コード"], ["GAMEBASE_VERSION", "バージョン"], ["GAMEBASE_ALLOWVERSION", "バージョン違い認める"],
+      ["GAMEBASE_DEFAULTCHARA", "最初からいるキャラ"], ["GAMEBASE_NOITEM", "アイテムなし"]]) {
+      const value = base.get(csv!);
+      if (value && /^-?\d+$/.test(value)) globals.seed(variable!, 0, BigInt(value));
+      else if (variable === "GAMEBASE_VERSION" && value === "proto") globals.seed(variable, 0, 0n);
+    }
+    for (const [name, table] of game.tables) {
+      if (name.includes("/") || name === "GAMEBASE" || !table.size) continue;
+      const size = Math.max(game.variableSizes.get(`${name}NAME`)?.at(-1) ?? game.variableSizes.get(name)?.at(-1) ?? (name === "STR" ? 20000 : 1000), Math.max(...table.keys()) + 1);
+      if (size > 1_000_000) continue;
+      globals.define(`${name}NAME`, true, [size], true);
+      for (const [index, row] of table) globals.seed(`${name}NAME`, index, row[0] ?? "");
+    }
+    for (const line of game.headers) {
+      if (/^#DIMS?\s/i.test(line.text)) globals.declare(line);
+      // Other header directives are diagnosed by the compatibility report.
+    }
+    // Macros apply to ERB expressions only, so ERH declarations above are read unexpanded.
+    useMacros(game.macros);
+    const items = game.tables.get("ITEM");
+    globals.define("ITEMPRICE", false, [Math.max(game.variableSizes.get("ITEM")?.[0] ?? 1000, ...[...items?.keys() ?? []].map((i) => i + 1))], true);
+    for (const [index, row] of items ?? []) if (/^-?\d+$/.test(row[1]?.trim() ?? "")) globals.seed("ITEMPRICE", index, BigInt(row[1]!.trim()));
+    return globals;
   }
   /** Config.DrawableWidth: WindowX less the shape shift used by every drawing mode except WINAPI. */
   private drawableWidth(): number {
@@ -549,6 +578,49 @@ export class Runtime {
     for (const variables of this.statics.values()) variables.resetData();
     this.seedDefaults();
     this.clearContainers("SAVE");
+    this.lastLoad = { version: -1n, slot: -1n, text: "" };
+  }
+  private restart(): void {
+    this.statics.clear();
+    this.contexts = new WeakMap();
+    this.evaluatorCache = new WeakMap();
+    this.globals = this.createGlobals();
+    this.seedDefaults();
+    this.maps.clear();
+    this.xmlDocuments.clear();
+    this.dataTables = new DataTables();
+    this.graphics.clear();
+    this.dynamicSprites.clear();
+    this.spriteSizes.clear();
+    this.disposedSprites.clear();
+    this.randomState = BigInt.asUintN(64, (BigInt(randomInt(2 ** 47)) << 17n) ^ BigInt(randomInt(2 ** 17)));
+    this.dumpedRandom = undefined;
+    this.lastLoad = { version: -1n, slot: -1n, text: "" };
+    this.pending = null;
+    this.timed = undefined;
+    this.skipDisplay = this.userSkip = this.messageSkip = false;
+    this.noSkip = [];
+    this.temporaryLine = this.lineOpen = false;
+    this.lineCount = this.waits = 0;
+    this.printingHtml = this.printedLine = this.textbox = this.debugText = "";
+    this.printedLines = [];
+    this.buttonLines = [];
+    this.lineButtons = [];
+    this.textboxChanged = this.debugClear = true;
+    this.background = [];
+    this.backgroundMap = undefined;
+    this.backgroundChanged = true;
+    this.tooltipSettings = { custom: false, font: "", fontSize: 12, delay: 500, duration: 5000, color: "#000000", background: "#ffffe1" };
+    this.tooltipChanged = true;
+    this.audio = { soundVolume: 100, bgmVolume: 100, bgm: null, sounds: [], stopSounds: true };
+    this.forceKana = 0;
+    this.redraw = 1n;
+    this.pendingBegin = undefined;
+    this.pendingTrain = undefined;
+    this.trainPhaseActive = false;
+    this.ctrain = undefined;
+    this.style = { color: this.display.foreground, background: this.display.background, alignment: "left", fontStyle: 0 };
+    this.deferred.push({ type: "clear", count: Number.MAX_SAFE_INTEGER });
   }
   /** Like Emuera EE's RemoveEM*Data: MAPs and DataTables named in VarExt*.csv are emptied, XmlDocuments are removed; other containers survive. */
   private clearContainers(scope: ContainerScope): void {
@@ -587,6 +659,11 @@ export class Runtime {
     if (!Number.isSafeInteger(columns) || columns < 1 || columns > 1000) throw new EraError("Terminal columns must be between 1 and 1000");
     this.columns = columns;
   }
+  setClient(client: ClientState): void {
+    if (![client.width, client.height].every((size) => Number.isSafeInteger(size) && size >= 0 && size <= 65535)
+      || typeof client.active !== "boolean") throw new EraError("Client dimensions must be integers from 0 to 65535 and active must be a boolean");
+    this.client = { ...client };
+  }
   start(entry = "SYSTEM_TITLE"): Snapshot {
     if (this.iterator) throw new EraError("Runtime has already started");
     this.iterator = this.run(entry);
@@ -603,6 +680,13 @@ export class Runtime {
         return;
       } catch (error) {
         if (error instanceof Halt) return;
+        if (error instanceof RestartTransition) {
+          this.restart();
+          state = "TITLE";
+          previous = "";
+          loaded = false;
+          continue;
+        }
         loaded = error instanceof LoadTransition;
         if (!loaded && !(error instanceof StateChange)) throw error;
         previous = state;
@@ -896,7 +980,7 @@ export class Runtime {
     const crop = (part: Sprite): Rect => {
       let { width, height } = part;
       if ((!width || !height) && this.game.root) {
-        const size = imageSize(path.join(this.game.root, "resources", part.file));
+        const size = imageSize(path.join(gameDirectory(this.game.root, "resources"), part.file));
         width ||= size?.width ?? 0;
         height ||= size?.height ?? 0;
       }
@@ -1089,7 +1173,8 @@ export class Runtime {
     if (!relative || relative.split("/").includes("..") || path.isAbsolute(relative) || /^[A-Za-z]:/.test(relative)) return undefined;
     const extensions = ["txt", ...(this.game.config.get("LOADTEXTとSAVETEXTで使える拡張子") ?? "").split(",").map((ext) => ext.trim().toLowerCase()).filter(Boolean)];
     if (!extensions.includes(path.extname(relative).slice(1).toLowerCase())) return undefined;
-    return { store: `text-${Buffer.from(relative, "utf8").toString("base64url")}`, ...(this.game.root ? { game: path.join(this.game.root, relative) } : {}) };
+    const game = this.gameFile(relative);
+    return { store: `text-${Buffer.from(relative, "utf8").toString("base64url")}`, ...(game ? { game } : {}) };
   }
   private gameStamp(): { code: string; gameVersion: string } {
     const context = this.context(this.globals);
@@ -1177,6 +1262,7 @@ export class Runtime {
     }
     const accepted = this.pending.kind === "integer" ? BigInt(value.trim()).toString() : value;
     if (this.pending.buttonValues && !this.pending.buttonValues.includes(accepted)) throw new EraError("Choose one of the displayed button values");
+    this.messageSkip = false;
     this.textbox = "";
     if (this.pending.kind !== "wait") { this.buttonLines = []; this.lineButtons = []; }
     this.pending = null;
@@ -1216,9 +1302,13 @@ export class Runtime {
           return this.withDebug({ status: "halted", output, input: null, error: null, title: this.windowTitle(), target: this.currentTarget() });
         }
         if ("input" in next.value) {
-          if (this.skipDisplay) {
+          if (this.skipDisplay && !next.value.input.sleep) {
             if (next.value.input.kind === "wait") continue;
             throw new EraError("Input was requested while SKIPDISP is hiding output; wrap it in NOSKIP...ENDNOSKIP", this.currentSource);
+          }
+          if (this.messageSkip && next.value.input.kind === "wait" && !next.value.input.stopSkipping) {
+            this.timed = undefined;
+            continue;
           }
           // Emuera's RunEmueraProgram PrintFlush(false)s whenever the script stops to wait, so a line left open
           // (PRINT "[0] - Return " then INPUT) is finished and the echoed input goes on a line of its own.
@@ -1408,6 +1498,9 @@ export class Runtime {
     const context: EvaluationContext = {
       get: (name, indices) => {
         if (name === "LINECOUNT") return BigInt(this.lineCount);
+        if (name === "LASTLOAD_VERSION") return this.lastLoad.version;
+        if (name === "LASTLOAD_NO") return this.lastLoad.slot;
+        if (name === "LASTLOAD_TEXT") return this.lastLoad.text;
         if (name === "__INT_MAX__") return 0x7fff_ffff_ffff_ffffn;
         if (name === "__INT_MIN__") return -0x8000_0000_0000_0000n;
         // Debug variables are only populated in Emuera's debug mode.
@@ -1748,7 +1841,9 @@ export class Runtime {
             return routine ? routine.label ?? routine.name : "";
           }
           // Keyboard state, skip state and hover are not observable between inputs: nothing is held, skipped or hovered.
-          case "MESSKIP": case "GETKEY": case "GETKEYTRIGGERED": return 0n;
+          case "MESSKIP": return this.messageSkip ? 1n : 0n;
+          case "ISACTIVE": return this.client?.active === false ? 0n : 1n;
+          case "GETKEY": case "GETKEYTRIGGERED": return 0n;
           // The JS heap is not collectable on demand, so no memory is reported as freed.
           case "CLEARMEMORY": return 0n;
           case "GETMEMORYUSAGE": return BigInt(process.memoryUsage().rss);
@@ -1896,7 +1991,7 @@ export class Runtime {
           }
           case "GCREATEFROMFILE": {
             if (this.graphics.has(argInt(args, name, 0)) || !this.game.root) return 0n;
-            const resources = path.resolve(this.game.root, "resources");
+            const resources = path.resolve(gameDirectory(this.game.root, "resources"));
             const file = path.resolve(resources, argText(args, name, 1).replaceAll("\\", "/"));
             if (!file.startsWith(resources + path.sep)) return 0n;
             const size = imageSize(file);
@@ -1911,6 +2006,16 @@ export class Runtime {
           case "GDISPOSE": return this.graphics.delete(argInt(args, name, 0)) ? 1n : 0n;
           case "GGETCOLOR": return this.graphics.has(argInt(args, name, 0)) ? 0n : -1n;
           case "GDRAWSPRITE": case "GDRAWG": return this.draw(name, args);
+          case "GDRAWGWITHROTATE": {
+            if (args.length !== 3 && args.length !== 5) throw new EraError("GDRAWGWITHROTATE takes 3 or 5 arguments");
+            const canvas = this.graphics.get(argInt(args, name, 0)), source = this.picture(argInt(args, name, 1));
+            if (!canvas || !source) return 0n;
+            const x = args.length === 5 ? Number(argInt(args, name, 3)) : Math.trunc(source.width / 2);
+            const y = args.length === 5 ? Number(argInt(args, name, 4)) : Math.trunc(source.height / 2);
+            canvas.ops.push({ op: "rotate", angle: Number(argInt(args, name, 2) % 360n), x, y },
+              { op: "graphics", source, src: [0, 0, source.width, source.height], dest: [0, 0, source.width, source.height] });
+            return 1n;
+          }
           case "GDRAWGWITHMASK": {
             const canvas = this.graphics.get(argInt(args, name, 0)), source = this.picture(argInt(args, name, 1)), mask = this.picture(argInt(args, name, 2));
             if (!canvas || !source || !mask || source.width !== mask.width || source.height !== mask.height) return 0n;
@@ -1925,7 +2030,10 @@ export class Runtime {
             if (!canvas) return 0n;
             const color = argbColor(argInt(args, name, 1), name);
             if (args.length >= 6) canvas.ops.push({ op: "fill", color, rect: [Number(argInt(args, name, 2)), Number(argInt(args, name, 3)), Number(argInt(args, name, 4)), Number(argInt(args, name, 5))], replace: true });
-            else canvas.ops = argInt(args, name, 1) >> 24n ? [{ op: "fill", color, rect: [0, 0, canvas.width, canvas.height], replace: true }] : [];
+            else canvas.ops = [
+              ...(argInt(args, name, 1) >> 24n ? [{ op: "fill" as const, color, rect: [0, 0, canvas.width, canvas.height] as Rect, replace: true }] : []),
+              ...canvas.ops.filter((op) => op.op === "rotate"),
+            ];
             return 1n;
           }
           case "GSETCOLOR": {
@@ -1933,7 +2041,8 @@ export class Runtime {
             if (!canvas) return 0n;
             const x = Number(argInt(args, name, 2)), y = Number(argInt(args, name, 3));
             if (x < 0 || y < 0 || x >= canvas.width || y >= canvas.height) throw new EraError("GSETCOLOR position is outside the graphics");
-            canvas.ops.push({ op: "fill", color: argbColor(argInt(args, name, 1), name), rect: [x, y, 1, 1], replace: true });
+            canvas.ops.push({ op: "fill", color: argbColor(argInt(args, name, 1), name), rect: [x, y, 1, 1], replace: true,
+              ...(canvas.ops.some((op) => op.op === "rotate") ? { absolute: true } : {}) });
             return 1n;
           }
           case "GSETBRUSH": {
@@ -2105,6 +2214,22 @@ export class Runtime {
           case "MAP_SIZE": return BigInt(this.map(argText(args, name, 0)).size);
           case "MAP_HAS": return this.maps.get(argText(args, name, 0))?.has(argText(args, name, 1)) ? 1n : 0n;
           case "MAP_GET": return this.map(argText(args, name, 0)).get(argText(args, name, 1)) ?? "";
+          case "MAP_CLEAR": {
+            const map = this.maps.get(argText(args, name, 0));
+            if (!map) return -1n;
+            map.clear();
+            return 1n;
+          }
+          case "MAP_FROMXML": {
+            const map = this.maps.get(argText(args, name, 0));
+            if (!map) return 0n;
+            const document = parseXml(argText(args, name, 1));
+            for (const pair of selectNodes(document, "/map/p")) {
+              const keys = selectNodes(pair, "./k"), values = selectNodes(pair, "./v");
+              if (keys.length === 1 && values.length === 1) map.set(nodeOutput(keys[0]!, 1), nodeOutput(values[0]!, 2));
+            }
+            return 1n;
+          }
           case "MAP_REMOVE": {
             const map = this.maps.get(argText(args, name, 0));
             if (!map) return -1n;
@@ -2144,8 +2269,8 @@ export class Runtime {
           }
           case "HTML_ESCAPE": return escapeHtml(argText(args, name, 0));
           // EM sizes the drawing area to WindowX by WindowY less the input box (one line high).
-          case "CLIENTWIDTH": return integer(this.configValue("WindowX"));
-          case "CLIENTHEIGHT": return integer(this.configValue("WindowY")) - integer(this.configValue("LineHeight"));
+          case "CLIENTWIDTH": return this.client ? BigInt(this.client.width) : integer(this.configValue("WindowX"));
+          case "CLIENTHEIGHT": return this.client ? BigInt(this.client.height) : integer(this.configValue("WindowY")) - integer(this.configValue("LineHeight"));
           case "STRLENS": return BigInt(stringWidth(argText(args, name, 0)));
           case "STRCOUNT": {
             const matches = this.regex(argText(args, name, 1));
@@ -2301,6 +2426,7 @@ export class Runtime {
     const limits: Record<string, [number, number]> = {
       XML_DOCUMENT: [2, 2], XML_RELEASE: [1, 1], XML_EXIST: [1, 1], XML_TOSTR: [1, 1],
       XML_GET: [2, 4], XML_ADDNODE: [3, 5], XML_REMOVENODE: [2, 3],
+      XML_SET: [3, 5], XML_REPLACE: [2, 4], XML_ADDATTRIBUTE: [3, 6], XML_REMOVEATTRIBUTE: [2, 3],
     };
     const [min, max] = limits[base]!;
     if (args.length < min || args.length > max) throw new EraError(`Invalid number of arguments for ${name}`);
@@ -2308,6 +2434,13 @@ export class Runtime {
     const number = (i: number): number => Number(integer(value(i) ?? 0n));
     const id = (): string => String(value(0)!);
     switch (base) {
+      case "XML_REPLACE": {
+        if (args.length !== 2) break;
+        const replacement = parseXml(text(value(1)!));
+        if (!this.xmlDocuments.has(id())) return -1n;
+        this.xmlDocuments.set(id(), replacement);
+        return 1n;
+      }
       case "XML_DOCUMENT": {
         if (this.xmlDocuments.has(id())) return 0n;
         this.xmlDocuments.set(id(), parseXml(text(value(1)!)));
@@ -2335,8 +2468,15 @@ export class Runtime {
       else if (number(2) !== 0) this.writeArray(variables, context, { kind: "variable", name: "RESULTS", indices: [literal(0n)] }, nodes.map((node) => nodeOutput(node, type)));
       return BigInt(nodes.length);
     }
-    const all = number(base === "XML_ADDNODE" ? 4 : 2) !== 0;
-    const count = base === "XML_ADDNODE" ? addNode(document, path, text(value(2)!), number(3), all) : removeNode(document, path, all);
+    let count: number;
+    switch (base) {
+      case "XML_SET": count = setNodes(document, path, text(value(2)!), number(3) !== 0, number(4)); break;
+      case "XML_REPLACE": count = replaceNodes(document, path, parseXml(text(value(2)!)), number(3) !== 0); break;
+      case "XML_ADDATTRIBUTE": count = addAttribute(document, path, text(value(2)!), text(value(3) ?? ""), number(4), number(5) !== 0); break;
+      case "XML_REMOVEATTRIBUTE": count = removeAttributes(document, path, number(2) !== 0); break;
+      case "XML_ADDNODE": count = addNode(document, path, text(value(2)!), number(3), number(4) !== 0); break;
+      default: count = removeNode(document, path, number(2) !== 0);
+    }
     if (!stored && count) {
       const target = args[0]!;
       if (target.kind !== "variable") throw new EraError(`${name} needs a string variable to update`);
@@ -2433,6 +2573,11 @@ export class Runtime {
     this.textboxChanged = false;
     if (this.tooltipChanged) snapshot.tooltip = { ...this.tooltipSettings };
     this.tooltipChanged = false;
+    if (this.audio) {
+      snapshot.audio = { ...this.audio, sounds: this.audio.sounds.slice() };
+      this.audio.sounds = [];
+      this.audio.stopSounds = false;
+    }
     return snapshot;
   }
   private resourceUrl(file: string): string {
@@ -2584,6 +2729,7 @@ export class Runtime {
     info = {
       returnType: functionType ? key(functionType.text) === "#FUNCTIONS" ? "string" : "integer" : undefined,
       dynamic: routine.directives.filter((line) => /^#DIMS?\s/i.test(line.text) && /\b(?:DYNAMIC|REF)\b/i.test(line.text)),
+      inline: new Map(),
       references: routine.parameters.map((parameter) => references.has(key(parameter.split("=")[0]!.trim().split(":")[0]!))),
       parameters: routine.parameters.map((parameter) => {
         const equal = parameter.indexOf("=");
@@ -2592,6 +2738,13 @@ export class Runtime {
         return { target, defaultSource: equal < 0 ? undefined : parameter.slice(equal + 1) };
       }),
     };
+    for (const line of routine.lines) {
+      const declaration = inlineDeclaration(line);
+      if (!declaration) continue;
+      const reference = this.parse(declaration.name);
+      if (reference.kind !== "variable" || reference.indices.length) throw new EraError(`Invalid inline variable name: ${declaration.name}`, line);
+      if (!info.inline.has(declaration.name)) info.inline.set(declaration.name, declaration);
+    }
     this.routineInfo.set(routine, info);
     return info;
   }
@@ -2709,10 +2862,14 @@ export class Runtime {
       }
       this.statics.set(routine, variables);
     }
-    if (info.dynamic.length) {
+    if (info.dynamic.length || info.inline.size) {
       variables = new Variables(this.game, variables);
       variables.transient = true;
       for (const declaration of info.dynamic) variables.declare(declaration);
+      for (const declaration of info.inline.values()) {
+        if (variables.owns(declaration.name) || variables.parent!.owns(declaration.name)) continue;
+        variables.define(declaration.name, declaration.string, declaration.dimensions);
+      }
     }
     const context = this.context(variables);
     const frame: Frame = { variables, compiled, context };
@@ -2924,6 +3081,14 @@ export class Runtime {
           case "ADDCHARA":
             for (const part of this.arguments(args)) this.addCharacter(Number(num(part)), frame.context);
             break;
+          case "ADDDEFCHARA": {
+            if (args) throw new EraError("ADDDEFCHARA takes no arguments");
+            if (this.doing.at(-1)?.name !== "SYSTEM_TITLE") throw new EraError("ADDDEFCHARA may only be used in @SYSTEM_TITLE");
+            this.addCharacter(0, frame.context);
+            const character = integer(this.globals.get("GAMEBASE_DEFAULTCHARA", [], frame.context));
+            if (character > 0n) this.addCharacter(Number(character), frame.context);
+            break;
+          }
           case "ADDVOIDCHARA": {
             // Emuera's pseudo character: template 0 with no CSV data, so NO is 0 and every value is empty.
             if (args.trim()) throw new EraError("ADDVOIDCHARA takes no arguments");
@@ -2937,9 +3102,9 @@ export class Runtime {
           case "SORTCHARA":
             this.sortCharacters(args, frame);
             break;
-          case "BEGIN": {
+          case "BEGIN": case "FORCE_BEGIN": {
             const state = key(args.trim());
-            if (!BEGIN_STATES.has(state)) throw new EraError(`BEGINのキーワード"${args.trim()}"は未定義です`);
+            if (!BEGIN_STATES.has(state)) throw new EraError(`${op}のキーワード"${args.trim()}"は未定義です`);
             this.pendingBegin = state;
             this.style = { color: this.display.foreground, background: this.display.background, alignment: "left", fontStyle: 0 };
             // Like RETURN without touching RESULT; the system loop switches state once its call returns.
@@ -2984,6 +3149,19 @@ export class Runtime {
             yield this.emit("text", "Log written to emuera.log", true);
             break;
           }
+          case "PRINT_MARK": {
+            if (this.skipDisplay) break;
+            const character = num(args);
+            const marks = this.globals.row("MARK", [literal(character), literal(0n)], frame.context);
+            let value = "";
+            for (let i = 0; i < marks.size; i++) {
+              const level = integer(marks.get(i));
+              const name = this.game.tables.get("MARK")?.get(i)?.[0];
+              if (level !== 0n && name) value += `${name}LV${level} `;
+            }
+            yield this.emit("text", value, true);
+            break;
+          }
           case "SAVEDATA": {
             const parts = this.arguments(args);
             if (parts.length !== 2) throw new EraError("SAVEDATA expects slot, text");
@@ -2991,10 +3169,12 @@ export class Runtime {
             break;
           }
           case "LOADDATA": {
-            const file = this.saveFile(num(args));
+            const slot = num(args);
+            const file = this.saveFile(slot);
             const result = this.checkSave(file);
             if (result.state !== 0n || !result.record?.data) throw new EraError(`LOADDATA: ${result.message}`);
             this.loadGame(result.record.data, result.record.containers);
+            this.lastLoad = { version: BigInt(result.record.gameVersion), slot, text: result.record.text };
             throw new LoadTransition();
           }
           case "DELDATA":
@@ -3155,13 +3335,16 @@ export class Runtime {
             break;
           }
           case "HTML_PRINT": {
-            const html = text(ev(args));
+            const parts = this.arguments(args);
+            if (parts.length < 1 || parts.length > 2 || !parts[0]) throw new EraError("HTML_PRINT expects html[, toPrintBuffer]");
+            const html = text(ev(parts[0]));
+            const buffered = parts[1] ? num(parts[1]) !== 0n : false;
             if (!html || this.skipDisplay) break;
             // PrintHtml flushes pending plain text before adding its own display lines. Panel markers are
             // our layout extension, not Emuera HTML, and retain their shared-line behavior.
             const panel = /^\s*<era-(?:open|close)(?:\s+class\s*=\s*(?:'[^']*'|"[^"]*"))?\s*\/?>\s*$/i.test(html);
-            if (this.lineOpen && !panel) yield this.emit("text", "", true);
-            yield this.emit("html", html, true);
+            if (this.lineOpen && !panel && !buffered) yield this.emit("text", "", true);
+            yield this.emit("html", html, !buffered);
             break;
           }
           case "PRINT_RECT": case "PRINT_SPACE": {
@@ -3271,6 +3454,14 @@ export class Runtime {
             else if (op === "RETURNFORM") this.globals.set("RESULT", [], 0n, frame.context);
             return;
           }
+          case "VARSIZE": {
+            const reference = this.parse(args);
+            if (reference.kind !== "variable" || reference.indices.length)
+              throw new EraError("VARSIZE expects an array variable name");
+            const dimensions = frame.variables.dimensions(reference.name, frame.context);
+            this.globals.setMany("RESULT", [literal(0n)], dimensions.map(BigInt), frame.context);
+            break;
+          }
           case "VARSET": {
             const parts = this.arguments(args);
             const reference = this.parse(parts[0] ?? "");
@@ -3280,13 +3471,23 @@ export class Runtime {
             frame.variables.fill(reference.name, reference.indices, value, [bound(2), bound(3)], frame.context);
             break;
           }
+          case "VARI": case "VARS": {
+            const declaration = inlineDeclaration(line)!;
+            frame.variables.fill(declaration.name, [], declaration.string ? "" : 0n, [undefined, undefined], frame.context);
+            const dimensions = frame.variables.dimensions(declaration.name, frame.context);
+            if (dimensions.length === 1 && dimensions[0] === 1) {
+              const value = declaration.initializer ? ev(declaration.initializer) : declaration.string ? "" : 0n;
+              this.assign(frame, this.parse(declaration.name), value);
+            }
+            break;
+          }
           case "STRLEN": case "STRLENU": case "STRLENFORM": case "STRLENFORMU": {
             const source = op.startsWith("STRLENFORM") ? this.formatted(args, frame) : args;
             this.globals.set("RESULT", [], BigInt(op.endsWith("U") ? source.length : stringWidth(source)), frame.context);
             break;
           }
           case "STRLENS": case "STRLENSU": case "SUBSTRING": case "SUBSTRINGU": case "STRFIND": case "STRFINDU": case "STRCOUNT": case "EXISTFUNCTION":
-          case "CLIENTWIDTH": case "CLIENTHEIGHT": case "FIND_CHARADATA": case "EXISTFILE":
+          case "CLIENTWIDTH": case "CLIENTHEIGHT": case "ISACTIVE": case "FIND_CHARADATA": case "EXISTFILE":
           case "SIGN": case "ALLSAMES": case "NOSAMES": case "COLOR_FROMNAME": case "COLOR_FROMRGB": case "CHKFONT": case "LINEISEMPTY": case "HTML_GETPRINTEDSTR":
           case "GETDOINGFUNCTION": case "MESSKIP": case "GETKEY": case "GETKEYTRIGGERED": case "GETTEXTBOX": case "REGEXPMATCH": case "STRJOIN":
           case "INRANGEARRAY": case "INRANGECARRAY": case "CLEARMEMORY": case "GETMEMORYUSAGE": {
@@ -3331,6 +3532,9 @@ export class Runtime {
             this.assign(frame, count, BigInt(pieces?.length ?? -1));
             break;
           }
+          case "QUIT_AND_RESTART":
+            if (args) throw new EraError("QUIT_AND_RESTART takes no arguments");
+            throw new RestartTransition();
           case "QUIT": this.finished = true; return;
           case "BINPUT": case "BINPUTS": {
             const numeric = op === "BINPUT";
@@ -3382,7 +3586,8 @@ export class Runtime {
             this.globals.set(numeric ? "RESULT" : "RESULTS", [], numeric ? BigInt(value.trim()) : value, frame.context);
             break;
           }
-          case "WAIT": case "FORCEWAIT": yield { input: { kind: "wait" } }; break;
+          case "WAIT": yield { input: { kind: "wait" } }; break;
+          case "FORCEWAIT": yield { input: { kind: "wait", stopSkipping: true } }; break;
           case "INPUTMOUSEKEY": {
             // Prints nothing, not even the timeout message; the script reads RESULT:0-5.
             const time = args.trim() ? Number(num(args)) : 0;
@@ -3540,6 +3745,9 @@ export class Runtime {
             this.skipDisplay = num(args) !== 0n;
             this.userSkip = this.skipDisplay;
             this.globals.set("RESULT", [], this.skipDisplay ? 1n : 0n, frame.context);
+            break;
+          case "SKIPLOG":
+            this.messageSkip = num(args) !== 0n;
             break;
           case "CALLTRAIN": {
             const count = num(args);
@@ -3707,11 +3915,15 @@ export class Runtime {
           case "DUMPRAND": this.dumpedRandom = this.randomState; break;
           case "INITRAND": if (this.dumpedRandom !== undefined) this.randomState = this.dumpedRandom; break;
           case "WAITANYKEY": yield { input: { kind: "wait" } }; break;
-          case "TOOLTIP_CUSTOM": case "TOOLTIP_SETFONTSIZE": case "TOOLTIP_SETFONT":
+          case "TOOLTIP_CUSTOM": case "TOOLTIP_SETFONTSIZE": case "TOOLTIP_SETFONT": case "TOOLTIP_FORMAT":
           case "TOOLTIP_SETDELAY": case "TOOLTIP_SETDURATION": case "TOOLTIP_SETCOLOR": {
             const parts = this.arguments(args), count = op === "TOOLTIP_SETCOLOR" ? 2 : 1;
             if (parts.length !== count || parts.some((part) => !part)) throw new EraError(`${op} expects ${count} argument(s)`);
-            if (op === "TOOLTIP_SETFONT") this.tooltipSettings.font = text(ev(parts[0]!));
+            if (op === "TOOLTIP_FORMAT") {
+              const format = num(parts[0]!);
+              if (format < 0n || format > 2n) throw new EraError("TOOLTIP_FORMAT supports Left (0), HorizontalCenter (1), or Right (2)");
+              this.tooltipSettings.format = Number(format);
+            } else if (op === "TOOLTIP_SETFONT") this.tooltipSettings.font = text(ev(parts[0]!));
             else if (op === "TOOLTIP_SETCOLOR") {
               this.tooltipSettings.color = rgbColor(num(parts[0]!));
               this.tooltipSettings.background = rgbColor(num(parts[1]!));
@@ -3725,8 +3937,43 @@ export class Runtime {
             this.tooltipChanged = true;
             break;
           }
-          // Sound and animation timers have no effect in the terminal.
-          case "AWAIT": case "PLAYSOUND": case "STOPSOUND": case "PLAYBGM": case "STOPBGM": case "SETANIMETIMER":
+          case "SETBGMVOLUME": case "SETSOUNDVOLUME": case "PLAYSOUND": case "PLAYBGM": case "STOPSOUND": case "STOPBGM": {
+            const parts = args.trim() ? this.arguments(args) : [];
+            const expected = op === "STOPSOUND" || op === "STOPBGM" ? 0 : 1;
+            if (parts.length < expected || parts.length > (op === "PLAYSOUND" ? 2 : expected) || parts.some((part) => !part))
+              throw new EraError(`${op} expects ${op === "PLAYSOUND" ? "1 or 2" : expected} argument(s)`);
+            const audio = this.audio ??= { soundVolume: 100, bgmVolume: 100, bgm: null, sounds: [], stopSounds: false };
+            if (op === "SETBGMVOLUME" || op === "SETSOUNDVOLUME") {
+              const volume = Number(num(parts[0]!));
+              audio[op === "SETBGMVOLUME" ? "bgmVolume" : "soundVolume"] = Math.min(100, Math.max(0, volume));
+            } else if (op === "STOPBGM") audio.bgm = null;
+            else if (op === "STOPSOUND") { audio.sounds = []; audio.stopSounds = true; }
+            else {
+              const filename = text(ev(parts[0]!));
+              const repeat = parts[1] ? Math.max(1, Number(num(parts[1]))) : 1;
+              if (/^(?:[\\/]|[A-Za-z]:)/.test(filename) || filename.replaceAll("\\", "/").split("/").includes(".."))
+                throw new EraError(`${op} requires a path within the sound directory`);
+              const file = this.gameFile("sound/" + filename);
+              // Native Emuera ignores missing sound files.
+              if (file) {
+                const relative = path.relative(this.game.root, file).split(path.sep).slice(1).map(encodeURIComponent).join("/");
+                const url = `${this.game.resourceBase.replace(/resources\/$/, "sound/")}${relative}`;
+                const track = { id: randomUUID(), url };
+                if (op === "PLAYBGM") audio.bgm = track;
+                else audio.sounds.push({ ...track, repeat });
+              }
+            }
+            break;
+          }
+          case "AWAIT": {
+            const time = args.trim() ? Number(num(args)) : 0;
+            if (time < 0 || time > 10000) throw new EraError("AWAIT time must be between 0 and 10000 milliseconds");
+            this.timed = { value: "", message: undefined, countdown: false };
+            // Even AWAIT 0 must yield to the host so focus/minimize polling loops cannot block the server.
+            yield { input: { kind: "wait", timeout: Math.max(1, time), blocking: true, stopSkipping: true, sleep: true } };
+            break;
+          }
+          case "SETANIMETIMER":
             break;
           case "CALLSHARP": {
             if (!supportedSharpCall(args))

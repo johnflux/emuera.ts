@@ -49,6 +49,7 @@ test("ZIP installation downloads, safely extracts, and flattens archive wrapper 
     { name: "release/ERB/title.erb", content: "@SYSTEM_TITLE\nPRINTL From ZIP\nINPUT" },
     { name: "release/CSV/Flag.csv", content: "0,example" },
     { name: "release/resources/portrait.txt", content: "image fixture" },
+    { name: "release/.gitattributes", content: "*.png filter=lfs diff=lfs merge=lfs -text\n" },
   ]);
   const server = createServer((request, response) => {
     assert.equal(request.headers["sec-fetch-mode"], "same-origin");
@@ -59,11 +60,16 @@ test("ZIP installation downloads, safely extracts, and flattens archive wrapper 
     await once(server, "listening");
     const address = server.address();
     assert.ok(address && typeof address !== "string");
+    for (const id of ["tw", "eranas"]) {
+      const game = GAME_CATALOG.find((game) => game.id === id)!;
+      assert.ok(game.archive);
+      await installGame({ ...game, archive: `http://127.0.0.1:${address.port}/${id}.zip` }, path.join(root, "GAMES"));
+      const installed = path.join(root, "GAMES", game.folder);
+      assert.match(await readFile(path.join(installed, "ERB", "title.erb"), "utf8"), /From ZIP/);
+      assert.equal(await readFile(path.join(installed, "CSV", "Flag.csv"), "utf8"), "0,example");
+      assert.equal(await readFile(path.join(installed, "resources", "portrait.txt"), "utf8"), "image fixture");
+    }
     const tw = GAME_CATALOG.find((game) => game.id === "tw")!;
-    await installGame({ ...tw, archive: `http://127.0.0.1:${address.port}/tw.zip` }, path.join(root, "GAMES"));
-    const installed = path.join(root, "GAMES", tw.folder);
-    assert.match(await readFile(path.join(installed, "ERB", "title.erb"), "utf8"), /From ZIP/);
-    assert.equal(await readFile(path.join(installed, "CSV", "Flag.csv"), "utf8"), "0,example");
     await assert.rejects(installGame({ ...tw, archive: `http://127.0.0.1:${address.port}/missing.zip` }, path.join(root, "OtherGames")), /Expected one game/);
     assert.deepEqual((await readdir(root)).sort(), ["GAMES", "OtherGames"]);
     assert.deepEqual(await readdir(path.join(root, "OtherGames")), []);

@@ -163,6 +163,7 @@ function showGames() {
 }
 new ResizeObserver(() => {
   placeBackground();
+  scheduleHtmlPositions();
   // scrollIntoView would also scroll an open dialog's body to its end.
   if (input && !busy && !terminal.querySelector(".era-dialog:popover-open")) lastOutputLine()?.scrollIntoView({ block: "nearest" });
 }).observe(terminal);
@@ -382,6 +383,7 @@ function useTooltipSettings(settings) {
     fontFamily: custom && settings.font ? settings.font : "",
     fontSize: custom ? `${settings.fontSize}px` : "",
     color: custom ? settings.color : "", backgroundColor: custom ? settings.background : "",
+    textAlign: custom && settings.format !== undefined ? ["left", "center", "right"][settings.format] : "",
   });
 }
 /** An element's box including any pictures inside it, which overflow their zero-height line. */
@@ -719,6 +721,15 @@ function imageScale() {
   const lineHeight = Number.parseFloat(style.lineHeight);
   return (Number.isFinite(lineHeight) ? lineHeight : Number.parseFloat(style.fontSize) * 1.25) / metrics.lineHeight;
 }
+/** Use the same game-pixel coordinates as CBG placement and mouse hit testing. */
+function clientState() {
+  const scale = imageScale();
+  return {
+    width: Math.max(0, Math.floor(terminal.clientWidth / scale)),
+    height: Math.max(0, Math.floor(terminal.clientHeight / scale)),
+    active: !document.hidden && document.hasFocus(),
+  };
+}
 /** CSS pixels per Emuera pixel across the line: a column is half the configured font size wide in Emuera. */
 function columnScale() {
   const width = Number.parseFloat(getComputedStyle(terminal).getPropertyValue("--logical-width"));
@@ -826,11 +837,21 @@ async function paintOps(picture) {
       : op.op === "mask" ? Promise.all([paintPicture(op.source), paintPicture(op.mask)])
       : null));
   picture.ops.forEach((op, i) => {
-    if (op.op === "fill") {
+    if (op.op === "rotate") {
+      // GDI+ MatrixOrder.Append: rotate the existing transform in world coordinates.
+      const previous = context.getTransform();
+      context.setTransform(1, 0, 0, 1, 0, 0);
+      context.translate(op.x, op.y);
+      context.rotate(op.angle * Math.PI / 180);
+      context.translate(-op.x, -op.y);
+      context.transform(previous.a, previous.b, previous.c, previous.d, previous.e, previous.f);
+    } else if (op.op === "fill") {
+      if (op.absolute) { context.save(); context.setTransform(1, 0, 0, 1, 0, 0); }
       const [x, y, width, height] = op.rect;
       if (op.replace) context.clearRect(x, y, width, height);
       context.fillStyle = op.color;
       context.fillRect(x, y, width, height);
+      if (op.absolute) context.restore();
     } else if (op.op === "line") {
       context.strokeStyle = op.color;
       context.lineWidth = op.width;
@@ -1213,6 +1234,16 @@ function layoutHtmlPositions() {
     element.style.marginLeft = `${Number(element.dataset.htmlPosition) - offset}px`;
   }
 }
+let htmlPositionsFrame = 0;
+function scheduleHtmlPositions() {
+  if (htmlPositionsFrame) return;
+  htmlPositionsFrame = requestAnimationFrame(() => {
+    htmlPositionsFrame = 0;
+    layoutHtmlPositions();
+  });
+}
+// Both on-device translation and browser page translators can change widths after rendering.
+new MutationObserver(scheduleHtmlPositions).observe(terminal, { childList: true, characterData: true, subtree: true });
 /**
  * Hotpatch extension (not Emuera HTML): era-* classes are styled by style.css; other class names are ignored so
  * game markup can't pick up the client's own classes.
@@ -1448,7 +1479,7 @@ async function expire() {
   busy = true;
   expiring = true;
   try {
-    const snapshot = await api("/api/timeout", { session, step, columns: terminalColumns(), display: displaySettings() });
+    const snapshot = await api("/api/timeout", { session, step, columns: terminalColumns(), display: displaySettings(), client: clientState() });
     if (current === generation) await render(snapshot, false, false, true);
   } catch (error) { if (!staleTab(error)) message(error.message, true); }
   finally {
@@ -1491,6 +1522,73 @@ function revealSelectedOccupants() {
       - Math.max(0, (lineup.clientWidth - occupant.offsetWidth) / 2);
   }
 }
+let backgroundAudio = null;
+const soundAudio = new Set();
+const blockedAudio = new Set();
+function stopAudio(element) {
+  element.pause();
+  element.removeAttribute("src");
+  element.load();
+  soundAudio.delete(element);
+  blockedAudio.delete(element);
+}
+function playAudio(element) {
+  element.play().catch((error) => {
+    if (backgroundAudio?.element !== element && !soundAudio.has(element)) return;
+    if (error.name === "NotAllowedError") {
+      if (!blockedAudio.has(element)) message("Audio is blocked by the browser. Click or press a key to enable playback.", true);
+      blockedAudio.add(element);
+    } else message(`Could not play audio: ${error.message}`, true);
+  });
+}
+function retryAudio() {
+  for (const element of blockedAudio) playAudio(element);
+  blockedAudio.clear();
+}
+document.addEventListener("pointerdown", retryAudio);
+document.addEventListener("keydown", retryAudio);
+function resetAudio() {
+  if (backgroundAudio) stopAudio(backgroundAudio.element);
+  backgroundAudio = null;
+  for (const element of soundAudio) stopAudio(element);
+}
+function useAudioSettings(settings) {
+  if (settings.stopSounds) for (const element of soundAudio) stopAudio(element);
+  if (backgroundAudio?.id !== settings.bgm?.id) {
+    if (backgroundAudio) stopAudio(backgroundAudio.element);
+    backgroundAudio = null;
+    if (settings.bgm) {
+      const element = new Audio(settings.bgm.url);
+      element.loop = true;
+      element.volume = settings.bgmVolume / 100;
+      backgroundAudio = { id: settings.bgm.id, element };
+      element.addEventListener("error", () => {
+        if (backgroundAudio?.element === element) message(`Could not load background audio: ${settings.bgm.url}`, true);
+      });
+      playAudio(element);
+    }
+  }
+  if (backgroundAudio) backgroundAudio.element.volume = settings.bgmVolume / 100;
+  for (const element of soundAudio) element.volume = settings.soundVolume / 100;
+  for (const track of settings.sounds) {
+    if (soundAudio.size >= 10) stopAudio(soundAudio.values().next().value);
+    const element = new Audio(track.url);
+    element.volume = settings.soundVolume / 100;
+    soundAudio.add(element);
+    let remaining = track.repeat;
+    element.addEventListener("ended", () => {
+      if (!soundAudio.has(element)) return;
+      if (--remaining > 0) { element.currentTime = 0; playAudio(element); }
+      else stopAudio(element);
+    });
+    element.addEventListener("error", () => {
+      if (!soundAudio.has(element)) return;
+      message(`Could not load sound: ${track.url}`, true);
+      stopAudio(element);
+    });
+    playAudio(element);
+  }
+}
 /** advanceScreen: true after a submitted input (retires the screen), "continue" after a click-to-continue wait. */
 async function renderSnapshot(snapshot, advanceScreen) {
   hideTooltip();
@@ -1501,6 +1599,7 @@ async function renderSnapshot(snapshot, advanceScreen) {
     snapshot.cbgMap !== undefined ? showBackgroundMap(snapshot.cbgMap) : undefined,
   ]);
   if (snapshot.tooltip) useTooltipSettings(snapshot.tooltip);
+  if (snapshot.audio) useAudioSettings(snapshot.audio);
   if (snapshot.textbox !== undefined) command.value = snapshot.textbox;
   const previousScreen = currentScreen;
   const previousLine = currentLine;
@@ -1733,7 +1832,7 @@ function runQueuedContinue() {
   if (queued) void submit("");
   else if (input.timeout == null) {
     // Let the server run the next step while the player reads, so the click is answered at once.
-    void fetch("/api/prefetch", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ session }) }).catch(() => {});
+    void fetch("/api/prefetch", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ session, client: clientState() }) }).catch(() => {});
   }
 }
 /** Waits for the settings and the terminal font, which terminal measurements depend on. */
@@ -1745,6 +1844,7 @@ async function terminalReady() {
 }
 /** Clears the run's client state before a new or resumed run is shown. */
 function resetRun() {
+  resetAudio();
   continueQueued = false;
   skipRequested = false;
   hideTooltip();
@@ -1778,7 +1878,7 @@ async function start(mode, game = runGame, debug = debugPreferred()) {
     showRunInUrl();
     await terminalReady();
     const columns = terminalColumns();
-    const snapshot = await api("/api/start", { mode, game: runGame ?? undefined, debug, previousSession: session, columns, display: displaySettings() });
+    const snapshot = await api("/api/start", { mode, game: runGame ?? undefined, debug, previousSession: session, columns, display: displaySettings(), client: clientState() });
     activityResponded();
     await render(snapshot, false, true);
   }
@@ -1808,10 +1908,11 @@ async function resume(id) {
     showReport(false);
     const advance = { start: false, timeout: false, continue: "continue", input: true };
     await renderSteps(data.history.map(({ advance: how, snapshot }, i) =>
-      ({ snapshot: { ...snapshot, session: id }, advanceScreen: i === 0 ? false : advance[how] })), true);
+      ({ snapshot: { ...snapshot, session: id, audio: undefined }, advanceScreen: i === 0 ? false : advance[how] })), true);
     // The trimmed history may have lost the step that set them.
     await Promise.all([showBackground(data.cbg ?? []), showBackgroundMap(data.cbgMap ?? null)]);
     useTooltipSettings(data.tooltip ?? null);
+    if (data.audio) useAudioSettings(data.audio);
     command.value = data.textbox ?? "";
     step = data.step;
     restored = true;
@@ -1849,7 +1950,7 @@ async function submit(value, selectedChoice = null) {
   beginActivity();
   updateControls();
   try {
-    const snapshot = await api("/api/input", { session, step, value, columns: terminalColumns(), display: displaySettings() });
+    const snapshot = await api("/api/input", { session, step, value, columns: terminalColumns(), display: displaySettings(), client: clientState() });
     activityResponded();
     selectedChoice?.classList.add("is-selected");
     command.value = "";
@@ -1882,7 +1983,7 @@ function submitMouseKey(result, results, button = null) {
 }
 function clickToContinue(event) {
   if (input?.kind === "mousekey" && event) {
-    if (!busy && !settling()) submitMouseKey([1, MOUSE_BUTTONS[event.button] ?? MOUSE_BUTTONS[0], ...clientPoint(event), -1, 0]);
+    if ((!busy || expiring) && !settling()) submitMouseKey([1, MOUSE_BUTTONS[event.button] ?? MOUSE_BUTTONS[0], ...clientPoint(event), -1, 0]);
     return;
   }
   if (busy && !expiring) { if (session) queueContinue(); return; }
@@ -1936,23 +2037,23 @@ terminal.addEventListener("click", (event) => {
   if (value < 0 || input?.kind !== "mousekey") return;
   event.preventDefault();
   event.stopImmediatePropagation();
-  if (!busy && !settling()) submitMouseKey([1, MOUSE_BUTTONS[event.button] ?? MOUSE_BUTTONS[0], ...clientPoint(event), value, 0]);
+  if ((!busy || expiring) && !settling()) submitMouseKey([1, MOUSE_BUTTONS[event.button] ?? MOUSE_BUTTONS[0], ...clientPoint(event), value, 0]);
 }, true);
 terminal.addEventListener("contextmenu", (event) => {
   if (event.target instanceof Element && event.target.closest("a[href]")) return;
   event.preventDefault();
   if (input?.kind === "mousekey") {
-    if (!busy && !settling()) submitMouseKey([1, MOUSE_BUTTONS[2], ...clientPoint(event), backgroundHit(event), 0]);
+    if ((!busy || expiring) && !settling()) submitMouseKey([1, MOUSE_BUTTONS[2], ...clientPoint(event), backgroundHit(event), 0]);
   } else if (input?.kind === "wait") skipText();
 });
 terminal.addEventListener("auxclick", (event) => {
-  if (input?.kind === "mousekey" && event.button === 1 && !busy && !settling()) submitMouseKey([1, MOUSE_BUTTONS[1], ...clientPoint(event), backgroundHit(event), 0]);
+  if (input?.kind === "mousekey" && event.button === 1 && (!busy || expiring) && !settling()) submitMouseKey([1, MOUSE_BUTTONS[1], ...clientPoint(event), backgroundHit(event), 0]);
 });
 // While INPUTMOUSEKEY waits the wheel is input (one notch of 120 per event, up positive), not scrolling.
 terminal.addEventListener("wheel", (event) => {
   if (input?.kind !== "mousekey" || event.ctrlKey || !event.deltaY) return;
   event.preventDefault();
-  if (!busy && !settling()) submitMouseKey([2, event.deltaY < 0 ? 120 : -120, ...clientPoint(event)]);
+  if ((!busy || expiring) && !settling()) submitMouseKey([2, event.deltaY < 0 ? 120 : -120, ...clientPoint(event)]);
 }, { passive: false });
 terminal.addEventListener("pointerup", (event) => {
   const pressed = press?.disabled;
@@ -2030,7 +2131,7 @@ document.addEventListener("keydown", (event) => {
     && !((event.key === "Enter" || event.key === " ") && event.target instanceof Element && event.target.closest("button, a[href]"))) {
     // RESULT:1 is the Windows key code (keyCode); RESULT:2 adds Shift 0x10000 and Alt 0x40000.
     event.preventDefault();
-    if (!busy && !settling()) submitMouseKey([3, event.keyCode, event.keyCode | (event.shiftKey ? 0x10000 : 0) | (event.altKey ? 0x40000 : 0)]);
+    if ((!busy || expiring) && !settling()) submitMouseKey([3, event.keyCode, event.keyCode | (event.shiftKey ? 0x10000 : 0) | (event.altKey ? 0x40000 : 0)]);
     return;
   }
   if ((busy && !expiring) || !input || event.defaultPrevented || event.isComposing || event.ctrlKey || event.metaKey || event.altKey) return;
@@ -2220,6 +2321,7 @@ document.querySelector("#library-toggle").addEventListener("click", async () => 
     "Progress that has not been saved in the game will be lost.", "Return to library")) return;
   try {
     if (session) await api("/api/stop", { session });
+    resetAudio();
     clearTimedWait();
     generation++;
     input = null;

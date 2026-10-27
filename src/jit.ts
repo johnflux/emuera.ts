@@ -52,7 +52,7 @@ interface Site { name: string; bare: (string | undefined)[] }
 interface Binding { g: number; st: number; h: Variables; own: boolean; s: Resolved; c: (number | undefined)[] }
 
 // Names the evaluation context answers before consulting variables.
-const SPECIAL = new Set(["LINECOUNT", "__INT_MAX__", "__INT_MIN__", "__FILE__", "__FUNCTION__", "__LINE__", "DRAWLINESTR", "GAMEBASE_VERSION", "RAND"]);
+const SPECIAL = new Set(["LINECOUNT", "LASTLOAD_VERSION", "LASTLOAD_NO", "LASTLOAD_TEXT", "__INT_MAX__", "__INT_MIN__", "__FILE__", "__FUNCTION__", "__LINE__", "DRAWLINESTR", "GAMEBASE_VERSION", "RAND"]);
 const THRESHOLD = 2;
 const LOOP_STATE_OPS = new Set(["FOR", "REPEAT", "NEXT", "REND", "BREAK", "CONTINUE", "RESTART", "GOTO", "GOTOFORM", "TRYGOTO", "TRYGOTOFORM"]);
 const LITERALS: Expr[] = [];
@@ -69,7 +69,7 @@ const CALL_OPS = new Set([
 const INPUT_OPS = new Set([
   "INPUT", "INPUTS", "ONEINPUT", "ONEINPUTS", "TINPUT", "TINPUTS", "TONEINPUT", "TONEINPUTS",
   "BINPUT", "BINPUTS", "INPUTANY",
-  "WAIT", "FORCEWAIT", "TWAIT", "WAITANYKEY", "STOPCALLTRAIN", "INPUTMOUSEKEY",
+  "WAIT", "FORCEWAIT", "TWAIT", "WAITANYKEY", "STOPCALLTRAIN", "INPUTMOUSEKEY", "AWAIT",
 ]);
 /** Whether running this (non-call) instruction may wait for input. */
 function waits(op: string): boolean {

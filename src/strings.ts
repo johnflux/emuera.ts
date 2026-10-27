@@ -119,7 +119,7 @@ export function toHalfWidth(value: string): string {
     return kana.get(c) ?? c;
   }).join("");
 }
-/** Formats an integer like .NET Int64.ToString(format) for the standard D, X, N, F and G formats and 0/#/,/. custom patterns. */
+/** Formats integers with standard D/X/N/F/G formats or 0/#/,/. patterns with literal currency affixes. */
 export function formatInteger(value: bigint, format: string): string | undefined {
   const negative = value < 0n;
   const magnitude = negative ? -value : value;
@@ -141,7 +141,10 @@ export function formatInteger(value: bigint, format: string): string | undefined
       default: return value.toString();
     }
   }
-  if (!/^[0#,.]+$/.test(format)) return undefined;
+  const custom = /^([\p{Sc} +()-]*)([0#,.]+)([\p{Sc} +()-]*)$/u.exec(format);
+  if (!custom) return undefined;
+  const prefix = custom[1]!, suffix = custom[3]!;
+  format = custom[2]!;
   const point = format.indexOf(".");
   let whole = point < 0 ? format : format.slice(0, point);
   const fraction = point < 0 ? "" : format.slice(point + 1).replace(/[.,]/g, "");
@@ -162,5 +165,5 @@ export function formatInteger(value: bigint, format: string): string | undefined
   wholeDigits = wholeDigits === "0" && minimumWhole === 0 ? "" : wholeDigits.padStart(minimumWhole, "0");
   if (grouping) wholeDigits = group(wholeDigits);
   const result = wholeDigits + (fractionDigits ? "." + fractionDigits : "");
-  return (negative && /[1-9]/.test(result) ? "-" : "") + result;
+  return (negative && /[1-9]/.test(result) ? "-" : "") + prefix + result + suffix;
 }

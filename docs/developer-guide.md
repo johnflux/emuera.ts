@@ -8,6 +8,8 @@ and hotpatches; the server offers each one whose directory exists. At startup it
 also offers any other folder in `GAMES/` that holds `ERB/` and `CSV/`, directly
 or one level down (e.g. an unzipped `name/name-master`), titled and identified
 by the folder name. Use **Refresh library** after adding a game; a restart is not required.
+Standard folder names are matched case-insensitively, including `erb/`, `csv/`,
+`Resources/` and `Sound/`, on Linux as well as macOS/Windows. Files are not renamed.
 ERB files load in Emuera's order: in each directory, subdirectories first, then
 files, each sorted case-insensitively. As in Emuera, a non-event function defined
 twice keeps its first definition and the later one is reported in the
@@ -49,6 +51,70 @@ existing defaults. No game scripts or data are patched for these fixes.
 `STR` and its default name-table capacity follow Emuera's 20,000-element default,
 so Reverse's training-message scratch ranges above index 1,000 are valid.
 Explicit variable sizes still take precedence, and out-of-range accesses still fail.
+
+**eraOCG2:** the installed `GAMES/eraocg2` is regression-tested through the
+title animation, new-game confirmation, Story-mode selection, and player-name
+entry. Its lexical compatibility report now has no gaps; this does not establish
+complete gameplay support. No game scripts or data are patched.
+`ADDDEFCHARA`, restricted to `@SYSTEM_TITLE`, adds character template 0 and
+the optional positive `最初からいるキャラ` number from `GameBase.csv`, using
+the same CSV initialization as `ADDCHARA`. `PRINT_MARK` prints named, nonzero
+marks as `nameLVlevel ` in index order and ends the line.
+`SKIPLOG` controls message skipping: output remains visible, `MESSKIP()`
+reports the mode, ordinary message waits are skipped, and `FORCEWAIT` or
+value input still requires interaction. It does not suppress console logging.
+`QUIT_AND_RESTART` unwinds all callers and returns to a freshly initialized
+title state, clearing variables, characters, runtime containers, graphics,
+and console history while retaining saved files and the current browser
+display settings. Interpreter and JIT paths are covered by command regressions.
+
+**eraFL:** startup is regression-tested through initialization, companion-mode
+selection, and the unique-companion list with portraits. The engine loads
+`CSV/_default.config` (or `default.config`), then `emuera.config`, then
+`CSV/_fixed.config` (or `fixed.config`), with later layers taking precedence.
+This enables the game's configured XML file reads; `LOADTEXT` resolves
+game-relative filenames case-insensitively, including `GLOBAL_GOAL_schema.xml`
+whose on-disk name is lowercase. The real schema populates the `GLOBAL_GOAL`
+table, and skill XML documents are loaded, rather than bypassing initialization.
+`TOOLTIP_FORMAT` supports the native left (0), center (1), and right (2)
+alignments and sends changes to the browser tooltip. Other text-format flags
+fail explicitly. `HTML_PRINT html, 1` appends to the current print buffer;
+the omitted/zero flag retains standalone HTML printing.
+`VARI` and `VARS` declare per-call numeric/string locals, including
+arrays. Storage is available throughout the routine, while executing each
+declaration resets its contents and evaluates scalar initializers at that point.
+Repeated declarations reuse the first declaration's storage, and existing
+`#DIM`/`#DIMS` locals remain usable with these reset instructions. Recursive
+calls have independent inline locals; both interpreter and JIT paths are tested.
+`LASTLOAD_VERSION`, `LASTLOAD_NO`, and `LASTLOAD_TEXT` report the most recently
+loaded game save, defaulting to `-1`, `-1`, and an empty string. `RESETDATA`
+and `QUIT_AND_RESTART` reset that metadata; checking or saving a slot does not
+change it. The installed game's new-game path completes `UPDATE` without
+the `CSV_NO` declaration failure. Its remaining local compatibility gaps are
+implemented: `MAP_CLEAR`, `MAP_FROMXML`, `XML_SET`, `XML_REPLACE`,
+`XML_ADDATTRIBUTE`, `XML_REMOVEATTRIBUTE`, `GDRAWGWITHROTATE`,
+`SETBGMVOLUME`, and `SETSOUNDVOLUME`. XML mutations support string-variable
+writeback, stored documents and `_BYNAME` forms. Map imports merge `/map/p`
+entries (key inner text, value inner XML), skipping malformed pairs; clear
+preserves the map itself. Rotation persists for subsequent drawing, including
+across a full `GCLEAR`, matching the native graphics transform.
+The installed report now has only three unsupported `CALLSHARP` occurrences:
+the optional Gemini, Ollama and generic LLM API plugins. They remain explicit
+errors, not fake successful responses; no provider requests are made.
+Full gameplay is not verified. No eraFL scripts or data are patched.
+Shop money formatting supports literal currency prefixes/suffixes in `TOSTR`
+custom numeric patterns, including `$#,###`, without losing Int64 precision.
+The `VARSIZE arrayName` statement inspects an array without reading an element
+and writes its dimension lengths to `RESULT:0`, `RESULT:1`, and `RESULT:2`
+as applicable, preserving unused result slots. This supports WindowDrawer's
+two-dimensional text/property buffers. The expression `VARSIZE("name", dimension)`
+continues to return a single dimension length.
+Browser HTML `pos` anchors are recalculated after text/wrapper changes, including
+asynchronous on-device and browser-page translation, so translated menu labels
+do not push WindowDrawer's borders out of alignment.
+Routine declarations accept a trailing comma without adding a phantom parameter.
+This covers `HAS_CLOTH_TAG`, called by the game's condition-map checks; omitted
+call arguments still use the corresponding declared defaults.
 
 **Blue Resort:** the installed `GAMES/erablue_resort` is supported through
 its title menu, Normal-mode selection, and full gameplay. Its
@@ -112,12 +178,12 @@ also works with an empty `GAMES/` folder: TW, K, and Rance are catalog entries,
 not required bundled games, and appear under Not installed when absent. Their
 monograms include **TW** for The World and **K** for eraTohoK.
 
-The catalog contains the ten highest-starred public era-game repositories found
+The catalog contains nine of the highest-starred public era-game repositories found
 through [GitGud's era search](https://gitgud.io/explore/projects?name=era&sort=stars_desc),
 excluding tools and unrelated projects, plus TW, K, and Rance. The star counts
-are a **2026-10-26 snapshot**, not a live ranking or a compatibility rating.
-The ten are EraUma, Pops TW, eraTW Sub-modding, eraToho Reverse, eraAS,
-erablue_resort, eraOCG2, eraFL, eraSQN, and eraMegaten. Descriptions are short
+are a **2026-10-27 snapshot**, not a live ranking or a compatibility rating.
+The nine are EraUma, eraNAS, eraTW Sub-modding, eraToho Reverse, eraAS,
+erablue_resort, eraOCG2, eraSQN, and eraMegaten. Descriptions are short
 summaries, except eraAS and erablue_resort, which use the era-games group's
 published blurbs. Blue Resort is supported for full gameplay. EraUma can be
 downloaded with its Git submodules into `GAMES/.downloads/erauma` for source inspection, but it requires its own
@@ -138,6 +204,10 @@ minutes. ZIP extraction is handled in Node.js, without external unzip tools,
 and rejects unsafe paths, links, special files, and oversized archives (512 MiB
 download / 1 GiB extracted / 100,000 entries). Network errors are reported with
 a manual ZIP-download alternative; existing folders are never overwritten.
+
+eraNAS also uses **Install ZIP**, downloading its `dev/omogatari-kai` branch
+with Git LFS assets included. It installs into `GAMES/pops-tw` without Git or
+Git LFS; existing Pops TW installations keep the same folder.
 
 **Install with Git** asks before cloning a catalog repository into `GAMES/`.
 It requires Git and an internet connection, uses a shallow clone (the repository's
@@ -533,6 +603,9 @@ declarations and the expression evaluator. No single routine dominates.
   `REF` is 1-D, and constants, character variables, other types and other ranks are
   rejected. `BEGIN FIRST` unwinds the caller and dispatches `EVENTFIRST`
   routines in `#PRI`/normal/`#LATER` order, respecting `#SINGLE`.
+  `FORCE_BEGIN` accepts the same states and uses the same transition and style
+  reset as `BEGIN`; this interpreter already allows `BEGIN` from nested routines
+  without the native engine's system-state restrictions.
   `_Rename.csv` substitutions are applied before script indexing.
 - Character CSV queries (`EXISTCSV`, `CSVNAME`, `CSVCALLNAME`, `CSVNICKNAME`,
   `CSVMASTERNAME`, `CSVBASE`, `CSVABL`, `CSVTALENT`, `CSVEXP`, `CSVRELATION`,
@@ -683,7 +756,17 @@ declarations and the expression evaluator. No single routine dominates.
   operations. `GGETFONT`, `GGETFONTSIZE` and `GGETFONTSTYLE` read that state.
   `GGETTEXTSIZE` and `HTML_STRINGLINES` use fixed-cell measurements, not exact
   platform GDI+ font metrics. `STRFORM` expands FORM text without printing.
-  `EXISTSOUND` checks local sound files but does not enable audio playback.
+  `EXISTSOUND` checks local sound files.
+- `PLAYBGM` loops local background audio; `PLAYSOUND` plays up to ten concurrent
+  effects with an optional repeat count (minimum one). `STOPBGM`/`STOPSOUND`
+  stop the respective channels. `SETBGMVOLUME`/`SETSOUNDVOLUME` clamp to 0..100,
+  affect existing and future playback, and leave `RESULT` unchanged.
+  The server serves allowlisted MP3/WAV/Ogg/FLAC/M4A/AAC files from the game's
+  sound directory only; codec support depends on the browser. Playback and
+  loading errors are displayed. Autoplay restrictions prompt for a click/key
+  and retry on that gesture. Resume restores BGM and volumes, but does not
+  replay old effects. New runs and library return stop the old audio.
+  Terminal-only clients receive the same audio state but do not play it.
 - Tooltip custom font, font size, colors, delay and duration settings are sent to
   the browser. Textbox and tooltip settings survive session resume.
 - Resource CSV sprite rectangles and local PNG/WebP/JPEG/GIF/BMP serving.
@@ -709,7 +792,7 @@ declarations and the expression evaluator. No single routine dominates.
   `is-not-target` and are slightly faded and desaturated until hovered. Unsupported tags and
   missing images show errors.
 - Graphics (`GCREATE`, `GCREATEFROMFILE`, `GCLEAR`, `GSETBRUSH`, `GFILLRECTANGLE`,
-  `GSETCOLOR`, `GDRAWSPRITE`, `GDRAWG`, `GDRAWGWITHMASK`, `GDISPOSE`) build
+  `GSETCOLOR`, `GDRAWSPRITE`, `GDRAWG`, `GDRAWGWITHROTATE`, `GDRAWGWITHMASK`, `GDISPOSE`) build
   display lists instead of pixels. As in Emuera, `SPRITECREATE` sprites reference
   their G live: a disposed G makes them "not created". Color matrices are 5x5
   integer array blocks scaled by 1/256. An html output that shows a runtime-made
@@ -728,8 +811,25 @@ declarations and the expression evaluator. No single routine dominates.
   the hit map; `CBGCLEAR` clears both, without disposing their source graphics.
   Both visible layers and the hit map survive session resume.
   While back layers are shown, text backgrounds are transparent so they show
-  through. `PLAYBGM`/`STOPBGM`, like the sound instructions, are silent.
+  through.
+  Browser runs report the actual drawable client width/height in game pixels
+  at startup and on input/timer steps. `CLIENTWIDTH()`/`CLIENTHEIGHT()` use those
+  dimensions, with the same scale used to place CBG canvases and map mouse
+  coordinates, rather than always reporting the configured desktop window size.
+  Headless runs retain the configured dimensions. `ISACTIVE()` reports browser
+  visibility/focus (headless runs default to active).
+  `AWAIT` yields to the browser event loop, including when its delay is omitted
+  or zero, so inactive-window polling loops cannot block the server. Explicit
+  delays accept 0–10000 milliseconds; the browser transport uses a minimum 1 ms
+  timer and does not allow clicks or message skipping to bypass it.
   See [sprites.md](sprites.md) for how sprites are stored, sent and painted.
+- **eraFlappyTengu** (separate from eraFL): the unmodified public game is
+  regression-tested when installed under `GAMES/eraflappytengu`, through its
+  first rendered frame, click-to-play, timed updates, focus loss and resume,
+  Escape to exit, and `FORCE_BEGIN TITLE` to play again. Its lexical compatibility
+  report has no gaps or loader diagnostics.
+  Its lowercase `csv/` directory works without renaming. Full gameplay and the
+  sorting demo shown in external feedback have not been verified.
 - A presentation-only patch recognizes the title's exact 35-strip HTML sequence
   and contiguous resource rectangles, rendering one cropped image instead of
   35 images and metadata requests. ERB files, runtime output and `LINECOUNT`

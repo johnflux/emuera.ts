@@ -93,18 +93,22 @@ test("library loads and refreshes without the optional starter panel", async () 
 
 test("catalog has unique ids and verified group blurbs and restricts clone sources", () => {
   assert.equal(new Set(GAME_CATALOG.map((game) => game.id)).size, GAME_CATALOG.length);
-  assert.equal(GAME_CATALOG.length, 13);
+  assert.equal(GAME_CATALOG.length, 12);
   assert.deepEqual(GAME_CATALOG.filter((game) => game.hiddenFromCatalog).map((game) => game.id),
     ["erauma", "eratw-sub-modding", "eramegaten"]);
-  assert.equal(GAME_CATALOG.filter((game) => !game.hiddenFromCatalog).length, 10);
+  assert.equal(GAME_CATALOG.filter((game) => !game.hiddenFromCatalog).length, 9);
   const popular = GAME_CATALOG.filter((game) => game.stars !== undefined);
-  assert.equal(popular.length, 10);
-  assert.deepEqual(popular.map((game) => game.stars), [119, 91, 87, 65, 58, 57, 32, 27, 24, 17]);
+  assert.equal(popular.length, 9);
+  assert.deepEqual(popular.map((game) => game.stars), [119, 91, 87, 65, 58, 57, 32, 24, 17]);
   for (const game of GAME_CATALOG) {
     assert.match(game.id, /^[a-z0-9-]+$/);
     assert.equal(path.basename(game.folder), game.folder);
     if (game.repository) assert.match(game.repository, /^https:\/\/gitgud\.io\/(?:[\w-]+\/)+[\w-]+\.git$/);
   }
+  const nas = GAME_CATALOG.find((game) => game.id === "eranas")!;
+  assert.equal(nas.repository, "https://gitgud.io/mrpopsalot/pops-tw.git");
+  assert.equal(nas.archive, "https://gitgud.io/mrpopsalot/pops-tw/-/archive/dev/omogatari-kai/pops-tw-dev-omogatari-kai.zip?lfs=true");
+  assert.equal(GAME_CATALOG.some((game) => game.id === "erafl"), false);
   assert.equal(GAME_CATALOG.find((game) => game.id === "erablue-resort")?.blurb,
     "Manage a resort and explore dungeons with Granblue Fantasy characters.");
   const uma = GAME_CATALOG.find((game) => game.id === "erauma")!;

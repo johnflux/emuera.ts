@@ -23,8 +23,8 @@ export interface CatalogGame {
   branch?: string;
 }
 
-export const CATALOG_UPDATED = "2026-10-26";
-/** Top ten public GitGud era-game search results by stars, excluding tools/unrelated projects, plus the three known games. */
+export const CATALOG_UPDATED = "2026-10-27";
+/** Public GitGud era-game search results by stars, excluding tools/unrelated projects, plus the three known games. */
 export const GAME_CATALOG: readonly CatalogGame[] = [
   {
     id: "tw", title: "eraToho The World", genre: "Life simulation", folder: "anon-tw-anon-tw_eng-modding",
@@ -50,9 +50,10 @@ export const GAME_CATALOG: readonly CatalogGame[] = [
     downloadOnly: true, submodules: true, hiddenFromCatalog: true,
   },
   {
-    id: "pops-tw", title: "Pops TW", genre: "Life simulation", folder: "pops-tw", stars: 91, monogram: "PT",
+    id: "eranas", title: "eraNAS", genre: "Life simulation", folder: "pops-tw", stars: 91, monogram: "NA",
     blurb: "A Touhou life-simulation variant with time-stop powers and additional stories and content.",
     source: "https://gitgud.io/mrpopsalot/pops-tw", repository: "https://gitgud.io/mrpopsalot/pops-tw.git",
+    archive: "https://gitgud.io/mrpopsalot/pops-tw/-/archive/dev/omogatari-kai/pops-tw-dev-omogatari-kai.zip?lfs=true",
   },
   {
     id: "eratw-sub-modding", title: "eraTW Sub-modding", genre: "Life simulation / Chinese", folder: "eratw-sub-modding", stars: 87, monogram: "SM",
@@ -80,12 +81,6 @@ export const GAME_CATALOG: readonly CatalogGame[] = [
     id: "eraocg2", title: "eraOCG2", genre: "Card battles / Chinese", folder: "eraocg2", stars: 32, monogram: "CG",
     blurb: "A Yu-Gi-Oh! Tag Force-inspired fan game centered on card duels.",
     source: "https://gitgud.io/era-games-zh/doujin/eraocg2", repository: "https://gitgud.io/era-games-zh/doujin/eraocg2.git",
-  },
-  {
-    id: "erafl", title: "eraFL", genre: "Fantasy sandbox / Japanese", folder: "erafl", stars: 27, monogram: "FL",
-    blurb: "Build a life in an editable fantasy sandbox, meet its characters, and take on tabletop-style quests.",
-    source: "https://gitgud.io/kom1t/erafl", repository: "https://gitgud.io/kom1t/erafl.git",
-    requirements: "Uses a customized Emuera engine. Compatibility here is unverified.",
   },
   {
     id: "erasqn", title: "eraSQN", genre: "Fantasy / exploration", folder: "eraSQN", stars: 24, monogram: "SQ",

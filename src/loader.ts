@@ -3,6 +3,7 @@ import { closeSync, existsSync, openSync, readdirSync, readFileSync, readSync } 
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { characterField, EraError, EVENT_FUNCTIONS, isCharacterNumberField, key, allowsFullWidthSpace, stripComment, splitArguments, type Diagnostic, type Line, type Routine } from "./model.js";
+import { CONFIG_ITEMS } from "./config-items.js";
 
 /** Browser-presentation ERB layered over eraToho The World without editing its files (see docs/hotpatches.md). */
 export const HOTPATCH_ROOT = fileURLToPath(new URL("../hotpatch/", import.meta.url));
@@ -15,7 +16,20 @@ export const KNOWN_GAMES: readonly GameDefinition[] = [
   { id: "k", title: "eraTohoK", root: path.join(GAMES_DIR, "eraTohoK", "eraTohoK-master") },
   { id: "rancek", title: "eraRanceK", root: path.join(GAMES_DIR, "eraRanceK") },
 ];
-export const isGameRoot = (dir: string): boolean => existsSync(path.join(dir, "ERB")) && existsSync(path.join(dir, "CSV"));
+/** Resolve Emuera's standard folders without assuming a case-insensitive filesystem. Exact spelling wins. */
+export function gameDirectory(root: string, name: string): string {
+  let entries;
+  try { entries = readdirSync(root, { withFileTypes: true }); }
+  catch (error) {
+    if (error instanceof Error && "code" in error && (error.code === "ENOENT" || error.code === "ENOTDIR")) return path.join(root, name);
+    throw error;
+  }
+  const directories = entries.filter((entry) => entry.isDirectory());
+  const match = directories.find((entry) => entry.name === name)
+    ?? directories.find((entry) => key(entry.name) === key(name));
+  return path.join(root, match?.name ?? name);
+}
+export const isGameRoot = (dir: string): boolean => ["ERB", "CSV"].every((name) => existsSync(gameDirectory(dir, name)));
 const subdirectories = (dir: string): string[] => {
   try { return readdirSync(dir, { withFileTypes: true }).filter((entry) => entry.isDirectory() && !entry.name.startsWith(".")).map((entry) => entry.name).sort(); }
   catch { return []; }
@@ -288,7 +302,10 @@ export function indexScript(game: Game, source: string, file: string, header = f
       else if (args.startsWith(",")) args = args.slice(1).trimStart();
       let parameters: string[] = [];
       const directives: Line[] = [];
-      try { parameters = args ? splitArguments(args) : []; }
+      try {
+        parameters = args ? splitArguments(args) : [];
+        if (parameters.at(-1) === "") parameters.pop();
+      }
       catch (error) {
         if (!(error instanceof EraError)) throw error;
         game.diagnostics.push({ ...line, message: `Unsupported function signature: ${content}` });
@@ -338,20 +355,28 @@ export async function loadGame(root = GAME_ROOT, options: { debug?: boolean } = 
   // Keep this compatibility default local to the detected fork; explicit config still wins.
   if (existsSync(path.join(root, "Emuera-Anchor.exe")))
     game.config.set("ユーザー関数の引数に自動的にTOSTRを補完する", "YES");
-  const configFile = path.join(root, "emuera.config");
-  if (existsSync(configFile)) {
-    for (const row of (await readText(configFile)).split(/\r?\n/)) {
+  const csvRoot = gameDirectory(root, "CSV");
+  const defaultConfig = ["_default.config", "default.config"].map((name) => path.join(csvRoot, name)).find(existsSync);
+  const fixedConfig = ["_fixed.config", "fixed.config"].map((name) => path.join(csvRoot, name)).find(existsSync);
+  for (const configFile of [defaultConfig, path.join(root, "emuera.config"), fixedConfig]) {
+    if (!configFile || !existsSync(configFile)) continue;
+    for (const raw of (await readText(configFile)).split(/\r?\n/)) {
+      const row = raw.trim();
       const separator = row.indexOf(":");
-      if (separator > 0 && !row.startsWith(";")) game.config.set(row.slice(0, separator).trim(), row.slice(separator + 1).trim());
+      if (separator > 0 && !row.startsWith(";")) {
+        const name = row.slice(0, separator).trim();
+        const item = CONFIG_ITEMS.find((entry) => entry.slice(0, 3).some((alias) => String(alias).toUpperCase() === name.toUpperCase()));
+        game.config.set(item?.[1] ?? name, row.slice(separator + 1).trim());
+      }
     }
   }
-  const csvFiles = (await filesUnder(path.join(root, "CSV"))).filter((file) => /\.csv$/i.test(file));
+  const csvFiles = (await filesUnder(csvRoot)).filter((file) => /\.csv$/i.test(file));
   for (const file of csvFiles.filter((file) => path.basename(file).toUpperCase() === "_RENAME.CSV")) {
     for (const row of csvRows(await readText(file))) {
       if (row[1]) game.renames.set(row[1], row[0] ?? "");
     }
   }
-  const erbFiles = await filesUnder(path.join(root, "ERB"));
+  const erbFiles = await filesUnder(gameDirectory(root, "ERB"));
   for (const file of erbFiles.filter((file) => /\.erd$/i.test(file))) {
     const name = key(path.basename(file).slice(0, -4));
     if (game.names.has(name)) throw new EraError(`Duplicate ERD name table: ${name}`, { file, line: 0 });
@@ -377,7 +402,7 @@ export async function loadGame(root = GAME_ROOT, options: { debug?: boolean } = 
     game.scriptFiles++;
   }
   for (const file of csvFiles) {
-    const relative = path.relative(path.join(root, "CSV"), file).split(path.sep).join("/");
+    const relative = path.relative(csvRoot, file).split(path.sep).join("/");
     const name = key(relative.replace(/\.csv$/i, ""));
     const records = [...csvRecords(await readText(file), path.relative(root, file))];
     const rows = records.map(({ row }) => row);
@@ -438,7 +463,7 @@ export async function loadGame(root = GAME_ROOT, options: { debug?: boolean } = 
       game.tables.set(name, new Map(rows.map((row, i) => [i, row])));
     }
   }
-  const resources = path.join(root, "resources");
+  const resources = gameDirectory(root, "resources");
   for (const file of existsSync(resources) ? await filesUnder(resources) : []) {
     if (!/\.csv$/i.test(file)) continue;
     const warn = (message: string) => game.diagnostics.push({ file: path.relative(root, file), line: 0, message });
@@ -463,7 +488,7 @@ export async function loadGame(root = GAME_ROOT, options: { debug?: boolean } = 
       }
       if (!row[1].includes(".")) { warn(`Resource image has no file extension: ${row[0]}`); continue; }
       const sprite: Sprite = {
-        file: path.relative(path.join(root, "resources"), path.resolve(path.dirname(file), row[1].replaceAll("\\", "/"))),
+        file: path.relative(resources, path.resolve(path.dirname(file), row[1].replaceAll("\\", "/"))),
         x: 0, y: 0, width: 0, height: 0,
       };
       let delay = 1000;

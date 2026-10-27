@@ -14,7 +14,7 @@
     "yauzl": "^3.4.0"
   },
   "scripts": {
-    "dev": "tsx watch --clear-screen=false --include 'web/**' --include 'hotpatch/**' --include 'GAMES/*/ERB/**' --include 'GAMES/*/CSV/**' --include 'GAMES/*/resources/**' --include 'GAMES/*/*/ERB/**' --include 'GAMES/*/*/CSV/**' --include 'GAMES/*/*/resources/**' src/server.ts --dev",
+    "dev": "tsx watch --clear-screen=false --include 'web/**' --include 'hotpatch/**' --include 'GAMES/*/{[eE][rR][bB],[cC][sS][vV],[rR][eE][sS][oO][uU][rR][cC][eE][sS]}/**' --include 'GAMES/*/*/{[eE][rR][bB],[cC][sS][vV],[rR][eE][sS][oO][uU][rR][cC][eE][sS]}/**' src/server.ts --dev",
     "build": "tsc",
     "start": "npm run dev",
     "start:prod": "node dist/server.js",

@@ -5,8 +5,147 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { once } from "node:events";
 import { createApp } from "../src/server.js";
-import { discoverGames, emptyGame, indexScript, loadGame, readText } from "../src/loader.js";
+import { discoverGames, emptyGame, gameDirectory, indexScript, loadGame, readText } from "../src/loader.js";
 import { EraError } from "../src/model.js";
+
+test("lowercase and mixed-case folders work through discovery, loading and resource serving", async () => {
+  const games = await mkdtemp(path.join(tmpdir(), "era-folder-case-"));
+  try {
+    for (const [name, erb, csv, resources, sound] of [
+      ["lower", "erb", "csv", "resources", "sound"], ["mixed", "ErB", "CsV", "Resources", "Sound"],
+    ] as const) {
+      const root = path.join(games, name);
+      await Promise.all([erb, csv, resources, sound].map((dir) => mkdir(path.join(root, dir), { recursive: true })));
+      const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j6foAAAAASUVORK5CYII=", "base64");
+      await Promise.all([
+        writeFile(path.join(root, erb, "title.erb"), `@SYSTEM_TITLE
+PRINTFORML {SPRITEWIDTH("PIXEL")} {GCREATEFROMFILE(1, "pixel.png")} {GWIDTH(1)}
+PLAYBGM "theme.ogg"
+INPUT`),
+        writeFile(path.join(root, csv, "Flag.csv"), "0,score"),
+        writeFile(path.join(root, csv, "_default.config"), "フォントサイズ:20"),
+        writeFile(path.join(root, resources, "sprites.csv"), "PIXEL,pixel.png"),
+        writeFile(path.join(root, resources, "pixel.png"), png),
+        writeFile(path.join(root, sound, "theme.ogg"), "audio fixture"),
+      ]);
+      assert.equal(gameDirectory(root, "ERB"), path.join(root, erb));
+      assert.equal(gameDirectory(root, "CSV"), path.join(root, csv));
+      assert.equal(gameDirectory(root, "resources"), path.join(root, resources));
+      const game = await loadGame(root);
+      assert.equal(game.names.get("FLAG")?.get("SCORE"), 0);
+      assert.equal(game.config.get("フォントサイズ"), "20");
+      const app = createApp(game);
+      try {
+        app.listen(0, "127.0.0.1");
+        await once(app, "listening");
+        const address = app.address();
+        assert.ok(address && typeof address !== "string");
+        const base = `http://127.0.0.1:${address.port}`;
+        const run = await (await fetch(base + "/api/start", {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "game" }),
+        })).json();
+        assert.equal(run.status, "waiting", JSON.stringify(run.error));
+        assert.equal(run.output.filter((item: { type: string }) => item.type === "text")[0].text, "1 1 1");
+        const sprite = await (await fetch(base + "/api/sprite?name=PIXEL")).json();
+        assert.equal((await fetch(base + sprite.url)).status, 200);
+        assert.equal(await (await fetch(base + run.audio.bgm.url)).text(), "audio fixture");
+      } finally {
+        if (app.listening) await new Promise<void>((resolve, reject) => app.close((error) => error ? reject(error) : resolve()));
+      }
+    }
+    assert.deepEqual(discoverGames(games, []).map((game) => game.id), ["lower", "mixed"]);
+  } finally { await rm(games, { recursive: true, force: true }); }
+});
+
+test("browser client state reaches start, input, timeout and prefetched continuations", async () => {
+  const game = emptyGame();
+  indexScript(game, `@SYSTEM_TITLE
+PRINTFORML {CLIENTWIDTH()} {CLIENTHEIGHT()} {ISACTIVE()}
+INPUT
+PRINTFORML {CLIENTWIDTH()} {CLIENTHEIGHT()} {ISACTIVE()}
+AWAIT 1
+PRINTFORML {CLIENTWIDTH()} {CLIENTHEIGHT()} {ISACTIVE()}
+WAIT
+PRINTFORML {CLIENTWIDTH()} {CLIENTHEIGHT()} {ISACTIVE()}
+RETURN`, "client.ERB");
+  const app = createApp(game);
+  try {
+    app.listen(0, "127.0.0.1");
+    await once(app, "listening");
+    const address = app.address();
+    assert.ok(address && typeof address !== "string");
+    const base = `http://127.0.0.1:${address.port}`;
+    const post = (route: string, data: unknown) => fetch(base + route, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data),
+    });
+    const invalid = [null, [], {}, "bad", { width: -1, height: 1, active: true },
+      { width: 1.5, height: 1, active: true }, { width: 1, height: 65536, active: true },
+      { width: 1, height: 1, active: "yes" }];
+    for (const client of invalid)
+      assert.equal((await post("/api/start", { mode: "game", client })).status, 400);
+    const start = await (await post("/api/start", { mode: "game", client: { width: 1200, height: 800, active: true } })).json();
+    const session = start.session;
+    assert.equal(start.output[0].text, "1200 800 1");
+    for (const client of invalid) {
+      for (const route of ["/api/input", "/api/timeout", "/api/prefetch"])
+        assert.equal((await post(route, { session, value: "0", client })).status, 400, route);
+    }
+    const input = await (await post("/api/input", { session, value: "0", client: { width: 900, height: 600, active: false } })).json();
+    assert.equal(input.output.at(-1).text, "900 600 0");
+    const timeout = await (await post("/api/timeout", { session, client: { width: 800, height: 500, active: true } })).json();
+    assert.equal(timeout.output.at(-1).text, "800 500 1");
+    assert.equal((await (await post("/api/prefetch", { session, client: { width: 700, height: 400, active: false } })).json()).prefetched, true);
+    const continued = await (await post("/api/input", { session, value: "" })).json();
+    assert.equal(continued.output.at(-1).text, "700 400 0");
+  } finally {
+    if (app.listening) await new Promise<void>((resolve, reject) => app.close((error) => error ? reject(error) : resolve()));
+  }
+});
+
+test("local sound routes enforce file confinement and resume keeps audio state without replaying effects", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "era-audio-server-"));
+  const game = emptyGame(root);
+  indexScript(game, `@SYSTEM_TITLE
+SETBGMVOLUME 40
+SETSOUNDVOLUME 20
+PLAYBGM "theme.ogg"
+PLAYSOUND "theme.ogg", 3
+INPUT`, "audio.ERB");
+  const app = createApp([{ id: "audio", title: "Audio", game }]);
+  try {
+    await mkdir(path.join(root, "sound"));
+    await writeFile(path.join(root, "sound", "theme.ogg"), "fixture");
+    await writeFile(path.join(root, "sound", "private.txt"), "not audio");
+    await writeFile(path.join(root, "outside.ogg"), "outside");
+    await symlink(path.join(root, "outside.ogg"), path.join(root, "sound", "escape.ogg"));
+    app.listen(0, "127.0.0.1");
+    await once(app, "listening");
+    const address = app.address();
+    assert.ok(address && typeof address !== "string");
+    const base = `http://127.0.0.1:${address.port}`;
+    const post = (route: string, data: unknown) => fetch(base + route, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data),
+    });
+    const run = await (await post("/api/start", { mode: "game", game: "audio" })).json();
+    assert.equal(run.status, "waiting", JSON.stringify(run.error));
+    assert.equal(run.audio.bgmVolume, 40);
+    assert.equal(run.audio.sounds[0].repeat, 3);
+    const sound = await fetch(base + run.audio.bgm.url);
+    assert.equal(sound.status, 200);
+    assert.equal(sound.headers.get("content-type"), "audio/ogg");
+    assert.equal(await sound.text(), "fixture");
+    assert.equal((await fetch(base + "/games/audio/sound/theme.ogg")).status, 200);
+    for (const filename of ["private.txt", "escape.ogg", "..%2foutside.ogg"]) {
+      assert.equal((await fetch(base + "/sound/" + filename)).status, 403, filename);
+    }
+    assert.equal((await fetch(base + "/sound/missing.wav")).status, 404);
+    const resumed = await (await post("/api/resume", { session: run.session })).json();
+    assert.deepEqual(resumed.audio, { ...run.audio, sounds: [], stopSounds: true });
+  } finally {
+    if (app.listening) await new Promise<void>((resolve, reject) => app.close((error) => error ? reject(error) : resolve()));
+    await rm(root, { recursive: true, force: true });
+  }
+});
 
 test("games are discovered in GAMES folders directly or one level down, after the known ones", async () => {
   const dir = await mkdtemp(path.join(tmpdir(), "era-games-"));

@@ -19,6 +19,135 @@ const template = (game: Game) => game.characters.set(0, { file: "Chara0.csv", ro
   ["フラグ", "3", "42"], ["刻印", "1", "2"], ["CSTR", "1", "text"],
 ] });
 
+test("AWAIT yields to the host, validates delays and cannot be skipped", () => {
+  for (const jit of [false, true]) {
+    const run = runtime(`@SYSTEM_TITLE
+FOR LOCAL, 0, 4
+CALL PAUSE
+NEXT
+RETURN
+@PAUSE
+AWAIT
+AWAIT 0
+AWAIT 10000
+RETURN`, undefined, { jit });
+    let snapshot = run.start();
+    for (let i = 0; i < 12; i++) {
+      assert.equal(snapshot.status, "waiting", JSON.stringify(snapshot.error));
+      assert.equal(snapshot.input?.blocking, true);
+      assert.equal(snapshot.input?.timeout, i % 3 === 2 ? 10000 : 1);
+      assert.throws(() => run.input(""), /cannot be skipped/);
+      assert.equal(run.prefetch(), false);
+      snapshot = run.timeout();
+    }
+    assert.equal(snapshot.status, "halted");
+    for (const time of [-1, 10001]) {
+      const bad = runtime(`@SYSTEM_TITLE\nAWAIT ${time}`, undefined, { jit }).start();
+      assert.equal(bad.status, "error");
+      assert.match(bad.error!.message, /AWAIT time/);
+    }
+    const hidden = runtime("@SYSTEM_TITLE\nSKIPDISP 1\nAWAIT 0\nSKIPDISP 0\nPRINTL done", undefined, { jit });
+    assert.equal(hidden.start().input?.sleep, true);
+    assert.deepEqual(texts(hidden.timeout()), ["done"]);
+    const skipping = runtime("@SYSTEM_TITLE\nSKIPLOG 1\nAWAIT 0\nPRINTL done", undefined, { jit });
+    assert.equal(skipping.start().input?.sleep, true);
+    assert.deepEqual(texts(skipping.timeout()), ["done"]);
+  }
+});
+
+test("client dimensions and ISACTIVE follow the host state in interpreted and JIT routines", () => {
+  for (const jit of [false, true]) {
+    const run = runtime(`@SYSTEM_TITLE
+FOR LOCAL, 0, 4
+CALL SHOW_CLIENT
+NEXT
+INPUT
+CALL SHOW_CLIENT
+INPUT
+CALL SHOW_CLIENT
+RETURN
+@SHOW_CLIENT
+ISACTIVE
+PRINTFORML {CLIENTWIDTH()} {CLIENTHEIGHT()} {ISACTIVE()} {RESULT}
+RETURN`, undefined, { jit, client: { width: 1200, height: 800, active: true } });
+    assert.deepEqual(texts(run.start()), Array(4).fill("1200 800 1 1"));
+    run.setClient({ width: 640, height: 400, active: false });
+    assert.deepEqual(texts(run.input("0")), ["0", "640 400 0 0"]);
+    run.setClient({ width: 0, height: 0, active: true });
+    assert.deepEqual(texts(run.input("0")), ["0", "0 0 1 1"]);
+    for (const width of [-1, 0.5, NaN, Infinity, 65536])
+      assert.throws(() => run.setClient({ width, height: 1, active: true }), /Client dimensions/);
+    const fallback = runtime("@SYSTEM_TITLE\nPRINTFORML {CLIENTWIDTH()} {CLIENTHEIGHT()} {ISACTIVE()}", (game) => {
+      game.config.set("ウィンドウ幅", "900");
+      game.config.set("ウィンドウ高さ", "700");
+      game.config.set("一行の高さ", "20");
+    }, { jit }).start();
+    assert.deepEqual(texts(fallback), ["900 680 1"]);
+    assert.match(runtime("@SYSTEM_TITLE\nPRINTVL ISACTIVE(1)", undefined, { jit }).start().error!.message, /ISACTIVE/);
+  }
+});
+
+test("VARSIZE statements inspect bare arrays and write every dimension without reading elements", () => {
+  for (const jit of [false, true]) {
+    const result = runtime(`@SYSTEM_TITLE
+FOR LOCAL, 0, 4
+CALL SIZES
+NEXT
+RETURN
+@SIZES
+#DIM DYNAMIC GRID, 8, 9
+#DIMS CUBE, 4, 5, 6
+#DIM VECTOR, 7
+RESULT = 90, 91, 92, 93
+VARSIZE CUBE
+PRINTFORML {RESULT:0} {RESULT:1} {RESULT:2} {RESULT:3}
+VARSIZE GRID
+PRINTFORML {RESULT:0} {RESULT:1} {RESULT:2} {RESULT:3}
+VARSIZE VECTOR
+PRINTFORML {RESULT:0} {RESULT:1} {RESULT:2} {RESULT:3}
+PRINTFORML {VARSIZE("GRID", 1)} {VARSIZE("CUBE", 2)}
+RETURN`, undefined, { jit }).start();
+    assert.deepEqual(texts(result), Array(4).fill([
+      "4 5 6 93", "8 9 6 93", "7 9 6 93", "9 6",
+    ]).flat());
+    for (const args of ['"GRID"', "GRID:0", "GRID, 1", "UNKNOWN", ""]) {
+      const bad = runtime(`@SYSTEM_TITLE\n#DIM GRID, 2, 3\nVARSIZE ${args}`, undefined, { jit }).start();
+      assert.equal(bad.status, "error", args);
+      assert.equal(bad.error!.line, 3);
+    }
+    const indexed = runtime("@SYSTEM_TITLE\n#DIM GRID, 2, 3\nPRINTVL GRID", undefined, { jit }).start();
+    assert.equal(indexed.status, "error");
+    assert.match(indexed.error!.message, /Expected 2 indices/);
+  }
+});
+
+test("TOSTR custom currency affixes preserve grouping, signs, zero placeholders and Int64 precision", () => {
+  for (const jit of [false, true]) {
+    const result = runtime(`@SYSTEM_TITLE
+FOR LOCAL, 0, 4
+CALL FORMAT_MONEY
+NEXT
+RETURN
+@FORMAT_MONEY
+PRINTSL TOSTR(1234567, "$#,###")
+PRINTSL TOSTR(-1234567, "$#,###")
+PRINTSL TOSTR(0, "$#,###")
+PRINTSL TOSTR(0, "$#,##0")
+PRINTSL TOSTR(12, "$000.00")
+PRINTSL TOSTR(1234, "#,##0 $")
+PRINTSL TOSTR(-9223372036854775808, "$#,###")
+PRINTSL TOSTR(1234567, "$0,,.00")
+RETURN`, undefined, { jit }).start();
+    assert.deepEqual(texts(result), Array(4).fill([
+      "$1,234,567", "-$1,234,567", "$", "$0", "$012.00", "1,234 $",
+      "-$9,223,372,036,854,775,808", "$1.23",
+    ]).flat());
+    const unsupported = runtime('@SYSTEM_TITLE\nPRINTSL TOSTR(1, "$0%")', undefined, { jit }).start();
+    assert.equal(unsupported.status, "error");
+    assert.match(unsupported.error!.message, /Unsupported TOSTR format/);
+  }
+});
+
 test(".NET escaped commas work in Unicode regexes without changing escaped backslashes or invalid escapes", () => {
   const result = runtime(String.raw`@SYSTEM_TITLE
 PRINTSL REPLACE("a,b,c", "\,(?!.*\,)", " and ")
@@ -858,6 +987,45 @@ PRINTFORML {XML_ADDNODE(0, "/r", "<c/>")} %XML_TOSTR(0)% {XML_GET(1, "/r")} {XML
     `0 1 <list><item k="b">B</item><item k="c">C</item></list>`,
     "1 <r><c /></r> -1 1",
   ]);
+});
+
+test("FORCE_BEGIN matches BEGIN transitions, resets style and rejects unknown states", () => {
+  for (const jit of [false, true]) {
+    for (const op of ["BEGIN", "FORCE_BEGIN"]) {
+      const run = runtime(`@SYSTEM_TITLE
+FOR LOCAL, 0, 4
+CALL TRANSITION, 0
+NEXT
+CALL TRANSITION, 1
+RETURN
+@TRANSITION(ARG)
+SIF !ARG
+  RETURN
+RESULT = 42
+SETCOLOR 0x123456
+SETBGCOLOR 0x654321
+ALIGNMENT RIGHT
+FONTBOLD
+${op} first
+THROW transition continued
+@EVENTFIRST
+PRINTFORML first {RESULT}
+INPUT
+QUIT`, undefined, { jit });
+      const snapshot = run.start();
+      assert.equal(snapshot.status, "waiting", JSON.stringify(snapshot.error));
+      assert.deepEqual(texts(snapshot), ["first 42"]);
+      assert.deepEqual(snapshot.output[0]!.style, {
+        color: "#c0c0c0", background: "#000000", alignment: "left", fontStyle: 0,
+      });
+      assert.equal(run.input("0").status, "halted");
+    }
+    for (const args of ["", "UNKNOWN", "TITLE, FIRST"]) {
+      const invalid = runtime(`@SYSTEM_TITLE\nFORCE_BEGIN ${args}`, undefined, { jit }).start();
+      assert.equal(invalid.status, "error");
+      assert.match(invalid.error!.message, /FORCE_BEGIN/);
+    }
+  }
 });
 
 test("the shop loop sells items, rejects unaffordable ones and passes other values to USERSHOP", () => {

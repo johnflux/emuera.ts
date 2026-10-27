@@ -16,20 +16,20 @@ export const SUPPORTED = new Set([
   "CALL", "JUMP", "RETURN", "RETURNFORM", "GOTO", "GOTOFORM", "TRYGOTO", "TRYGOTOFORM", "RESTART", "INPUT", "INPUTS", "ONEINPUT", "ONEINPUTS", "WAIT", "FORCEWAIT", "TWAIT",
   "TINPUT", "TINPUTS", "TONEINPUT", "TONEINPUTS",
   "BINPUT", "BINPUTS", "INPUTANY",
-  "SETCOLOR", "RESETCOLOR", "SETBGCOLOR", "RESETBGCOLOR", "ALIGNMENT", "QUIT", "THROW",
+  "SETCOLOR", "RESETCOLOR", "SETBGCOLOR", "RESETBGCOLOR", "ALIGNMENT", "QUIT", "QUIT_AND_RESTART", "THROW",
   "LOADGLOBAL", "SAVEGLOBAL", "CLEARMEMORY", "RETURNF", "FONTSTYLE", "FONTBOLD", "FONTITALIC", "FONTREGULAR", "REDRAW",
   "MAP_RELEASE", "MAP_CREATE", "MAP_SET", "STRDATA", "DATA", "DATAFORM", "DATALIST", "ENDLIST", "ENDDATA",
   "DEBUGPRINT", "DEBUGPRINTL", "DEBUGPRINTFORM", "DEBUGPRINTFORML", "DEBUGCLEAR", "ASSERT",
-  "SPLIT", "VARSET", "ARRAYREMOVE", "SETBIT", "CLEARBIT", "INVERTBIT",
-  "BITMAP_CACHE_ENABLE", "SETFONT", "RESETDATA", "ADDCHARA", "ADDVOIDCHARA", "DELCHARA", "DELALLCHARA", "COPYCHARA", "ADDCOPYCHARA", "SWAPCHARA", "PICKUPCHARA", "SORTCHARA", "BEGIN", "CALLF", "TRYCALLF", "CALLFORM", "CALLFORMF", "TRYCALLFORM", "TRYCALLFORMF", "TRYCCALLFORM", "TRYCALL", "TRYJUMP", "TRYCCALL", "TRYCJUMP", "JUMPFORM", "TRYJUMPFORM", "TRYCJUMPFORM", "CATCH", "ENDCATCH",
-  "TIMES", "BAR", "BARL", "BARSTR", "SKIPDISP", "NOSKIP", "ENDNOSKIP", "ISSKIP", "MOUSESKIP", "REUSELASTLINE", "CVARSET",
+  "SPLIT", "VARI", "VARS", "VARSIZE", "VARSET", "ARRAYREMOVE", "SETBIT", "CLEARBIT", "INVERTBIT",
+  "BITMAP_CACHE_ENABLE", "SETFONT", "RESETDATA", "ADDCHARA", "ADDDEFCHARA", "ADDVOIDCHARA", "DELCHARA", "DELALLCHARA", "COPYCHARA", "ADDCOPYCHARA", "SWAPCHARA", "PICKUPCHARA", "SORTCHARA", "BEGIN", "CALLF", "TRYCALLF", "CALLFORM", "CALLFORMF", "TRYCALLFORM", "TRYCALLFORMF", "TRYCCALLFORM", "TRYCALL", "TRYJUMP", "TRYCCALL", "TRYCJUMP", "JUMPFORM", "TRYJUMPFORM", "TRYCJUMPFORM", "CATCH", "ENDCATCH",
+  "FORCE_BEGIN", "TIMES", "BAR", "BARL", "BARSTR", "SKIPDISP", "SKIPLOG", "PRINT_MARK", "NOSKIP", "ENDNOSKIP", "ISSKIP", "MOUSESKIP", "REUSELASTLINE", "CVARSET",
   "ARRAYSHIFT", "ARRAYSORT", "ARRAYCOPY", "SWAP", "POWER", "HTML_TAGSPLIT", "EXISTFUNCTION", "CLIENTWIDTH", "CLIENTHEIGHT", "FIND_CHARADATA", "EXISTFILE",
   "SIGN", "ALLSAMES", "NOSAMES", "COLOR_FROMNAME", "COLOR_FROMRGB", "CHKFONT", "LINEISEMPTY", "HTML_GETPRINTEDSTR", "GETDOINGFUNCTION",
-  "MESSKIP", "GETKEY", "GETKEYTRIGGERED", "GETTEXTBOX", "REGEXPMATCH", "STRJOIN", "INRANGEARRAY", "INRANGECARRAY", "ENCODETOUNI", "CLEARMEMORY", "GETMEMORYUSAGE", "PRINT_RECT", "PRINT_SPACE", "CALLTRAIN", "STOPCALLTRAIN", "SETVAR", "VARSETEX", "SETCOLORBYNAME", "SETBGCOLORBYNAME",
+  "MESSKIP", "ISACTIVE", "GETKEY", "GETKEYTRIGGERED", "GETTEXTBOX", "REGEXPMATCH", "STRJOIN", "INRANGEARRAY", "INRANGECARRAY", "ENCODETOUNI", "CLEARMEMORY", "GETMEMORYUSAGE", "PRINT_RECT", "PRINT_SPACE", "CALLTRAIN", "STOPCALLTRAIN", "SETVAR", "VARSETEX", "SETCOLORBYNAME", "SETBGCOLORBYNAME",
   "GETTIME", "GETMILLISECOND", "GETSECOND", "RANDOMIZE", "DUMPRAND", "INITRAND", "WAITANYKEY",
-  "AWAIT", "PLAYSOUND", "STOPSOUND", "PLAYBGM", "STOPBGM", "INPUTMOUSEKEY", "CBGCLEAR", "CBGREMOVERANGE", "CBGSETG", "CBGSETSPRITE", "SETANIMETIMER", "TOOLTIP_SETDELAY", "TOOLTIP_SETDURATION", "TOOLTIP_SETCOLOR",
+  "AWAIT", "PLAYSOUND", "STOPSOUND", "PLAYBGM", "STOPBGM", "SETBGMVOLUME", "SETSOUNDVOLUME", "INPUTMOUSEKEY", "CBGCLEAR", "CBGREMOVERANGE", "CBGSETG", "CBGSETSPRITE", "SETANIMETIMER", "TOOLTIP_SETDELAY", "TOOLTIP_SETDURATION", "TOOLTIP_SETCOLOR",
   "PRINT_IMG", "CBGSETBUTTONSPRITE", "CBGSETBMAPG", "CBGREMOVEBMAP", "CBGCLEARBUTTON",
-  "TOOLTIP_CUSTOM", "TOOLTIP_SETFONTSIZE", "TOOLTIP_SETFONT",
+  "TOOLTIP_CUSTOM", "TOOLTIP_SETFONTSIZE", "TOOLTIP_SETFONT", "TOOLTIP_FORMAT",
 ]);
 export interface PrintVariant {
   argument: "" | "V" | "S" | "FORM" | "FORMS";
@@ -68,6 +68,26 @@ export interface Instruction extends Line {
   op: string; args: string; target: number;
   /** Runtime parse caches; parsing is deterministic, so they live as long as the compiled routine. */
   parsed?: Expr; assignment?: unknown; values?: Expr[]; cases?: unknown[];
+}
+export interface InlineDeclaration {
+  name: string;
+  string: boolean;
+  dimensions: number[];
+  initializer: string | undefined;
+  line: Line;
+}
+export function inlineDeclaration(line: Line): InlineDeclaration | undefined {
+  const match = /^(VARI|VARS)\s+([^,\s=]+)\s*([^=]*)(?:=(.*))?$/i.exec(line.text);
+  if (!match) {
+    if (/^VAR[IS](?:\s|$)/i.test(line.text)) throw new EraError("VARI/VARS expects name[, dimensions][ = initializer]", line);
+    return undefined;
+  }
+  const suffix = match[3]!.trim();
+  if (suffix && !suffix.startsWith(",")) throw new EraError("VARI/VARS dimensions must follow a comma", line);
+  const dimensions = suffix ? suffix.slice(1).split(",").map((size) => /^\s*\d+\s*$/.test(size) ? Number(size) : NaN) : [1];
+  if (dimensions.length > 3 || dimensions.some((size) => !Number.isSafeInteger(size) || size < 1 || size > 1_000_000))
+    throw new EraError(`Invalid dimensions for ${match[2]}`, line);
+  return { name: key(match[2]!), string: key(match[1]!) === "VARS", dimensions, initializer: match[4]?.trim(), line };
 }
 export interface Compiled {
   code: Instruction[];

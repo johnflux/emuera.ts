@@ -5,10 +5,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { compatibility } from "./compatibility.js";
 import { demoGame } from "./demo.js";
-import { applyHotpatches, displayDefaults, displayMetrics, discoverGames, emptyGame, GAMES_DIR, KNOWN_GAMES, isGameRoot, loadGame, stillFrame, type DisplaySettings, type Game } from "./loader.js";
+import { applyHotpatches, displayDefaults, displayMetrics, discoverGames, emptyGame, gameDirectory, GAMES_DIR, KNOWN_GAMES, isGameRoot, loadGame, stillFrame, type DisplaySettings, type Game } from "./loader.js";
 import { CATALOG_UPDATED, downloadedCatalogGames, GAME_CATALOG, installGame } from "./library.js";
 import { EraError, key } from "./model.js";
-import { GAME_INSTRUCTION_LIMIT, Runtime, type BackgroundLayer, type Snapshot } from "./runtime.js";
+import { GAME_INSTRUCTION_LIMIT, Runtime, type BackgroundLayer, type ClientState, type Snapshot } from "./runtime.js";
 import { FileGlobalStore, FileSaveStore, gameSaveDirectory, MemoryGlobalStore, MemorySaveStore, type GlobalStore, type SaveStore } from "./storage.js";
 import { patchTitleImage } from "./render-patches.js";
 
@@ -59,6 +59,7 @@ const mime: Record<string, string> = {
   ".css": "text/css; charset=utf-8", ".png": "image/png", ".webp": "image/webp",
   ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".bmp": "image/bmp",
   ".ttf": "font/ttf", ".txt": "text/plain; charset=utf-8", ".svg": "image/svg+xml",
+  ".mp3": "audio/mpeg", ".wav": "audio/wav", ".ogg": "audio/ogg", ".flac": "audio/flac", ".m4a": "audio/mp4", ".aac": "audio/aac",
 };
 /** How the browser renders a step: a fresh run, after a submitted input, after a click-to-continue, or a timeout. */
 type Advance = "start" | "input" | "continue" | "timeout";
@@ -83,6 +84,7 @@ interface Session {
   cbg?: BackgroundLayer[];
   cbgMap?: Snapshot["cbgMap"];
   tooltip?: Snapshot["tooltip"];
+  audio?: Snapshot["audio"];
   textbox?: string;
 }
 const HISTORY_BYTES = 8 * 1024 * 1024;
@@ -111,7 +113,7 @@ async function body(request: IncomingMessage): Promise<Record<string, unknown>> 
   if (!data || typeof data !== "object" || Array.isArray(data)) throw new HttpError(400, "Expected a JSON object");
   return data as Record<string, unknown>;
 }
-async function resourceFile(root: string, relative: string): Promise<string> {
+async function resourceFile(root: string, relative: string, audio = false): Promise<string> {
   const base = await realpath(root);
   let resolved: string;
   try { resolved = await realpath(path.resolve(base, relative)); }
@@ -120,8 +122,8 @@ async function resourceFile(root: string, relative: string): Promise<string> {
     throw error;
   }
   if (!resolved.startsWith(base + path.sep)) throw new HttpError(403, "Resource path outside game resources");
-  if (![".png", ".webp", ".jpg", ".jpeg", ".gif", ".bmp"].includes(path.extname(resolved).toLowerCase()))
-    throw new HttpError(403, "Unsupported image type");
+  if (!(audio ? [".mp3", ".wav", ".ogg", ".flac", ".m4a", ".aac"] : [".png", ".webp", ".jpg", ".jpeg", ".gif", ".bmp"]).includes(path.extname(resolved).toLowerCase()))
+    throw new HttpError(403, audio ? "Unsupported audio type" : "Unsupported image type");
   if (!(await stat(resolved)).isFile()) throw new HttpError(404, "Image file not found");
   return resolved;
 }
@@ -139,6 +141,15 @@ function displaySettings(value: unknown): Partial<DisplaySettings> | undefined {
     } else throw new HttpError(400, `Unknown display setting: ${name}`);
   }
   return result;
+}
+function clientState(value: unknown): ClientState | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "object" || value === null || Array.isArray(value)) throw new HttpError(400, "client must be an object");
+  const { width, height, active } = value as Record<string, unknown>;
+  if (typeof width !== "number" || typeof height !== "number"
+    || ![width, height].every((size) => Number.isSafeInteger(size) && size >= 0 && size <= 65535)
+    || typeof active !== "boolean") throw new HttpError(400, "client requires integer width/height from 0 to 65535 and a boolean active");
+  return { width, height, active };
 }
 
 /**
@@ -184,6 +195,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
       if (patched.cbg) session.cbg = patched.cbg;
       if (patched.cbgMap !== undefined) session.cbgMap = patched.cbgMap;
       if (patched.tooltip) session.tooltip = patched.tooltip;
+      if (patched.audio) session.audio = { ...patched.audio, sounds: [], stopSounds: true };
       if (patched.textbox !== undefined) session.textbox = patched.textbox;
       else if (advance === "input") session.textbox = "";
       const bytes = JSON.stringify(patched).length;
@@ -288,6 +300,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
         if (data.debug !== undefined && typeof data.debug !== "boolean") throw new HttpError(400, "debug must be a boolean");
         const debug = data.debug === true;
         const display = displaySettings(data.display);
+        const client = clientState(data.client);
         if (data.columns !== undefined && (typeof data.columns !== "number" || !Number.isSafeInteger(data.columns) || data.columns < 20 || data.columns > 1000))
           throw new HttpError(400, "columns must be an integer from 20 to 1000");
         const now = Date.now();
@@ -303,6 +316,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
             saves: data.mode === "game" ? entry.saves : new MemorySaveStore(),
             columns: typeof data.columns === "number" ? data.columns : 120,
             ...(display ? { display } : {}),
+            ...(client ? { client } : {}),
           });
           const snapshot = runtime.start();
           const session: Session | undefined = snapshot.status === "waiting"
@@ -322,6 +336,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
         if (data.columns !== undefined && (typeof data.columns !== "number" || !Number.isSafeInteger(data.columns) || data.columns < 20 || data.columns > 1000))
           throw new HttpError(400, "columns must be an integer from 20 to 1000");
         const display = displaySettings(data.display);
+        const client = clientState(data.client);
         const session = sessions.get(data.session);
         if (!session) throw new HttpError(404, "Session expired or does not exist; start a new run");
         // Another tab (a duplicate of this one) has moved the run on; this page must resume to catch up.
@@ -330,6 +345,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
         try {
           if (typeof data.columns === "number") session.runtime.setColumns(data.columns);
           if (display) session.runtime.setDisplay(display);
+          if (client) session.runtime.setClient(client);
           const waiting = session.history.at(-1)?.snapshot.input?.kind === "wait";
           const snapshot = timeout ? session.runtime.timeout() : session.runtime.input(data.value as string);
           if (snapshot.status !== "waiting") sessions.delete(data.session);
@@ -348,7 +364,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
         if (!session) throw new HttpError(404, "Session expired or does not exist; start a new run");
         session.used = Date.now();
         json(response, { session: data.session, mode: session.mode, game: session.game, debug: session.debug, step: session.step,
-          cbg: session.cbg ?? [], cbgMap: session.cbgMap ?? null, tooltip: session.tooltip, textbox: session.textbox ?? "",
+          cbg: session.cbg ?? [], cbgMap: session.cbgMap ?? null, tooltip: session.tooltip, audio: session.audio, textbox: session.textbox ?? "",
           history: session.history.map(({ advance, snapshot }) => ({ advance, snapshot })) });
         return;
       }
@@ -357,7 +373,9 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
         // now, while the player reads, so their click is answered at once.
         const data = await body(request);
         if (typeof data.session !== "string") throw new HttpError(400, "Expected a session string");
+        const client = clientState(data.client);
         const session = sessions.get(data.session);
+        if (client && session) session.runtime.setClient(client);
         json(response, { prefetched: session?.runtime.prefetch() ?? false });
         return;
       }
@@ -369,20 +387,20 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
         const sprite = stillFrame(definition);
         if (!sprite) throw new HttpError(404, `Animation sprite has no frames: ${name}`);
         // Validate before handing metadata to the browser.
-        await resourceFile(path.join(game.root, "resources"), sprite.file);
+        await resourceFile(gameDirectory(game.root, "resources"), sprite.file);
         json(response, { ...sprite, url: `${game.resourceBase}${sprite.file.split(path.sep).map(encodeURIComponent).join("/")}` });
         return;
       }
-      const resource = /^(?:\/games\/([a-z0-9-]+))?\/resources\/(.*)$/.exec(url.pathname);
+      const resource = /^(?:\/games\/([a-z0-9-]+))?\/(resources|sound)\/(.*)$/.exec(url.pathname);
       if (request.method === "GET" && resource) {
         const { game } = entryFor(resource[1]);
         let relative: string;
-        try { relative = decodeURIComponent(resource[2]!); }
+        try { relative = decodeURIComponent(resource[3]!); }
         catch (error) {
           if (!(error instanceof URIError)) throw error;
           throw new HttpError(400, "Invalid resource path encoding");
         }
-        const file = await resourceFile(path.join(game.root, "resources"), relative);
+        const file = await resourceFile(gameDirectory(game.root, resource[2]!), relative, resource[2] === "sound");
         response.writeHead(200, { "Content-Type": mime[path.extname(file).toLowerCase()]! });
         response.end(await readFile(file));
         return;
