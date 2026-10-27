@@ -103,6 +103,8 @@ export interface Game {
   headers: Line[];
   tables: Map<string, Map<number, string[]>>;
   names: Map<string, Map<string, number>>;
+  /** ERD reverse lookups preserve the spelling of names, independently of CSV name tables. */
+  erdNames: Map<string, Map<number, string>>;
   sprites: Map<string, Sprite>;
   diagnostics: Diagnostic[];
   scriptFiles: number;
@@ -181,7 +183,7 @@ export function csvRows(source: string): string[][] {
   });
 }
 export function emptyGame(root = ""): Game {
-  return { root, routines: new Map(), headers: [], tables: new Map(), names: new Map(), sprites: new Map(), diagnostics: [], scriptFiles: 0, variableSizes: new Map(), macros: new Map(), characters: new Map(), renames: new Map(), money: { label: "\u00a5", first: true }, config: new Map(), replacements: new Map(), containers: { SAVE: containerNames(), GLOBAL: containerNames(), STATIC: containerNames() }, resourceBase: "/resources/" };
+  return { root, routines: new Map(), headers: [], tables: new Map(), names: new Map(), erdNames: new Map(), sprites: new Map(), diagnostics: [], scriptFiles: 0, variableSizes: new Map(), macros: new Map(), characters: new Map(), renames: new Map(), money: { label: "\u00a5", first: true }, config: new Map(), replacements: new Map(), containers: { SAVE: containerNames(), GLOBAL: containerNames(), STATIC: containerNames() }, resourceBase: "/resources/" };
 }
 function* logicalLines(source: string, file: string): Generator<Line> {
   const rows = source.replace(/^\uFEFF/, "").split(/\r?\n/);
@@ -338,6 +340,7 @@ export async function loadGame(root = GAME_ROOT, options: { debug?: boolean } = 
     const name = key(path.basename(file).slice(0, -4));
     if (game.names.has(name)) throw new EraError(`Duplicate ERD name table: ${name}`, { file, line: 0 });
     const names = new Map<string, number>();
+    const reverse = new Map<number, string>();
     for (const row of csvRows(await readText(file))) {
       const index = Number(row[0]);
       if (!/^\d+$/.test(row[0] ?? "") || !Number.isSafeInteger(index))
@@ -345,8 +348,10 @@ export async function loadGame(root = GAME_ROOT, options: { debug?: boolean } = 
       // ERD tables can reserve numeric indices without assigning them a name.
       if (!row[1]) continue;
       names.set(key(row[1]), index);
+      if (!reverse.has(index)) reverse.set(index, row[1]);
     }
     game.names.set(name, names);
+    game.erdNames.set(name, reverse);
   }
   const scripts = erbFiles.filter((file) => /\.(erb|erh)$/i.test(file));
   // Header macro declarations must be available to ERB conditional compilation.

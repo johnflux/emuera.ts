@@ -8,7 +8,7 @@ import { symbolTable, Variables, type GlobalData, type SaveData } from "./variab
 import { parseFormat } from "./format.js";
 import { MemoryGlobalStore, MemorySaveStore, StagedStores, type GlobalStore, type SaveStore } from "./storage.js";
 import { randomInt } from "node:crypto";
-import { escapeHtml, htmlButtons, htmlTagSplit, htmlWidth, plainHtml } from "./html.js";
+import { escapeHtml, htmlButtons, htmlLineCount, htmlSpriteNames, htmlTagSplit, htmlWidth, plainHtml } from "./html.js";
 import { formatInteger, stringWidth, toFullWidth, toHalfWidth } from "./strings.js";
 import { DataTables, TABLE_OPERATIONS } from "./data-tables.js";
 import { CONFIG_ITEMS, configSetting } from "./config-items.js";
@@ -186,6 +186,10 @@ function argbColor(value: bigint, name: string): string {
   const c = Number(value);
   return `rgba(${(c >>> 16) & 255}, ${(c >>> 8) & 255}, ${c & 255}, ${+((c >>> 24) / 255).toFixed(4)})`;
 }
+function rgbColor(value: bigint): string {
+  if (value < 0n || value > 0xffffffn) throw new EraError("Color out of range");
+  return "#" + value.toString(16).padStart(6, "0");
+}
 const SKIPPED: Yield = { output: { type: "text", text: "", newline: false, style: {} as Style } };
 /** .NET KnownColor names accepted by SETCOLORBYNAME (lowercase keys are matched case-insensitively). */
 const KNOWN_COLORS: Record<string, string> = Object.fromEntries(Object.entries({
@@ -230,6 +234,8 @@ const BUILTIN_ARITIES: Record<string, [number, number]> = {
     SPRITECREATED: [1, 1], SPRITEWIDTH: [1, 1], SPRITEHEIGHT: [1, 1], SPRITEPOSX: [1, 1], SPRITEPOSY: [1, 1],
     SPRITECREATE: [2, 6], SPRITEDISPOSE: [1, 1], SPRITEANIMECREATE: [3, 3], SPRITEANIMEADDFRAME: [9, 9], SPRITESETPOS: [3, 3], SPRITEMOVE: [3, 3],
     SPRITEDISPOSEALL: [1, 1], SETTEXTBOX: [1, 1], MAP_REMOVE: [2, 2],
+    GETNUMB: [2, 2], MAP_TOXML: [1, 1], EXISTSOUND: [1, 1], STRFORM: [1, 1],
+    HTML_STRINGLINES: [2, 2],
     GCREATE: [3, 3], GCREATEFROMFILE: [2, 3], GCREATED: [1, 1], GWIDTH: [1, 1], GHEIGHT: [1, 1], GDISPOSE: [1, 1], GCLEAR: [2, 6],
     GSETCOLOR: [4, 4], GGETCOLOR: [3, 3], GDRAWG: [10, 11], GDRAWGWITHMASK: [5, 5], GDRAWSPRITE: [2, 7], GFILLRECTANGLE: [5, 5],
     GSETBRUSH: [2, 2], GSETPEN: [3, 3], GSETFONT: [3, 4], GSAVE: [2, 2], GLOAD: [2, 2],
@@ -269,7 +275,8 @@ function optionalInteger(expr: Expr | undefined, fallback: number, context: Eval
   return expr && expr.kind !== "omitted" ? Number(integer(evaluate(expr, context))) : fallback;
 }
 /** Builtin expression functions evaluated outside BUILTIN_ARITIES; all of them may also be used as statements. */
-const RAW_FUNCTIONS = ["ARRAYMSORT", "ARRAYMSORTEX", "ENUMFUNCBEGINSWITH", "ENUMFILES", "MAP_GETKEYS", "FINDCHARA", "FINDLASTCHARA", "REGEXPMATCH", "STRJOIN", "INRANGEARRAY", "INRANGECARRAY", "GDRAWG", "GDRAWSPRITE", "GETNUM"];
+const FUNCTION_ENUMERATIONS = new Set(["ENUMFUNCBEGINSWITH", "ENUMFUNCENDSWITH", "ENUMFUNCWITH"]);
+const RAW_FUNCTIONS = ["ARRAYMSORT", "ARRAYMSORTEX", ...FUNCTION_ENUMERATIONS, "ENUMFILES", "MAP_GETKEYS", "ERDNAME", "FINDCHARA", "FINDLASTCHARA", "REGEXPMATCH", "STRJOIN", "INRANGEARRAY", "INRANGECARRAY", "GDRAWG", "GDRAWSPRITE", "GETNUM"];
 const ARRAY_SCANS = new Set(["SUMARRAY", "MATCH", "MAXARRAY", "MINARRAY", "FINDELEMENT", "FINDLASTELEMENT"]);
 const CHARACTER_SCANS = new Set(["SUMCARRAY", "CMATCH", "MAXCARRAY", "MINCARRAY"]);
 const XML_FUNCTIONS = new Set([
@@ -373,6 +380,8 @@ export class Runtime {
   /** CBG layers ordered back to front (descending z, then insertion), and whether they changed since the last snapshot. */
   private background: BackgroundSource[] = [];
   private backgroundChanged = false;
+  private lastBackground = "[]";
+  private lastBackgroundMap = "null";
   private backgroundMap: bigint | undefined;
   private tooltipSettings: TooltipSettings = { custom: false, font: "", fontSize: 12, delay: 500, duration: 5000, color: "#000000", background: "#ffffe1" };
   private tooltipChanged = false;
@@ -958,11 +967,13 @@ export class Runtime {
   /** Definitions of the runtime-made and animated sprites an html string shows, for the browser to paint. */
   private htmlSprites(html: string): Record<string, SpriteDefinition> | undefined {
     let found: Record<string, SpriteDefinition> | undefined;
-    for (const match of html.matchAll(/\bsrcb?\s*=\s*(?:'([^']*)'|"([^"]*)")/gi)) {
-      const name = match[1] ?? match[2]!;
+    for (const name of htmlSpriteNames(html)) {
       if (found?.[name]) continue;
       const sprite = this.sprite(name);
-      if (!sprite) continue;
+      if (!sprite) {
+        if (this.disposedSprites.has(key(name))) (found ??= {})[name] = { width: 0, height: 1, x: 0, y: 0, picture: { width: 1, height: 1, ops: [] } };
+        continue;
+      }
       const { width, height } = sprite;
       if (sprite.frames) {
         const frames = sprite.frames.map((frame) => ({ picture: this.framePicture(sprite, frame), delay: frame.delay }));
@@ -1511,7 +1522,7 @@ export class Runtime {
           const values = args.slice(0, -1).map((arg) => evaluate(arg, context));
           return this.draw(name, values, this.colorMatrix(args.at(-1), variables, context, name));
         }
-        if (name === "ENUMFUNCBEGINSWITH" || name === "ENUMFILES") {
+        if (FUNCTION_ENUMERATIONS.has(name) || name === "ENUMFILES") {
           const outputIndex = name === "ENUMFILES" ? 3 : 1;
           if (args.length < 1 || args.length > outputIndex + 1) throw new EraError(`Invalid number of arguments for ${name}`);
           const output = args[outputIndex];
@@ -1520,9 +1531,10 @@ export class Runtime {
             || variables.isCharacter(destination.name, context) || variables.dimensions(destination.name, context).length !== 1)
             throw new EraError(`${name} output must be a one-dimensional string array`);
           const first = text(evaluate(args[0]!, context));
+          const matches = (id: string): boolean => name === "ENUMFUNCENDSWITH" ? id.endsWith(key(first)) : name === "ENUMFUNCWITH" ? id.includes(key(first)) : id.startsWith(key(first));
           const values = name === "ENUMFILES"
             ? this.enumerateFiles(first, args[1] && args[1].kind !== "omitted" ? text(evaluate(args[1], context)) : "*", optionalInteger(args[2], 0, context) !== 0)
-            : first ? [...this.game.routines].filter(([id]) => !EVENT_FUNCTIONS.has(id) && id.startsWith(key(first))).map(([id, routines]) => routines[0]?.label ?? id) : [];
+            : first ? [...this.game.routines].filter(([id]) => !EVENT_FUNCTIONS.has(id) && matches(id)).map(([id, routines]) => routines[0]?.label ?? id) : [];
           if (!values) return -1n;
           const count = Math.min(values.length, variables.dimensions(destination.name, context)[0]!);
           this.writeArray(variables, context, destination, values.slice(0, count));
@@ -1614,11 +1626,18 @@ export class Runtime {
           if (result.selected && output) this.writeArray(variables, context, output, result.selected);
           return result.value;
         }
+        if (name === "ERDNAME") {
+          if (args.length < 2 || args.length > 3 || args[0]?.kind !== "variable") throw new EraError("ERDNAME expects variable, index[, dimension]");
+          const table = args[0].name + (args[2] && args[2].kind !== "omitted" ? `@${integer(evaluate(args[2], context))}` : "");
+          const index = integer(evaluate(args[1]!, context));
+          return this.game.erdNames.get(table)?.get(Number(index)) ?? "";
+        }
         if (name !== "GETNUM") return undefined;
-        if (args.length !== 2) throw new EraError("GETNUM expects a CSV variable and a name");
+        if (args.length < 2 || args.length > 3) throw new EraError("GETNUM expects a CSV variable and a name[, dimension]");
         const reference = args[0]!;
         if (reference.kind !== "variable" || reference.indices.length) throw new EraError("GETNUM expects a bare CSV variable");
-        const symbols = this.game.names.get(symbolTable(reference.name));
+        const table = args[2] && args[2].kind !== "omitted" ? `${reference.name}@${integer(evaluate(args[2], context))}` : symbolTable(reference.name);
+        const symbols = this.game.names.get(table);
         if (!symbols) throw new EraError(`No CSV name table for ${reference.name}`);
         return BigInt(symbols.get(key(text(evaluate(args[1]!, context)))) ?? -1);
       },
@@ -1813,7 +1832,14 @@ export class Runtime {
             sprite.frames.push(animationFrame({ graphics: argInt(args, name, 1), delay }, [x, y, width, height], [Number(argInt(args, name, 6)), Number(argInt(args, name, 7))], sprite.width, sprite.height));
             return 1n;
           }
-          case "SPRITEDISPOSE": return this.dynamicSprites.delete(key(argText(args, name, 0))) ? 1n : 0n;
+          case "SPRITEDISPOSE": {
+            const id = key(argText(args, name, 0));
+            const dynamic = this.dynamicSprites.delete(id);
+            const resource = this.game.sprites.has(id) && !this.disposedSprites.has(id);
+            if (resource) this.disposedSprites.add(id);
+            this.spriteSizes.delete(id);
+            return dynamic || resource ? 1n : 0n;
+          }
           case "SPRITEDISPOSEALL": {
             let count = this.dynamicSprites.size;
             this.dynamicSprites.clear();
@@ -1894,7 +1920,7 @@ export class Runtime {
             return 1n;
           }
           case "GSETFONT": {
-            const font = this.graphicFont(argText(args, name, 1), Number(argInt(args, name, 2)), Number(args[3] ?? 0n));
+            const font = this.graphicFont(argText(args, name, 1), Number(argInt(args, name, 2)), Number(args[3] === undefined ? 0n : argInt(args, name, 3)));
             const canvas = this.graphics.get(argInt(args, name, 0));
             if (!canvas) return 0n;
             canvas.font = font;
@@ -2046,6 +2072,18 @@ export class Runtime {
             if (!map) return -1n;
             return map.delete(argText(args, name, 1)) ? 1n : 0n;
           }
+          case "MAP_TOXML": {
+            const map = this.maps.get(argText(args, name, 0));
+            if (!map) return "";
+            return `<map>${[...map].map(([k, v]) => `<p><k>${escapeHtml(k)}</k><v>${escapeHtml(v)}</v></p>`).join("")}</map>`;
+          }
+          case "GETNUMB": {
+            const variable = key(argText(args, name, 0));
+            if (!variables.has(variable)) throw new EraError(`GETNUMB: unknown variable ${variable}`);
+            return BigInt(this.game.names.get(symbolTable(variable))?.get(key(argText(args, name, 1))) ?? -1);
+          }
+          case "EXISTSOUND": return this.gameFile("sound/" + argText(args, name, 0)) ? 1n : 0n;
+          case "STRFORM": return evaluate(parseFormat(argText(args, name, 0).split(/\r?\n/)[0]!), context);
           case "HTML_POPPRINTINGSTR": {
             const html = this.printingHtml;
             if (html) this.deferred.push({ type: "clear", count: 1 });
@@ -2060,6 +2098,11 @@ export class Runtime {
             // Without <nobr> the first line wraps at Config.DrawableWidth.
             const pixels = measured.nobr ? measured.pixels : Math.min(measured.pixels, this.drawableWidth());
             return args[1] !== undefined && argInt(args, name, 1) !== 0n ? BigInt(Math.round(pixels)) : BigInt(Math.ceil(pixels / (fontSize / 2)));
+          }
+          case "HTML_STRINGLINES": {
+            const width = Number(argInt(args, name, 1));
+            if (width <= 0) throw new EraError("HTML_STRINGLINES width must be positive");
+            return BigInt(htmlLineCount(argText(args, name, 0), width, Number(this.configValue("FontSize")), (id) => this.sprite(id)));
           }
           case "HTML_ESCAPE": return escapeHtml(argText(args, name, 0));
           // EM sizes the drawing area to WindowX by WindowY less the input box (one line high).
@@ -2329,14 +2372,24 @@ export class Runtime {
     if (this.debugText) snapshot.debug = this.debugText;
     this.debugText = "";
     this.debugClear = false;
-    if (this.backgroundChanged || this.background.length) snapshot.cbg = this.background.flatMap((layer): BackgroundLayer[] => {
-      const picture = layer.graphics !== undefined ? this.picture(layer.graphics) : this.spritePicture(layer.sprite!);
-      if (!picture) return [];
-      const hover = layer.hover ? this.spritePicture(layer.hover) : undefined;
-      return [{ z: layer.z, x: layer.x, y: layer.y, picture, ...(hover ? { hover } : {}),
-        ...(layer.buttonValue !== undefined ? { buttonValue: layer.buttonValue } : {}), ...(layer.tooltip ? { tooltip: layer.tooltip } : {}) }];
-    });
-    if (this.backgroundChanged || this.backgroundMap !== undefined) snapshot.cbgMap = this.backgroundMap === undefined ? null : this.picture(this.backgroundMap) ?? null;
+    if (this.backgroundChanged || this.background.length) {
+      const layers = this.background.flatMap((layer): BackgroundLayer[] => {
+        const picture = layer.graphics !== undefined ? this.picture(layer.graphics) : this.spritePicture(layer.sprite!);
+        if (!picture) return [];
+        const hover = layer.hover ? this.spritePicture(layer.hover) : undefined;
+        return [{ z: layer.z, x: layer.x, y: layer.y, picture, ...(hover ? { hover } : {}),
+          ...(layer.buttonValue !== undefined ? { buttonValue: layer.buttonValue } : {}), ...(layer.tooltip ? { tooltip: layer.tooltip } : {}) }];
+      });
+      const signature = JSON.stringify(layers);
+      if (this.backgroundChanged || signature !== this.lastBackground) snapshot.cbg = layers;
+      this.lastBackground = signature;
+    }
+    if (this.backgroundChanged || this.backgroundMap !== undefined) {
+      const picture = this.backgroundMap === undefined ? null : this.picture(this.backgroundMap) ?? null;
+      const signature = JSON.stringify(picture);
+      if (signature !== this.lastBackgroundMap) snapshot.cbgMap = picture;
+      this.lastBackgroundMap = signature;
+    }
     this.backgroundChanged = false;
     if (this.textboxChanged) snapshot.textbox = this.textbox;
     this.textboxChanged = false;
@@ -2417,7 +2470,7 @@ export class Runtime {
     this.printingHtml += type === "html" ? value : escapeHtml(value);
     if (newline) this.printingHtml = "";
     else if (value.includes("\n")) this.printingHtml = escapeHtml(value.slice(value.lastIndexOf("\n") + 1));
-    this.recordPrinted(type, value, newline, options.style ?? this.style);
+    this.recordPrinted(type, value, newline, options.style ?? this.style, !plain);
     const sprites = type === "html" ? this.htmlSprites(value) : undefined;
     return { output: { type, text: value, newline, style: { ...(options.style ?? this.style) }, ...(plain ? { plain: true } : {}), ...(options.single ? { single: true } : {}), ...(options.cell ? { cell: true } : {}), ...(sprites ? { sprites } : {}) } };
   }
@@ -2427,7 +2480,7 @@ export class Runtime {
     if (count > 0) this.buttonLines.splice(-count, count);
   }
   /** Mirrors EM HtmlManager.DisplayLine2Html: styled runs inside <p align><nobr>, an empty line holding one space. */
-  private recordPrinted(type: "text" | "html" | "input", value: string, newline: boolean, style: Style): void {
+  private recordPrinted(type: "text" | "html" | "input", value: string, newline: boolean, style: Style, buttons = true): void {
     const escape = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" })[c]!);
     const styled = (s: string): string => {
       if (!s) return "";
@@ -2446,7 +2499,7 @@ export class Runtime {
       if (i > 0) this.flushPrinted();
       this.printedLine += type === "html" ? segment : styled(segment);
       if (type === "html") this.lineButtons.push(...htmlButtons(segment));
-      else if (type === "text") this.lineButtons.push(...[...segment.matchAll(/\[[ \t]*(-?\d+)[ \t]*\]/g)].map((match) => match[1]!));
+      else if (type === "text" && buttons) this.lineButtons.push(...[...segment.matchAll(/\[[ \t]*(-?\d+)[ \t]*\]/g)].map((match) => match[1]!));
     });
     if (newline) this.flushPrinted();
   }
@@ -3077,22 +3130,28 @@ export class Runtime {
             break;
           }
           case "PRINT_IMG": {
-            const parts = this.arguments(args), main = parts[0] ? text(ev(parts[0])) : "";
+            const parts = this.arguments(args), values = new Map<number, Value>();
+            const value = (i: number): Value => {
+              if (!values.has(i)) values.set(i, ev(parts[i]!));
+              return values.get(i)!;
+            };
+            const main = parts[0] ? text(value(0)) : "";
             if (!main || parts.length > 6) throw new EraError("PRINT_IMG expects sprite[, hover][, color matrix][, width, height, ypos]");
             let at = 1, hover: string | undefined, matrix: ColorMatrix | undefined;
-            if (parts[at] && typeof ev(parts[at]!) === "string") hover = text(ev(parts[at++]!));
+            const isMatrix = (expr: Expr): boolean => expr.kind === "variable" && frame.variables.dimensions(expr.name, frame.context).length > 1;
+            if (parts[at] && !isMatrix(this.parse(parts[at]!)) && typeof value(at) === "string") hover = text(value(at++));
             if (parts[at]) {
               const candidate = this.parse(parts[at]!);
-              if (candidate.kind === "variable" && frame.variables.dimensions(candidate.name, frame.context).length > 1) {
+              if (isMatrix(candidate)) {
                 matrix = this.colorMatrix(candidate, frame.variables, frame.context, op);
                 at++;
               }
             }
             if (parts.length - at > 3) throw new EraError("PRINT_IMG accepts at most width, height and ypos after its sprites and matrix");
-            const sizes = parts.slice(at).map((part, i) => part ? ` ${["width", "height", "ypos"][i]}='${num(part)}'` : "").join("");
+            const sizes = parts.slice(at).map((part, i) => part ? ` ${["width", "height", "ypos"][i]}='${integer(value(at + i))}'` : "").join("");
             const html = `<img src="${escapeHtml(main)}"${hover ? ` srcb="${escapeHtml(hover)}"` : ""}${sizes}>`;
             const emitted = this.emit("html", html, false);
-            if (matrix && "output" in emitted && "sprites" in emitted.output) {
+            if (matrix && "output" in emitted && emitted.output.type === "html") {
               for (const id of [main, hover].filter((id): id is string => !!id)) {
                 const sprite = this.sprite(id);
                 if (!sprite) continue;
@@ -3126,7 +3185,7 @@ export class Runtime {
             const count = Number(num(args));
             if (count < 0 || !Number.isSafeInteger(count)) throw new EraError("Invalid CLEARLINE count");
             this.dropLines(count);
-            if (count) { this.printingHtml = ""; this.printedLine = ""; this.temporaryLine = false; this.lineOpen = false; }
+            if (count) { this.printingHtml = ""; this.printedLine = ""; this.lineButtons = []; this.temporaryLine = false; this.lineOpen = false; }
             yield { output: { type: "clear", count } };
             break;
           }
@@ -3338,17 +3397,18 @@ export class Runtime {
             if (parts.length !== 4 || parts.some((part) => !part)) throw new EraError(`${op} expects ${op === "CBGSETG" ? "gID" : "sprite"}, x, y, zDepth`);
             const z = Number(num(parts[3]!));
             if (z === 0) throw new EraError(`${op}: zDepth must not be 0 (the text layer)`);
+            const source = ev(parts[0]!);
             let picture: Picture | undefined;
-            if (op === "CBGSETG") picture = this.picture(num(parts[0]!));
+            if (op === "CBGSETG") picture = this.picture(integer(source));
             else {
-              const sprite = this.sprite(text(ev(parts[0]!)));
+              const sprite = this.sprite(text(source));
               const draw = sprite && this.spriteOp(sprite, [0, 0, sprite.width, sprite.height]);
               if (sprite && draw) picture = { width: sprite.width, height: sprite.height, ops: [draw] };
             }
             this.globals.set("RESULT", [], picture ? 1n : 0n, frame.context);
             if (!picture) break;
             const layer: BackgroundSource = { z, x: Number(num(parts[1]!)), y: Number(num(parts[2]!)),
-              ...(op === "CBGSETG" ? { graphics: num(parts[0]!) } : { sprite: text(ev(parts[0]!)) }) };
+              ...(op === "CBGSETG" ? { graphics: integer(source) } : { sprite: text(source) }) };
             const at = this.background.findIndex((other) => other.z < z);
             this.background.splice(at < 0 ? this.background.length : at, 0, layer);
             this.backgroundChanged = true;

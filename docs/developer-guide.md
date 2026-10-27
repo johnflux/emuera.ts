@@ -50,6 +50,17 @@ existing defaults. No game scripts or data are patched for these fixes.
 so Reverse's training-message scratch ranges above index 1,000 are valid.
 Explicit variable sizes still take precedence, and out-of-range accesses still fail.
 
+**Blue Resort:** the installed `GAMES/erablue_resort` is regression-tested through
+its title menu and Normal-mode selection to the protagonist-name prompt. Its
+original 20 missing instruction types now have implementations except
+`CALLSHARP`, which still reports an explicit native .NET-plugin limitation.
+`ENUMFUNCBEGINSWITH`, `ENUMFUNCENDSWITH`, and `ENUMFUNCWITH` work as both
+instructions and expressions, with case-insensitive matching and optional
+string-array destinations. `ERDNAME` preserves the original ERD label spelling,
+including dimension-specific tables, and `GETNUMB` resolves names dynamically.
+This is not a claim of full gameplay compatibility; the lexical inventory does
+not find every missing expression function or validate every argument form.
+
 `UPCHECK` applies the current target's `UP`/`DOWN` deltas and clears those arrays.
 `OUTPUTLOG` writes the retained console text (up to 4,096 completed lines plus
 pending text) as plain text to the game's
@@ -615,6 +626,28 @@ declarations and the expression evaluator. No single routine dominates.
   `@CALLTRAINEND` runs at the end. While output is skipped, input instructions
   are skipped too; `SKIPDISP` sets `RESULT`.
 - `PRINT_RECT`/`PRINT_SPACE` emit inline `<shape>` rectangles/spaces.
+- `BINPUT`/`BINPUTS` validate typed and clicked input against the active retained
+  buttons; no buttons means an immediate default, or an error without one.
+  `INPUTANY` writes numeric input to `RESULT` and other input to `RESULTS`.
+  `SETTEXTBOX` updates the browser field and `GETTEXTBOX` reads the runtime's
+  value; unsent browser edits are not observable by a running script.
+  BINPUT's optional nonzero mouse-side-channel mode still fails explicitly.
+  `ARRAYMSORTEX` reorders named arrays together, supports ascending/descending
+  order and explicit counts, and validates all targets before changing them.
+  `ENUMFILES` supports wildcards, recursion and output arrays. Paths are confined
+  to the game directory, case-insensitive, and returned with Windows separators;
+  recursive searches skip symlinks. `MAP_GETKEYS` supports joined and array output,
+  `MAP_REMOVE` removes keys, and `MAP_TOXML` exports escaped key/value pairs.
+- `PRINT_IMG` shares the inline HTML sprite renderer, including hover sprites,
+  dimensions, offsets and color matrices. `SPRITEDISPOSEALL(0)` preserves
+  resource-CSV sprites; a nonzero argument disposes them for that runtime only.
+  `GSETPEN`, `GSETFONT`, `GDRAWLINE` and `GDRAWTEXT` create browser canvas
+  operations. `GGETFONT`, `GGETFONTSIZE` and `GGETFONTSTYLE` read that state.
+  `GGETTEXTSIZE` and `HTML_STRINGLINES` use fixed-cell measurements, not exact
+  platform GDI+ font metrics. `STRFORM` expands FORM text without printing.
+  `EXISTSOUND` checks local sound files but does not enable audio playback.
+- Tooltip custom font, font size, colors, delay and duration settings are sent to
+  the browser. Textbox and tooltip settings survive session resume.
 - Resource CSV sprite rectangles and local PNG/WebP/JPEG/GIF/BMP serving.
   Named `<img src='SPRITENAME'>` images are cropped from sprite sheets.
   Basic HTML paragraphs, breaks, emphasis, fonts (color only), numeric choices,
@@ -645,10 +678,17 @@ declarations and the expression evaluator. No single routine dominates.
   sprite carries a snapshot of its picture, which the browser paints on a
   `<canvas>`. `GGETCOLOR` cannot read pixels (it returns 0), `GSAVE`/`GLOAD`
   are unsupported, and animated sprites draw nothing.
-  `CBGSETG`/`CBGSETSPRITE` fix a snapshot of a G or sprite to the client area
+  `CBGSETG`/`CBGSETSPRITE` fix a G or sprite to the client area
   (offset from its bottom-left; z > 0 behind the text, z < 0 in front) until
   `CBGCLEAR`/`CBGREMOVERANGE`. A step's snapshot carries the full layer list
   only when it changed, and the server keeps the latest so a reload restores it.
+  Referenced graphics are refreshed when their content changes.
+  `CBGSETBUTTONSPRITE` carries normal/hover pictures and tooltip text;
+  `CBGSETBMAPG` installs a separate pixel hit map. Opaque pixels select their
+  24-bit RGB value, switch matching sprites to their hover picture, and populate
+  `INPUTMOUSEKEY`'s `RESULT:4` when clicked. Removing buttons does not remove
+  the hit map; `CBGCLEAR` clears both, without disposing their source graphics.
+  Both visible layers and the hit map survive session resume.
   While back layers are shown, text backgrounds are transparent so they show
   through. `PLAYBGM`/`STOPBGM`, like the sound instructions, are silent.
   See [sprites.md](sprites.md) for how sprites are stored, sent and painted.

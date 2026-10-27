@@ -271,7 +271,9 @@ function updateControls() {
   document.querySelector("#input-form").hidden = !input || input.kind === "mousekey";
   command.placeholder = input?.defaultValue !== undefined && input.kind !== "wait" ? `Enter for ${JSON.stringify(input.defaultValue)}` : "";
   terminal.querySelectorAll("button.choice").forEach((button) => {
-    button.disabled = !button.closest(".screen.is-active") || button.classList.contains("is-stale") || (busy && !expiring) || !input || input.kind === "wait" || !!input.blocking;
+    const value = input?.kind === "integer" && /^-?\d+$/.test(button.dataset.value) ? BigInt(button.dataset.value).toString() : button.dataset.value;
+    button.disabled = !button.closest(".screen.is-active") || button.classList.contains("is-stale") || (busy && !expiring) || !input || input.kind === "wait" || !!input.blocking
+      || !!input.buttonValues && !input.buttonValues.includes(value);
   });
 }
 function screen() {
@@ -362,11 +364,25 @@ function splitStaleOutput() {
   }
 }
 function hideTooltip() {
+  clearTimeout(tooltipDelay);
+  clearTimeout(tooltipDuration);
   tooltipTarget?.removeAttribute("aria-describedby");
   tooltipTarget = null;
   tooltip.hidden = true;
   if (tooltip.matches(":popover-open")) tooltip.hidePopover();
   tooltip.textContent = "";
+}
+let tooltipDelay;
+let tooltipDuration;
+let tooltipSettings = null;
+function useTooltipSettings(settings) {
+  tooltipSettings = settings;
+  const custom = settings?.custom;
+  Object.assign(tooltip.style, {
+    fontFamily: custom && settings.font ? settings.font : "",
+    fontSize: custom ? `${settings.fontSize}px` : "",
+    color: custom ? settings.color : "", backgroundColor: custom ? settings.background : "",
+  });
 }
 /** An element's box including any pictures inside it, which overflow their zero-height line. */
 function visibleBox(element) {
@@ -385,7 +401,7 @@ function describe(element, description) {
   element.dataset.tooltip = description;
   if (!element.matches("button, a[href]")) element.tabIndex = 0;
   function show() {
-    if (busy || !element.closest(".screen.is-active") || element.matches(".is-stale")) return;
+    if (busy || !element.closest(".screen.is-active, .cbg-layer") || element.matches(".is-stale")) return;
     if (element.closest(".era-occupant-list") && element.querySelector(".sprite")) return;
     hideTooltip();
     tooltipTarget = element;
@@ -406,10 +422,16 @@ function describe(element, description) {
       below + box.height <= innerHeight - margin ? below : anchor.top - box.height - 8,
       innerHeight - box.height - margin,
     ))}px`;
+    if (tooltipSettings?.duration > 0) tooltipDuration = setTimeout(hideTooltip, tooltipSettings.duration);
   }
-  element.addEventListener("mouseenter", show);
+  element.addEventListener("mouseenter", () => {
+    clearTimeout(tooltipDelay);
+    if (tooltipSettings?.delay > 0) tooltipDelay = setTimeout(show, tooltipSettings.delay);
+    else show();
+  });
   element.addEventListener("focus", show);
   element.addEventListener("mouseleave", () => {
+    clearTimeout(tooltipDelay);
     if (tooltipTarget === element && document.activeElement !== element) hideTooltip();
   });
   element.addEventListener("blur", () => { if (tooltipTarget === element) hideTooltip(); });
@@ -809,6 +831,25 @@ async function paintOps(picture) {
       if (op.replace) context.clearRect(x, y, width, height);
       context.fillStyle = op.color;
       context.fillRect(x, y, width, height);
+    } else if (op.op === "line") {
+      context.strokeStyle = op.color;
+      context.lineWidth = op.width;
+      context.beginPath();
+      context.moveTo(...op.from);
+      context.lineTo(...op.to);
+      context.stroke();
+    } else if (op.op === "text") {
+      const { name, size, style } = op.font;
+      context.font = `${style & 2 ? "italic " : ""}${style & 1 ? "bold " : ""}${size}px ${JSON.stringify(name)}, monospace`;
+      context.textBaseline = "top";
+      context.fillStyle = op.color;
+      op.text.split(/\r?\n/).forEach((line, index) => {
+        const y = op.y + index * size;
+        context.fillText(line, op.x, y);
+        const width = context.measureText(line).width;
+        if (style & 4) context.fillRect(op.x, y + size / 2, width, Math.max(1, size / 16));
+        if (style & 8) context.fillRect(op.x, y + size - 1, width, Math.max(1, size / 16));
+      });
     } else if (op.op === "mask") {
       // Emuera GDrawGWithMask: blend source over destination by the mask's blue channel.
       const [source, mask] = images[i];
@@ -869,6 +910,36 @@ function animate(name, holder, layers, delays, token) {
 }
 const backgroundLayers = { back: document.querySelector("#cbg-back"), front: document.querySelector("#cbg-front") };
 let backgroundVersion = 0;
+let backgroundMap = null;
+let backgroundMapVersion = 0;
+let backgroundButtons = [];
+let selectedBackground = -1;
+async function showBackgroundMap(picture) {
+  const version = ++backgroundMapVersion;
+  backgroundMap = null;
+  try {
+    const canvas = picture ? await paintPicture(picture) : null;
+    if (version === backgroundMapVersion) backgroundMap = canvas;
+  } catch (error) { message(`Could not draw the background hit map: ${error.message}`, true); }
+}
+function backgroundHit(event) {
+  if (!backgroundMap) return -1;
+  const [x, y] = clientPoint(event);
+  const top = backgroundMap.height + y;
+  if (x < 0 || top < 0 || x >= backgroundMap.width || top >= backgroundMap.height) return -1;
+  const [r, g, b, a] = backgroundMap.getContext("2d").getImageData(x, top, 1, 1).data;
+  return a === 255 ? (r << 16) | (g << 8) | b : -1;
+}
+function selectBackground(value) {
+  if (value === selectedBackground) return;
+  selectedBackground = value;
+  hideTooltip();
+  for (const { canvas, hover, buttonValue } of backgroundButtons) {
+    const selected = value >= 0 && value === buttonValue;
+    if (hover) { canvas.hidden = selected; hover.hidden = !selected; }
+    if (selected) canvas.dispatchEvent(new Event("mouseenter"));
+  }
+}
 /** Puts the CBG layers over the terminal's visible box (Emuera's client area, without the scrollbar). */
 function placeBackground() {
   for (const layer of Object.values(backgroundLayers)) {
@@ -891,15 +962,23 @@ async function showBackground(layers) {
     canvases = await Promise.all(layers.map(async (layer) => {
       const canvas = await pictureCopy(layer.picture);
       Object.assign(canvas.dataset, { x: layer.x, y: layer.y, width: layer.picture.width, height: layer.picture.height });
-      return { canvas, front: layer.z < 0 };
+      const hover = layer.hover ? await pictureCopy(layer.hover) : null;
+      if (hover) {
+        Object.assign(hover.dataset, { x: layer.x, y: layer.y, width: layer.hover.width, height: layer.hover.height });
+        hover.hidden = true;
+      }
+      if (layer.tooltip) describe(canvas, layer.tooltip);
+      return { canvas, hover, buttonValue: layer.buttonValue, front: layer.z < 0 };
     }));
   } catch (error) {
     message(`Could not draw a background picture: ${error.message}`, true);
     return;
   }
   if (version !== backgroundVersion) return;
-  backgroundLayers.back.replaceChildren(...canvases.filter((entry) => !entry.front).map((entry) => entry.canvas));
-  backgroundLayers.front.replaceChildren(...canvases.filter((entry) => entry.front).map((entry) => entry.canvas));
+  backgroundButtons = canvases;
+  selectedBackground = -1;
+  backgroundLayers.back.replaceChildren(...canvases.filter((entry) => !entry.front).flatMap((entry) => entry.hover ? [entry.canvas, entry.hover] : [entry.canvas]));
+  backgroundLayers.front.replaceChildren(...canvases.filter((entry) => entry.front).flatMap((entry) => entry.hover ? [entry.canvas, entry.hover] : [entry.canvas]));
   terminal.classList.toggle("has-cbg-back", backgroundLayers.back.childElementCount > 0);
   placeBackground();
 }
@@ -1401,7 +1480,12 @@ async function renderSnapshot(snapshot, advanceScreen) {
   hideTooltip();
   document.title = snapshot.title || "Emuera.ts";
   showDebugOutput(snapshot);
-  if (snapshot.cbg) void showBackground(snapshot.cbg);
+  await Promise.all([
+    snapshot.cbg ? showBackground(snapshot.cbg) : undefined,
+    snapshot.cbgMap !== undefined ? showBackgroundMap(snapshot.cbgMap) : undefined,
+  ]);
+  if (snapshot.tooltip) useTooltipSettings(snapshot.tooltip);
+  if (snapshot.textbox !== undefined) command.value = snapshot.textbox;
   const previousScreen = currentScreen;
   const previousLine = currentLine;
   if (advanceScreen === "continue") {
@@ -1621,6 +1705,8 @@ function resetRun() {
   command.value = "";
   currentLine = null;
   void showBackground([]);
+  void showBackgroundMap(null);
+  useTooltipSettings(null);
 }
 async function start(mode, game = runGame, debug = debugPreferred()) {
   if (busy) return;
@@ -1670,7 +1756,9 @@ async function resume(id) {
     await renderSteps(data.history.map(({ advance: how, snapshot }, i) =>
       ({ snapshot: { ...snapshot, session: id }, advanceScreen: i === 0 ? false : advance[how] })), true);
     // The trimmed history may have lost the step that set them.
-    void showBackground(data.cbg ?? []);
+    await Promise.all([showBackground(data.cbg ?? []), showBackgroundMap(data.cbgMap ?? null)]);
+    useTooltipSettings(data.tooltip ?? null);
+    command.value = data.textbox ?? "";
     step = data.step;
     restored = true;
   } catch (error) {
@@ -1786,13 +1874,22 @@ terminal.addEventListener("click", (event) => {
   }
   clickToContinue(event);
 });
+terminal.addEventListener("pointermove", (event) => selectBackground(backgroundHit(event)));
+terminal.addEventListener("pointerleave", () => selectBackground(-1));
+terminal.addEventListener("click", (event) => {
+  const value = backgroundHit(event);
+  if (value < 0 || input?.kind !== "mousekey") return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  if (!busy && !settling()) submitMouseKey([1, MOUSE_BUTTONS[event.button] ?? MOUSE_BUTTONS[0], ...clientPoint(event), value, 0]);
+}, true);
 terminal.addEventListener("contextmenu", (event) => {
   if (input?.kind !== "mousekey" || (event.target instanceof Element && event.target.closest("a[href]"))) return;
   event.preventDefault();
-  if (!busy && !settling()) submitMouseKey([1, MOUSE_BUTTONS[2], ...clientPoint(event), -1, 0]);
+  if (!busy && !settling()) submitMouseKey([1, MOUSE_BUTTONS[2], ...clientPoint(event), backgroundHit(event), 0]);
 });
 terminal.addEventListener("auxclick", (event) => {
-  if (input?.kind === "mousekey" && event.button === 1 && !busy && !settling()) submitMouseKey([1, MOUSE_BUTTONS[1], ...clientPoint(event), -1, 0]);
+  if (input?.kind === "mousekey" && event.button === 1 && !busy && !settling()) submitMouseKey([1, MOUSE_BUTTONS[1], ...clientPoint(event), backgroundHit(event), 0]);
 });
 // While INPUTMOUSEKEY waits the wheel is input (one notch of 120 per event, up positive), not scrolling.
 terminal.addEventListener("wheel", (event) => {

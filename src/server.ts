@@ -81,6 +81,9 @@ interface Session {
   step: number;
   /** The CBG layers as last delivered, which a trimmed history may no longer contain. */
   cbg?: BackgroundLayer[];
+  cbgMap?: Snapshot["cbgMap"];
+  tooltip?: Snapshot["tooltip"];
+  textbox?: string;
 }
 const HISTORY_BYTES = 8 * 1024 * 1024;
 class HttpError extends Error {
@@ -179,6 +182,10 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
     if (session) {
       session.step++;
       if (patched.cbg) session.cbg = patched.cbg;
+      if (patched.cbgMap !== undefined) session.cbgMap = patched.cbgMap;
+      if (patched.tooltip) session.tooltip = patched.tooltip;
+      if (patched.textbox !== undefined) session.textbox = patched.textbox;
+      else if (advance === "input") session.textbox = "";
       const bytes = JSON.stringify(patched).length;
       session.history.push({ advance, snapshot: patched, bytes });
       session.bytes += bytes;
@@ -339,7 +346,9 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
         const session = sessions.get(data.session);
         if (!session) throw new HttpError(404, "Session expired or does not exist; start a new run");
         session.used = Date.now();
-        json(response, { session: data.session, mode: session.mode, game: session.game, debug: session.debug, step: session.step, cbg: session.cbg ?? [], history: session.history.map(({ advance, snapshot }) => ({ advance, snapshot })) });
+        json(response, { session: data.session, mode: session.mode, game: session.game, debug: session.debug, step: session.step,
+          cbg: session.cbg ?? [], cbgMap: session.cbgMap ?? null, tooltip: session.tooltip, textbox: session.textbox ?? "",
+          history: session.history.map(({ advance, snapshot }) => ({ advance, snapshot })) });
         return;
       }
       if (request.method === "POST" && url.pathname === "/api/prefetch") {

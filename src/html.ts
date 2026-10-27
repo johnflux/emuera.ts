@@ -16,6 +16,7 @@ export function plainHtml(value: string): string {
 
 /** Values exposed by HTML buttons, with entities decoded as they are in the browser. */
 export function htmlButtons(value: string): string[] {
+  if (!/<button\b/i.test(value)) return [];
   const values: string[] = [];
   function visit(node: DefaultTreeAdapterMap["node"]): void {
     if (node.nodeName === "button" && "attrs" in node) {
@@ -27,6 +28,44 @@ export function htmlButtons(value: string): string[] {
   }
   visit(parseFragment(value));
   return values;
+}
+
+export function htmlSpriteNames(value: string): string[] {
+  if (!/<img\b/i.test(value)) return [];
+  const names: string[] = [];
+  function visit(node: DefaultTreeAdapterMap["node"]): void {
+    if (node.nodeName === "img" && "attrs" in node)
+      names.push(...node.attrs.filter((attribute) => attribute.name === "src" || attribute.name === "srcb").map((attribute) => attribute.value));
+    if ("childNodes" in node) node.childNodes.forEach(visit);
+  }
+  visit(parseFragment(value));
+  return names;
+}
+
+/** Fixed-cell line measurement, using the same sprite/shape units as HTML_STRINGLEN. */
+export function htmlLineCount(value: string, width: number, fontSize: number, spriteSize: (name: string) => { width: number; height: number } | undefined): number {
+  let lines = 0, used = 0;
+  const add = (cells: number): void => {
+    if (used && used + cells > width) { lines++; used = 0; }
+    used += cells;
+    while (used > width) { lines++; used -= width; }
+  };
+  const newline = (): void => { lines++; used = 0; };
+  function visit(node: DefaultTreeAdapterMap["node"]): void {
+    if ("value" in node && node.nodeName === "#text") {
+      for (const c of node.value) if (c === "\n") newline(); else add(stringWidth(c));
+      return;
+    }
+    if (node.nodeName === "br") { newline(); return; }
+    if ((node.nodeName === "img" || node.nodeName === "shape" || node.nodeName === "space") && "attrs" in node) {
+      const html = `<${node.nodeName}${node.attrs.map((attribute) => ` ${attribute.name}="${escapeHtml(attribute.value)}"`).join("")}>`;
+      add(htmlWidth(html, fontSize, spriteSize).pixels / (fontSize / 2));
+      if (node.nodeName === "img") return;
+    }
+    if ("childNodes" in node) node.childNodes.forEach(visit);
+  }
+  visit(parseFragment(value));
+  return lines + (used > 0 ? 1 : 0);
 }
 
 /**
