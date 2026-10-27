@@ -156,7 +156,8 @@ longer); hover it for the split between script time (server) and render time
   `[IF_DEBUG]` code instead of `[IF_NDEBUG]`, `ASSERT` stops the run with an
   error when its argument is 0, `__FILE__`/`__FUNCTION__`/`__LINE__` are filled
   in, and `DEBUGPRINT*` output appears in a **Debug output** panel under the
-  terminal (`DEBUGCLEAR` empties it). Outside debug mode these instructions are
+  terminal (`DEBUGCLEAR` empties it). Minimize/Expand collapses the output without
+  disabling debug mode or discarding logs. Outside debug mode these instructions are
   skipped, as in Emuera. The status shows "Game · Debug" while it is on.
 - **Compatibility report**: for the current game, inspect unsupported instruction names, directives,
   and loader diagnostics (such as ignored duplicate functions). It also lists

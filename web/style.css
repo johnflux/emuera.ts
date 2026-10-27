@@ -1,6 +1,7 @@
 @font-face { font-family: "BIZ UD Gothic"; src: url("/fonts/BIZUDGothic-Regular.ttf") format("truetype"); font-weight: 400; font-style: normal; font-display: block; }
 :root { color-scheme: dark; --font-size: 16px; --terminal-font: "BIZ UD Gothic", "MS Gothic", "ＭＳ ゴシック", monospace; --terminal-foreground: #c0c0c0; --terminal-background: #000; --selection-color: #ff0; }
-* { box-sizing: border-box; overscroll-behavior-x: none; }
+* { box-sizing: border-box; }
+html, body, #terminal, #game-tooltip, #compatibility, #debug-log, .library, .era-sheet-body, .era-occupant-list, .era-move-map { overscroll-behavior-x: none; }
 html, body { overscroll-behavior-y: none; }
 body { margin: 0; height: 100dvh; display: flex; flex-direction: column; background: #000; color: #fff; font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace; }
 header { flex-shrink: 0; position: relative; z-index: 5; display: flex; align-items: center; gap: 12px; height: 40px; padding: 0 12px 0 16px; border-bottom: 1px solid #2a2a2a; background: linear-gradient(#141414, #0a0a0a); }
@@ -57,10 +58,10 @@ button:disabled { color: #666; cursor: default; }
 .confirm-actions .danger { background: #3a1616; border-color: #a04a4a; color: #fff; }
 .confirm-actions .danger:hover:enabled, .confirm-actions .danger:focus-visible { background: #522020; border-color: #e07070; }
 #status.error { color: #ff9d9d; }
-main { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 16px 0 16px 20px; color: var(--terminal-foreground); background: var(--terminal-background); }
+main { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 0 0 16px 0; color: var(--terminal-foreground); background: var(--terminal-background); }
 #terminal, #input-form { font-family: var(--terminal-font); }
 /* main has no right padding: the scrollbar takes its place, and the output keeps a 20px margin like the left one. */
-#terminal { flex: 1; min-height: 0; display: flex; flex-direction: column; padding-right: max(6px, calc(20px - var(--scrollbar-width, 0px))); font-size: var(--font-size); line-height: var(--line-height, 1.25); overflow: auto; scrollbar-gutter: stable; container-type: inline-size; }
+#terminal { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 16px max(6px, calc(20px - var(--scrollbar-width, 0px))) 0 20px; font-size: var(--font-size); line-height: var(--line-height, 1.25); overflow: auto; scrollbar-gutter: stable; container-type: inline-size; }
 /* CBGSETG/CBGSETSPRITE pictures: positioned over the terminal's visible box by placeBackground() in app.js. */
 #terminal { position: relative; z-index: 1; }
 .cbg-layer { position: absolute; overflow: hidden; pointer-events: none; }
@@ -147,27 +148,28 @@ a { color: #8ddaff; }
 .shape-rect { position: relative; height: 1em; vertical-align: text-top; }
 .shape-rect > span { position: absolute; background: currentColor; }
 .missing { color: #ff9d9d; font-size: 12px; }
-#compatibility { border: 1px solid #444; padding: 16px; margin: 20px 20px 0 0; font-size: 13px; overflow: auto; max-height: 65vh; }
+#compatibility { border: 1px solid #444; padding: 16px; margin: 20px 20px 0; font-size: 13px; overflow: auto; max-height: 65vh; }
 #compatibility h2 { font-size: 16px; }
 #compatibility table { border-collapse: collapse; width: 100%; }
 #compatibility td, #compatibility th { border-bottom: 1px solid #333; padding: 8px; text-align: left; vertical-align: top; white-space: pre-wrap; }
-#debug-output { order: 2; flex-shrink: 0; display: flex; flex-direction: column; max-height: 30vh; border: 1px solid #444; margin: 8px 20px 12px 0; font-size: 12px; color: #cfc; background: #050a05; font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace; }
+#debug-output { order: 2; flex-shrink: 0; display: flex; flex-direction: column; max-height: 30vh; border: 1px solid #444; margin: 8px 20px 12px; font-size: 12px; color: #cfc; background: #050a05; font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace; }
 #debug-output[hidden] { display: none; }
 .debug-header { display: flex; align-items: center; justify-content: space-between; padding: 4px 8px; border-bottom: 1px solid #333; }
 .debug-header h2 { margin: 0; font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: .08em; }
+.debug-header-actions { display: flex; gap: 6px; }
 .debug-header button { font-size: 11px; padding: 2px 8px; }
 #debug-log { flex: 1; min-height: 3em; margin: 0; padding: 6px 8px; overflow: auto; white-space: pre-wrap; }
-#settings { border: 1px solid #444; padding: 16px; margin: 20px 20px 0 0; font-size: 13px; color: #fff; background: #090909; font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace; }
+#settings { border: 1px solid #444; padding: 16px; margin: 20px 20px 0; font-size: 13px; color: #fff; background: #090909; font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace; }
 #settings h2 { font-size: 16px; margin-top: 0; }
 #settings-form { display: grid; grid-template-columns: max-content; gap: 10px; }
 #settings-form label { display: flex; gap: 10px; align-items: center; justify-content: space-between; }
 #settings-form input[type="text"] { background: #101010; border: 1px solid #555; padding: 3px 6px; width: 16em; }
 #settings-form input[type="color"] { background: none; border: 1px solid #555; padding: 0; width: 3em; height: 1.6em; }
-#input-form { order: 1; flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding-right: 20px; font-size: var(--font-size); line-height: var(--line-height, 1.25); }
+#input-form { order: 1; flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding: 0 20px; font-size: var(--font-size); line-height: var(--line-height, 1.25); }
 #input-form[hidden] { display: none; }
 #command { flex: 1; min-width: 0; background: transparent; border: 0; padding: 0; line-height: inherit; outline: none; }
 #submit { font-size: 12px; padding: 2px 8px; }
-@media (max-width: 600px) { header, main { padding-left: 10px; padding-right: 10px; } .mode { display: none; } }
+@media (max-width: 600px) { header, #terminal, #input-form { padding-left: 10px; padding-right: 10px; } #compatibility, #debug-output, #settings { margin-left: 10px; margin-right: 10px; } .mode { display: none; } }
 /* Hotpatch sections (hotpatch/*.ERB): one HTML_PRINT, so one logical line, laid out as a block. */
 /* Lines are at least the game's logical width; sections wrap to the visible terminal instead. */
 .line .era-section { display: block; max-width: 100cqi; white-space: normal; margin: 2px 0 4px; }

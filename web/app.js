@@ -1936,6 +1936,11 @@ debugButton.addEventListener("click", async () => {
   void start(runMode, runGame, debug);
 });
 document.querySelector("#debug-clear").addEventListener("click", () => { debugLog.textContent = ""; });
+document.querySelector("#debug-minimize").addEventListener("click", (event) => {
+  debugLog.hidden = !debugLog.hidden;
+  event.currentTarget.setAttribute("aria-expanded", String(!debugLog.hidden));
+  event.currentTarget.textContent = debugLog.hidden ? "Expand" : "Minimize";
+});
 document.querySelector("#font-size").addEventListener("input", (event) => {
   updateSetting("fontSize", Number(event.target.value));
 });
