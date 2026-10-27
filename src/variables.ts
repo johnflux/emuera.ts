@@ -1,6 +1,7 @@
 import { evaluate, parseExpression, type EvaluationContext, type Expr } from "./expression.js";
 import type { Game } from "./loader.js";
 import { EraError, integer, key, splitArguments, type Line, type Value } from "./model.js";
+import type { SaveLayout } from "./save-format.js";
 
 interface Variable {
   string: boolean;
@@ -348,6 +349,13 @@ export class Variables {
       if (variable.values.size) variables[name] = Object.fromEntries([...variable.values].map(([index, value]) => [addressText(variable, index), String(value)]));
     }
     return { characters: this.characterCount(), variables };
+  }
+  saveLayout(context: EvaluationContext, global = false): SaveLayout[] {
+    return (global ? this.globalNames() : this.savedNames(context)).filter((name) => this.has(name)).map((name) => {
+      const variable = this.resolve(name, context);
+      return { name, string: variable.string, character: !!variable.character,
+        dimensions: [...(variable.character ? variable.dimensions.slice(1) : variable.dimensions)] };
+    });
   }
   /** Replaces the saved variables; call resetData() first so unsaved variables return to their defaults. */
   importSave(data: SaveData, context: EvaluationContext): void {

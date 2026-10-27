@@ -7,6 +7,7 @@ import { emptyGame, indexScript, loadGame } from "../src/loader.js";
 import { Runtime, type Snapshot } from "../src/runtime.js";
 import { FileGlobalStore, MemoryGlobalStore } from "../src/storage.js";
 import { EraError, splitArguments, stripComment } from "../src/model.js";
+import { readNativeSave } from "../src/save-format.js";
 
 function game(source: string, headers = "") {
   const value = emptyGame();
@@ -197,7 +198,7 @@ PRINTFORML {TEMP}/{TOTAL}`)).start();
 });
 test("global save/load round trip across independent runtimes, missing file status and corruption errors", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "era-globals-"));
-  const file = path.join(root, "global.json");
+  const file = path.join(root, "global.sav");
   try {
     const headers = '#DIM GLOBAL SETTING, 2\n#DIMS GLOBAL LABEL = "initial"';
     const saveGame = game(`@SYSTEM_TITLE
@@ -212,7 +213,7 @@ PRINTFORML saved={RESULT}`, headers);
     const saved = new Runtime(saveGame, 50_000, { store: new FileGlobalStore(file) }).start();
     assert.equal(saved.status, "halted", JSON.stringify(saved.error));
     assert.equal(printed(saved), "missing=0\nsaved=1");
-    assert.ok((await readFile(file, "utf8")).includes("9223372036854775807"));
+    assert.equal(readNativeSave(await readFile(file)).data.variables.GLOBAL?.["2"], "9223372036854775807");
     const loadGame = game(`@SYSTEM_TITLE
 LOADGLOBAL
 PRINTFORML loaded={RESULT} {GLOBAL:2} %GLOBALS:1% {SETTING:1} %LABEL%`, headers);
@@ -221,7 +222,7 @@ PRINTFORML loaded={RESULT} {GLOBAL:2} %GLOBALS:1% {SETTING:1} %LABEL%`, headers)
     await writeFile(file, "{bad json");
     const bad = new Runtime(loadGame, 50_000, { store: new FileGlobalStore(file) }).start();
     assert.equal(bad.status, "error");
-    assert.match(bad.error!.message, /Invalid global data JSON/);
+    assert.match(bad.error!.message, /Invalid global data/);
     assert.equal(bad.error!.line, 2);
     const blocked = path.join(root, "blocked");
     await writeFile(blocked, "not a directory");

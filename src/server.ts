@@ -9,7 +9,7 @@ import { applyHotpatches, displayDefaults, displayMetrics, discoverGames, emptyG
 import { CATALOG_UPDATED, GAME_CATALOG, installGame } from "./library.js";
 import { EraError, key } from "./model.js";
 import { GAME_INSTRUCTION_LIMIT, Runtime, type BackgroundLayer, type Snapshot } from "./runtime.js";
-import { FileGlobalStore, FileSaveStore, MemoryGlobalStore, MemorySaveStore, type GlobalStore, type SaveStore } from "./storage.js";
+import { FileGlobalStore, FileSaveStore, gameSaveDirectory, MemoryGlobalStore, MemorySaveStore, type GlobalStore, type SaveStore } from "./storage.js";
 import { patchTitleImage } from "./render-patches.js";
 
 type BrowserSnapshot = ReturnType<typeof patchTitleImage>;
@@ -140,7 +140,7 @@ function displaySettings(value: unknown): Partial<DisplaySettings> | undefined {
 
 /**
  * Serves the browser UI for one or more games. Each game keeps its global data and saves in its own
- * <game>/.era-typescript/, and its resources/ images are served at /resources/ (the default game) or
+ * Emuera save directory, and its resources/ images are served at /resources/ (the default game) or
  * /games/<id>/resources/.
  */
 export function createApp(games: Game | readonly GameEntry[], development = false, gamesDir = path.resolve("GAMES")) {
@@ -150,10 +150,11 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
     const { game } = entry;
     if (!/^[a-z0-9-]+$/.test(entry.id)) throw new Error(`Invalid game id: ${entry.id}`);
     game.resourceBase = index === 0 ? "/resources/" : `/games/${entry.id}/resources/`;
+    const saveDirectory = game.root && gameSaveDirectory(game.root, game.config);
     return {
       ...entry,
-      store: entry.store ?? (game.root ? new FileGlobalStore(path.join(game.root, ".era-typescript", "global.json")) : new MemoryGlobalStore()),
-      saves: entry.saves ?? (game.root ? new FileSaveStore(path.join(game.root, ".era-typescript", "saves")) : new MemorySaveStore()),
+      store: entry.store ?? (saveDirectory ? new FileGlobalStore(path.join(saveDirectory, "global.sav")) : new MemoryGlobalStore()),
+      saves: entry.saves ?? (saveDirectory ? new FileSaveStore(saveDirectory, path.join(game.root, "dat")) : new MemorySaveStore()),
       report: undefined as ReturnType<typeof compatibility> | undefined,
       debugGame: undefined as Promise<Game> | undefined,
     };

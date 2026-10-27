@@ -11,11 +11,12 @@ import { randomInt } from "node:crypto";
 import { escapeHtml, htmlTagSplit, htmlWidth, plainHtml } from "./html.js";
 import { formatInteger, stringWidth, toFullWidth, toHalfWidth } from "./strings.js";
 import { DataTables, TABLE_OPERATIONS } from "./data-tables.js";
-import { CONFIG_ITEMS } from "./config-items.js";
+import { CONFIG_ITEMS, configSetting } from "./config-items.js";
 import type { Document as XmlDocument } from "@xmldom/xmldom";
 import { addNode, nodeOutput, parseXml, removeNode, selectNodes, serializeXml } from "./xml.js";
 import { DECLINE, loadIntrinsics, type Intrinsic } from "./intrinsics.js";
 import { ASYNC, Jit, type CallAnalysis } from "./jit.js";
+import { readNativeSave, writeNativeSave, type NativeSave, type SavedContainers, type SaveMetadata } from "./save-format.js";
 
 export interface Style { color: string; background: string; alignment: "left" | "center" | "right"; fontStyle: number; font?: string }
 type Rect = [x: number, y: number, width: number, height: number];
@@ -155,9 +156,6 @@ const SKIPPED_INPUTS = new Set(["INPUT", "INPUTS", "ONEINPUT", "ONEINPUTS", "TIN
 /** Variables that start a new turn of training at zero. */
 const TRAIN_RESET = { global: ["TFLAG", "TSTR"], character: ["GOTJUEL", "TEQUIP", "EX", "PALAM", "SOURCE", "TCVAR"] };
 const COMMAND_RESET = { global: ["UP", "DOWN", "LOSEBASE"], character: ["DOWNBASE", "CUP", "CDOWN"] };
-interface SavedContainers { maps: Record<string, [string, string][]>; xmls: Record<string, string>; dts: Record<string, [string, string]> }
-interface SaveRecord { version: 1; code: string; gameVersion: string; text: string; data: SaveData; containers?: SavedContainers }
-interface CharacterRecord { version: 1; code: string; gameVersion: string; text: string; characters: GlobalData[] }
 const literal = (value: Value): Expr => ({ kind: "literal", value });
 /** Parses and checks an INPUTMOUSEKEY answer; RESULT:0 must be 1-4 and the values 32-bit (RESULT:5 a button value). */
 function mouseKeyInput(value: string): MouseKeyInput {
@@ -493,7 +491,7 @@ export class Runtime {
       code.toUpperCase() === wanted || japanese.toUpperCase() === wanted || (!replace && english.toUpperCase() === wanted));
     if (!item) throw new EraError(`GETCONFIG: unknown config item ${name}`);
     const [, japanese, , kind, fallback, replace] = item;
-    const raw = (replace ? this.game.replacements : this.game.config).get(japanese)?.trim();
+    const raw = replace ? this.game.replacements.get(japanese)?.trim() : configSetting(this.game.config, name);
     switch (kind) {
       case "bool":
         if (raw === undefined) return BigInt(fallback);
@@ -971,10 +969,10 @@ export class Runtime {
   }
   private saveFile(slot: bigint): string {
     if (slot < 0n || slot > 1_000_000n) throw new EraError("Save slot must be between 0 and 1000000");
-    return `save${slot}.json`;
+    return `save${String(slot).padStart(2, "0")}.sav`;
   }
   private charaFile(name: string): string {
-    return `chara-${Buffer.from(name, "utf8").toString("base64url") || "_"}.json`;
+    return `chara_${name}.dat`;
   }
   /**
    * SAVETEXT/LOADTEXT files: integers name numbered save-folder texts; strings are game-relative
@@ -1012,16 +1010,17 @@ export class Runtime {
     return { code: String(this.globals.get("GAMEBASE_CODE", [], context)), gameVersion: String(this.globals.get("GAMEBASE_VERSION", [], context)) };
   }
   /** CHKDATA states: 0 OK, 1 missing, 2 another game, 3 incompatible version, 4 corrupt. */
-  private checkSave(file: string): { state: bigint; message: string; record?: SaveRecord & CharacterRecord } {
+  private checkSave(file: string): { state: bigint; message: string; record?: NativeSave } {
     const raw = this.saves.read(file);
     if (raw === null) return { state: 1n, message: "----" };
-    let record: SaveRecord & CharacterRecord;
+    let record: NativeSave;
     try {
-      record = JSON.parse(raw);
-      if (record?.version !== 1 || typeof record.code !== "string" || typeof record.gameVersion !== "string" || typeof record.text !== "string") throw new Error();
-    } catch { return { state: 4n, message: "セーブデータが壊れています" }; }
+      if (!Buffer.isBuffer(raw)) throw new EraError("Expected binary Emuera save");
+      record = readNativeSave(raw);
+      if (record.type !== (file.endsWith(".dat") ? 3 : 0)) throw new EraError("Wrong Emuera save file type");
+    } catch (error) { return { state: 4n, message: `セーブデータが壊れています: ${error instanceof Error ? error.message : String(error)}` }; }
     const { code, gameVersion } = this.gameStamp();
-    if (record.code !== "0" && record.code !== code) return { state: 2n, message: "異なるゲームのセーブデータです" };
+    if (code !== "0" && record.code !== "0" && record.code !== code) return { state: 2n, message: "異なるゲームのセーブデータです" };
     const target = BigInt(record.gameVersion);
     const declared = [...(this.game.tables.get("GAMEBASE")?.values() ?? [])].find((row) => row[0] === "バージョン")?.[1];
     const minimum = [...(this.game.tables.get("GAMEBASE")?.values() ?? [])].find((row) => row[0] === "バージョン違い認める")?.[1];
@@ -1041,8 +1040,15 @@ export class Runtime {
   }
   private saveGame(slot: bigint, message: string): void {
     if (message.includes("\n")) throw new EraError("SAVEDATA text must not contain a newline");
-    const record: SaveRecord = { version: 1, ...this.gameStamp(), text: message, data: this.globals.exportSave(this.context(this.globals)), containers: this.exportContainers("SAVE") };
-    this.saves.write(this.saveFile(slot), JSON.stringify(record));
+    const context = this.context(this.globals);
+    const record: NativeSave = { type: 0, ...this.gameStamp(), text: message, data: this.globals.exportSave(context),
+      characters: this.globals.exportCharacters(Array.from({ length: this.globals.characterCount() }, (_, i) => i), context),
+      containers: this.exportContainers("SAVE") };
+    this.saves.write(this.saveFile(slot), writeNativeSave(record, this.saveMetadata()));
+  }
+  private saveMetadata(global = false): SaveMetadata {
+    return { ...this.gameStamp(), layout: this.globals.saveLayout(this.context(this.globals), global),
+      compressed: /^(YES|TRUE|1)$/i.test(configSetting(this.game.config, "ZipSaveData") ?? "") };
   }
   /**
    * Continues a plain click-to-continue wait before the click arrives, so the next input() returns at once.
@@ -1781,8 +1787,8 @@ export class Runtime {
             const pattern = args[0] === undefined ? "*" : argText(args, name, 0);
             const glob = new RegExp(`^${[...pattern].map((c) => c === "*" ? ".*" : c === "?" ? "." : c.replace(/[\\^$.+()[\]{}|]/g, "\\$&")).join("")}$`, "isu");
             const names = this.saves.list().flatMap((file) => {
-              const match = /^chara-([A-Za-z0-9_-]+)\.json$/.exec(file);
-              const name = match && match[1] !== "_" ? Buffer.from(match[1]!, "base64url").toString("utf8") : "";
+              const match = /^chara_(.*)\.dat$/i.exec(file);
+              const name = match?.[1] ?? "";
               return name && this.charaFile(name) === file && glob.test(name) ? [name] : [];
             }).sort();
             const size = this.globals.dimensions("RESULTS", context)[0]!;
@@ -1804,7 +1810,7 @@ export class Runtime {
             const file = this.textFile(args[0]!);
             if (!file) return "";
             const saved = this.saves.read(file.store) ?? (file.game ? readTextFileSync(file.game) : null);
-            return (saved ?? "").replace(/\r/g, "");
+            return (saved?.toString() ?? "").replace(/\r/g, "");
           }
           case "EXISTVAR": {
             // Bit flags: 1 integer, 2 string, 4 constant, 8 two-dimensional, 16 three-dimensional.
@@ -2691,8 +2697,10 @@ export class Runtime {
             if (new Set(indices).size !== indices.length) throw new EraError("SAVECHARA lists the same character twice");
             const message = text(ev(parts[1]!));
             if (message.includes("\n")) throw new EraError("SAVECHARA text must not contain a newline");
-            const record: CharacterRecord = { version: 1, ...this.gameStamp(), text: message, characters: this.globals.exportCharacters(indices, frame.context) };
-            this.saves.write(this.charaFile(text(ev(parts[0]!))), JSON.stringify(record));
+            const record: NativeSave = { type: 3, ...this.gameStamp(), text: message,
+              data: { characters: indices.length, variables: {} }, characters: this.globals.exportCharacters(indices, frame.context),
+              containers: { maps: {}, xmls: {}, dts: {} } };
+            this.saves.write(this.charaFile(text(ev(parts[0]!))), writeNativeSave(record, this.saveMetadata()));
             break;
           }
           case "LOADCHARA": {
@@ -2758,14 +2766,14 @@ export class Runtime {
           case "ENDCATCH": break;
           case "LOADGLOBAL": {
             if (args) throw new EraError("LOADGLOBAL takes no arguments");
-            const saved = this.store.load();
+            const saved = this.store.load(this.gameStamp().code);
             if (saved) this.globals.importGlobals(saved, frame.context);
             this.globals.set("RESULT", [], saved ? 1n : 0n, frame.context);
             break;
           }
           case "SAVEGLOBAL":
             if (args) throw new EraError("SAVEGLOBAL takes no arguments");
-            this.store.save(this.globals.exportGlobals(frame.context));
+            this.store.save(this.globals.exportGlobals(frame.context), this.saveMetadata(true));
             this.globals.set("RESULT", [], 1n, frame.context);
             break;
           case "CLEARMEMORY": {

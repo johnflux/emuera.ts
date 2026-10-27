@@ -1,5 +1,11 @@
 /** Emuera EE/EM config items (ConfigData.cs): code, Japanese key, English key, value kind, default, whether it is a _Replace.csv item. */
 export type ConfigKind = "bool" | "int" | "color" | "string" | "list" | "enum";
+export function configSetting(config: ReadonlyMap<string, string>, name: string): string | undefined {
+  const wanted = name.toUpperCase();
+  const item = CONFIG_ITEMS.find((entry) => entry.slice(0, 3).some((alias) => alias.toString().toUpperCase() === wanted));
+  const aliases = new Set((item ? item.slice(0, 3) : [name]).map((alias) => alias.toString().toUpperCase()));
+  return [...config].find(([key]) => aliases.has(key.toUpperCase()))?.[1].trim();
+}
 export const CONFIG_ITEMS: readonly [code: string, japanese: string, english: string, kind: ConfigKind, fallback: number | string, replace: boolean][] = [
   ["IgnoreCase", "大文字小文字の違いを無視する", "Ignore case", "bool", 1, false],
   ["UseRenameFile", "_Rename.csvを利用する", "Use _Rename.csv file", "bool", 0, false],
