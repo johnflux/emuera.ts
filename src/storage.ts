@@ -41,7 +41,7 @@ export class FileGlobalStore implements GlobalStore {
     try {
       const record = readNativeSave(source);
       if (record.type !== 1) throw new EraError("Expected Emuera global save");
-      if (code !== undefined && code !== "0" && record.code !== "0" && record.code !== code)
+      if (code !== undefined && record.code !== "0" && record.code !== code)
         throw new EraError("Global data belongs to another game");
       return record.data.variables;
     } catch (error) { throw new EraError(`Invalid global data: ${error instanceof Error ? error.message : String(error)}`); }

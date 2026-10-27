@@ -32,7 +32,7 @@ The verified path continues through housing setup: the colored map renders,
 a location and room can be chosen, and the run reaches the pre-game settings
 menu ("Re-customize yourself") before the day-to-day game loop. Pre-defined-character
 selection is not yet supported end to end. Native binary saves can be loaded;
-the bundled slot-0 regression reaches the game's `EVENTLOAD` output and wait.
+the bundled slot-0 regression reaches the game's `EVENTLOAD` and gameplay input.
 Unsupported operations stop with their source filename and line.
 
 **eraToho Reverse:** the installed `GAMES/eratohoreverse` is tested through its
@@ -725,7 +725,7 @@ symlinks). No game-supplied scripts or event attributes are attached to the DOM.
 Next work should follow the verified new-game path into housing's colored-map
 renderer, then housing/options and the `BEGIN SHOP` game loop.
 Pre-defined character selection needs additional character-management operations.
-Native Continue is covered through the bundled save's initial post-load wait;
+Native Continue is covered through the bundled save's post-load gameplay input;
 later gameplay can still encounter unsupported operations.
 Keep unsupported behavior explicit and add conformance tests for each feature
 before claiming more of the game is supported.

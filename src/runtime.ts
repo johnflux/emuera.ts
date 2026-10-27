@@ -28,6 +28,8 @@ export type GraphicOp =
   | { op: "graphics"; source: Picture; src: Rect; dest: Rect; matrix?: ColorMatrix }
   /** Blends a CSS color over rect; replace first clears it (GCLEAR, GSETCOLOR). */
   | { op: "fill"; color: string; rect: Rect; replace?: boolean }
+  | { op: "line"; color: string; width: number; from: [number, number]; to: [number, number] }
+  | { op: "text"; text: string; color: string; x: number; y: number; font: GraphicFont }
   /** GDRAWGWITHMASK: the mask's blue channel blends source over the destination. */
   | { op: "mask"; source: Picture; mask: Picture; x: number; y: number };
 export interface Picture { width: number; height: number; ops: GraphicOp[] }
@@ -42,7 +44,8 @@ interface AnimationFrame {
   url?: string; graphics?: bigint;
   src: Rect; offset: [x: number, y: number]; delay: number;
 }
-interface Canvas extends Picture { brush?: string }
+export interface GraphicFont { name: string; size: number; style: number }
+interface Canvas extends Picture { brush?: string; pen?: { color: string; width: number }; font?: GraphicFont }
 interface SpriteInfo {
   width: number; height: number;
   /** SPRITEPOS offset (Emuera DestBasePosition). */
@@ -70,7 +73,9 @@ export type Output =
  * A CBGSETG/CBGSETSPRITE layer: a picture fixed to the client area, its bottom-left at (x, y) from the area's
  * bottom-left (y down). z > 0 is behind the text (further back as z grows), z < 0 in front of it.
  */
-export interface BackgroundLayer { z: number; x: number; y: number; picture: Picture }
+export interface BackgroundLayer { z: number; x: number; y: number; picture: Picture; hover?: Picture; buttonValue?: number; tooltip?: string }
+interface BackgroundSource { z: number; x: number; y: number; graphics?: bigint; sprite?: string; hover?: string; buttonValue?: number; tooltip?: string }
+export interface TooltipSettings { custom: boolean; font: string; fontSize: number; delay: number; duration: number; color: string; background: string }
 /**
  * INPUTMOUSEKEY's answer, sent as the input value: RESULT:0-5 (type 1 click, 2 wheel, 3 key, 4 timeout) and,
  * for a click on a string button, its RESULTS.
@@ -107,6 +112,9 @@ export interface Snapshot {
   cbg?: BackgroundLayer[];
   /** Present only when SETTEXTBOX changed the command field during this step. */
   textbox?: string;
+  tooltip?: TooltipSettings;
+  /** CBG hit map, independent of the visible layers; null removes it. */
+  cbgMap?: Picture | null;
 }
 interface RoutineInfo {
   returnType: "integer" | "string" | undefined;
@@ -225,6 +233,7 @@ const BUILTIN_ARITIES: Record<string, [number, number]> = {
     GCREATE: [3, 3], GCREATEFROMFILE: [2, 3], GCREATED: [1, 1], GWIDTH: [1, 1], GHEIGHT: [1, 1], GDISPOSE: [1, 1], GCLEAR: [2, 6],
     GSETCOLOR: [4, 4], GGETCOLOR: [3, 3], GDRAWG: [10, 11], GDRAWGWITHMASK: [5, 5], GDRAWSPRITE: [2, 7], GFILLRECTANGLE: [5, 5],
     GSETBRUSH: [2, 2], GSETPEN: [3, 3], GSETFONT: [3, 4], GSAVE: [2, 2], GLOAD: [2, 2],
+    GDRAWTEXT: [2, 4], GDRAWLINE: [5, 5], GGETTEXTSIZE: [3, 4], GGETFONT: [1, 1], GGETFONTSIZE: [1, 1], GGETFONTSTYLE: [1, 1],
   GETTIME: [0, 0], GETTIMES: [0, 0], EXISTFUNCTION: [1, 1], CLIENTWIDTH: [0, 0], CLIENTHEIGHT: [0, 0], FIND_CHARADATA: [0, 1], EXISTFILE: [1, 1], SQRT: [1, 1], CBRT: [1, 1], LOG: [1, 1], LOG10: [1, 1], EXPONENT: [1, 1], GETMILLISECOND: [0, 0], GETSECOND: [0, 0], GETDEFCOLOR: [0, 0], GETBGCOLOR: [0, 0], GETDEFBGCOLOR: [0, 0], GETFONT: [0, 0],
   CONVERT: [2, 2], SUBSTRINGU: [2, 3], CHARATU: [2, 2],
   SIGN: [1, 1], ALLSAMES: [1, 10000], NOSAMES: [1, 10000], COLOR_FROMNAME: [1, 1], COLOR_FROMRGB: [3, 3], ENCODETOUNI: [1, 2], CHKFONT: [1, 1], CHKDATA: [1, 1],
@@ -362,8 +371,11 @@ export class Runtime {
   private debugText = "";
   private debugClear = false;
   /** CBG layers ordered back to front (descending z, then insertion), and whether they changed since the last snapshot. */
-  private background: BackgroundLayer[] = [];
+  private background: BackgroundSource[] = [];
   private backgroundChanged = false;
+  private backgroundMap: bigint | undefined;
+  private tooltipSettings: TooltipSettings = { custom: false, font: "", fontSize: 12, delay: 500, duration: 5000, color: "#000000", background: "#ffffe1" };
+  private tooltipChanged = false;
   private forceKana = 0;
   private printCLength: number;
   private deferred: Output[] = [];
@@ -896,6 +908,20 @@ export class Runtime {
     const canvas = this.graphics.get(id);
     return canvas && { width: canvas.width, height: canvas.height, ops: canvas.ops.slice() };
   }
+  private spritePicture(name: string): Picture | undefined {
+    const sprite = this.sprite(name);
+    if (!sprite) return undefined;
+    const op = this.spriteOp(sprite, [0, 0, sprite.width, sprite.height]);
+    return { width: sprite.width, height: sprite.height, ops: op ? [op] : [] };
+  }
+  private graphicFont(name: string, size: number, style: number): GraphicFont {
+    if (!name || size < 1 || size > 8192 || !Number.isSafeInteger(size) || style < 0 || style > 15)
+      throw new EraError("Graphics font requires a name, size between 1 and 8192, and style between 0 and 15");
+    return { name, size, style };
+  }
+  private defaultGraphicFont(): GraphicFont {
+    return { name: this.display.font, size: Number(this.configValue("FontSize")), style: 0 };
+  }
   /** Emuera ASpriteSingle.GraphicsDraw: a SPRITEPOS offset scales with the destination. */
   private spriteOp(sprite: SpriteInfo, dest: Rect, matrix?: ColorMatrix): GraphicOp | undefined {
     let src = sprite.src ?? sprite.rect, source: Picture | undefined;
@@ -1068,7 +1094,7 @@ export class Runtime {
       if (record.type !== (file.endsWith(".dat") ? 3 : 0)) throw new EraError("Wrong Emuera save file type");
     } catch (error) { return { state: 4n, message: `セーブデータが壊れています: ${error instanceof Error ? error.message : String(error)}` }; }
     const { code, gameVersion } = this.gameStamp();
-    if (code !== "0" && record.code !== "0" && record.code !== code) return { state: 2n, message: "異なるゲームのセーブデータです" };
+    if (record.code !== "0" && record.code !== code) return { state: 2n, message: "異なるゲームのセーブデータです" };
     const target = BigInt(record.gameVersion);
     const declared = [...(this.game.tables.get("GAMEBASE")?.values() ?? [])].find((row) => row[0] === "バージョン")?.[1];
     const minimum = [...(this.game.tables.get("GAMEBASE")?.values() ?? [])].find((row) => row[0] === "バージョン違い認める")?.[1];
@@ -1489,7 +1515,7 @@ export class Runtime {
           const outputIndex = name === "ENUMFILES" ? 3 : 1;
           if (args.length < 1 || args.length > outputIndex + 1) throw new EraError(`Invalid number of arguments for ${name}`);
           const output = args[outputIndex];
-          const destination = output && output.kind !== "omitted" ? output : { kind: "variable", name: "RESULTS", indices: [] } as const;
+          const destination: Expr = output && output.kind !== "omitted" ? output : { kind: "variable", name: "RESULTS", indices: [] };
           if (destination.kind !== "variable" || destination.indices.length || !variables.isString(destination.name, context)
             || variables.isCharacter(destination.name, context) || variables.dimensions(destination.name, context).length !== 1)
             throw new EraError(`${name} output must be a one-dimensional string array`);
@@ -1508,7 +1534,7 @@ export class Runtime {
           this.globals.set("RESULT", [], BigInt(keys.length), context);
           if (args.length < 2) return keys.join(",");
           const output = args.length === 3 ? args[1] : undefined;
-          const destination = output ?? { kind: "variable", name: "RESULTS", indices: [] } as const;
+          const destination: Expr = output ?? { kind: "variable", name: "RESULTS", indices: [] };
           if (destination.kind !== "variable" || destination.indices.length || !variables.isString(destination.name, context)
             || variables.dimensions(destination.name, context).length !== 1 || variables.isCharacter(destination.name, context))
             throw new EraError("MAP_GETKEYS output must be a one-dimensional string array");
@@ -1858,8 +1884,48 @@ export class Runtime {
             canvas.ops.push({ op: "fill", color: canvas.brush ?? this.display.background, rect: [Number(argInt(args, name, 1)), Number(argInt(args, name, 2)), Number(argInt(args, name, 3)), Number(argInt(args, name, 4))] });
             return 1n;
           }
-          case "GSETPEN": case "GSETFONT":
-            return this.graphics.has(argInt(args, name, 0)) ? 1n : 0n;
+          case "GSETPEN": {
+            const canvas = this.graphics.get(argInt(args, name, 0));
+            const width = Number(argInt(args, name, 2));
+            if (width < 0 || width > 8192) throw new EraError("GSETPEN width must be between 0 and 8192");
+            const color = argbColor(argInt(args, name, 1), name);
+            if (!canvas) return 0n;
+            canvas.pen = { color, width: width || 1 };
+            return 1n;
+          }
+          case "GSETFONT": {
+            const font = this.graphicFont(argText(args, name, 1), Number(argInt(args, name, 2)), Number(args[3] ?? 0n));
+            const canvas = this.graphics.get(argInt(args, name, 0));
+            if (!canvas) return 0n;
+            canvas.font = font;
+            return 1n;
+          }
+          case "GGETFONT": return this.graphics.get(argInt(args, name, 0))?.font?.name ?? this.defaultGraphicFont().name;
+          case "GGETFONTSIZE": return BigInt(this.graphics.get(argInt(args, name, 0))?.font?.size ?? this.defaultGraphicFont().size);
+          case "GGETFONTSTYLE": return BigInt(this.graphics.get(argInt(args, name, 0))?.font?.style ?? 0);
+          case "GDRAWLINE": {
+            const canvas = this.graphics.get(argInt(args, name, 0));
+            if (!canvas) return 0n;
+            canvas.ops.push({ op: "line", ...(canvas.pen ?? { color: this.display.foreground, width: 1 }),
+              from: [Number(argInt(args, name, 1)), Number(argInt(args, name, 2))], to: [Number(argInt(args, name, 3)), Number(argInt(args, name, 4))] });
+            return 1n;
+          }
+          case "GDRAWTEXT": {
+            if (args.length === 3) throw new EraError("GDRAWTEXT x and y must be supplied together");
+            const canvas = this.graphics.get(argInt(args, name, 0));
+            if (!canvas) return 0n;
+            canvas.ops.push({ op: "text", text: argText(args, name, 1), color: canvas.brush ?? this.display.foreground,
+              x: Number(args[2] === undefined ? 0n : argInt(args, name, 2)), y: Number(args[3] === undefined ? 0n : argInt(args, name, 3)),
+              font: { ...(canvas.font ?? this.defaultGraphicFont()) } });
+            return 1n;
+          }
+          case "GGETTEXTSIZE": {
+            const font = this.graphicFont(argText(args, name, 1), Number(argInt(args, name, 2)), Number(args[3] === undefined ? 0n : argInt(args, name, 3)));
+            // The server uses the same fixed-cell measurement as HTML_STRINGLEN, not platform GDI+ metrics.
+            const lines = argText(args, name, 0).split(/\r?\n/);
+            this.globals.set("RESULT", [literal(1n)], BigInt(font.size * lines.length), context);
+            return BigInt(Math.ceil(Math.max(...lines.map((line) => stringWidth(line))) * font.size / 2));
+          }
           case "GSAVE": case "GLOAD": return 0n;
           case "CURRENTALIGN": return this.style.alignment.toUpperCase();
           case "GETCOLOR": return BigInt("0x" + this.style.color.slice(1));
@@ -2263,10 +2329,19 @@ export class Runtime {
     if (this.debugText) snapshot.debug = this.debugText;
     this.debugText = "";
     this.debugClear = false;
-    if (this.backgroundChanged) snapshot.cbg = this.background.slice();
+    if (this.backgroundChanged || this.background.length) snapshot.cbg = this.background.flatMap((layer): BackgroundLayer[] => {
+      const picture = layer.graphics !== undefined ? this.picture(layer.graphics) : this.spritePicture(layer.sprite!);
+      if (!picture) return [];
+      const hover = layer.hover ? this.spritePicture(layer.hover) : undefined;
+      return [{ z: layer.z, x: layer.x, y: layer.y, picture, ...(hover ? { hover } : {}),
+        ...(layer.buttonValue !== undefined ? { buttonValue: layer.buttonValue } : {}), ...(layer.tooltip ? { tooltip: layer.tooltip } : {}) }];
+    });
+    if (this.backgroundChanged || this.backgroundMap !== undefined) snapshot.cbgMap = this.backgroundMap === undefined ? null : this.picture(this.backgroundMap) ?? null;
     this.backgroundChanged = false;
     if (this.textboxChanged) snapshot.textbox = this.textbox;
     this.textboxChanged = false;
+    if (this.tooltipChanged) snapshot.tooltip = { ...this.tooltipSettings };
+    this.tooltipChanged = false;
     return snapshot;
   }
   private resourceUrl(file: string): string {
@@ -3001,6 +3076,34 @@ export class Runtime {
             yield this.emit("html", shape, false);
             break;
           }
+          case "PRINT_IMG": {
+            const parts = this.arguments(args), main = parts[0] ? text(ev(parts[0])) : "";
+            if (!main || parts.length > 6) throw new EraError("PRINT_IMG expects sprite[, hover][, color matrix][, width, height, ypos]");
+            let at = 1, hover: string | undefined, matrix: ColorMatrix | undefined;
+            if (parts[at] && typeof ev(parts[at]!) === "string") hover = text(ev(parts[at++]!));
+            if (parts[at]) {
+              const candidate = this.parse(parts[at]!);
+              if (candidate.kind === "variable" && frame.variables.dimensions(candidate.name, frame.context).length > 1) {
+                matrix = this.colorMatrix(candidate, frame.variables, frame.context, op);
+                at++;
+              }
+            }
+            if (parts.length - at > 3) throw new EraError("PRINT_IMG accepts at most width, height and ypos after its sprites and matrix");
+            const sizes = parts.slice(at).map((part, i) => part ? ` ${["width", "height", "ypos"][i]}='${num(part)}'` : "").join("");
+            const html = `<img src="${escapeHtml(main)}"${hover ? ` srcb="${escapeHtml(hover)}"` : ""}${sizes}>`;
+            const emitted = this.emit("html", html, false);
+            if (matrix && "output" in emitted && "sprites" in emitted.output) {
+              for (const id of [main, hover].filter((id): id is string => !!id)) {
+                const sprite = this.sprite(id);
+                if (!sprite) continue;
+                const draw = this.spriteOp(sprite, [0, 0, sprite.width, sprite.height], matrix);
+                (emitted.output.sprites ??= {})[id] = { width: sprite.width, height: sprite.height, x: 0, y: 0,
+                  picture: { width: sprite.width, height: sprite.height, ops: draw ? [draw] : [] } };
+              }
+            }
+            yield emitted;
+            break;
+          }
           case "PRINTBUTTON": case "PRINTBUTTONC": case "PRINTBUTTONLC": {
             const parts = this.arguments(args);
             if (parts.length !== 2) throw new EraError(`${op} expects label and value`);
@@ -3190,8 +3293,38 @@ export class Runtime {
           case "CBGCLEAR":
             if (args.trim()) throw new EraError("CBGCLEAR does not accept arguments");
             this.background = [];
+            this.backgroundMap = undefined;
             this.backgroundChanged = true;
             break;
+          case "CBGSETBMAPG":
+            this.backgroundMap = num(args);
+            if (!this.graphics.has(this.backgroundMap)) throw new EraError("CBGSETBMAPG requires existing graphics");
+            this.backgroundChanged = true;
+            break;
+          case "CBGREMOVEBMAP":
+            if (args.trim()) throw new EraError("CBGREMOVEBMAP does not accept arguments");
+            this.backgroundMap = undefined;
+            this.backgroundChanged = true;
+            break;
+          case "CBGCLEARBUTTON":
+            if (args.trim()) throw new EraError("CBGCLEARBUTTON does not accept arguments");
+            this.background = this.background.filter((layer) => layer.buttonValue === undefined);
+            this.backgroundChanged = true;
+            break;
+          case "CBGSETBUTTONSPRITE": {
+            const parts = this.arguments(args);
+            if (parts.length < 6 || parts.length > 7 || parts.slice(0, 6).some((part) => !part)) throw new EraError("CBGSETBUTTONSPRITE expects value, sprite, hover, x, y, z[, tooltip]");
+            const buttonValue = Number(num(parts[0]!)), z = Number(num(parts[5]!));
+            if (buttonValue < 0 || buttonValue > 0xffffff) throw new EraError("CBG button values must fit in 24 bits");
+            if (!z) throw new EraError("CBGSETBUTTONSPRITE: zDepth must not be 0");
+            const layer: BackgroundSource = { buttonValue, sprite: text(ev(parts[1]!)), hover: text(ev(parts[2]!)),
+              x: Number(num(parts[3]!)), y: Number(num(parts[4]!)), z, tooltip: parts[6] ? text(ev(parts[6])) : "" };
+            if (!this.sprite(layer.sprite!) || (layer.hover && !this.sprite(layer.hover))) throw new EraError("CBGSETBUTTONSPRITE requires existing sprites");
+            const at = this.background.findIndex((other) => other.z < z);
+            this.background.splice(at < 0 ? this.background.length : at, 0, layer);
+            this.backgroundChanged = true;
+            break;
+          }
           case "CBGREMOVERANGE": {
             const parts = this.arguments(args);
             if (parts.length !== 2 || !parts[0] || !parts[1]) throw new EraError("CBGREMOVERANGE expects zmin, zmax");
@@ -3214,7 +3347,8 @@ export class Runtime {
             }
             this.globals.set("RESULT", [], picture ? 1n : 0n, frame.context);
             if (!picture) break;
-            const layer = { z, x: Number(num(parts[1]!)), y: Number(num(parts[2]!)), picture };
+            const layer: BackgroundSource = { z, x: Number(num(parts[1]!)), y: Number(num(parts[2]!)),
+              ...(op === "CBGSETG" ? { graphics: num(parts[0]!) } : { sprite: text(ev(parts[0]!)) }) };
             const at = this.background.findIndex((other) => other.z < z);
             this.background.splice(at < 0 ? this.background.length : at, 0, layer);
             this.backgroundChanged = true;
@@ -3470,10 +3604,28 @@ export class Runtime {
           case "DUMPRAND": this.dumpedRandom = this.randomState; break;
           case "INITRAND": if (this.dumpedRandom !== undefined) this.randomState = this.dumpedRandom; break;
           case "WAITANYKEY": yield { input: { kind: "wait" } }; break;
-          // Sound, tooltip timing and animation timers have no effect in the terminal.
-          case "AWAIT": case "PLAYSOUND": case "STOPSOUND": case "PLAYBGM": case "STOPBGM": case "SETANIMETIMER":
-          case "TOOLTIP_SETDELAY": case "TOOLTIP_SETDURATION": case "TOOLTIP_SETCOLOR":
+          case "TOOLTIP_CUSTOM": case "TOOLTIP_SETFONTSIZE": case "TOOLTIP_SETFONT":
+          case "TOOLTIP_SETDELAY": case "TOOLTIP_SETDURATION": case "TOOLTIP_SETCOLOR": {
+            const parts = this.arguments(args), count = op === "TOOLTIP_SETCOLOR" ? 2 : 1;
+            if (parts.length !== count || parts.some((part) => !part)) throw new EraError(`${op} expects ${count} argument(s)`);
+            if (op === "TOOLTIP_SETFONT") this.tooltipSettings.font = text(ev(parts[0]!));
+            else if (op === "TOOLTIP_SETCOLOR") {
+              this.tooltipSettings.color = rgbColor(num(parts[0]!));
+              this.tooltipSettings.background = rgbColor(num(parts[1]!));
+            } else if (op === "TOOLTIP_CUSTOM") this.tooltipSettings.custom = num(parts[0]!) !== 0n;
+            else {
+              const value = Number(num(parts[0]!));
+              if (value < 0 || value > 2 ** 31 - 1 || op === "TOOLTIP_SETFONTSIZE" && (value < 1 || value > 8192))
+                throw new EraError(`${op} argument out of range`);
+              this.tooltipSettings[op === "TOOLTIP_SETFONTSIZE" ? "fontSize" : op === "TOOLTIP_SETDELAY" ? "delay" : "duration"] = value;
+            }
+            this.tooltipChanged = true;
             break;
+          }
+          // Sound and animation timers have no effect in the terminal.
+          case "AWAIT": case "PLAYSOUND": case "STOPSOUND": case "PLAYBGM": case "STOPBGM": case "SETANIMETIMER":
+            break;
+          case "CALLSHARP": throw new EraError("CALLSHARP requires a native .NET plugin and is not supported by this TypeScript runtime");
           case "THROW": throw new EraError(this.formatted(args, frame));
           default: {
             // Emuera lets any built-in method run as a statement, storing its value in RESULT/RESULTS.

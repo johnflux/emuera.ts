@@ -84,6 +84,9 @@ test("rejects truncation, invalid dimensions, malformed runs, unsupported format
   assert.throws(() => readNativeSave(badVersion), /version/);
   const badRun = Buffer.from(FIXTURE); badRun[badRun.indexOf(Buffer.from([0xf0, 3])) + 1] = 7;
   assert.throws(() => readNativeSave(badRun), /exceeds/);
+  const badDimension = Buffer.from(FIXTURE);
+  badDimension.writeInt32LE(-1, badDimension.indexOf(Buffer.from("46004c0041004700", "hex")) + 8);
+  assert.throws(() => readNativeSave(badDimension), /count/);
   assert.throws(() => readNativeSave(Buffer.concat([FIXTURE, Buffer.from([0xff, 1])])), /trailing/);
 });
 
@@ -103,6 +106,7 @@ DELDATA 0
 CHKDATA 0
 PRINTFORML {RESULT}
 QUIT`);
+  game.tables.set("GAMEBASE", new Map([[0, ["コード", "7"]]]));
   const result = new Runtime(game, 50_000, { saves }).start();
   assert.equal(result.status, "halted", JSON.stringify(result.error));
   assert.equal(printed(result), "0 slot\n1 42 A -9223372036854775808\n2 A\n1");
@@ -144,6 +148,7 @@ test("file stores honor SAV casing, native global data, dat character files and 
     assert.deepEqual(saves.read("save00.sav"), FIXTURE);
     assert.equal(globals.load("7")?.GLOBAL?.["1"], "42");
     assert.throws(() => globals.load("8"), /another game/);
+    assert.throws(() => globals.load("0"), /another game/);
     saves.write("chara_テスト.dat", FIXTURE);
     assert.deepEqual(await readFile(path.join(root, "dat", "chara_テスト.dat")), FIXTURE);
     await writeFile(path.join(root, "SAV", "SAVE01.SAV"), FIXTURE);
@@ -180,6 +185,7 @@ SAVECHARA "hero", "hero", 0
 SAVEDATA 300, "autosave"
 QUIT`);
     game.root = root;
+    game.tables.set("GAMEBASE", new Map([[0, ["コード", "7"]]]));
     game.config.set("セーブデータをSAVフォルダ内に作成する", "YES");
     game.config.set("セーブデータを圧縮して保存する", "YES");
     app = createApp(game);
@@ -206,7 +212,7 @@ QUIT`);
   }
 });
 
-test("bundled Emuera saves decode and load into the actual game's EVENTLOAD without changing disk files",
+test("bundled Emuera saves decode and reach the actual game's gameplay input without changing disk files",
   { skip: !existsSync(path.join(GAME_ROOT, "sav", "save00.sav")) }, async () => {
     const saves = new MemorySaveStore();
     for (const name of ["save00.sav", "save99.sav", "save300.sav"]) {
@@ -223,7 +229,11 @@ test("bundled Emuera saves decode and load into the actual game's EVENTLOAD with
     store.save(global.data.variables);
     indexScript(game, "@TEST_NATIVE_LOAD\nLOADGLOBAL\nLOADDATA 0", "native-test.ERB");
     const runtime = new Runtime(game, GAME_INSTRUCTION_LIMIT, { saves, store });
-    const snapshot = runtime.start("TEST_NATIVE_LOAD");
+    let snapshot = runtime.start("TEST_NATIVE_LOAD");
     assert.notEqual(snapshot.status, "error", JSON.stringify(snapshot.error));
     assert.ok(snapshot.output.length > 0);
+    for (let waits = 0; waits < 30 && snapshot.status === "waiting" && snapshot.input?.kind === "wait"; waits++)
+      snapshot = snapshot.input.blocking ? runtime.timeout() : runtime.input("");
+    assert.equal(snapshot.status, "waiting", JSON.stringify(snapshot.error));
+    assert.equal(snapshot.input?.kind, "integer");
   });
