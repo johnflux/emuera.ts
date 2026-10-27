@@ -4,6 +4,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
+import { demoGame } from "../src/demo.js";
 import { applyHotpatches, emptyGame, GAME_ROOT, indexScript, loadGame } from "../src/loader.js";
 import { GAME_INSTRUCTION_LIMIT, Runtime } from "../src/runtime.js";
 
@@ -111,7 +112,11 @@ CFLAG:MASTER:現在位置 = ${scenario.room}
 CFLAG:71:現在位置 = 54
 CALLNAME:71 = Shinmyoumaru
 ${scenario.setup ?? ""}
+FLAG:画像表示 = 3
+FLAG:画像表示設定 = 1
+isModifier = 10
 CALL HOTPATCH_OCCUPANTS
+PRINTFORML Image settings: {FLAG:画像表示}, {FLAG:画像表示設定}, {isModifier}
 CALL COM_ABLE428
 PRINTFORML Mallet available: {RESULT}
 WAIT`, "<cage-test>");
@@ -121,6 +126,7 @@ WAIT`, "<cage-test>");
     const markup = snapshot.output.flatMap((item) => item.type === "html" ? [item.text] : []).join("");
     const text = snapshot.output.flatMap((item) => "text" in item ? [item.text] : []).join("");
     assert.equal(markup.includes("era-occupant-caged"), scenario.caged, scenario.name);
+    assert.match(text, /Image settings: 3, 1, 10/, "rendering each portrait restores the image settings");
     assert.match(text, new RegExp(`Mallet available: ${Number(scenario.able)}`), scenario.name);
     if (scenario.caged) {
       assert.match(markup, /<span class='era-occupant era-occupant-caged'>/);
@@ -170,4 +176,48 @@ test("main screen hotpatch opens and closes its panel boxes in balance", {
     assert.ok(screen.some((text) => text.includes("era-timestop-button")), `screen ${index} has the time stop control`);
   }
   assert.ok(screens[1]!.some((text) => /era-stopped'[^>]*value='999'|value='999'[^>]*era-stopped/.test(text)), "time stop switches to Resume Time");
+});
+
+test("room lineup renders every portrait and preserves target selection", {
+  skip: !existsSync(GAME_ROOT),
+}, async () => {
+  const game = await loadGame();
+  await applyHotpatches(game);
+  for (const scenario of ["1", "2", "3", "4", "5", "6", "7"]) {
+    const runtime = new Runtime(demoGame(game), GAME_INSTRUCTION_LIMIT);
+    runtime.start();
+    runtime.input("8");
+    let snapshot = runtime.input(scenario);
+    const markup: string[] = [];
+    for (let waits = 0; ; waits++) {
+      assert.equal(snapshot.error, null, `${scenario}: ${JSON.stringify(snapshot.error)}`);
+      for (const item of snapshot.output) if (item.type === "html") markup.push(item.text);
+      if (snapshot.input?.kind !== "wait") break;
+      assert.ok(waits < 40, "scenario reaches the main screen");
+      snapshot = runtime.input("");
+    }
+    const html = markup.join("");
+    const count = scenario === "4" ? 6 : ["3", "5"].includes(scenario) ? 2 : ["1", "6"].includes(scenario) ? 0 : 1;
+    assert.equal((html.match(/<era-open class='era-portrait'>/g) ?? []).length, count, scenario);
+    assert.equal((html.match(/aria-pressed='true'/g) ?? []).length, count ? 1 : 0, scenario);
+    assert.equal((html.match(/<era-open/g) ?? []).length, (html.match(/<era-close>/g) ?? []).length, scenario);
+    assert.doesNotMatch(html, /era-main-occupants/, "occupants are inside the room card");
+    assert.doesNotMatch(html, /era-selected/, "selection uses only the existing sprite highlight, not an occupant highlight");
+    assert.ok(html.indexOf("era-character") < html.indexOf("era-occupant-list"));
+    if (!count) {
+      assert.match(html, /Just you/);
+      continue;
+    }
+    const labels = [...html.matchAll(/<button value='(\d+)' class='era-occupant-label' aria-pressed='(true|false)'/g)];
+    assert.equal(labels.length, count);
+    const originalTarget = snapshot.target;
+    assert.equal(originalTarget, Number(labels.find((label) => label[2] === "true")![1]) - 1000);
+    const next = labels.find((label) => label[2] === "false") ?? labels[0]!;
+    snapshot = runtime.input(next[1]!);
+    assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
+    const selected = snapshot.output.flatMap((item) => item.type === "html" ? [item.text] : []).join("");
+    assert.match(selected, new RegExp(`value='${next[1]}' class='era-occupant-label' aria-pressed='true'`));
+    assert.equal(snapshot.target, Number(next[1]) - 1000);
+    if (count > 1) assert.notEqual(snapshot.target, originalTarget);
+  }
 });

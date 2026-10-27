@@ -100,6 +100,7 @@ ENDIF
 CHOICE = RESULT
 ; The game's own Quicktest (TITLE.ERB option 99) without its option prompts.
 RESETDATA
+CALL MAKE_TALENT_MAP
 DEMO_SCENARIO = CHOICE
 DevTest = 1
 VARSET DevTestOptions

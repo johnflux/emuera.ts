@@ -1214,6 +1214,8 @@ async function renderHtml(markup, parent, sprites) {
       }
     } else throw new Error(`Unsupported HTML tag: <${node.tagName.toLowerCase()}>`);
     applyClasses(element, node);
+    if (element.classList.contains("era-occupant-label"))
+      element.setAttribute("aria-pressed", String(node.getAttribute("aria-pressed") === "true"));
     // Hotpatch extension: data-room links a non-button element to the map's room buttons with that value.
     const room = node.getAttribute("data-room");
     if (room !== null && /^-?\d+$/.test(room)) element.dataset.room = room;
@@ -1267,6 +1269,7 @@ async function renderSteps(steps, fresh = false, keepFocus = false, toBottom = f
     pendingImages = [];
     syncDialogs();
     layoutMapPictures();
+    revealSelectedOccupants();
     markMapLabels();
     translation.translateTree(terminal);
     terminal.removeAttribute("aria-busy");
@@ -1333,13 +1336,21 @@ function markTarget(target) {
   if (!Number.isInteger(target) || target < 0) return;
   const value = String(TARGET_BUTTON_BASE + target);
   const pictures = [...outputRoot.querySelectorAll(".screen.is-active button.choice:has(.sprite)")]
-    .filter((button) => Math.floor(Number(button.dataset.value) / TARGET_BUTTON_BASE) === 1 && !button.closest(".era-occupants"));
+    .filter((button) => Math.floor(Number(button.dataset.value) / TARGET_BUTTON_BASE) === 1
+      && (!button.closest(".era-occupants") || button.closest(".era-portrait")));
   // Layered pictures (effects drawn over the body) are further buttons with the same value; mark only the base.
   const selected = pictures.find((button) => button.dataset.value === value);
   if (!selected) return;
   selected.classList.add("is-target");
   // Other characters' pictures (all their layers) are dimmed so the selection stands out.
   for (const button of pictures) if (button.dataset.value !== value) button.classList.add("is-not-target");
+}
+function revealSelectedOccupants() {
+  for (const occupant of terminal.querySelectorAll('.screen.is-active .era-occupant:has(.era-occupant-label[aria-pressed="true"])')) {
+    const lineup = occupant.closest(".era-occupant-list");
+    lineup.scrollLeft += occupant.getBoundingClientRect().left - lineup.getBoundingClientRect().left
+      - Math.max(0, (lineup.clientWidth - occupant.offsetWidth) / 2);
+  }
 }
 /** advanceScreen: true after a submitted input (retires the screen), "continue" after a click-to-continue wait. */
 async function renderSnapshot(snapshot, advanceScreen) {

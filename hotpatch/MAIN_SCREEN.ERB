@@ -2,8 +2,8 @@
 ; Hotpatch for the main screen's status (ERB/ステータス表示関連/INFO.ERB @SHOW_STATUS). Together with
 ; MAIN_SCREEN_COMMANDS.ERB (@SHOW_USERCOM) it lays the screen out in panels (<era-open>/<era-close> boxes, see
 ; docs/hotpatches.md): a header with the clock, date, place and a large Time Stop button; the room occupants and the
-; target's stats on the left; the selected character's card (with the look text: clothes and what is happening to
-; them) in the middle; your card on the right; the actions below.
+; target's stats below; a horizontal room lineup beside the selected character's details (with the look text:
+; clothes and what is happening to them); your card on the right; the actions below.
 ;
 ; SHOW_STATUS's logic up to the display is copied unchanged. The display calls the game's own printers for the
 ; date, weather, situation, place, states and counters, and HOTPATCH_* rewrites of INFO_TARGET_BUTTON, INFO_BASE,
@@ -143,9 +143,6 @@ HTML_PRINT "<era-close>"
 VARSET LOCAL
 CALL HOTPATCH_TARGET_DATAGROUP
 
-HTML_PRINT "<era-open class='era-main-occupants'>"
-CALL HOTPATCH_OCCUPANTS
-HTML_PRINT "<era-close>"
 HTML_PRINT "<era-open class='era-main-left'>"
 IF TARGET > 0
 	HTML_PRINT "<era-open class='era-card era-stats'>"
@@ -162,9 +159,7 @@ IF TARGET > 0
 	HTML_PRINT "<era-open class='era-scene'>"
 	CALL HOTPATCH_SCENE
 	HTML_PRINT "<era-close>"
-	HTML_PRINT "<era-open class='era-portrait'>"
-	CALL HOTPATCH_PORTRAIT
-	HTML_PRINT "<era-close>"
+	CALL HOTPATCH_OCCUPANTS
 	HTML_PRINT "<era-open class='era-character-info'>"
 	CALL HOTPATCH_TARGET_SITUATION(FLAG:TARGETの情報表示モード)
 	CALL HOTPATCH_BASE(TARGET)
@@ -185,6 +180,7 @@ ELSE
 	HTML_PRINT "<era-open class='era-scene'>"
 	CALL HOTPATCH_SCENE
 	HTML_PRINT "<era-close>"
+	CALL HOTPATCH_OCCUPANTS
 	HTML_PRINT "<div class='era-alone-message'><span class='era-alone-mark'></span><span class='era-alone-title'>Nobody else is here</span><span class='era-alone-hint'>Move or go out to find someone, or wait for visitors.</span></div>"
 	CALL SHOW_EQUIP_1
 	HTML_PRINT "<era-close>"
@@ -267,8 +263,8 @@ IF CFLAG:睡眠
 ENDIF
 
 ;-------------------------------------------------------------------------------
-; INFO_TARGET_BUTTON as a list: companions, the carried character and everyone in the room, each a button
-; (1000 + character) with a face, name and state. Counts TFLAG:パンツ収奪 as the original does.
+; INFO_TARGET_BUTTON as a horizontal lineup: companions, the carried character and everyone in the room.
+; Each selectable character has their layered portrait, name and state. Counts TFLAG:パンツ収奪 as the original does.
 ;-------------------------------------------------------------------------------
 @HOTPATCH_OCCUPANTS
 #DIM DYNAMIC nIndex
@@ -279,7 +275,11 @@ ENDIF
 #DIMS DYNAMIC sItems
 #DIMS DYNAMIC sClass
 #DIMS DYNAMIC sState
+#DIMS DYNAMIC sPressed
 TFLAG:パンツ収奪 = 0
+HTML_PRINT "<era-open class='era-occupants'>"
+HTML_PRINT "<div class='era-card-title'>Room Occupants</div>"
+HTML_PRINT "<era-open class='era-occupant-list'>"
 IF TARGET > 0
 	FOR nIndex, 1, GET_TARGETNUM() + 1
 		nChara = TARGET:nIndex
@@ -319,13 +319,14 @@ IF TARGET > 0
 		SIF !STRLENS(sState)
 			sState '= @"Favor %HOTPATCH_RANK(CFLAG:nChara:2, "MAX_50000")%"
 		sState += HOTPATCH_FEELINGS(nChara, 1)
-		SIF nChara == TARGET
-			sClass += " era-selected"
 		sClass += HOTPATCH_MOOD_CLASS(nChara)
-		CALL HOTPATCH_FACE(nChara)
-		sItems += @"<button value='{1000 + nChara}' class='era-occupant%sClass%'><span class='era-face'>%RESULTS%</span>"
-		sItems += @"<span class='era-occupant-text'><span class='era-occupant-name'>%HTML_ESCAPE(CALLNAME:nChara)%</span>"
-		sItems += @"<span class='era-occupant-state'>%sState%</span></span></button>"
+		sPressed '= nChara == TARGET ? "true" # "false"
+		HTML_PRINT @"<era-open class='era-occupant%sClass%'>"
+		HTML_PRINT "<era-open class='era-portrait'>"
+		CALL HOTPATCH_PORTRAIT(nChara)
+		HTML_PRINT "<era-close>"
+		HTML_PRINT @"<button value='{1000 + nChara}' class='era-occupant-label' aria-pressed='%sPressed%'><span class='era-occupant-text'><span class='era-occupant-name'>%HTML_ESCAPE(CALLNAME:nChara)%</span><span class='era-occupant-state'>%sState%</span></span></button>"
+		HTML_PRINT "<era-close>"
 		nCount++
 		SIF nChara == 71
 			bShinmyoumaruShown = 1
@@ -351,7 +352,10 @@ IF CHARANUM > 71 && !bShinmyoumaruShown && FLAG:なりきり != 71 && CFLAG:71:�
 ENDIF
 SIF !nCount
 	sItems '= "<span class='era-occupant era-occupant-none'><span class='era-face'></span><span class='era-occupant-text'><span class='era-occupant-name'>Just you</span><span class='era-occupant-state'>No one else is in the room</span></span></span>"
-HTML_PRINT @"<div class='era-card era-occupants'><div class='era-card-title'>Room Occupants</div><div class='era-occupant-list'>%sItems%</div></div>"
+SIF STRLENS(sItems)
+	HTML_PRINT sItems
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-close>"
 
 ; The character's face picture as an <img> in RESULTS (empty if the game has none), as LOAD_FACE_IMAGE gets it.
 @HOTPATCH_FACE(nChara)
@@ -370,19 +374,23 @@ ELSE
 	RESULTS '= @"<span class='era-face-letter'>%HTML_ESCAPE(SUBSTRINGU(CALLNAME:nChara, 0, 1))%</span>"
 ENDIF
 
-; The current target's picture (with its effect layers) from PRINT_TARGET_IMAGE, whatever the image settings.
-@HOTPATCH_PORTRAIT
+; Render one character without changing TARGET or the game's image settings.
+@HOTPATCH_PORTRAIT(nChara)
+#DIM DYNAMIC nChara
+#DIM DYNAMIC nPortrait, 2
 #DIM DYNAMIC nShown
 #DIM DYNAMIC nSettings
 #DIM DYNAMIC nSize
 nShown = FLAG:画像表示
 nSettings = FLAG:画像表示設定
 nSize = isModifier
+nPortrait:0 = nChara
+nPortrait:1 = nChara
 FLAG:画像表示 = 1
 FLAG:画像表示設定 = 0
 ;A little larger than the game's image size setting, so it fills the card's corner.
 isModifier += 20
-CALL PRINT_TARGET_IMAGE(TARGET)
+CALL PRINT_TARGET_IMAGE(nPortrait)
 FLAG:画像表示 = nShown
 FLAG:画像表示設定 = nSettings
 isModifier = nSize

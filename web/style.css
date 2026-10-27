@@ -191,13 +191,13 @@ a { color: #8ddaff; }
 .era-box { --terminal-background: transparent; }
 .era-box .line, .era-box .output-text { background-color: transparent; }
 .era-box .line .era-section { margin: 0; }
-/* Main screen (hotpatch/MAIN_SCREEN*.ERB): header, then two rows of equal-height cards: occupants | character | you
+/* Main screen (hotpatch/MAIN_SCREEN*.ERB): header, then the room lineup and character details | you
    (with a minimum height, so the screen keeps its shape when nobody is around), then the target's stats | actions |
    menu. During a session the counters take a row under the actions, which then no longer reach down. */
 .era-main { display: grid; gap: 10px; max-width: 100cqi; margin: 4px 0; white-space: normal;
   grid-template-columns: minmax(40ch, 44ch) minmax(0, 1fr) minmax(32ch, 38ch);
   grid-template-rows: auto auto auto 1fr auto;
-  grid-template-areas: "header header header" "occupants center right" "left actions menu" "left counters menu" "last last last"; }
+  grid-template-areas: "header header header" "center center right" "left actions menu" "left counters menu" "last last last"; }
 .era-main > * { min-width: 0; align-self: start; }
 .era-main > .line { grid-column: 1 / -1; }
 .era-main-header { grid-area: header; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; padding: 8px 12px; border: 1px solid #2c3640; border-radius: 10px; background: linear-gradient(90deg, #12181e, #0d1014); }
@@ -299,9 +299,8 @@ a { color: #8ddaff; }
   filter: var(--landmark-tint, ); }
 .era-sky.era-area-art .era-sky-land { display: none; }
 .era-sky.era-area-art-night .era-sky-landmark { --landmark-tint: ; }
-.era-main-occupants { grid-area: occupants; }
 .era-main-left { grid-area: left; display: flex; flex-direction: column; gap: 10px; }
-.era-main > :is(.era-main-occupants, .era-main-center, .era-main-right, .era-main-left) { align-self: stretch; display: flex; flex-direction: column; }
+.era-main > :is(.era-main-center, .era-main-right, .era-main-left) { align-self: stretch; display: flex; flex-direction: column; }
 .era-main > :is(.era-main-actions, .era-main-menu) { align-self: stretch; }
 .era-main:not(:has(> .era-counters)) > .era-main-actions { grid-row-end: span 2; }
 /* Nobody selected, so no stats: the actions take their column too. */
@@ -309,9 +308,9 @@ a { color: #8ddaff; }
 .era-main:not(:has(.era-stats)) > .era-main-actions { grid-column: 1 / 3; }
 .era-main-left > .era-stats { flex: 1 0 auto; }
 /* PRINTed cards sit in a line and a span; letting those wrappers go lets the card itself fill the column. */
-.era-main-occupants > .line:has(.era-card), .era-main-occupants > .line > span:has(> .era-card),
+.era-occupant-list > .line:has(.era-occupant), .era-occupant-list > .line > span:has(> .era-occupant),
 .era-alone > .line:has(.era-alone-message), .era-alone > .line > span:has(> .era-alone-message) { display: contents; }
-:is(.era-main-center, .era-main-right) > .era-card, .era-main-occupants .era-occupants { flex: 1 0 auto; }
+:is(.era-main-center, .era-main-right) > .era-card { flex: 1 0 auto; }
 .era-main-center > .era-card { min-height: 290px; }
 .era-main-center { grid-area: center; }
 .era-main-right { grid-area: right; }
@@ -321,11 +320,11 @@ a { color: #8ddaff; }
 .era-main-last { grid-area: last; color: #888; }
 @container (max-width: 1100px) {
   .era-main { grid-template-columns: minmax(40ch, 44ch) minmax(0, 1fr); grid-template-rows: none;
-    grid-template-areas: "header header" "occupants center" "left actions" "right menu" "counters counters" "last last"; }
+    grid-template-areas: "header header" "center center" "left actions" "right menu" "counters counters" "last last"; }
   .era-main:not(:has(> .era-counters)) > .era-main-actions { grid-row-end: auto; }
 }
 @container (max-width: 760px) {
-  .era-main { grid-template-columns: minmax(0, 1fr); grid-template-areas: "header" "occupants" "center" "actions" "left" "right" "menu" "counters" "last"; }
+  .era-main { grid-template-columns: minmax(0, 1fr); grid-template-areas: "header" "center" "actions" "left" "right" "menu" "counters" "last"; }
   .era-main-center > .era-card { min-height: 0; }
   .era-main:not(:has(.era-stats)) > .era-main-actions { grid-column: 1; }
 }
@@ -409,40 +408,26 @@ a { color: #8ddaff; }
 .era-player-toggles { margin-top: 6px; }
 .era-strong { font-weight: bold; }
 .screen.is-active .line button.choice:is(.era-chip-button, .era-toggle, .era-star):enabled:is(:hover, :focus-visible) { border-color: #8ddaff; }
-/* Occupant list: a tab per character, the selected one highlighted. */
-.era-occupant-list { display: flex; flex-direction: column; gap: 4px; }
-.line button.choice.era-occupant, .era-occupant { display: flex; align-items: center; gap: 10px; width: 100%; padding: 4px 8px; border: 1px solid transparent; border-left: 3px solid transparent; border-radius: 8px; background: #161b20; text-align: left; cursor: pointer; }
-/* The occupants and the character card form one box: the list is a darker tab rail down its left side (taking the
-   grid gap, with no right border), and the selected tab has the card's own background and covers the card's left
-   border, so it opens into the card it is showing. Stacked on narrow screens, they are separate cards again. */
-.era-main > .era-main-occupants { position: relative; z-index: 2; margin-right: -10px; }
-.era-main-occupants .era-occupants { padding-right: 0; border-right: 0; border-radius: 10px 0 0 10px; background: #0c0f12; }
-.era-main-center > .era-character { border-radius: 0 10px 10px 0; }
-.era-occupants .era-card-title { padding-right: 10px; }
-.line button.choice.era-occupant:not(.era-selected) { margin-right: 8px; width: calc(100% - 8px); background: transparent; }
-.line button.choice.era-occupant.era-selected { width: calc(100% + 1px); margin-right: -1px; border-color: #2a3138; border-left-color: #66ffff; border-right: 0; border-radius: 8px 0 0 8px; background: #111518; }
-.era-main:has(.era-stopped) .line button.choice.era-occupant.era-selected { border-color: #7fb4e0aa; border-left-color: #bfe6ff; border-right: 0; background: #14223e; }
-@container (max-width: 760px) {
-  .era-main > .era-main-occupants { margin-right: 0; }
-  .era-main-occupants .era-occupants { padding-right: 10px; border-right: 1px solid #2a3138; border-radius: 10px; }
-  .era-main-center > .era-character { border-radius: 10px; }
-  .line button.choice.era-occupant:is(.era-selected, :not(.era-selected)) { width: 100%; margin-right: 0; border-right: 1px solid transparent; border-radius: 8px; }
-  .line button.choice.era-occupant.era-selected { border-right-color: #2a3138; }
-}
-.screen.is-active .line button.choice.era-occupant:enabled:is(:hover, :focus-visible):not(.era-selected) { background: #1e262d; }
+/* The room is a row of full portraits, not a tab rail. Crowds scroll without shrinking the sprites. */
+.era-occupants { min-width: 0; }
+.era-occupant-list { display: flex; align-items: stretch; justify-content: safe center; gap: 8px; overflow-x: auto; padding: 2px 2px 8px; }
+.era-occupant { display: flex; flex: 0 0 180px; flex-direction: column; align-items: center; justify-content: flex-end; gap: 6px; min-width: 0; padding: 6px; text-align: center; }
+.era-occupant > .line { width: 100%; white-space: normal; }
+.line button.choice.era-occupant-label { display: block; width: 100%; padding: 4px; border-radius: 6px; text-align: center; white-space: normal; }
+.screen.is-active .line button.choice.era-occupant-label:enabled:is(:hover, :focus-visible) { background: #1e262d; }
 .era-occupant.era-request .era-occupant-state { color: #7f7; }
 .era-occupant.era-asleep .era-face { filter: brightness(.6) saturate(.5); }
-.era-occupant.era-occupant-none { border: 1px dashed #2c353d; background: transparent; cursor: default; }
+.era-occupant.era-occupant-none { background: transparent; cursor: default; }
 .era-occupant-none .era-face { border: 2px dashed #33414d; background: transparent; }
 .era-occupant-none .era-occupant-name { color: #9aa5ad; }
-.era-occupant.era-occupant-caged { width: calc(100% - 8px); border: 1px dashed #667581; background: transparent; cursor: default; }
+.era-occupant.era-occupant-caged { background: transparent; cursor: default; }
 .era-occupant-caged .era-face { border-radius: 6px; filter: saturate(.4); }
 .era-occupant-caged .era-occupant-name { color: #aab8c4; }
 .era-face { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 44px; height: 44px; overflow: hidden; border-radius: 50%; background: #222; }
 .era-face-letter { color: #aaa; font-weight: bold; font-size: 1.3em; }
 .era-occupant-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
 .era-occupant-name { color: #eee; font-weight: bold; }
-.era-occupant.era-selected .era-occupant-name { color: #8fc8ff; }
+.era-occupant:has(.era-occupant-label[aria-pressed="true"]) .era-occupant-name { color: #8fc8ff; }
 /* Names in the game's mood colours (SHOW_EQUIP_2: C_BLUE, C_H_PINK, C_ORANGE, C_AQUA, C_RED). */
 .era-occupant.era-mood-asleep .era-occupant-name { color: #306eff; }
 .era-occupant.era-mood-heat .era-occupant-name { color: #ff69b4; }
@@ -458,7 +443,7 @@ a { color: #8ddaff; }
 .era-feel-hate, .era-feel-mad, .era-feel-sullen { color: #ff5050; } .era-feel-sad { color: #6f9cff; } .era-feel-happy { color: #66ffff; }
 .era-facts .era-feel-hate { cursor: help; }
 /* The character card: name, portrait beside the facts and meters. */
-.era-character { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 14px; align-items: start; }
+.era-character { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 400px); column-gap: 14px; align-items: start; }
 .era-character > :is(.line, .era-scene) { grid-column: 1 / -1; }
 /* Nobody to show: a placeholder silhouette in the middle of the card, the room's look text under it. */
 .era-character.era-alone { display: flex; flex-direction: column; align-items: stretch; }
@@ -475,8 +460,8 @@ a { color: #8ddaff; }
 .era-place-name { color: #e6f2ff; font-size: 1.3em; letter-spacing: .02em; }
 .era-place-name::before { content: ""; display: inline-block; width: .55em; height: .55em; margin-right: .5em; border: 2px solid #66ffff; border-radius: 50% 50% 50% 0; transform: rotate(-45deg) translateY(-.1em); }
 .era-place-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-left: auto; font-size: .8em; font-weight: normal; }
-/* The portrait sits in the card's bottom-left corner, over the card's padding (10px left, 8px bottom); HOTPATCH_PORTRAIT draws it a little larger. */
-.era-portrait { min-width: 180px; align-self: end; margin: 0 0 -8px -10px; }
+/* Each portrait's effect layers share one cell, with its label below. */
+.era-portrait { min-width: 0; align-self: center; }
 .era-portrait .sprite { height: auto; vertical-align: bottom; }
 /* The picture takes its own height here, so the blank lines the game prints to make room for it are dropped. */
 .era-portrait .sprite-clip:first-child { position: relative; display: block; }
@@ -490,8 +475,10 @@ a { color: #8ddaff; }
    card's gradient; fading the picture by the same amount (its alpha is 35%) gives the intended dimming. */
 .era-portrait .sprite[data-src="時間停止"] { display: none; }
 .era-portrait:has(.sprite[data-src="時間停止"]) .sprite { opacity: .65; }
-.screen.is-active .era-portrait button.choice.is-target .sprite-clip:not(.sprite-hover) { box-shadow: none; }
-.era-character-info { min-width: 0; }
+.era-character-info { min-width: 0; width: 100%; max-width: 400px; align-self: center; }
+@container (max-width: 760px) {
+  .era-character { grid-template-columns: minmax(0, 1fr); row-gap: 10px; }
+}
 .era-character-state { color: #bbb; }
 /* The target's name (SHOW_EQUIP_2) in the card-title blue, unless the game colours it for their mood; species after it. */
 .era-character-state > .line:not(.era-marker) > .text-color-neutral:first-child { color: #8fc8ff; font-weight: bold; }
