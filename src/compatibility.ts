@@ -52,7 +52,7 @@ export function compatibility(game: Game) {
   return {
     scriptFiles: game.scriptFiles, functions, csvTables: game.tables.size, sprites: game.sprites.size,
     instructions, recognizedInstructions: supported,
-    note: "Lexical inventory only. Recognized instruction names do not imply support for every argument, expression, variable, preprocessor feature or reachable game path. No playability percentage is implied.",
+    note: "",
     gaps: [...gaps.values()].sort((a, b) => b.count - a.count || a.feature.localeCompare(b.feature)),
     diagnostics: game.diagnostics.slice(0, 100), diagnosticCount: game.diagnostics.length,
   };

@@ -7,7 +7,7 @@ import { test } from "node:test";
 import { runInNewContext } from "node:vm";
 import { downloadedCatalogGames, GAME_CATALOG, installGame } from "../src/library.js";
 import { createApp } from "../src/server.js";
-import { discoverGames, HOTPATCH_ROOT } from "../src/loader.js";
+import { discoverGames, HOTPATCH_ROOT, loadGame } from "../src/loader.js";
 
 test("library loads and refreshes without the optional starter panel", async () => {
   let tabs: Element[] = [];
@@ -53,6 +53,7 @@ test("library loads and refreshes without the optional starter panel", async () 
           { id: "tw", title: "eraToho The World", genre: "Life simulation", folder: "tw", blurb: "Touhou life simulation." },
           { id: "erauma", title: "EraUma", genre: "Training / story", folder: "erauma", stars: 119, source: "https://gitgud.io/umaera/erauma", repository: "https://gitgud.io/umaera/erauma.git", downloadOnly: true, requirements: "Not playable here." },
           { id: "erablue-resort", title: "erablue_resort", genre: "Management / adventure", folder: "erablue_resort", stars: 57, source: "https://gitgud.io/era-games/erablue_resort" },
+          ...GAME_CATALOG.filter((game) => game.hiddenFromCatalog).map((game) => ({ ...game, id: `hidden-${game.id}` })),
         ],
       };
     },
@@ -65,6 +66,9 @@ test("library loads and refreshes without the optional starter panel", async () 
   assert.equal(nodes.get("#game-grid")!.children.length, 1);
   tabs[1]!.listeners.get("click")!();
   const catalogText = (node: Element): string => node.textContent + node.children.map(catalogText).join("");
+  assert.deepEqual(nodes.get("#game-grid")!.children.map((card) => card.children[1]!.children[1]!.textContent),
+    ["EraUma", "erablue_resort", "eraToho The World"]);
+  assert.match(nodes.get("#catalog-note")!.textContent, /^2 popular era-game repositories/);
   assert.match(catalogText(nodes.get("#game-grid")!), /Download source/);
   assert.match(catalogText(nodes.get("#game-grid")!), /GAMES\/.downloads\/erauma/);
   assert.doesNotMatch(catalogText(nodes.get("#game-grid")!), /Compatibility:|full gameplay is not yet supported|through the protagonist-name prompt/);
@@ -90,6 +94,9 @@ test("library loads and refreshes without the optional starter panel", async () 
 test("catalog has unique ids and verified group blurbs and restricts clone sources", () => {
   assert.equal(new Set(GAME_CATALOG.map((game) => game.id)).size, GAME_CATALOG.length);
   assert.equal(GAME_CATALOG.length, 13);
+  assert.deepEqual(GAME_CATALOG.filter((game) => game.hiddenFromCatalog).map((game) => game.id),
+    ["erauma", "eratw-sub-modding", "eramegaten"]);
+  assert.equal(GAME_CATALOG.filter((game) => !game.hiddenFromCatalog).length, 10);
   const popular = GAME_CATALOG.filter((game) => game.stars !== undefined);
   assert.equal(popular.length, 10);
   assert.deepEqual(popular.map((game) => game.stars), [119, 91, 87, 65, 58, 57, 32, 27, 24, 17]);
@@ -141,10 +148,12 @@ test("installation publishes a complete game, preserves existing folders, and cl
       await mkdir(path.join(destination, "ERB"), { recursive: true });
       await mkdir(path.join(destination, "CSV"));
       await writeFile(path.join(destination, "ERB", "start.erb"), "@SYSTEM_TITLE\nPRINTL Installed\nINPUT");
+      await writeFile(path.join(destination, "CSV", "VariableSize.csv"), "FLAG,\t19000,\t; saved flags\nRESULTS,7000,\nSAVESTR,6200,");
     };
     await installGame(game, games, clone);
     const erb = path.join(games, game.folder, "ERB", "start.erb");
     assert.match(await readFile(erb, "utf8"), /Installed/);
+    assert.deepEqual((await loadGame(path.join(games, game.folder))).variableSizes.get("FLAG"), [19000]);
     await assert.rejects(installGame(game, games, clone), /already exists/);
     assert.equal(attempts, 1);
     assert.match(await readFile(erb, "utf8"), /Installed/);

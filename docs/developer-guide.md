@@ -124,6 +124,9 @@ downloaded with its Git submodules into `GAMES/.downloads/erauma` for source ins
 era-electron engine and is not added as a playable game. Other known engine
 requirements are noted on the cards. The catalog is bundled locally; browsing
 it makes no requests to GitGud.
+EraUma, eraTW Sub-modding, and eraMegaten are hidden from **Not installed**,
+including its count. Their metadata remains available for existing installations
+and downloads; local game discovery and the **Installed** tab are unchanged.
 
 When TW is absent, **Install TW** is available directly on the home screen.
 One click downloads the
@@ -578,8 +581,10 @@ declarations and the expression evaluator. No single routine dominates.
   Declarations initialize lazily on access. A subset of built-in arrays is
   available; the full Emuera variable catalog is not implemented.
 - CSV name-to-index mappings and `*NAME` tables, plus basic GameBase metadata.
-  Basic built-in array sizes come from `VariableSize.csv`; `-1` disabled arrays
-  are not accessible. This game's `proto` version marker maps to the unversioned
+  Basic built-in array sizes come from `VariableSize.csv`; trailing empty CSV
+  fields (including before comments) are ignored, but missing or invalid
+  dimensions are rejected. `-1` disabled arrays are not accessible.
+  This game's `proto` version marker maps to the unversioned
   numeric version `0`, allowing its ERB version formatter to run. Other
   non-numeric version markers still fail explicitly.
   Character CSV templates are instantiated by `ADDCHARA`, including initial
@@ -608,6 +613,17 @@ declarations and the expression evaluator. No single routine dominates.
   `SUMCARRAY`); value-filling and ranged `VARSET`; `__INT_MAX__`/`__INT_MIN__`.
 - String instructions (`STRLEN*`, `STRLENS*`, `SUBSTRING*`, `STRFIND*`,
   `STRCOUNT`) store into `RESULT`/`RESULTS`; `TOFULL`/`TOHALF`.
+- `RETURNFORM` formats its argument, then evaluates the resulting comma-separated
+  integer expressions into `RESULT` before returning. `BARSTR(value, max, length)`
+  returns the same clamped bar as the `BARSTR` statement writes to `RESULTS`.
+  `SAVENOS [destination]` writes the configured save-slot count (default 20)
+  to the destination or `RESULT`; `SAVENOS()` returns that count.
+  `PUTFORM` appends formatted text to the writable, unsaved `SAVEDATA_TEXT`
+  string, which the default autosave clears before calling `SAVEINFO`.
+  `SORTCHARA [variable[, FORWARD|BACK]]` stably sorts character data by the
+  chosen element (default `NO`), keeping `MASTER` in place and remapping
+  `TARGET`/`ASSI`. These features cover eraAS's current lexical compatibility
+  gaps; its new-game, autosave and manual-save flow has a regression test.
 - `SPLIT` (optional count variable, default `RESULT`; truncates to the array),
   `REPLACE`, `STRLENS`, `HTML_TOPLAINTEXT`, and `HTML_POPPRINTINGSTR` support
   the game's tip-wrapping helper. HTML-to-text parsing uses parse5; popped print

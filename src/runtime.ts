@@ -218,7 +218,7 @@ const KNOWN_COLORS: Record<string, string> = Object.fromEntries(Object.entries({
   Violet: "ee82ee", Wheat: "f5deb3", White: "ffffff", WhiteSmoke: "f5f5f5", Yellow: "ffff00", YellowGreen: "9acd32",
 }).map(([name, hex]) => [key(name), `#${hex}`]));
 const BUILTIN_ARITIES: Record<string, [number, number]> = {
-    ABS: [1, 1], MIN: [1, 1000], MAX: [1, 1000], LIMIT: [3, 3],
+    ABS: [1, 1], MIN: [1, 1000], MAX: [1, 1000], LIMIT: [3, 3], BARSTR: [3, 3], SAVENOS: [0, 0],
     TOSTR: [1, 2], MONEYSTR: [1, 2], TOINT: [1, 1], STRLENU: [1, 1], MAXWIDTH: [0, 0],
     GETCOLOR: [0, 0], GETSTYLE: [0, 0], GETCONFIG: [1, 1], GETCONFIGS: [1, 1], GETMETH: [1, 10000], GETMETHS: [1, 10000], POWER: [2, 2], HTML_STRINGLEN: [1, 2], EXISTVAR: [1, 1], GETVAR: [1, 1], GETVARS: [1, 1], VARSIZE: [1, 2],
     MAP_EXIST: [1, 1], MAP_SIZE: [1, 1], MAP_HAS: [2, 2], MAP_GET: [2, 2],
@@ -411,7 +411,6 @@ export class Runtime {
   private userSkip = false;
   /** Counts waits and inputs so EVENTCOMEND can tell whether it already waited. */
   private waits = 0;
-  private saveInfo = "";
   /** G canvases (GCREATE) as display lists the browser paints; see Picture. */
   private graphics = new Map<bigint, Canvas>();
   /** SPRITECREATE sprites reference their G by id, live like Emuera's SpriteG; SPRITEANIMECREATE sprites have no graphics. */
@@ -444,6 +443,7 @@ export class Runtime {
     this.globals.defineCharacter("DOWNBASE", false, game.variableSizes.get("BASE") ?? [100]);
     for (const name of ["CUP", "CDOWN"]) this.globals.defineCharacter(name, false, game.variableSizes.get("PALAM") ?? [200]);
     this.globals.define("TSTR", true, game.variableSizes.get("TSTR") ?? [100]);
+    this.globals.define("SAVEDATA_TEXT", true, [1]);
     ["STR", "SAVESTR", "GLOBALS", "RESULTS", "WINDOW_TITLE", "GAMEBASE_TITLE", "GAMEBASE_INFO", "GAMEBASE_YEAR", "GAMEBASE_AUTHOR"].forEach((name) => this.globals.define(name, true, game.variableSizes.get(name) ?? [name === "STR" ? 20000 : 1000]));
     for (const name of ["GAMEBASE_VERSION", "GAMEBASE_CODE", "GAMEBASE_ALLOWVERSION", "GAMEBASE_DEFAULTCHARA", "GAMEBASE_NOITEM", "CHARANUM"]) this.globals.define(name);
     const base = new Map([...(game.tables.get("GAMEBASE")?.values() ?? [])].map((row) => [row[0], row[1] ?? ""]));
@@ -870,12 +870,12 @@ export class Runtime {
   }
   private *autosave(): Generator<Yield, void, string> {
     if (yield* this.system("SYSTEM_AUTOSAVE", false, false)) return;
-    this.saveInfo = "";
+    this.globals.set("SAVEDATA_TEXT", [], "", this.context(this.globals));
     yield* this.system("SAVEINFO", false, false);
     const now = new Date();
     const pad = (n: number): string => String(n).padStart(2, "0");
     const stamp = `${now.getFullYear()}/${pad(now.getMonth() + 1)}/${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
-    this.saveGame(99n, `${stamp} ${this.saveInfo}`.trimEnd());
+    this.saveGame(99n, `${stamp} ${text(this.globals.get("SAVEDATA_TEXT", [], this.context(this.globals)))}`.trimEnd());
   }
   private *afterLoad(): Generator<Yield, void, string> {
     yield* this.system("SYSTEM_LOADEND", false);
@@ -1342,6 +1342,41 @@ export class Runtime {
     if (!template) throw new EraError(`Unknown character template: ${number}`);
     return template;
   }
+  private sortCharacters(args: string, frame: Frame): void {
+    const parts = this.arguments(args);
+    const direction = key(parts[1]?.trim() ?? "FORWARD");
+    if (parts.length > 2 || !["FORWARD", "BACK"].includes(direction))
+      throw new EraError("SORTCHARA expects character variable[, FORWARD or BACK]");
+    const reference = this.parse(parts[0] || "NO");
+    if (reference.kind !== "variable" || !frame.variables.isCharacter(reference.name, frame.context))
+      throw new EraError("SORTCHARA requires a character variable");
+    const count = this.globals.characterCount();
+    if (count <= 1) return;
+    const rank = frame.variables.characterRank(reference.name, frame.context);
+    const indices = reference.indices.length > rank ? reference.indices.slice(1) : [...reference.indices];
+    while (indices.length < rank) indices.push(literal(0n));
+    const values = frame.variables.characterValues(reference.name, indices, frame.context);
+    const master = Number(this.number("MASTER"));
+    const order = Array.from({ length: count }, (_, i) => i).filter((i) => i !== master);
+    order.sort((a, b) => {
+      const left = values[a]!, right = values[b]!;
+      const comparison = left < right ? -1 : left > right ? 1 : 0;
+      return direction === "BACK" ? -comparison : comparison;
+    });
+    if (master >= 0 && master < count) order.splice(master, 0, master);
+    for (const name of ["TARGET", "ASSI"]) {
+      const old = Number(this.number(name));
+      if (old >= 0 && old < count) this.setNumber(name, BigInt(order.indexOf(old)));
+    }
+    this.globals.rearrangeCharacters(count, (i) => order[i]!);
+  }
+  private bar(value: bigint, maximum: bigint, length: bigint, op = "BARSTR"): string {
+    if (maximum <= 0n) throw new EraError(`${op} maximum must be positive`);
+    if (length <= 0n || length >= 100n) throw new EraError(`${op} length must be between 1 and 99`);
+    let filled = value * length / maximum;
+    filled = filled < 0n ? 0n : filled > length ? length : filled;
+    return `[${"*".repeat(Number(filled))}${".".repeat(Number(length - filled))}]`;
+  }
   private characterNumber(source: string, file: string): bigint {
     // Emuera reads a leading integer from character CSV values; a missing value
     // means 1 for every numeric field, not just TALENT. Trailing notes are allowed.
@@ -1648,6 +1683,8 @@ export class Runtime {
         if (arity && (args.length < arity[0] || args.length > arity[1]))
           throw new EraError(`Invalid number of arguments for ${name}`);
         switch (name) {
+          case "BARSTR": return this.bar(argInt(args, name, 0), argInt(args, name, 1), argInt(args, name, 2));
+          case "SAVENOS": return integer(this.configValue("SaveDataNos"));
           case "EXISTCSV": return this.game.characters.has(Number(argInt(args, name, 0))) ? 1n : 0n;
           case "ISSKIP": return this.skipDisplay ? 1n : 0n;
           case "GETPALAMLV": case "GETEXPLV": {
@@ -2897,6 +2934,9 @@ export class Runtime {
           case "DELCHARA": case "DELALLCHARA": case "COPYCHARA": case "ADDCOPYCHARA": case "SWAPCHARA": case "PICKUPCHARA":
             this.characterOperation(op, op === "DELALLCHARA" ? [] : this.arguments(args).map((part) => Number(num(part))), frame.context);
             break;
+          case "SORTCHARA":
+            this.sortCharacters(args, frame);
+            break;
           case "BEGIN": {
             const state = key(args.trim());
             if (!BEGIN_STATES.has(state)) throw new EraError(`BEGINのキーワード"${args.trim()}"は未定義です`);
@@ -2997,8 +3037,11 @@ export class Runtime {
             this.resetStain(Number(character));
             break;
           }
+          case "SAVENOS":
+            this.assign(frame, this.parse(args.trim() || "RESULT"), integer(this.configValue("SaveDataNos")));
+            break;
           case "PUTFORM":
-            this.saveInfo += this.formatted(args, frame);
+            this.globals.set("SAVEDATA_TEXT", [], text(this.globals.get("SAVEDATA_TEXT", [], frame.context)) + this.formatted(args, frame), frame.context);
             break;
           case "CALLF": case "TRYCALLF": {
             const call = this.callTarget(args);
@@ -3222,9 +3265,12 @@ export class Runtime {
             }
             next = destination; break;
           }
-          case "RETURN":
-            if (args) this.arguments(args).map(ev).forEach((value, i) => this.globals.set("RESULT", [literal(BigInt(i))], value, frame.context));
+          case "RETURN": case "RETURNFORM": {
+            const source = op === "RETURNFORM" ? this.formatted(args, frame) : args;
+            if (source.trim()) this.arguments(source).map(ev).forEach((value, i) => this.globals.set("RESULT", [literal(BigInt(i))], value, frame.context));
+            else if (op === "RETURNFORM") this.globals.set("RESULT", [], 0n, frame.context);
             return;
+          }
           case "VARSET": {
             const parts = this.arguments(args);
             const reference = this.parse(parts[0] ?? "");
@@ -3485,11 +3531,7 @@ export class Runtime {
             const parts = this.arguments(args);
             if (parts.length !== 3) throw new EraError(`${op} expects value, maximum, length`);
             const [value, maximum, length] = parts.map(num) as [bigint, bigint, bigint];
-            if (maximum <= 0n) throw new EraError(`${op} maximum must be positive`);
-            if (length <= 0n || length >= 100n) throw new EraError(`${op} length must be between 1 and 99`);
-            let filled = value * length / maximum;
-            filled = filled < 0n ? 0n : filled > length ? length : filled;
-            const bar = `[${"*".repeat(Number(filled))}${".".repeat(Number(length - filled))}]`;
+            const bar = this.bar(value, maximum, length, op);
             if (op === "BARSTR") this.globals.set("RESULTS", [], bar, frame.context);
             else yield this.emit("text", bar, op === "BARL");
             break;

@@ -412,7 +412,9 @@ export async function loadGame(root = GAME_ROOT, options: { debug?: boolean } = 
     }
     if (name === "VARIABLESIZE") {
       for (const row of rows) {
-        const dimensions = row.slice(1).map(Number);
+        const sizes = row.slice(1);
+        while (sizes.at(-1) === "") sizes.pop();
+        const dimensions = sizes.map(Number);
         if (dimensions.length && dimensions.every((n) => n === -1)) {
           game.variableSizes.set(key(row[0]!), []);
           continue;

@@ -16,6 +16,7 @@ export interface CatalogGame {
   stars?: number;
   requirements?: string;
   downloadOnly?: boolean;
+  hiddenFromCatalog?: boolean;
   submodules?: boolean;
   archive?: string;
   repository?: string;
@@ -46,7 +47,7 @@ export const GAME_CATALOG: readonly CatalogGame[] = [
     blurb: "Become a trainer and build your own story in a world inspired by Uma Musume and the history of horse racing.",
     source: "https://gitgud.io/umaera/erauma", repository: "https://gitgud.io/umaera/erauma.git",
     requirements: "Uses its own era-electron engine and is not playable in this interpreter. Downloaded for source inspection only.",
-    downloadOnly: true, submodules: true,
+    downloadOnly: true, submodules: true, hiddenFromCatalog: true,
   },
   {
     id: "pops-tw", title: "Pops TW", genre: "Life simulation", folder: "pops-tw", stars: 91, monogram: "PT",
@@ -55,6 +56,7 @@ export const GAME_CATALOG: readonly CatalogGame[] = [
   },
   {
     id: "eratw-sub-modding", title: "eraTW Sub-modding", genre: "Life simulation / Chinese", folder: "eratw-sub-modding", stars: 87, monogram: "SM",
+    hiddenFromCatalog: true,
     blurb: "A Chinese-language TW variant based on version 4.881, combining expanded content, patches, and new features.",
     source: "https://gitgud.io/era-games-zh/touhou/eratw-sub-modding", repository: "https://gitgud.io/era-games-zh/touhou/eratw-sub-modding.git",
   },
@@ -92,6 +94,7 @@ export const GAME_CATALOG: readonly CatalogGame[] = [
   },
   {
     id: "eramegaten", title: "eraMegaten", genre: "RPG / Japanese", folder: "eramegaten_p", stars: 17, monogram: "MT",
+    hiddenFromCatalog: true,
     blurb: "A Megami Tensei-inspired fan RPG with demons, character roles, and exploration, built on the ShinEraTensei branch.",
     source: "https://gitgud.io/bazzile/eramegaten_p", repository: "https://gitgud.io/bazzile/eramegaten_p.git",
     requirements: "Uses .NET Emuera extensions. Compatibility here is unverified.",

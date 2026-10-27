@@ -251,6 +251,30 @@ PRINTFORML {MAP_EXIST("test")}`)).start();
   assert.equal(result.status, "halted", JSON.stringify(result.error));
   assert.equal(printed(result), "1 1 1 updated\n0");
 });
+test("VariableSize CSV ignores trailing empty fields without accepting invalid dimensions", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "era-variable-size-"));
+  try {
+    await mkdir(path.join(root, "ERB"));
+    await mkdir(path.join(root, "CSV"));
+    await writeFile(path.join(root, "ERB", "title.erb"), `@SYSTEM_TITLE
+FLAG:18999 = 42
+PRINTFORML {VARSIZE("FLAG")} {FLAG:18999} {VARSIZE("RESULTS")} {VARSIZE("SAVESTR")}`);
+    const file = path.join(root, "CSV", "VariableSize.csv");
+    await writeFile(file, "FLAG,\t19000,\t; saved flags\nRESULTS,7000,,\nSAVESTR,6200,\t\nA,2,3,\nB,-1,\nC,-1,-1,,\nD,100");
+    const loaded = await loadGame(root);
+    for (const [name, dimensions] of [
+      ["FLAG", [19000]], ["RESULTS", [7000]], ["SAVESTR", [6200]],
+      ["A", [2, 3]], ["B", []], ["C", []], ["D", [100]],
+    ] as const) assert.deepEqual(loaded.variableSizes.get(name), dimensions);
+    const result = new Runtime(loaded).start();
+    assert.equal(result.status, "halted", JSON.stringify(result.error));
+    assert.equal(printed(result), "19000 42 7000 6200");
+    for (const row of ["FLAG", "FLAG,,,", "FLAG,0,", "FLAG,1000001,", "FLAG,1.5,", "FLAG,nope,", "FLAG,,2,", "FLAG,2,,3,", "FLAG,-1,2,"]) {
+      await writeFile(file, row);
+      await assert.rejects(loadGame(root), /Invalid variable size/, row);
+    }
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
 test("CSV lookup references, declared variable sizes and GETVARS", () => {
   const data = game(`@SYSTEM_TITLE
 PRINTFORML {GETNUM(TALENT, "example")} {GETNUM(TALENT, "missing")} {VARSIZE("LABELS")} %GETVARS("LABELS:1")%

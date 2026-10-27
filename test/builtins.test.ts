@@ -582,6 +582,177 @@ PRINTFORML {CFLAG:0:3}{CFLAG:1:3}{CFLAG:2:3} {CFLAG:0:4}{CFLAG:1:4}{CFLAG:2:4}`,
   assert.match(blocked.error!.message, /SKIPDISP/);
 });
 
+test("RETURNFORM formats and evaluates numeric return expressions on every call", () => {
+  for (const jit of [false, true]) {
+    const result = runtime(`@SYSTEM_TITLE
+REPEAT 4
+CALL VALUES(COUNT)
+PRINTFORML {RESULT}:{RESULT:1}
+REND
+CALL EMPTY
+PRINTFORML {RESULT}
+@VALUES(ARG)
+RETURNFORM ARG + {ARG}, {ARG + 10}
+THROW unreachable
+@EMPTY
+RETURNFORM`, undefined, { jit }).start();
+    assert.deepEqual(texts(result), ["0:10", "2:11", "4:12", "6:13", "0"]);
+    assert.match(runtime('@SYSTEM_TITLE\nRETURNFORM "wrong"', undefined, { jit }).start().error!.message, /type mismatch|integer/);
+  }
+});
+
+test("BARSTR expressions and statements share clamping, formatting and validation", () => {
+  for (const jit of [false, true]) {
+    const result = runtime(`@SYSTEM_TITLE
+RESULTS = untouched
+PRINTSL BARSTR(3, 10, 5)
+PRINTSL RESULTS
+BARSTR 3, 10, 5
+PRINTSL RESULTS
+PRINTFORML %BARSTR(-1, 10, 3)% %BARSTR(20, 10, 4)%
+PRINTFORML %BARSTR(0, 1, 1)% %BARSTR(1, 1, 99)%`, undefined, { jit }).start();
+    assert.deepEqual(texts(result), ["[*....]", "untouched", "[*....]", "[...] [****]", `[.] [${"*".repeat(99)}]`]);
+    for (const expression of ["BARSTR(1, 0, 5)", "BARSTR(1, -1, 5)", "BARSTR(1, 2, 0)", "BARSTR(1, 2, 100)", "BARSTR(1, 2)", 'BARSTR("x", 2, 5)'])
+      assert.equal(runtime(`@SYSTEM_TITLE\nPRINTSL ${expression}`, undefined, { jit }).start().status, "error", expression);
+  }
+});
+
+test("SAVENOS writes the configured slot count to a destination or RESULT", () => {
+  for (const jit of [false, true]) {
+    const source = `@SYSTEM_TITLE
+SAVENOS LOCAL:2
+PRINTFORML {LOCAL:2} {RESULT}
+SAVENOS
+PRINTFORML {RESULT} {SAVENOS()}`;
+    assert.deepEqual(texts(runtime(source, undefined, { jit }).start()), ["20 0", "20 20"]);
+    assert.deepEqual(texts(runtime(source, (game) => game.config.set("表示するセーブデータ数", "40"), { jit }).start()), ["40 0", "40 40"]);
+    for (const destination of ["1", "RESULTS", "LOCAL, 1"])
+      assert.equal(runtime(`@SYSTEM_TITLE\nSAVENOS ${destination}`, undefined, { jit }).start().status, "error", destination);
+  }
+});
+
+test("PUTFORM appends to writable unsaved SAVEDATA_TEXT and saves its description", async () => {
+  const { MemorySaveStore } = await import("../src/storage.js");
+  const { readNativeSave } = await import("../src/save-format.js");
+  for (const jit of [false, true]) {
+    const saves = new MemorySaveStore();
+    const result = runtime(`@SYSTEM_TITLE
+PRINTFORML [%SAVEDATA_TEXT%]
+SAVEDATA_TEXT = prefix:
+PUTFORM  Day {7}${" "}
+PUTFORM (%"night"%); notes
+PRINTSL SAVEDATA_TEXT
+SAVEDATA 3, SAVEDATA_TEXT
+CHKDATA 3
+PRINTSL RESULTS
+RESETDATA
+PRINTFORML [%SAVEDATA_TEXT%]
+PUTFORM fresh
+PRINTSL SAVEDATA_TEXT`, undefined, { jit, saves }).start();
+    assert.deepEqual(texts(result), ["[]", "prefix: Day 7 (night); notes", "prefix: Day 7 (night); notes", "[]", "fresh"]);
+    const saved = saves.read("save03.sav");
+    assert.ok(Buffer.isBuffer(saved));
+    const record = readNativeSave(saved);
+    assert.equal(record.text, "prefix: Day 7 (night); notes");
+    assert.equal(record.data.variables.SAVEDATA_TEXT, undefined);
+  }
+});
+
+test("SORTCHARA is stable, fixes MASTER in place, remaps TARGET/ASSI and moves all character data", () => {
+  for (const jit of [false, true]) {
+    const result = runtime(`@SYSTEM_TITLE
+ADDVOIDCHARA
+ADDVOIDCHARA
+ADDVOIDCHARA
+ADDVOIDCHARA
+MASTER = 1
+TARGET = 0
+ASSI = 3
+NAME:0 = z
+NAME:1 = master
+NAME:2 = a
+NAME:3 = b
+CFLAG:0:2 = 9
+CFLAG:1:2 = -1
+CFLAG:2:2 = 3
+CFLAG:3:2 = 3
+CSTR:0:0 = zero
+CSTR:1:0 = one
+CSTR:2:0 = two
+CSTR:3:0 = three
+SORTCHARA CFLAG:0:ORDER
+CALL SHOW
+SORTCHARA CFLAG:ORDER, BACK
+CALL SHOW
+SORTCHARA NAME
+CALL SHOW
+MASTER = -1
+SORTCHARA NAME, BACK
+CALL SHOW
+@SHOW
+PRINTFORML %NAME:0%,%NAME:1%,%NAME:2%,%NAME:3% {MASTER}:{TARGET}:{ASSI}
+PRINTFORML %CSTR:0:0%,%CSTR:1:0%,%CSTR:2:0%,%CSTR:3:0%`, (game) => {
+      game.names.set("CFLAG", new Map([["ORDER", 2]]));
+    }, { jit }).start();
+    assert.deepEqual(texts(result), [
+      "a,master,b,z 1:3:2", "two,one,three,zero",
+      "z,master,a,b 1:0:3", "zero,one,two,three",
+      "a,master,b,z 1:3:2", "two,one,three,zero",
+      "z,master,b,a -1:0:2", "zero,one,three,two",
+    ]);
+    assert.deepEqual(texts(runtime("@SYSTEM_TITLE\nSORTCHARA\nADDVOIDCHARA\nSORTCHARA\nPRINTL ok", undefined, { jit }).start()), ["ok"]);
+    for (const args of ["FLAG", "CFLAG, INVALID", "CFLAG, FORWARD, 1", "1", "CFLAG:10000"]) {
+      const invalid = runtime(`@SYSTEM_TITLE\nADDVOIDCHARA\nADDVOIDCHARA\nSORTCHARA ${args}`, undefined, { jit }).start();
+      assert.equal(invalid.status, "error", args);
+    }
+  }
+});
+
+test("SORTCHARA defaults to NO and resolves multidimensional sort indices once", () => {
+  for (const jit of [false, true]) {
+    const result = runtime(`@SYSTEM_TITLE
+ADDVOIDCHARA
+ADDVOIDCHARA
+ADDVOIDCHARA
+MASTER = -1
+NO:0 = 30
+NO:1 = 10
+NO:2 = 20
+GRID:0:1:0 = 1
+GRID:1:1:0 = 3
+GRID:2:1:0 = 2
+SORTCHARA
+PRINTFORML {NO:0},{NO:1},{NO:2}
+LOCAL = 0
+SORTCHARA GRID:0:1:(LOCAL++)
+PRINTFORML {NO:0},{NO:1},{NO:2} {LOCAL}`, (game) => {
+      indexScript(game, "#DIM CHARADATA GRID, 2, 2", "grid.ERH", true);
+    }, { jit }).start();
+    assert.deepEqual(texts(result), ["10,20,30", "30,20,10 1"]);
+  }
+});
+
+test("default autosaving clears SAVEDATA_TEXT before SAVEINFO builds each description", async () => {
+  const { MemorySaveStore } = await import("../src/storage.js");
+  const { readNativeSave } = await import("../src/save-format.js");
+  for (const jit of [false, true]) {
+    const saves = new MemorySaveStore();
+    const result = runtime(`@SYSTEM_TITLE
+SAVEDATA_TEXT = stale
+BEGIN SHOP
+@SAVEINFO
+PUTFORM fresh {7}
+@SHOW_SHOP
+PRINTSL SAVEDATA_TEXT
+@USERSHOP
+QUIT`, undefined, { jit, saves }).start();
+    assert.deepEqual(texts(result), ["fresh 7"]);
+    const saved = saves.read("save99.sav");
+    assert.ok(Buffer.isBuffer(saved));
+    assert.match(readNativeSave(saved).text, /^\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2} fresh 7$/);
+  }
+});
+
 test("SAVEDATA, CHKDATA and LOADDATA round-trip game data and resume in the shop", async () => {
   const { MemorySaveStore } = await import("../src/storage.js");
   const saves = new MemorySaveStore();

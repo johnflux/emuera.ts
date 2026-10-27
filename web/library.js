@@ -27,7 +27,8 @@ export function createLibrary({ api, launch, gamesChanged, confirmAction }) {
   function render() {
     const installed = new Set(data.installed.map((game) => game.catalogId));
     const downloaded = new Set(data.downloaded ?? []);
-    const available = data.catalog.filter((game) => !installed.has(game.id)).sort((a, b) => (b.stars ?? -1) - (a.stars ?? -1));
+    const catalog = data.catalog.filter((game) => !game.hiddenFromCatalog);
+    const available = catalog.filter((game) => !installed.has(game.id)).sort((a, b) => (b.stars ?? -1) - (a.stars ?? -1));
     const tw = available.find((game) => game.id === "tw");
     if (starter) {
       starter.hidden = !tw;
@@ -44,7 +45,7 @@ export function createLibrary({ api, launch, gamesChanged, confirmAction }) {
       starter.append(copy, button);
     }
     catalogNote.hidden = selected === 0;
-    catalogNote.textContent = `10 popular era-game repositories, ranked by GitGud stars (${data.catalogUpdated ?? "snapshot"}), plus TW, K, and Rance. Stars are not a compatibility rating.`;
+    catalogNote.textContent = `${catalog.filter((game) => game.stars !== undefined).length} popular era-game repositories, ranked by GitGud stars (${data.catalogUpdated ?? "snapshot"}), plus TW, K, and Rance. Stars are not a compatibility rating.`;
     document.querySelector("#installed-count").textContent = data.installed.length;
     document.querySelector("#catalog-count").textContent = available.length;
     grid.replaceChildren();

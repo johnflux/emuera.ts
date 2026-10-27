@@ -63,7 +63,7 @@ export function symbolTable(name: string): string {
 export type GlobalData = Record<string, Record<string, string>>;
 export interface SaveData { characters: number; variables: GlobalData }
 // Built-ins that Emuera does not write to save files (STR comes from Str.csv; CHARANUM is derived).
-const UNSAVED = new Set(["STR", "RESULTS", "GLOBAL", "GLOBALS", "WINDOW_TITLE", "CHARANUM", "LOCAL", "LOCALS", "ARG", "ARGS"]);
+const UNSAVED = new Set(["STR", "RESULTS", "SAVEDATA_TEXT", "GLOBAL", "GLOBALS", "WINDOW_TITLE", "CHARANUM", "LOCAL", "LOCALS", "ARG", "ARGS"]);
 export interface Resolved {
   name: string;
   variable: Variable;
@@ -191,6 +191,15 @@ export class Variables {
   /** Number of indices after the character index (0 for scalars such as NAME). */
   characterRank(name: string, context: EvaluationContext): number {
     return this.resolve(key(name), context).dimensions.length - 1;
+  }
+  /** One element across all characters, resolving its indices once before sorting. */
+  characterValues(name: string, indices: Expr[], context: EvaluationContext): Value[] {
+    const variable = this.resolve(key(name), context);
+    if (!variable.character) throw new EraError(`Expected a character variable: ${name}`);
+    const index = this.address(name, [{ kind: "literal", value: 0n }, ...indices], context);
+    const stride = strides(variable)[0]!;
+    return Array.from({ length: variable.dimensions[0]! }, (_, i) =>
+      variable.values.get(index + i * stride) ?? (variable.string ? "" : 0n));
   }
   dimensions(name: string, context: EvaluationContext): number[] {
     name = key(name);

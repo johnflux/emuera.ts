@@ -91,7 +91,7 @@ export const CHARACTER_FIELDS: ReadonlyMap<string, string> = new Map([
 export const characterField = (name: string | undefined): string | undefined => name === undefined ? undefined : CHARACTER_FIELDS.get(name.toUpperCase());
 export const isCharacterNumberField = (name: string | undefined): boolean => name === "番号" || name?.toUpperCase() === "NO";
 export const EVENT_FUNCTIONS: ReadonlySet<string> = new Set(["EVENTFIRST", "EVENTTRAIN", "EVENTSHOP", "EVENTBUY", "EVENTCOM", "EVENTTURNEND", "EVENTCOMEND", "EVENTEND", "EVENTLOAD"]);
-export const LITERAL_TEXT_INSTRUCTION = /^(?:(?:DEBUG)?PRINT(?:SINGLE)?(?:FORM)?(?:C|LC)?[KD]?[LW]?|PRINTPLAIN(?:FORM)?|DATA(?:FORM)?)$/i;
+export const LITERAL_TEXT_INSTRUCTION = /^(?:(?:DEBUG)?PRINT(?:SINGLE)?(?:FORM)?(?:C|LC)?[KD]?[LW]?|PRINTPLAIN(?:FORM)?|DATA(?:FORM)?|PUTFORM|RETURNFORM)$/i;
 /**
  * Emuera whitespace is space and tab; the full-width space U+3000 counts only when the
  * config 全角スペースをホワイトスペースに含める is enabled (Emuera's default).
