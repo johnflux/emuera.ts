@@ -230,19 +230,24 @@ SIF REFRESH_STATUS() ;Custom code, cycle again if nRefreshStatus is set to 1.
 @HOTPATCH_PLAYER_KIND()
 #FUNCTIONS
 #DIMS DYNAMIC sRace
-#DIMS DYNAMIC sSize
 sRace '= GET_CHARA_TALENT_BY_CATEGORY_TR(MASTER, "RACE")
 sRace '= REPLACE(sRace, "＠$", "")
 sRace '= REPLACE(sRace, "＠", " · ")
-sSize '= GET_TALENTNAME_TR(GETNUM(TALENT, "体型"), TALENT:MASTER:体型)
+SIF STRLENS(sRace)
+	sRace '= @"<span class='era-player-race'>%HTML_ESCAPE(sRace)%</span><span class='era-sep'> · </span>"
+RETURNF @"<div class='era-player-kind'>%sRace%%HOTPATCH_BODY_SIZE(MASTER)%</div>"
+
+@HOTPATCH_BODY_SIZE(nChara)
+#FUNCTIONS
+#DIM nChara
+#DIMS DYNAMIC sSize
+sSize '= GET_TALENTNAME_TR(GETNUM(TALENT, "体型"), TALENT:nChara:体型)
 IF STRLENS(sSize)
 	sSize '= @"<span class='era-size era-unusual' title='Body size; a mallet can change it'>%HTML_ESCAPE(sSize)%</span>"
 ELSE
 	sSize '= "<span class='era-size' title='Body size; a mallet can change it'>Normal size</span>"
 ENDIF
-SIF STRLENS(sRace)
-	sRace '= @"<span class='era-player-race'>%HTML_ESCAPE(sRace)%</span><span class='era-sep'> · </span>"
-RETURNF @"<div class='era-player-kind'>%sRace%%sSize%</div>"
+RETURNF sSize
 
 @HOTPATCH_TARGET_DATAGROUP
 IF TARGET <= 0
@@ -416,10 +421,9 @@ CALL SHOW_EQUIP_2
 ;Species after the name (the game's own race text and description, as in its talent list).
 sHtml '= PRINT_GET_RACE(TARGET)
 IF STRLENS(sHtml)
-	HTML_PRINT @"<span class='era-race' title='%HTML_ESCAPE(RACE_INFO(TARGET))%'>%HTML_ESCAPE(sHtml)%</span>"
-ELSE
-	PRINTL
+	sHtml '= @"<span class='era-race' title='%HTML_ESCAPE(RACE_INFO(TARGET))%'>%HTML_ESCAPE(sHtml)%</span><span class='era-sep'> · </span>"
 ENDIF
+HTML_PRINT @"<div class='era-character-kind'>%sHtml%%HOTPATCH_BODY_SIZE(TARGET)%</div>"
 HTML_PRINT "<era-close>"
 sHtml '= @"<span class='era-fact'><span class='era-fact-label'>Favor</span>%HOTPATCH_RANK(CFLAG:2, "MAX_50000")% {CFLAG:2}</span>"
 sHtml += @"<span class='era-fact'><span class='era-fact-label'>Trust</span>%HOTPATCH_RANK(CFLAG:信頼度, "MAX_20000")% {CFLAG:信頼度}</span>"

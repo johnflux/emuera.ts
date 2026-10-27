@@ -178,6 +178,40 @@ test("main screen hotpatch opens and closes its panel boxes in balance", {
   assert.ok(screens[1]!.some((text) => /era-stopped'[^>]*value='999'|value='999'[^>]*era-stopped/.test(text)), "time stop switches to Resume Time");
 });
 
+test("character info and player panels share body-size labels and highlights", {
+  skip: !existsSync(GAME_ROOT),
+}, async () => {
+  const game = await loadGame();
+  await applyHotpatches(game);
+  for (const size of [0, -5, -2, -1, 1, 2, 5]) {
+    const stub = emptyGame(game.root);
+    indexScript(stub, `@SYSTEM_TITLE
+CALL MAKE_TALENT_MAP
+ADDCHARA 0
+ADDCHARA 1
+MASTER = 0
+TARGET = 1
+nameArray:1:na_Title = ●Race:Human
+TALENT:MASTER:体型 = ${size}
+TALENT:TARGET:体型 = ${size}
+HTML_PRINT HOTPATCH_PLAYER_KIND()
+CALL HOTPATCH_TARGET_SITUATION
+WAIT`, "<info-size-test>");
+    game.routines.set("SYSTEM_TITLE", stub.routines.get("SYSTEM_TITLE")!);
+    const snapshot = new Runtime(game, GAME_INSTRUCTION_LIMIT).start();
+    assert.equal(snapshot.error, null, `${size}: ${JSON.stringify(snapshot.error)}`);
+    const html = snapshot.output.flatMap((item) => item.type === "html" ? [item.text] : []).join("");
+    const sizes = [...html.matchAll(/<span class='era-size(?: era-unusual)?'[^>]*>[^<]+<\/span>/g)].map((match) => match[0]);
+    assert.equal(sizes.length, 2, "player and target both show body size");
+    assert.equal(sizes[0], sizes[1], "both panels use identical size markup");
+    assert.equal(sizes[1]!.includes("era-unusual"), size !== 0);
+    if (!size) assert.match(sizes[1]!, />Normal size</);
+    assert.match(html, /class='era-race'[^>]*>[^<]+<\/span><span class='era-sep'> · <\/span>/);
+    assert.match(html, /<div class='era-character-kind'><span class='era-race'[^>]*>[^<]+<\/span><span class='era-sep'> · <\/span><span class='era-size(?: era-unusual)?'[^>]*>[^<]+<\/span><\/div>/,
+      "race and size share one HTML output row");
+  }
+});
+
 test("character titles fill quiet info panels without hiding relationship or mood tags", {
   skip: !existsSync(GAME_ROOT),
 }, async () => {

@@ -93,7 +93,9 @@ fills the available height and bottom-aligns its occupants.
 The details column is at most 400px wide, with a face
 portrait and the existing character facts, meters and clothing; below 760px it
 sits under the scene. The **Character Info** heading is not a nonfunctional tab.
-The portrait and summary use a top-aligned two-column header; Favor/Trust and
+The portrait and summary use a top-aligned two-column header. Body size appears
+beside the selected character's race, using the same labels and unusual-size
+highlight as the player panel. Favor/Trust and
 Children/Fertility form paired rows, with the meters and clothing below.
 When no relationship, Hate Mark or mood tags, sleep or anger states need the
 space, the existing `nameArray[NO][na_Title]` title appears as a short blurb.

@@ -1,6 +1,7 @@
 @font-face { font-family: "BIZ UD Gothic"; src: url("/fonts/BIZUDGothic-Regular.ttf") format("truetype"); font-weight: 400; font-style: normal; font-display: block; }
 :root { color-scheme: dark; --font-size: 16px; --terminal-font: "BIZ UD Gothic", "MS Gothic", "ＭＳ ゴシック", monospace; --terminal-foreground: #c0c0c0; --terminal-background: #000; --selection-color: #ff0; }
-* { box-sizing: border-box; }
+* { box-sizing: border-box; overscroll-behavior-x: none; }
+html, body { overscroll-behavior-y: none; }
 body { margin: 0; height: 100dvh; display: flex; flex-direction: column; background: #000; color: #fff; font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace; }
 header { flex-shrink: 0; position: relative; z-index: 5; display: flex; align-items: center; gap: 12px; height: 40px; padding: 0 12px 0 16px; border-bottom: 1px solid #2a2a2a; background: linear-gradient(#141414, #0a0a0a); }
 .brand { margin: 0; flex-shrink: 0; display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; letter-spacing: .02em; color: #eee; }
@@ -510,7 +511,7 @@ a { color: #8ddaff; }
 .era-info-face .sprite-clip { position: relative; display: block; }
 .era-info-body .era-character-state { line-height: 1.15; }
 .era-info-body .era-race { margin-left: 0; }
-.era-info-body .era-character-state > .line:not(.era-marker) > :first-child { font-size: 1.15em; }
+.era-info-body .era-character-state > .line:not(.era-marker) > :first-child:not(:has(.era-character-kind)) { font-size: 1.15em; }
 .era-info-body .era-bars { margin: 0; }
 .era-info-body .era-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px 8px; margin: 6px 0 0; font-size: .85em; }
 .era-info-body .era-fact { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: .5ch; }
@@ -522,9 +523,11 @@ a { color: #8ddaff; }
 }
 .era-character-state { color: #bbb; }
 /* The target's name (SHOW_EQUIP_2) in the card-title blue, unless the game colours it for their mood; species after it. */
-.era-character-state > .line:not(.era-marker) > .text-color-neutral:first-child { color: #8fc8ff; font-weight: bold; }
+.era-character-state > .line:not(.era-marker) > .text-color-neutral:first-child:not(:has(.era-character-kind)) { color: #8fc8ff; font-weight: bold; }
 .era-player-kind { margin: -4px 0 6px; color: #8a8a8a; font-size: .8em; }
-.era-player-kind .era-size.era-unusual { color: #ffd27f; }
+.era-character-kind { color: #8a8a8a; font-size: .8em; font-weight: normal; line-height: normal; }
+.era-character-kind .era-race { font-size: inherit; }
+.era-player-kind .era-size.era-unusual, .era-character-state .era-size.era-unusual { color: #ffd27f; }
 .era-race { margin-left: 1ch; color: #8a8a8a; font-size: .8em; font-weight: normal; }
 .era-facts { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 4px 0; }
 .era-fact-label { margin-right: .75ch; color: #8a949c; }
