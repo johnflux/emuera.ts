@@ -43,6 +43,11 @@
       <button id="library-refresh" class="library-refresh">Refresh library</button>
     </div>
     <p id="library-message" class="library-message" role="status">Loading games...</p>
+    <div id="library-progress" class="library-progress" role="status" aria-live="polite" hidden>
+      <span class="library-progress-spinner" aria-hidden="true"></span>
+      <span id="library-progress-text"></span>
+      <span class="library-progress-detail">This can take several minutes. Keep this page open.</span>
+    </div>
     <p id="catalog-note" class="library-note catalog-note" hidden></p>
     <div id="game-grid" class="game-grid" role="tabpanel" aria-labelledby="installed-tab" tabindex="0"></div>
     <footer class="library-footer">

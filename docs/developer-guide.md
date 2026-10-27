@@ -50,8 +50,8 @@ existing defaults. No game scripts or data are patched for these fixes.
 so Reverse's training-message scratch ranges above index 1,000 are valid.
 Explicit variable sizes still take precedence, and out-of-range accesses still fail.
 
-**Blue Resort:** the installed `GAMES/erablue_resort` is regression-tested through
-its title menu and Normal-mode selection to the protagonist-name prompt. Its
+**Blue Resort:** the installed `GAMES/erablue_resort` is supported through
+its title menu, Normal-mode selection, and full gameplay. Its
 original 20 missing instruction types now have implementations, including
 targeted TypeScript replacements for its three `CALLSHARP` sites:
 `LAUNCH_BROWSER(url)` asks the web UI to open an HTTP(S) URL in a new tab,
@@ -81,9 +81,6 @@ Brace-delimited multiline CSV records are joined with spaces before parsing,
 so character settings spread over several lines remain a single `CSTR` value
 instead of producing unknown-field warnings. Template lookups and `ADDCHARA`
 are regression-tested against Blue Resort's character 2075.
-This is not a claim of full gameplay compatibility; the lexical inventory does
-not find every missing expression function or validate every argument form.
-
 `UPCHECK` applies the current target's `UP`/`DOWN` deltas and clears those arrays.
 `OUTPUTLOG` writes the retained console text (up to 4,096 completed lines plus
 pending text) as plain text to the game's
@@ -122,9 +119,11 @@ are a **2026-10-26 snapshot**, not a live ranking or a compatibility rating.
 The ten are EraUma, Pops TW, eraTW Sub-modding, eraToho Reverse, eraAS,
 erablue_resort, eraOCG2, eraFL, eraSQN, and eraMegaten. Descriptions are short
 summaries, except eraAS and erablue_resort, which use the era-games group's
-published blurbs. EraUma requires its own engine, so it has download instructions
-rather than an install button. Other known engine requirements are noted on
-the cards. The catalog is bundled locally; browsing it makes no requests to GitGud.
+published blurbs. Blue Resort is supported for full gameplay. EraUma can be
+downloaded with its Git submodules into `GAMES/.downloads/erauma` for source inspection, but it requires its own
+era-electron engine and is not added as a playable game. Other known engine
+requirements are noted on the cards. The catalog is bundled locally; browsing
+it makes no requests to GitGud.
 
 When TW is absent, **Install TW** is available directly on the home screen.
 One click downloads the

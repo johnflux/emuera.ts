@@ -4,11 +4,14 @@ export function createLibrary({ api, launch, gamesChanged, confirmAction }) {
   const notice = document.querySelector("#library-message");
   const tabs = [...root.querySelectorAll('[role="tab"]')];
   const refreshButton = document.querySelector("#library-refresh");
+  const progress = document.querySelector("#library-progress");
+  const progressText = document.querySelector("#library-progress-text");
   const starter = document.querySelector("#library-starter");
   const catalogNote = document.querySelector("#catalog-note");
-  let data = { installed: [], catalog: [] };
+  let data = { installed: [], downloaded: [], catalog: [] };
   let selected = 0;
   let working = false;
+  let installingGame = null;
 
   function message(text, error = false) {
     notice.textContent = text;
@@ -23,6 +26,7 @@ export function createLibrary({ api, launch, gamesChanged, confirmAction }) {
   }
   function render() {
     const installed = new Set(data.installed.map((game) => game.catalogId));
+    const downloaded = new Set(data.downloaded ?? []);
     const available = data.catalog.filter((game) => !installed.has(game.id)).sort((a, b) => (b.stars ?? -1) - (a.stars ?? -1));
     const tw = available.find((game) => game.id === "tw");
     if (starter) {
@@ -55,16 +59,19 @@ export function createLibrary({ api, launch, gamesChanged, confirmAction }) {
         element("span", "game-card-orbit"));
       const content = element("div", "game-card-content");
       const meta = element("div", "game-card-meta");
-      meta.append(element("span", "", game.genre), element("span", selected === 0 ? "game-ready" : "", selected === 0 ? "Installed" : game.stars !== undefined ? `${game.stars} stars` : "Discover"));
+      meta.append(element("span", "", game.genre), element("span", selected === 0 ? "game-ready" : "", selected === 0 ? "Installed" : downloaded.has(game.id) ? "Downloaded" : game.stars !== undefined ? `${game.stars} stars` : "Discover"));
       const heading = element("h3", "", game.title);
       const blurb = element("p", "game-card-blurb", game.blurb);
       const actions = element("div", "game-card-actions");
-      const button = element("button", "game-primary", selected === 0 ? "Play game" : game.archive ? "Install ZIP" : game.repository ? "Install with Git" : "Find downloads");
-      button.disabled = working;
+      const installing = installingGame === game.id;
+      const button = element("button", "game-primary", installing
+        ? game.downloadOnly || game.archive ? "Downloading..." : "Cloning..."
+        : selected === 0 ? "Play game" : downloaded.has(game.id) ? "Downloaded" : game.downloadOnly ? "Download source" : game.archive ? "Install ZIP" : game.repository ? "Install with Git" : "Find downloads");
+      button.disabled = working || (selected === 1 && downloaded.has(game.id));
       button.setAttribute("aria-label", `${button.textContent}: ${game.title}`);
       if (selected === 0) button.addEventListener("click", () => launch(game.id));
-      else if (game.archive || game.repository) button.addEventListener("click", () => { void install(game); });
-      else {
+      else if (!downloaded.has(game.id) && (game.archive || game.repository)) button.addEventListener("click", () => { void install(game); });
+      else if (!game.archive && !game.repository) {
         const link = element("a", "game-primary", "Find downloads");
         link.href = game.source;
         link.target = "_blank";
@@ -91,6 +98,7 @@ export function createLibrary({ api, launch, gamesChanged, confirmAction }) {
         }
         content.append(element("p", "game-install-note", game.archive
           ? `Downloads and extracts into GAMES/${game.folder}. No Git required.`
+          : game.downloadOnly ? `Downloads the source into GAMES/.downloads/${game.folder}; it will not be added as a playable game.`
           : game.repository ? `Clones into GAMES/${game.folder}. Git required.`
             : game.requirements ? "Use the project's download and engine instructions."
               : `Download and extract into GAMES/${game.folder}, then refresh.`));
@@ -106,6 +114,7 @@ export function createLibrary({ api, launch, gamesChanged, confirmAction }) {
       grid.append(empty);
     }
     refreshButton.disabled = working;
+    progress.hidden = !installingGame;
   }
   function select(index, focus = false) {
     selected = index;
@@ -144,20 +153,32 @@ export function createLibrary({ api, launch, gamesChanged, confirmAction }) {
   }
   async function install(game) {
     if (working) return;
-    if (!game.archive && !await confirmAction(`Install ${game.title}?`,
-      `This downloads third-party game scripts from ${game.source} into GAMES/${game.folder}. Only install games you trust. Existing folders will not be overwritten.`, "Clone game")) return;
+    if (!game.archive && !await confirmAction(game.downloadOnly ? `Download ${game.title} source?` : `Install ${game.title}?`,
+      game.downloadOnly
+        ? `This downloads the third-party source project from ${game.source} into GAMES/.downloads/${game.folder}. It will not be playable here. Only download projects you trust. Existing folders will not be overwritten.`
+        : `This downloads third-party game scripts from ${game.source} into GAMES/${game.folder}. Only install games you trust. Existing folders will not be overwritten.`,
+      game.downloadOnly ? "Download source" : "Clone game")) return;
     working = true;
+    installingGame = game.id;
+    progressText.textContent = game.downloadOnly
+      ? `Downloading ${game.title} source...`
+      : game.archive ? `Downloading and extracting ${game.title}...` : `Cloning ${game.title}...`;
     render();
-    message(`${game.archive ? "Downloading and extracting" : "Cloning"} ${game.title} into GAMES/${game.folder}... This may take several minutes. Keep this page open.`);
+    message(game.downloadOnly
+      ? `Downloading ${game.title} source into GAMES/.downloads/${game.folder}... This may take several minutes. Keep this page open.`
+      : `${game.archive ? "Downloading and extracting" : "Cloning"} ${game.title} into GAMES/${game.folder}... This may take several minutes. Keep this page open.`);
     try {
       await api("/api/library/install", { id: game.id });
-      await gamesChanged();
+      if (!game.downloadOnly) await gamesChanged();
       await load();
-      select(0);
-      message(`${game.title} installed. Select Play game to begin.`);
-      tabs[0].focus();
+      if (game.downloadOnly) message(`${game.title} source downloaded for inspection. It is not playable in this interpreter.`);
+      else {
+        select(0);
+        message(`${game.title} installed. Select Play game to begin.`);
+        tabs[0].focus();
+      }
     } catch (error) { message(`${error.message} Use ${game.archive ? "Download ZIP manually" : "Project page"} to download an archive, extract it into GAMES/, then refresh.`, true); }
-    finally { working = false; render(); }
+    finally { working = false; installingGame = null; render(); }
   }
   refreshButton.addEventListener("click", () => { void refresh(); });
   return {

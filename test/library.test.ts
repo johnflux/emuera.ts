@@ -5,11 +5,12 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { runInNewContext } from "node:vm";
-import { GAME_CATALOG, installGame } from "../src/library.js";
+import { downloadedCatalogGames, GAME_CATALOG, installGame } from "../src/library.js";
 import { createApp } from "../src/server.js";
 import { discoverGames, HOTPATCH_ROOT } from "../src/loader.js";
 
 test("library loads and refreshes without the optional starter panel", async () => {
+  let tabs: Element[] = [];
   class Element {
     textContent = "";
     hidden = false;
@@ -23,9 +24,10 @@ test("library loads and refreshes without the optional starter panel", async () 
     replaceChildren() { this.children = []; }
     setAttribute(name: string, value: string) { this.attributes.set(name, value); }
     addEventListener(name: string, listener: () => void) { this.listeners.set(name, listener); }
-    querySelectorAll() { return [new Element(), new Element()]; }
+    querySelectorAll() { return tabs; }
   }
-  const nodes = new Map(["library", "game-grid", "library-message", "library-refresh",
+  tabs = [new Element(), new Element()];
+  const nodes = new Map(["library", "game-grid", "library-message", "library-progress", "library-progress-text", "library-refresh",
     "catalog-note", "installed-count", "catalog-count", "status", "library-toggle"]
     .map((id) => [`#${id}`, new Element()]));
   const source = await readFile(new URL("../web/library.js", import.meta.url), "utf8");
@@ -37,20 +39,50 @@ test("library loads and refreshes without the optional starter panel", async () 
     },
   });
   const requests: string[] = [];
+  let finishInstall!: () => void;
   const library = createLibrary({
     api: async (url: string) => {
       requests.push(url);
-      return { installed: [], catalog: [{ id: "tw" }] };
+      if (url === "/api/library/install") {
+        await new Promise<void>((resolve) => { finishInstall = resolve; });
+        return { ok: true };
+      }
+      return {
+        installed: [], downloaded: [],
+        catalog: [
+          { id: "tw", title: "eraToho The World", genre: "Life simulation", folder: "tw", blurb: "Touhou life simulation." },
+          { id: "erauma", title: "EraUma", genre: "Training / story", folder: "erauma", stars: 119, source: "https://gitgud.io/umaera/erauma", repository: "https://gitgud.io/umaera/erauma.git", downloadOnly: true, requirements: "Not playable here." },
+          { id: "erablue-resort", title: "erablue_resort", genre: "Management / adventure", folder: "erablue_resort", stars: 57, source: "https://gitgud.io/era-games/erablue_resort" },
+        ],
+      };
     },
     gamesChanged: async () => {},
+    confirmAction: async () => true,
   });
   await library.show();
   assert.equal(nodes.get("#library-message")!.textContent, "Select Play game to start.");
-  assert.equal(nodes.get("#catalog-count")!.textContent, 1);
+  assert.equal(nodes.get("#catalog-count")!.textContent, 3);
   assert.equal(nodes.get("#game-grid")!.children.length, 1);
+  tabs[1]!.listeners.get("click")!();
+  const catalogText = (node: Element): string => node.textContent + node.children.map(catalogText).join("");
+  assert.match(catalogText(nodes.get("#game-grid")!), /Download source/);
+  assert.match(catalogText(nodes.get("#game-grid")!), /GAMES\/.downloads\/erauma/);
+  assert.doesNotMatch(catalogText(nodes.get("#game-grid")!), /Compatibility:|full gameplay is not yet supported|through the protagonist-name prompt/);
+  const findElement = (node: Element, predicate: (candidate: Element) => boolean): Element | undefined =>
+    predicate(node) ? node : node.children.map((child) => findElement(child, predicate)).find(Boolean);
+  findElement(nodes.get("#game-grid")!, (node) => node.textContent === "Download source" && node.listeners.has("click"))!.listeners.get("click")!();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(nodes.get("#library-progress")!.hidden, false);
+  assert.equal(nodes.get("#library-progress-text")!.textContent, "Downloading EraUma source...");
+  assert.match(nodes.get("#library-message")!.textContent, /Downloading EraUma source into GAMES\/.downloads\/erauma/);
+  assert.match(catalogText(nodes.get("#game-grid")!), /Downloading\.\.\./);
+  finishInstall();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(nodes.get("#library-progress")!.hidden, true);
+  assert.match(nodes.get("#library-message")!.textContent, /source downloaded for inspection/);
   nodes.get("#library-refresh")!.listeners.get("click")!();
   await new Promise<void>((resolve) => setImmediate(resolve));
-  assert.deepEqual(requests, ["/api/library", "/api/library/refresh", "/api/library"]);
+  assert.deepEqual(requests, ["/api/library", "/api/library/install", "/api/library", "/api/library/refresh", "/api/library"]);
   assert.match(nodes.get("#library-message")!.textContent, /Library refreshed/);
   assert.equal(nodes.get("#library-refresh")!.disabled, false);
 });
@@ -68,11 +100,33 @@ test("catalog has unique ids and verified group blurbs and restricts clone sourc
   }
   assert.equal(GAME_CATALOG.find((game) => game.id === "erablue-resort")?.blurb,
     "Manage a resort and explore dungeons with Granblue Fantasy characters.");
+  const uma = GAME_CATALOG.find((game) => game.id === "erauma")!;
+  assert.equal(uma.repository, "https://gitgud.io/umaera/erauma.git");
+  assert.equal(uma.downloadOnly, true);
+  assert.equal(uma.submodules, true);
+  assert.match(uma.requirements ?? "", /not playable in this interpreter/);
   const tw = GAME_CATALOG.find((game) => game.id === "tw")!;
   assert.equal(tw.monogram, "TW");
   assert.equal(tw.archive, "https://gitgud.io/Legis1998/anon-tw/-/archive/anon-tw_eng-modding/anon-tw-anon-tw_eng-modding.zip");
   assert.equal(tw.repository, undefined);
   assert.equal(GAME_CATALOG.find((game) => game.id === "k")?.monogram, "K");
+});
+
+test("EraUma source downloads without becoming a playable game", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "era-library-download-"));
+  const games = path.join(root, "GAMES");
+  const uma = GAME_CATALOG.find((game) => game.id === "erauma")!;
+  try {
+    await installGame(uma, games, async (_game, destination) => {
+      await mkdir(path.join(destination, "engine"), { recursive: true });
+      await writeFile(path.join(destination, "README.md"), "EraUma source");
+    });
+    const checkout = path.join(games, ".downloads", "erauma");
+    assert.equal(await readFile(path.join(checkout, "README.md"), "utf8"), "EraUma source");
+    assert.deepEqual(await downloadedCatalogGames(games), ["erauma"]);
+    assert.deepEqual(discoverGames(games, []), []);
+    await assert.rejects(installGame(uma, games, async () => assert.fail("must not replace downloaded source")), /already exists/);
+  } finally { await rm(root, { recursive: true, force: true }); }
 });
 
 test("installation publishes a complete game, preserves existing folders, and cleans failed clones", async () => {
@@ -143,6 +197,7 @@ test("empty library serves home, refresh discovers games live, and stop releases
     for (const asset of ["/library.js", "/library.css"]) assert.equal((await fetch(base + asset)).status, 200);
     const initial = await (await fetch(base + "/api/library")).json();
     assert.deepEqual(initial.installed, []);
+    assert.deepEqual(initial.downloaded, []);
     assert.equal(initial.catalog.length, GAME_CATALOG.length);
     for (const id of ["tw", "k", "rancek"]) {
       assert.ok(initial.catalog.some((game: { id: string }) => game.id === id));

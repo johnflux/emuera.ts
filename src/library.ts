@@ -15,6 +15,8 @@ export interface CatalogGame {
   monogram?: string;
   stars?: number;
   requirements?: string;
+  downloadOnly?: boolean;
+  submodules?: boolean;
   archive?: string;
   repository?: string;
   branch?: string;
@@ -42,8 +44,9 @@ export const GAME_CATALOG: readonly CatalogGame[] = [
   {
     id: "erauma", title: "EraUma", genre: "Training / story", folder: "erauma", stars: 119, monogram: "UM",
     blurb: "Become a trainer and build your own story in a world inspired by Uma Musume and the history of horse racing.",
-    source: "https://gitgud.io/umaera/erauma",
-    requirements: "Requires its own era-electron engine; not playable in this interpreter. Follow the project's release instructions.",
+    source: "https://gitgud.io/umaera/erauma", repository: "https://gitgud.io/umaera/erauma.git",
+    requirements: "Uses its own era-electron engine and is not playable in this interpreter. Downloaded for source inspection only.",
+    downloadOnly: true, submodules: true,
   },
   {
     id: "pops-tw", title: "Pops TW", genre: "Life simulation", folder: "pops-tw", stars: 91, monogram: "PT",
@@ -106,6 +109,7 @@ const prepareGame: PrepareGame = async (game, destination) => {
   }
   await exec("git", [
     "-c", "core.hooksPath=/dev/null", "clone", "--depth", "1",
+    ...(game.submodules ? ["--recurse-submodules", "--shallow-submodules"] : []),
     ...(game.branch ? ["--branch", game.branch] : []), "--", game.repository!, destination,
   ], { timeout: 10 * 60_000, maxBuffer: 1024 * 1024, env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } });
 };
@@ -115,7 +119,9 @@ export async function installGame(game: CatalogGame, gamesDir: string, prepare: 
   if (!game.repository && !game.archive) throw new Error("This game requires a manual download.");
   gamesDir = path.resolve(gamesDir);
   await mkdir(gamesDir, { recursive: true });
-  const destination = path.join(gamesDir, game.folder);
+  const destinationRoot = game.downloadOnly ? path.join(gamesDir, ".downloads") : gamesDir;
+  await mkdir(destinationRoot, { recursive: true });
+  const destination = path.join(destinationRoot, game.folder);
   try {
     await lstat(destination);
     throw new Error(`GAMES/${game.folder} already exists. It has not been changed.`);
@@ -127,11 +133,24 @@ export async function installGame(game: CatalogGame, gamesDir: string, prepare: 
     const checkout = path.join(staging, "checkout");
     await prepare(game, checkout);
     const roots = isGameRoot(checkout) ? [checkout] : discoverGames(checkout, []).map((definition) => definition.root);
-    if (roots.length !== 1) throw new Error("Expected one game with ERB and CSV folders. Use the project download instructions instead.");
-    const source = game.archive ? roots[0]! : checkout;
+    if (!game.downloadOnly && roots.length !== 1) throw new Error("Expected one game with ERB and CSV folders. Use the project download instructions instead.");
+    const source = game.archive && roots.length === 1 ? roots[0]! : checkout;
     // Reserve the target before renaming so even an empty existing folder cannot be replaced.
     await mkdir(destination);
     try { await rename(source, destination); }
     catch (error) { await rmdir(destination); throw error; }
   } finally { await rm(staging, { recursive: true, force: true }); }
+}
+
+export async function downloadedCatalogGames(gamesDir: string): Promise<string[]> {
+  const downloaded: string[] = [];
+  for (const game of GAME_CATALOG.filter((item) => item.downloadOnly)) {
+    try {
+      await lstat(path.join(path.resolve(gamesDir), ".downloads", game.folder));
+      downloaded.push(game.id);
+    } catch (error) {
+      if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
+    }
+  }
+  return downloaded;
 }

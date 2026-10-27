@@ -1,17 +1,19 @@
 import { readdir, readFile } from "node:fs/promises";
 import { closeSync, existsSync, openSync, readdirSync, readFileSync, readSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { characterField, EraError, EVENT_FUNCTIONS, isCharacterNumberField, key, allowsFullWidthSpace, stripComment, splitArguments, type Diagnostic, type Line, type Routine } from "./model.js";
 
 /** Browser-presentation ERB layered over eraToho The World without editing its files (see docs/hotpatches.md). */
-export const HOTPATCH_ROOT = path.resolve("hotpatch");
+export const HOTPATCH_ROOT = fileURLToPath(new URL("../hotpatch/", import.meta.url));
+export const GAMES_DIR = path.resolve(process.env.ERA_GAMES_DIR ?? "GAMES");
 /** A game the server offers when its directory exists; the first is the default. */
 export interface GameDefinition { id: string; title: string; root: string; hotpatch?: string }
 /** Games with a fixed id (used in ?game= addresses), title or hotpatch; other folders in GAMES/ are discovered. */
 export const KNOWN_GAMES: readonly GameDefinition[] = [
-  { id: "tw", title: "eraToho The World", root: path.resolve("GAMES/anon-tw-anon-tw_eng-modding"), hotpatch: HOTPATCH_ROOT },
-  { id: "k", title: "eraTohoK", root: path.resolve("GAMES/eraTohoK/eraTohoK-master") },
-  { id: "rancek", title: "eraRanceK", root: path.resolve("GAMES/eraRanceK") },
+  { id: "tw", title: "eraToho The World", root: path.join(GAMES_DIR, "anon-tw-anon-tw_eng-modding"), hotpatch: HOTPATCH_ROOT },
+  { id: "k", title: "eraTohoK", root: path.join(GAMES_DIR, "eraTohoK", "eraTohoK-master") },
+  { id: "rancek", title: "eraRanceK", root: path.join(GAMES_DIR, "eraRanceK") },
 ];
 export const isGameRoot = (dir: string): boolean => existsSync(path.join(dir, "ERB")) && existsSync(path.join(dir, "CSV"));
 const subdirectories = (dir: string): string[] => {
@@ -22,7 +24,7 @@ const subdirectories = (dir: string): string[] => {
  * Known games, then every other folder in `gamesDir` holding ERB/ and CSV/ directly or one level down (as in an
  * unzipped `name/name-master`). A discovered game is titled and identified by its top-level folder name.
  */
-export function discoverGames(gamesDir = path.resolve("GAMES"), known: readonly GameDefinition[] = KNOWN_GAMES): GameDefinition[] {
+export function discoverGames(gamesDir = GAMES_DIR, known: readonly GameDefinition[] = KNOWN_GAMES): GameDefinition[] {
   const games = [...known];
   const roots = new Set(known.map((game) => game.root));
   const ids = new Set(known.map((game) => game.id));

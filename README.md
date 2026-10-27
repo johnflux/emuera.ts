@@ -27,6 +27,30 @@ https://gitgud.io/Legis1998/anon-tw/-/archive/anon-tw_eng-modding/anon-tw-anon-t
 See the [developer guide](docs/developer-guide.md) for compatibility details and
 additional documentation.
 
+## Desktop builds
+
+The Electron desktop app bundles the interpreter but not third-party games. It
+stores imported and downloaded games under the operating system's application
+data directory, keeping game files and saves writable and separate from the
+installed app.
+
+Install dependencies with `npm install`, then build on the target operating
+system:
+
+```sh
+npm run dist:mac
+npm run dist:win
+```
+
+`dist:mac` produces macOS DMG and ZIP packages for Intel and Apple silicon;
+`dist:win` produces a Windows installer and portable executable for x64. Build
+each platform on its own OS (macOS for Mac releases and Windows for Windows
+releases). Outputs go to `release/`. For distribution outside personal use,
+sign/notarize the macOS app and sign the Windows installer.
+
+To run the desktop app during development, use `npm run desktop`. This builds
+the server and opens the app window.
+
 ## Save files
 
 The app reads and writes Emuera's native binary saves, including gzip-compressed

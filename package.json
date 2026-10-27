@@ -1,6 +1,7 @@
 {
   "name": "era-typescript",
   "version": "0.1.0",
+  "description": "A browser-based interpreter for Emuera/ERB games.",
   "private": true,
   "type": "module",
   "engines": {
@@ -17,15 +18,51 @@
     "build": "tsc",
     "start": "npm run dev",
     "start:prod": "node dist/server.js",
+    "desktop": "npm run build && electron .",
+    "dist:mac": "npm run build && electron-builder --mac dmg zip --x64 --arm64",
+    "dist:win": "npm run build && electron-builder --win nsis portable --x64",
     "check": "tsc --noEmit",
     "test": "tsx --test test/*.test.ts",
     "compat": "tsx src/compat.ts",
     "area-art": "tsx src/area-art.ts"
   },
+  "main": "electron/main.cjs",
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@types/yauzl": "^3.4.0",
+    "electron": "^39.2.7",
+    "electron-builder": "^26.0.12",
     "tsx": "^4.20.0",
     "typescript": "^5.9.0"
+  },
+  "build": {
+    "appId": "org.emuera.era",
+    "productName": "Era",
+    "asar": true,
+    "files": [
+      "dist/**/*",
+      "web/**/*",
+      "hotpatch/**/*",
+      "electron/main.cjs",
+      "package.json",
+      "!GAMES/**",
+      "!test/**",
+      "!docs/**",
+      "!src/**"
+    ],
+    "mac": {
+      "category": "public.app-category.games",
+      "target": ["dmg", "zip"]
+    },
+    "win": {
+      "target": ["nsis", "portable"]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "directories": {
+      "output": "release"
+    }
   }
 }

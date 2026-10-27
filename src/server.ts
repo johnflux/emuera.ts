@@ -1,12 +1,12 @@
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { randomUUID } from "node:crypto";
 import { readdir, readFile, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { compatibility } from "./compatibility.js";
 import { demoGame } from "./demo.js";
-import { applyHotpatches, displayDefaults, displayMetrics, discoverGames, emptyGame, GAMES, KNOWN_GAMES, isGameRoot, loadGame, stillFrame, type DisplaySettings, type Game } from "./loader.js";
-import { CATALOG_UPDATED, GAME_CATALOG, installGame } from "./library.js";
+import { applyHotpatches, displayDefaults, displayMetrics, discoverGames, emptyGame, GAMES_DIR, KNOWN_GAMES, isGameRoot, loadGame, stillFrame, type DisplaySettings, type Game } from "./loader.js";
+import { CATALOG_UPDATED, downloadedCatalogGames, GAME_CATALOG, installGame } from "./library.js";
 import { EraError, key } from "./model.js";
 import { GAME_INSTRUCTION_LIMIT, Runtime, type BackgroundLayer, type Snapshot } from "./runtime.js";
 import { FileGlobalStore, FileSaveStore, gameSaveDirectory, MemoryGlobalStore, MemorySaveStore, type GlobalStore, type SaveStore } from "./storage.js";
@@ -146,7 +146,7 @@ function displaySettings(value: unknown): Partial<DisplaySettings> | undefined {
  * Emuera save directory, and its resources/ images are served at /resources/ (the default game) or
  * /games/<id>/resources/.
  */
-export function createApp(games: Game | readonly GameEntry[], development = false, gamesDir = path.resolve("GAMES")) {
+export function createApp(games: Game | readonly GameEntry[], development = false, gamesDir = GAMES_DIR) {
   gamesDir = path.resolve(gamesDir);
   const list = Array.isArray(games) ? games as readonly GameEntry[] : [{ id: "game", title: "Game", game: games as Game }];
   function register(entry: GameEntry, index: number) {
@@ -206,7 +206,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
   const instance = randomUUID();
   let installing = false;
   async function refreshGames() {
-    const known = KNOWN_GAMES.map((game) => ({ ...game, root: path.join(gamesDir, path.relative(path.resolve("GAMES"), game.root)) }));
+    const known = KNOWN_GAMES.map((game) => ({ ...game, root: path.join(gamesDir, path.relative(GAMES_DIR, game.root)) }));
     for (const definition of discoverGames(gamesDir, known)) {
       if (!isGameRoot(definition.root) || [...entries.values()].some((entry) => entry.game.root === definition.root)) continue;
       if (entries.has(definition.id)) throw new HttpError(409, `Game id already in use: ${definition.id}`);
@@ -236,6 +236,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
             const catalog = GAME_CATALOG.find((item) => item.id === id || relative.split(path.sep)[0]?.toLowerCase() === item.folder.toLowerCase());
             return { id, title: catalog?.title ?? title, blurb: catalog?.blurb ?? "A locally installed ERB game. Launch it to explore its world.", genre: catalog?.genre ?? "Local game", catalogId: catalog?.id, monogram: catalog?.monogram };
           }),
+          downloaded: await downloadedCatalogGames(gamesDir),
           catalog: GAME_CATALOG,
           catalogUpdated: CATALOG_UPDATED,
         });
@@ -423,36 +424,48 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
     });
   });
 }
+export async function startServer(port = 3000, gamesDir = GAMES_DIR, development = false): Promise<Server> {
+  gamesDir = path.resolve(gamesDir);
+  const known = KNOWN_GAMES.map((game) => ({ ...game, root: path.join(gamesDir, path.relative(GAMES_DIR, game.root)) }));
+  const loaded: GameEntry[] = [];
+  for (const definition of discoverGames(gamesDir, known).filter((game) => isGameRoot(game.root))) {
+    console.log(`Loading ${definition.title} from ${definition.root} ...`);
+    const game = await loadGame(definition.root);
+    const patched = definition.hotpatch ? await applyHotpatches(game, definition.hotpatch) : [];
+    if (patched.length) console.log(`Hotpatched ${patched.map((name) => `@${name}`).join(", ")}`);
+    console.log(`Loaded ${game.scriptFiles} scripts, ${game.routines.size} function names and ${game.sprites.size} sprites`);
+    loaded.push({
+      id: definition.id, title: definition.title, game,
+      loadDebug: async () => {
+        console.log(`Loading ${definition.title} in debug mode ...`);
+        const debug = await loadGame(definition.root, { debug: true });
+        if (definition.hotpatch) await applyHotpatches(debug, definition.hotpatch);
+        return debug;
+      },
+    });
+  }
+  const app = createApp(loaded, development, gamesDir);
+  await new Promise<void>((resolve, reject) => {
+    const onError = (error: Error) => reject(error);
+    app.once("error", onError);
+    app.listen(port, "127.0.0.1", () => {
+      app.off("error", onError);
+      resolve();
+    });
+  });
+  const address = app.address();
+  if (!address || typeof address === "string") throw new Error("Server did not bind to a TCP port");
+  console.log(`Open http://127.0.0.1:${address.port}`);
+  if (development) console.log("Development watch enabled; changes restart the backend and reload browser tabs. Active sessions reset.");
+  return app;
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     const rawPort = process.env.PORT ?? "3000";
     const port = Number(rawPort);
     if (!/^\d+$/.test(rawPort) || port < 1 || port > 65535) throw new Error("PORT must be an integer from 1 to 65535");
-    const available = GAMES.filter((definition) => isGameRoot(definition.root));
-    const loaded: GameEntry[] = [];
-    for (const definition of available) {
-      console.log(`Loading ${definition.title} from ${definition.root} ...`);
-      const game = await loadGame(definition.root);
-      const patched = definition.hotpatch ? await applyHotpatches(game, definition.hotpatch) : [];
-      if (patched.length) console.log(`Hotpatched ${patched.map((name) => `@${name}`).join(", ")}`);
-      console.log(`Loaded ${game.scriptFiles} scripts, ${game.routines.size} function names and ${game.sprites.size} sprites`);
-      loaded.push({
-        id: definition.id, title: definition.title, game,
-        loadDebug: async () => {
-          console.log(`Loading ${definition.title} in debug mode ...`);
-          const debug = await loadGame(definition.root, { debug: true });
-          if (definition.hotpatch) await applyHotpatches(debug, definition.hotpatch);
-          return debug;
-        },
-      });
-    }
-    const development = process.argv.includes("--dev");
-    const app = createApp(loaded, development);
-    app.on("error", (error) => { console.error(error); process.exitCode = 1; });
-    app.listen(port, "127.0.0.1", () => {
-      console.log(`Open http://127.0.0.1:${port}`);
-      if (development) console.log("Development watch enabled; changes restart the backend and reload browser tabs. Active sessions reset.");
-    });
+    await startServer(port, GAMES_DIR, process.argv.includes("--dev"));
   } catch (error) {
     console.error("Startup failed:", error);
     process.exitCode = 1;

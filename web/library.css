@@ -36,6 +36,12 @@
 .library-refresh { padding: 7px 10px; border: 1px solid #ffffff1c; border-radius: 6px; background: transparent; color: #aeb9c9; font-size: 12px; }
 .library-message { min-height: 20px; margin: 18px 0; color: #91a0b4; font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
 .library-message.error { color: #ffb7a9; }
+.library-progress { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 0 0 20px; padding: 14px 16px; border: 1px solid #98c8bc55; border-radius: 8px; background: #20312e; color: #dcebe3; font-size: 13px; }
+.library-progress[hidden] { display: none; }
+.library-progress-spinner { width: 15px; height: 15px; flex: 0 0 15px; border: 2px solid #98c8bc55; border-top-color: #b5d5c5; border-radius: 50%; animation: library-spin .8s linear infinite; }
+.library-progress-detail { color: #a4b5ad; font-size: 11px; }
+@keyframes library-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .library-progress-spinner { animation-duration: 2s; } }
 .game-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
 .game-card { min-width: 0; border: 1px solid #ffffff12; border-radius: 12px; overflow: hidden; background: #181e28; transition: border-color .2s, transform .2s; }
 .game-card:hover { border-color: #9bc8b54d; transform: translateY(-3px); }
