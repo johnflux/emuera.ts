@@ -103,6 +103,7 @@ main { position: relative; flex: 1; min-height: 0; display: flex; flex-direction
 .subarea-fixed > .subarea { position: fixed; }
 .subarea { position: absolute; box-sizing: border-box; overflow: hidden; border: 0 solid currentColor; text-align: left; white-space: pre-wrap; }
 .print-cell { display: inline-block; white-space: pre; }
+.html-positioned { display: inline-block; vertical-align: top; }
 .half-cells { display: inline-block; overflow: hidden; vertical-align: top; white-space: pre; text-decoration: inherit; }
 .half-cells.squeezed { position: relative; overflow: visible; }
 .half-cells.squeezed > span { position: absolute; left: 0; top: 0; text-decoration: none; transform: scale(.5, .6); transform-origin: left 55%; }

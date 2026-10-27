@@ -1204,6 +1204,15 @@ function layoutMapPictures() {
   }
 }
 const allowedTags = new Set(["P", "BR", "B", "STRONG", "I", "EM", "U", "S", "SPAN", "NOBR", "FONT", "NONBUTTON", "DIV"]);
+/** A locked HTML position resets the cursor from the line's left edge, including when it moves backwards. */
+function layoutHtmlPositions() {
+  for (const element of terminal.querySelectorAll(".html-positioned")) {
+    const origin = element.closest(".subarea, .line");
+    element.style.marginLeft = "0px";
+    const offset = element.getBoundingClientRect().left - origin.getBoundingClientRect().left;
+    element.style.marginLeft = `${Number(element.dataset.htmlPosition) - offset}px`;
+  }
+}
 /**
  * Hotpatch extension (not Emuera HTML): era-* classes are styled by style.css; other class names are ignored so
  * game markup can't pick up the client's own classes.
@@ -1336,6 +1345,12 @@ async function renderHtml(markup, parent, sprites) {
         markTextColor(element, color);
       }
     } else throw new Error(`Unsupported HTML tag: <${node.tagName.toLowerCase()}>`);
+    if (["BUTTON", "NONBUTTON"].includes(node.tagName) && node.hasAttribute("pos")) {
+      const position = node.getAttribute("pos").trim();
+      if (!/^-?\d+$/.test(position)) throw new Error(`Unsupported HTML position: ${position}`);
+      element.classList.add("html-positioned");
+      element.dataset.htmlPosition = String(sizeAttribute(position, 0, scale ?? imageScale()));
+    }
     applyClasses(element, node);
     if (element.matches(".era-occupant-label, .era-guard-toggle"))
       element.setAttribute("aria-pressed", String(node.getAttribute("aria-pressed") === "true"));
@@ -1391,6 +1406,7 @@ async function renderSteps(steps, fresh = false, keepFocus = false, toBottom = f
     outputRoot = terminal;
     pendingImages = [];
     syncDialogs();
+    layoutHtmlPositions();
     layoutMapPictures();
     revealSelectedOccupants();
     markMapLabels();

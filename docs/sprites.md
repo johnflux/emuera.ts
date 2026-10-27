@@ -45,6 +45,11 @@ Consequences of this design:
   `GSAVE`/`GLOAD` are unsupported.
 - Each HTML output that shows a runtime sprite carries a full, self-contained
   copy of its picture. Later drawing never changes what was already printed.
+- HTML `<button pos="...">` and `<nonbutton pos="...">` reset the horizontal
+  cursor relative to the line's left edge, in hundredths of the configured font
+  size. Positions are applied after images load, including backwards moves.
+  Repeated positions therefore stack sprite layers in print order, as used by
+  eraAS portraits, instead of placing each layer after the previous image.
 
 ## Low level
 
