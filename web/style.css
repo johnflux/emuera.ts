@@ -145,6 +145,8 @@ a { color: #8ddaff; }
 .sprite-hover { visibility: hidden; }
 .screen.is-active :is(.has-tooltip, button.choice):is(:hover, :focus-visible) .sprite-hover { visibility: visible; }
 .screen.is-active :is(.has-tooltip, button.choice):is(:hover, :focus-visible) .sprite-normal { visibility: hidden; }
+.screen.is-active .era-portrait:is(:hover, :focus-within) .sprite-hover { visibility: visible; }
+.screen.is-active .era-portrait:is(:hover, :focus-within) .sprite-normal { visibility: hidden; }
 .shape-rect { position: relative; height: 1em; vertical-align: text-top; }
 .shape-rect > span { position: absolute; background: currentColor; }
 .missing { color: #ff9d9d; font-size: 12px; }

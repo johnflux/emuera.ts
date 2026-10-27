@@ -10,7 +10,7 @@ import { evaluate, repeatString, type EvaluationContext, type Expr } from "./exp
 import { parseFormat } from "./format.js";
 import { EraError, integer, key, text, type Routine, type Value } from "./model.js";
 import { stringWidth } from "./strings.js";
-import { GENERATION, indexNumber, locate, readElement, writeElement, type Resolved, type Variables } from "./variables.js";
+import { GENERATION, indexNumber, indexSymbols, locate, readElement, writeElement, type Resolved, type Variables } from "./variables.js";
 
 type VariableExpr = Extract<Expr, { kind: "variable" }>;
 type CaseTest = { kind: "range"; from: string; to: string } | { kind: "compare"; op: string; operand: string } | { kind: "value"; source: string };
@@ -106,7 +106,7 @@ const H = {
       const site = S[j]!;
       const slot = V.slot(site.name, C);
       const home = V.transient ? V.parent! : V;
-      const c = site.bare.map((name) => name !== undefined && slot.symbols?.has(name) && !V.has(name) ? slot.symbols.get(name) : undefined);
+      const c = site.bare.map((name, i) => name !== undefined && !V.has(name) ? indexSymbols(slot, i, site.bare.length)?.get(name) : undefined);
       return B[j] = { g: GENERATION.value, st: home.stamp, h: home, own: V.transient && V.owns(site.name), s: slot, c };
     }
     if (b.own) b.s = V.slot(S[j]!.name, C);
@@ -116,7 +116,7 @@ const H = {
   str(B: (Binding | undefined)[], j: number, V: Variables, C: EvaluationContext, S: Site[]): boolean | undefined {
     try { return H.b(B, j, V, C, S).s.variable.string; } catch { return undefined; }
   },
-  ix: (b: Binding, value: Value): number => indexNumber(b.s, value),
+  ix: (b: Binding, value: Value, index: number, count: number): number => indexNumber(b.s, value, index, count),
   loc: (b: Binding, C: EvaluationContext, count: number, n0: number, n1: number, n2: number): number => locate(b.s, C, count, n0, n1, n2),
   rd: (b: Binding, C: EvaluationContext, count: number, n0: number, n1: number, n2: number): Value => readElement(b.s, locate(b.s, C, count, n0, n1, n2)),
   get: (b: Binding, index: number): Value => readElement(b.s, index),
@@ -271,9 +271,9 @@ class Generator {
   /** Index codes in order; `settled` supplies temps for computed indices already evaluated. */
   private indices(e: VariableExpr, b: string, settled?: (string | undefined)[]): string {
     const codes = e.indices.map((index, i) => {
-      if (index.kind === "literal") return typeof index.value === "bigint" ? `${Number(index.value)}` : `H.ix(${b}, ${JSON.stringify(index.value)})`;
-      if (index.kind === "variable" && !index.indices.length) return `(${b}.c[${i}] ?? H.ix(${b}, ${this.read(index)}))`;
-      return `H.ix(${b}, ${settled?.[i] ?? this.expr(index)})`;
+      if (index.kind === "literal") return typeof index.value === "bigint" ? `${Number(index.value)}` : `H.ix(${b}, ${JSON.stringify(index.value)}, ${i}, ${e.indices.length})`;
+      if (index.kind === "variable" && !index.indices.length) return `(${b}.c[${i}] ?? H.ix(${b}, ${this.read(index)}, ${i}, ${e.indices.length}))`;
+      return `H.ix(${b}, ${settled?.[i] ?? this.expr(index)}, ${i}, ${e.indices.length})`;
     });
     while (codes.length < 3) codes.push("0");
     return `${e.indices.length}, ${codes.join(", ")}`;

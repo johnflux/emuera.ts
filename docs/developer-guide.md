@@ -58,6 +58,11 @@ original 20 missing instruction types now have implementations except
 instructions and expressions, with case-insensitive matching and optional
 string-array destinations. `ERDNAME` preserves the original ERD label spelling,
 including dimension-specific tables, and `GETNUMB` resolves names dynamically.
+Array accesses also resolve bare and string index names against the matching
+`Variable@1.ERD`, `Variable@2.ERD`, or `Variable@3.ERD` table, falling back to the
+base name table when no dimension-specific table exists, in both interpreted
+and JIT execution. The game's party lookup through `BATTLE_STATE@2.ERD` is
+regression-tested separately from the new-game menu path.
 This is not a claim of full gameplay compatibility; the lexical inventory does
 not find every missing expression function or validate every argument form.
 

@@ -36,6 +36,27 @@ test("hotpatches reject new routines that are not named HOTPATCH_*", async () =>
   });
 });
 
+test("translated ability HTML emits valid six-digit CSS colors", {
+  skip: !existsSync(GAME_ROOT),
+}, async () => {
+  const game = await loadGame();
+  const stub = emptyGame(game.root);
+  indexScript(stub, `@SYSTEM_TITLE
+#DIMS MARKUP
+MARKUP '= COLOR_PRINT_HTML("Ex", "C_P_PURPLE", 2)
+HTML_PRINT MARKUP
+MARKUP '= COLOR_STAMP_HTML(2, 3, "★", "0xFFFF00")
+HTML_PRINT MARKUP
+WAIT`, "<stub>");
+  game.routines.set("SYSTEM_TITLE", stub.routines.get("SYSTEM_TITLE")!);
+  const snapshot = new Runtime(game, GAME_INSTRUCTION_LIMIT).start();
+  assert.equal(snapshot.error, null);
+  const markup = snapshot.output.flatMap((item) => item.type === "html" ? [item.text] : []).join("");
+  assert.match(markup, /<font color='#C070C0'>Ex<\/font>/);
+  assert.match(markup, /<font color='#FFFF00'>  ★★<\/font>/);
+  assert.doesNotMatch(markup, /#0x/i);
+});
+
 test("Palam hotpatch prints one HTML line with formatted values", {
   skip: !existsSync(GAME_ROOT),
 }, async () => {

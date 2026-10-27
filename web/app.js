@@ -1330,7 +1330,7 @@ async function renderHtml(markup, parent, sprites) {
       if (["left", "center", "right"].includes(alignment)) element.style.textAlign = alignment;
       const face = node.getAttribute("face");
       if (face) applyFont(element, face);
-      const color = node.getAttribute("color");
+      const color = node.getAttribute("color")?.replace(/^#0x([0-9a-f]{6})$/i, "#$1");
       if (color && /^(?:#[0-9a-f]{6}|[a-z]+)$/i.test(color)) {
         element.style.color = color;
         markTextColor(element, color);
@@ -1669,11 +1669,37 @@ function terminalColumns() {
  * Only one is kept, and it is dropped if the step ends anywhere other than a click-to-continue wait.
  */
 let continueQueued = false;
+let skipRequested = false;
+let skipRunning = false;
 function queueContinue() {
   continueQueued = true;
   message("Will continue when ready...");
 }
+function skipText() {
+  skipRequested = true;
+  continueQueued = false;
+  void continueSkipping();
+}
+async function continueSkipping() {
+  if (skipRunning) return;
+  skipRunning = true;
+  try {
+    while (skipRequested && input?.kind === "wait" && !busy) {
+      const previousStep = step;
+      await submit("");
+      if (step === previousStep) {
+        skipRequested = false;
+        break;
+      }
+    }
+    if (input?.kind !== "wait") skipRequested = false;
+  } finally {
+    skipRunning = false;
+    if (skipRequested && !busy && input?.kind === "wait") void continueSkipping();
+  }
+}
 function runQueuedContinue() {
+  if (skipRequested) { void continueSkipping(); return; }
   const queued = continueQueued;
   continueQueued = false;
   if (busy || input?.kind !== "wait" || input.blocking) return;
@@ -1693,6 +1719,7 @@ async function terminalReady() {
 /** Clears the run's client state before a new or resumed run is shown. */
 function resetRun() {
   continueQueued = false;
+  skipRequested = false;
   hideTooltip();
   busy = true;
   input = null;
@@ -1808,6 +1835,7 @@ async function submit(value, selectedChoice = null) {
     endActivity();
     updateControls();
     if (input) command.focus({ preventScroll: true });
+    if (skipRequested) void continueSkipping();
     runQueuedContinue();
   }
 }
@@ -1884,9 +1912,11 @@ terminal.addEventListener("click", (event) => {
   if (!busy && !settling()) submitMouseKey([1, MOUSE_BUTTONS[event.button] ?? MOUSE_BUTTONS[0], ...clientPoint(event), value, 0]);
 }, true);
 terminal.addEventListener("contextmenu", (event) => {
-  if (input?.kind !== "mousekey" || (event.target instanceof Element && event.target.closest("a[href]"))) return;
+  if (event.target instanceof Element && event.target.closest("a[href]")) return;
   event.preventDefault();
-  if (!busy && !settling()) submitMouseKey([1, MOUSE_BUTTONS[2], ...clientPoint(event), backgroundHit(event), 0]);
+  if (input?.kind === "mousekey") {
+    if (!busy && !settling()) submitMouseKey([1, MOUSE_BUTTONS[2], ...clientPoint(event), backgroundHit(event), 0]);
+  } else if (input?.kind === "wait") skipText();
 });
 terminal.addEventListener("auxclick", (event) => {
   if (input?.kind === "mousekey" && event.button === 1 && !busy && !settling()) submitMouseKey([1, MOUSE_BUTTONS[1], ...clientPoint(event), backgroundHit(event), 0]);

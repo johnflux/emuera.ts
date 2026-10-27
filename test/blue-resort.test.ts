@@ -170,6 +170,70 @@ PRINTSL STRFORM("first\\nsecond")`, true, game).start();
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
+test("ERD array indices select dimension tables for interpreted and compiled accesses", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "era-erd-indices-"));
+  try {
+    await mkdir(path.join(root, "ERB"));
+    await mkdir(path.join(root, "CSV"));
+    const tables: Record<string, string> = {
+      "Grid@1": "1,Label\n2,Shadow\n3,RowOnly\n8,TooFar",
+      "Grid@2": "2,Label\n1,Shadow\n3,ColumnOnly",
+      "Cube@1": "1,Label", "Cube@2": "2,Label", "Cube@3": "3,Label",
+      Legacy: "1,Label", People: "2,Label", BASE: "1,Health",
+    };
+    for (const [name, content] of Object.entries(tables)) await writeFile(path.join(root, "ERB", `${name}.ERD`), content);
+    await writeFile(path.join(root, "ERB", "arrays.ERH"), `#DIM Grid, 4, 4
+#DIM Cube, 4, 4, 4
+#DIM Legacy, 4, 4
+#DIM CHARADATA People, 4`);
+    const game = await loadGame(root);
+    for (const jit of [false, true]) {
+      const s = runtime(`@SYSTEM_TITLE
+ADDVOIDCHARA
+TARGET = 0
+REPEAT 4
+CALL CHECK
+REND
+RETURN
+@CHECK
+#DIM Shadow
+#DIMS Lookup = "label"
+Grid:Label:Label = 7
+Grid:"label":Lookup ++
+CALL BUMP(Grid)
+Grid:Shadow:Label = 20
+Cube:Label:Label:Label = Grid:Lookup:("la" + "bel")
+SWAP Grid:Label:Label, Cube:Lookup:"label":("la" + "bel")
+Legacy:Label:Label = 30
+People:Label = 40
+MAXBASE:Health = 50
+PRINTFORML {Grid:1:2} {Grid:0:2} {Cube:1:2:3} {Legacy:1:1} {People:0:Label} {MAXBASE:0:Health}
+RETURN
+@BUMP(R)
+#DIM REF R, 0, 0
+R:1:2 += 1`, jit, game).start();
+      assert.deepEqual(texts(s), Array(4).fill("9 20 9 30 40 50"));
+      for (const [access, error] of [
+        ["Grid:TooFar:Label", /out of range/],
+        ['Grid:Label:"RowOnly"', /Unknown GRID CSV index/],
+        ["Grid:ColumnOnly:Label", /Unknown variable/i],
+      ] as const) {
+        const failed = runtime(`@SYSTEM_TITLE
+REPEAT 4
+CALL CHECK(COUNT)
+REND
+RETURN
+@CHECK(N)
+#DIM N
+SIF N == 3
+PRINTFORML {${access}}`, jit, await loadGame(root)).start();
+        assert.equal(failed.status, "error", `${access}, jit=${jit}`);
+        assert.match(failed.error?.message ?? "", error);
+      }
+    }
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
 test("HTML_STRINGLINES measures explicit breaks, Unicode cells, inline images and shape widths", () => {
   const game = emptyGame();
   game.sprites.set("ICON", { file: "x.png", width: 10, height: 10, x: 0, y: 0 });
@@ -370,6 +434,20 @@ WAIT`).start();
 });
 
 const blueRoot = path.resolve("GAMES/erablue_resort");
+test("Blue Resort's party lookup resolves the character registration index in BATTLE_STATE@2", {
+  skip: !existsSync(blueRoot),
+}, async () => {
+  const game = await loadGame(blueRoot);
+  for (const jit of [false, true]) {
+    const s = runtime(`@ERD_REGRESSION
+BATTLE_STATE:7:0 = 123
+REPEAT 4
+PRINTFORML {隊列算出_味方(123)} {隊列算出_味方(-1)}
+REND`, jit, game).start("ERD_REGRESSION");
+    assert.deepEqual(texts(s), Array(4).fill("7 -1"));
+  }
+});
+
 test("Blue Resort boots to its button-restricted title menu with only native plugin instructions unrecognized", {
   skip: !existsSync(blueRoot),
 }, async () => {

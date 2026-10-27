@@ -64,7 +64,12 @@ export type GlobalData = Record<string, Record<string, string>>;
 export interface SaveData { characters: number; variables: GlobalData }
 // Built-ins that Emuera does not write to save files (STR comes from Str.csv; CHARANUM is derived).
 const UNSAVED = new Set(["STR", "RESULTS", "GLOBAL", "GLOBALS", "WINDOW_TITLE", "CHARANUM", "LOCAL", "LOCALS", "ARG", "ARGS"]);
-export interface Resolved { name: string; variable: Variable; symbols: Map<string, number> | undefined }
+export interface Resolved {
+  name: string;
+  variable: Variable;
+  symbols: Map<string, number> | undefined;
+  dimensionSymbols: (Map<string, number> | undefined)[];
+}
 // Bumped whenever any scope's name table changes, invalidating every scope's resolution cache.
 // Exported as an object so compiled routines can check it without a call.
 export const GENERATION = { value: 0 };
@@ -465,7 +470,10 @@ export class Variables {
       const variable = this.resolve(name, context);
       // Resolving may lazily create a declared variable, which bumps the generation; cache under the new one.
       if (this.cacheGeneration !== GENERATION.value) { this.resolved.clear(); this.known.clear(); this.cacheGeneration = GENERATION.value; }
-      entry = { name, variable, symbols: this.game.names.get(symbolTable(name)) };
+      entry = {
+        name, variable, symbols: this.game.names.get(symbolTable(name)),
+        dimensionSymbols: variable.dimensions.map((_, i) => this.game.names.get(`${name}@${i + 1}`)),
+      };
       this.resolved.set(written, entry);
     }
     return entry;
@@ -473,7 +481,8 @@ export class Variables {
   /** The variable resolved by the latest `address` call; avoids allocating a result object per access. */
   private addressed!: Variable;
   private address(written: string, indices: Expr[], context: EvaluationContext): number {
-    const { name, variable, symbols: table } = this.lookup(written, context);
+    const slot = this.lookup(written, context);
+    const { name, variable } = slot;
     const count = indices.length;
     const dimensions = variable.dimensions;
     const rank = dimensions.length;
@@ -497,6 +506,7 @@ export class Variables {
     let index = 0, bad = -1, badValue = 0;
     for (let i = 0; i < count; i++) {
       const expr = indices[i]!;
+      const table = indexSymbols(slot, i, count);
       let n: number;
       if (expr.kind === "literal" && typeof expr.value === "bigint") {
         n = Number(expr.value);
@@ -558,10 +568,14 @@ export class Variables {
   }
 }
 
-/** An index value as `address` converts it: CSV names through the variable's symbol table, integers as safe numbers. */
-export function indexNumber(slot: Resolved, value: Value): number {
+export function indexSymbols(slot: Resolved, index: number, count: number): Map<string, number> | undefined {
+  const offset = slot.variable.character && count === slot.variable.dimensions.length - 1 ? 1 : 0;
+  return slot.dimensionSymbols[index + offset] ?? slot.symbols;
+}
+/** Converts indices as `address` does, including dimension-specific ERD names. */
+export function indexNumber(slot: Resolved, value: Value, index: number, count: number): number {
   if (typeof value === "string") {
-    const symbol = slot.symbols?.get(key(value));
+    const symbol = indexSymbols(slot, index, count)?.get(key(value));
     if (symbol === undefined) throw new EraError(`Unknown ${slot.name} CSV index: ${value}`);
     return symbol;
   }
