@@ -386,6 +386,7 @@ function describe(element, description) {
   if (!element.matches("button, a[href]")) element.tabIndex = 0;
   function show() {
     if (busy || !element.closest(".screen.is-active") || element.matches(".is-stale")) return;
+    if (element.closest(".era-occupant-list") && element.querySelector(".sprite")) return;
     hideTooltip();
     tooltipTarget = element;
     // Each line is translated on its own so line breaks survive translation.
@@ -1432,6 +1433,7 @@ async function renderSnapshot(snapshot, advanceScreen) {
         if (output.single || ruleTail.test(parts[i])) textLine.classList.add("single-line");
         const fragment = document.createElement("span");
         applyStyle(fragment, output.style);
+        if (!parts[i].trim()) fragment.classList.add("is-empty");
         // A PRINTC button item is padded to a fixed width and wraps only as a whole, so a row of them lines up like a grid.
         if (output.cell) fragment.classList.add("print-cell");
         if (output.plain) fragment.textContent = parts[i];

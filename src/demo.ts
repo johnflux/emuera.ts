@@ -83,18 +83,18 @@ ENDSELECT
 GOTO MENU
 
 @SCENARIOS
-#DIMS SCENE, 11 = "", "Alone", "One person", "Two people", "Crowd (six people)", "Time stopped, two people", "Time stopped, alone", "Partner asleep", "Exhausted", "Outdoors at night, in the rain", "Asleep, before waking (the sleep menu)"
+#DIMS SCENE, 12 = "", "Alone", "One person", "Two people", "Crowd (six people)", "Time stopped, two people", "Time stopped, alone", "Partner asleep", "Exhausted", "Outdoors at night, in the rain", "Asleep, before waking (the sleep menu)", "Crowd stress test (24 people)"
 #DIM I
 ; RESETDATA resets static locals too.
 #DIM DYNAMIC CHOICE
 PRINTL Start the bundled game on its main screen in a prepared situation (Quicktest player, Hakurei Shrine back room).
 PRINTL Play continues normally from there; restart the demo to pick another scenario.
-FOR I, 1, 11
+FOR I, 1, 12
   PRINTFORML [{I}] %SCENE:I%
 NEXT
 PRINTL [0] Back
 INPUT
-IF RESULT < 1 || RESULT > 10
+IF RESULT < 1 || RESULT > 11
   RETURN 0
 ENDIF
 CHOICE = RESULT
@@ -142,6 +142,8 @@ SELECTCASE DEMO_SCENARIO
     COUNT = 2
   CASE 4
     COUNT = 6
+  CASE 11
+    COUNT = MIN(24, CHARANUM - 1)
 ENDSELECT
 ROOM = CFLAG:MASTER:現在位置
 IF DEMO_SCENARIO == 9
@@ -163,7 +165,11 @@ FOR C, 1, CHARANUM
 NEXT
 ; Already met, greeted and present last turn, so no arrival or first-meeting events interrupt the screen.
 FOR C, 0, COUNT
-  N = GETCHARA(CHARA:C)
+  IF DEMO_SCENARIO == 11
+    N = C + 1
+  ELSE
+    N = GETCHARA(CHARA:C)
+  ENDIF
   CFLAG:N:現在位置 = ROOM
   CFLAG:N:前ターン位置 = CFLAG:MASTER:前ターン位置
   CFLAG:N:面識 = 1
@@ -175,6 +181,9 @@ NEXT
 CALL SET_SLEEP(0, MASTER, 0)
 SIF COUNT
   TARGET = GETCHARA(CHARA)
+; Start at the far end of the crowd to exercise selected-person scrolling.
+SIF DEMO_SCENARIO == 11
+  TARGET = COUNT
 SELECTCASE DEMO_SCENARIO
   CASE 5, 6
     CALL COM355

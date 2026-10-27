@@ -93,6 +93,15 @@ test("HTTP UI, isolated sessions, real image bytes, sprite metadata, errors and 
     const page = await fetch(base);
     assert.match(await page.text(), /id="game"[^>]*>eraToho The World</);
     assert.match(page.headers.get("content-security-policy")!, /script-src 'self'/);
+    assert.equal((await fetch(base + "/rooms/shrine.svg")).status, 404);
+    for (const season of ["spring", "summer", "autumn", "winter"]) {
+      const decoration = await fetch(base + `/decoration/deco_corner_flower_${season}.png`);
+      assert.equal(decoration.status, 200);
+      assert.equal(decoration.headers.get("content-type"), "image/png");
+      const bytes = Buffer.from(await decoration.arrayBuffer());
+      assert.equal(bytes.subarray(1, 4).toString(), "PNG");
+    }
+    assert.equal((await fetch(base + "/decoration/deco_corner_flower_unknown.png")).status, 404);
     const font = await fetch(base + "/fonts/BIZUDGothic-Regular.ttf");
     assert.equal(font.status, 200);
     assert.equal(font.headers.get("content-type"), "font/ttf");

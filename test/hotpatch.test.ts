@@ -131,7 +131,7 @@ WAIT`, "<cage-test>");
     if (scenario.caged) {
       assert.match(markup, /<span class='era-occupant era-occupant-caged'>/);
       assert.match(markup, /In her cage · Miracle Mallet only/);
-      assert.doesNotMatch(markup, /<button[^>]*era-occupant-caged|value='1071'|Just you/);
+      assert.doesNotMatch(markup, /<button[^>]*era-occupant-caged|value='1071'|Nobody else is here/);
       assert.equal((markup.match(/era-occupant-name'>Shinmyoumaru</g) ?? []).length, 1, scenario.name);
       if (scenario.name === "asleep") assert.match(markup, /Miracle Mallet only · Asleep/);
     }
@@ -178,12 +178,50 @@ test("main screen hotpatch opens and closes its panel boxes in balance", {
   assert.ok(screens[1]!.some((text) => /era-stopped'[^>]*value='999'|value='999'[^>]*era-stopped/.test(text)), "time stop switches to Resume Time");
 });
 
+test("character titles fill quiet info panels without hiding relationship or mood tags", {
+  skip: !existsSync(GAME_ROOT),
+}, async () => {
+  const game = await loadGame();
+  await applyHotpatches(game);
+  const scenarios = [
+    { name: "quiet", setup: "", blurb: true },
+    { name: "missing title", setup: `nameArray:1:na_Title '= ""`, blurb: false },
+    { name: "hate mark", setup: "MARK:1:反発刻印 = 2", blurb: false, tag: "Hate Lv2" },
+    { name: "relationship", setup: "TALENT:1:恋慕 = 1", blurb: false, tag: "era-feel-love" },
+    { name: "happy", setup: "TALENT:1:機嫌 = 1", blurb: false },
+    { name: "sullen", setup: "TALENT:1:機嫌 = -1", blurb: false },
+    { name: "angry", setup: "BASE:1:怒り = 200", blurb: false },
+    { name: "asleep", setup: "CFLAG:1:睡眠 = 1", blurb: false },
+  ];
+  for (const scenario of scenarios) {
+    const stub = emptyGame(game.root);
+    indexScript(stub, `@SYSTEM_TITLE
+ADDCHARA 0
+ADDCHARA 1
+MASTER = 0
+TARGET = 1
+BASE:1:怒り = 0
+nameArray:1:na_Title = ～A <quiet> visitor～　●Race:Human　●Ability:Floating
+${scenario.setup}
+CALL HOTPATCH_TARGET_SITUATION
+WAIT`, "<info-title-test>");
+    game.routines.set("SYSTEM_TITLE", stub.routines.get("SYSTEM_TITLE")!);
+    const snapshot = new Runtime(game, GAME_INSTRUCTION_LIMIT).start();
+    assert.equal(snapshot.error, null, `${scenario.name}: ${JSON.stringify(snapshot.error)}`);
+    const html = snapshot.output.flatMap((item) => item.type === "html" ? [item.text] : []).join("");
+    assert.equal(html.includes("era-character-blurb"), scenario.blurb, scenario.name);
+    if (scenario.blurb) assert.match(html, /era-character-blurb'>A &lt;quiet&gt; visitor</);
+    if (scenario.tag) assert.ok(html.includes(scenario.tag), "existing tags remain visible");
+    assert.doesNotMatch(html, /●Race:|●Ability:/, "redundant race and ability fields are not part of the title");
+  }
+});
+
 test("room lineup renders every portrait and preserves target selection", {
   skip: !existsSync(GAME_ROOT),
 }, async () => {
   const game = await loadGame();
   await applyHotpatches(game);
-  for (const scenario of ["1", "2", "3", "4", "5", "6", "7"]) {
+  for (const scenario of ["1", "2", "3", "4", "5", "6", "7", "9", "11"]) {
     const runtime = new Runtime(demoGame(game), GAME_INSTRUCTION_LIMIT);
     runtime.start();
     runtime.input("8");
@@ -197,21 +235,36 @@ test("room lineup renders every portrait and preserves target selection", {
       snapshot = runtime.input("");
     }
     const html = markup.join("");
-    const count = scenario === "4" ? 6 : ["3", "5"].includes(scenario) ? 2 : ["1", "6"].includes(scenario) ? 0 : 1;
+    assert.ok(!snapshot.output.some((item) => "text" in item && item.text.includes("Change Partner")),
+      "the lineup replaces the redundant Change Partner menu button");
+    const count = scenario === "11" ? 24 : scenario === "4" ? 6 : ["3", "5"].includes(scenario) ? 2 : ["1", "6", "9"].includes(scenario) ? 0 : 1;
     assert.equal((html.match(/<era-open class='era-portrait'>/g) ?? []).length, count, scenario);
     assert.equal((html.match(/aria-pressed='true'/g) ?? []).length, count ? 1 : 0, scenario);
     assert.equal((html.match(/<era-open/g) ?? []).length, (html.match(/<era-close>/g) ?? []).length, scenario);
     assert.doesNotMatch(html, /era-main-occupants/, "occupants are inside the room card");
     assert.doesNotMatch(html, /era-selected/, "selection uses only the existing sprite highlight, not an occupant highlight");
     assert.ok(html.indexOf("era-character") < html.indexOf("era-occupant-list"));
+    assert.match(html, /era-room-stage/, "the lineup is inside a room stage");
+    assert.doesNotMatch(html, /era-room-shrine|\/rooms\//, "the room has no illustrated background");
+    assert.doesNotMatch(html, />Room Occupants</, "the room itself replaces the occupant-list heading");
     if (!count) {
-      assert.match(html, /Just you/);
+      assert.equal((html.match(/Nobody else is here/g) ?? []).length, 1, "one empty-room message");
+      assert.doesNotMatch(html, /Just you|No one else is in the room/);
       continue;
     }
     const labels = [...html.matchAll(/<button value='(\d+)' class='era-occupant-label' aria-pressed='(true|false)'/g)];
+    assert.match(html, /era-info-title'>Character Info</);
+    assert.match(html, /<era-open class='era-info-body'>/);
+    assert.match(html, /era-info-face/, "the details identify the selected person");
+    assert.match(html, /<era-open class='era-info-head'>/);
+    assert.match(html, /<era-open class='era-info-summary'>/);
     assert.equal(labels.length, count);
     const originalTarget = snapshot.target;
     assert.equal(originalTarget, Number(labels.find((label) => label[2] === "true")![1]) - 1000);
+    if (scenario === "11") {
+      assert.equal(new Set(labels.map((label) => label[1])).size, 24, "stress crowd has distinct characters");
+      assert.equal(originalTarget, Number(labels.at(-1)![1]) - 1000, "stress crowd starts with the last person selected");
+    }
     const next = labels.find((label) => label[2] === "false") ?? labels[0]!;
     snapshot = runtime.input(next[1]!);
     assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));

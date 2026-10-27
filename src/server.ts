@@ -393,6 +393,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
       // The main screen's per-area header art (web/areas/<map id>-<name>.svg, or pictures in web/areas/<map id>-<name>/).
       // Map pictures (web/maps/<map key>.<ext>) replace the game's text maps.
       const page = pages[url.pathname] ?? (/^\/areas\/\d+-[a-z]+\.svg$/.test(url.pathname)
+        || /^\/decoration\/deco_corner_flower_(spring|summer|autumn|winter)\.png$/.test(url.pathname)
         || /^\/areas\/\d+-[a-z]+\/(spring|summer|autumn|winter)-(day|night)-(left|middle|right)\.png$/.test(url.pathname)
         || /^\/maps\/[a-z0-9-]+\.(webp|svg|png|jpg)$/.test(url.pathname) ? url.pathname.slice(1) : undefined);
       if (request.method === "GET" && page) {

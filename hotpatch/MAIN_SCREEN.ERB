@@ -155,12 +155,16 @@ HTML_PRINT "<era-close>"
 HTML_PRINT "<era-open class='era-main-center'>"
 IF TARGET > 0
 	HTML_PRINT "<era-open class='era-card era-character'>"
+	HTML_PRINT "<era-open class='era-room-stage'>"
 	CALL HOTPATCH_PLACE
 	HTML_PRINT "<era-open class='era-scene'>"
 	CALL HOTPATCH_SCENE
 	HTML_PRINT "<era-close>"
 	CALL HOTPATCH_OCCUPANTS
+	HTML_PRINT "<era-close>"
 	HTML_PRINT "<era-open class='era-character-info'>"
+	HTML_PRINT "<div class='era-card-title era-info-title'>Character Info</div>"
+	HTML_PRINT "<era-open class='era-info-body'>"
 	CALL HOTPATCH_TARGET_SITUATION(FLAG:TARGETの情報表示モード)
 	CALL HOTPATCH_BASE(TARGET)
 	CALL HOTPATCH_EMOTION
@@ -174,15 +178,17 @@ IF TARGET > 0
 	HTML_PRINT "<era-close>"
 	HTML_PRINT "<era-close>"
 	HTML_PRINT "<era-close>"
+	HTML_PRINT "<era-close>"
 ELSE
 	HTML_PRINT "<era-open class='era-card era-character era-alone'>"
+	HTML_PRINT "<era-open class='era-room-stage'>"
 	CALL HOTPATCH_PLACE
 	HTML_PRINT "<era-open class='era-scene'>"
 	CALL HOTPATCH_SCENE
 	HTML_PRINT "<era-close>"
 	CALL HOTPATCH_OCCUPANTS
-	HTML_PRINT "<div class='era-alone-message'><span class='era-alone-mark'></span><span class='era-alone-title'>Nobody else is here</span><span class='era-alone-hint'>Move or go out to find someone, or wait for visitors.</span></div>"
 	CALL SHOW_EQUIP_1
+	HTML_PRINT "<era-close>"
 	HTML_PRINT "<era-close>"
 ENDIF
 HTML_PRINT "<era-close>"
@@ -278,7 +284,6 @@ ENDIF
 #DIMS DYNAMIC sPressed
 TFLAG:パンツ収奪 = 0
 HTML_PRINT "<era-open class='era-occupants'>"
-HTML_PRINT "<div class='era-card-title'>Room Occupants</div>"
 HTML_PRINT "<era-open class='era-occupant-list'>"
 IF TARGET > 0
 	FOR nIndex, 1, GET_TARGETNUM() + 1
@@ -351,15 +356,16 @@ IF CHARANUM > 71 && !bShinmyoumaruShown && FLAG:なりきり != 71 && CFLAG:71:�
 	nCount++
 ENDIF
 SIF !nCount
-	sItems '= "<span class='era-occupant era-occupant-none'><span class='era-face'></span><span class='era-occupant-text'><span class='era-occupant-name'>Just you</span><span class='era-occupant-state'>No one else is in the room</span></span></span>"
+	sItems '= "<div class='era-alone-message'><span class='era-alone-mark'></span><span class='era-alone-title'>Nobody else is here</span><span class='era-alone-hint'>Move or go out to find someone, or wait for visitors.</span></div>"
 SIF STRLENS(sItems)
 	HTML_PRINT sItems
 HTML_PRINT "<era-close>"
 HTML_PRINT "<era-close>"
 
 ; The character's face picture as an <img> in RESULTS (empty if the game has none), as LOAD_FACE_IMAGE gets it.
-@HOTPATCH_FACE(nChara)
+@HOTPATCH_FACE(nChara, nSize = 44)
 #DIM DYNAMIC nChara
+#DIM DYNAMIC nSize
 IF TALENT:nChara:行きずり && !GCREATED(CFLAG:nChara:モブ子素材CFLAG開始位置)
 	CALL モブ子生成(nChara, 0)
 	CALL モブ子生成(nChara, 1)
@@ -369,7 +375,7 @@ CALL GET_BASE_RESOURCE(nChara, "顔絵", "服", "通常")
 SIF !RESULT || RESULT > 1
 	RESULTS = %GET_BASESTYLE(nChara, "顔絵")%_服_通常_{NO:nChara}
 IF SPRITECREATED(RESULTS)
-	RESULTS '= @"<img src='%RESULTS%' height='44px'>"
+	RESULTS '= @"<img src='%RESULTS%' height='{nSize}px'>"
 ELSE
 	RESULTS '= @"<span class='era-face-letter'>%HTML_ESCAPE(SUBSTRINGU(CALLNAME:nChara, 0, 1))%</span>"
 ENDIF
@@ -401,6 +407,10 @@ isModifier = nSize
 @HOTPATCH_TARGET_SITUATION(情報表示MODE = 0)
 #DIM 情報表示MODE ;0 = 全部ON, 1 = 簡易
 #DIMS DYNAMIC sHtml
+HTML_PRINT "<era-open class='era-info-head'>"
+CALL HOTPATCH_FACE(TARGET, 74)
+HTML_PRINT @"<div class='era-info-face'>%RESULTS%</div>"
+HTML_PRINT "<era-open class='era-info-summary'>"
 HTML_PRINT "<era-open class='era-character-state'>"
 CALL SHOW_EQUIP_2
 ;Species after the name (the game's own race text and description, as in its talent list).
@@ -425,6 +435,15 @@ IF 情報表示MODE == 0
 ENDIF
 sHtml += HOTPATCH_FEELINGS(TARGET, 0)
 HTML_PRINT @"<div class='era-facts'>%sHtml%</div>"
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-close>"
+IF !STRLENS(HOTPATCH_FEELINGS(TARGET, 1)) && !CFLAG:TARGET:睡眠 && !BASE:TARGET:怒り
+	sHtml '= nameArray:(NO:TARGET):na_Title
+	sHtml '= REPLACE(sHtml, "[　 ]*●.*$", "")
+	sHtml '= REPLACE(sHtml, "^～|～$", "")
+	SIF STRLENS(sHtml)
+		HTML_PRINT @"<div class='era-character-blurb'>%HTML_ESCAPE(sHtml)%</div>"
+ENDIF
 LOCAL = MIN(BASE:怒り / 200, 5)
 SIF BASE:怒り && LOCAL == 0 ;qol custom code, show anger sign if there's even a little bit of anger going
 	LOCAL = 1
