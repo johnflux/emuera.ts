@@ -1452,6 +1452,7 @@ async function renderSteps(steps, fresh = false, keepFocus = false, toBottom = f
   if (input && !keepFocus) command.focus({ preventScroll: true });
 }
 // TINPUT/TWAIT timers run in the browser; expiry asks the runtime to apply the timeout.
+const FRAME_INTERVAL = 1000 / 60;
 function clearTimedWait() {
   if (!timedWait) return;
   clearTimeout(timedWait.handle);
@@ -1461,12 +1462,13 @@ function clearTimedWait() {
 function scheduleTimedWait() {
   clearTimedWait();
   if (!input?.timeout) return;
-  const deadline = performance.now() + input.timeout;
+  const delay = input.kind === "mousekey" ? Math.max(input.timeout, FRAME_INTERVAL) : input.timeout;
+  const deadline = performance.now() + delay;
   const counter = input.countdown ? lastOutputLine() : null;
   const tick = counter && setInterval(() => {
     counter.textContent = `残り ${Math.max(0, Math.floor((deadline - performance.now()) / 100)) / 10}`;
   }, 100);
-  timedWait = { handle: setTimeout(() => { void expire(); }, input.timeout), tick };
+  timedWait = { handle: setTimeout(() => { void expire(); }, delay), tick };
 }
 async function expire() {
   const current = generation;

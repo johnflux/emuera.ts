@@ -59,18 +59,18 @@ test("FlappyTengu falls between frames and a click makes the character flap upwa
     const run = new Runtime(game, 50_000, { jit, client: { width: 1200, height: 800, active: true } });
     assert.equal(y(run.start()), 0);
     const click = () => {
-      now += 30;
+      now += 16;
       return run.input(JSON.stringify({ result: [1, 0x100000, 10, -10, -1, 0] }));
     };
     click();
     let falling = 0;
     for (let frame = 0; frame < 5; frame++) {
-      now += 30;
+      now += 16;
       falling = y(run.timeout());
     }
     assert.ok(falling > 0, "gravity should move the character down");
     const beforeFlap = y(click());
-    now += 30;
+    now += 16;
     const afterFlap = y(run.timeout());
     assert.ok(afterFlap < beforeFlap, `flap should move upward: ${afterFlap} < ${beforeFlap}`);
   }

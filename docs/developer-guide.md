@@ -818,6 +818,10 @@ declarations and the expression evaluator. No single routine dominates.
   coordinates, rather than always reporting the configured desktop window size.
   Headless runs retain the configured dimensions. `ISACTIVE()` reports browser
   visibility/focus (headless runs default to active).
+  Timed `INPUTMOUSEKEY` frames are capped at 60 FPS: delays shorter than
+  1/60 second use that interval, while longer delays and other input timers
+  are unchanged. Mouse clicks, wheel events and keys received during a timed
+  frame's request/render are queued for the next frame instead of discarded.
   `AWAIT` yields to the browser event loop, including when its delay is omitted
   or zero, so inactive-window polling loops cannot block the server. Explicit
   delays accept 0–10000 milliseconds; the browser transport uses a minimum 1 ms
@@ -828,6 +832,9 @@ declarations and the expression evaluator. No single routine dominates.
   first rendered frame, click-to-play, timed updates, focus loss and resume,
   Escape to exit, and `FORCE_BEGIN TITLE` to play again. Its lexical compatibility
   report has no gaps or loader diagnostics.
+  Movement and upward flaps are tested with a controlled clock. The browser's
+  60 FPS cap keeps the game's integer-divided physics from rounding to zero
+  at sub-15 ms frame times; no game scripts are patched.
   Its lowercase `csv/` directory works without renaming. Full gameplay and the
   sorting demo shown in external feedback have not been verified.
 - A presentation-only patch recognizes the title's exact 35-strip HTML sequence

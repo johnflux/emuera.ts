@@ -4,6 +4,33 @@ import { test } from "node:test";
 import { runInNewContext } from "node:vm";
 import { parseFragment, type DefaultTreeAdapterMap } from "parse5";
 
+test("timed mouse frames are capped at 60 FPS without changing longer waits or other input timers", async () => {
+  const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
+  const start = source.indexOf("const FRAME_INTERVAL =");
+  const end = source.indexOf("async function expire(", start);
+  const delays: number[] = [];
+  const cleared: number[] = [];
+  const input = { kind: "mousekey", timeout: 5 };
+  const schedule = runInNewContext(`let timedWait;\n${source.slice(start, end)}\nscheduleTimedWait`, {
+    input, performance: { now: () => 0 },
+    setTimeout: (_: () => void, delay: number) => { delays.push(delay); return delays.length; },
+    clearTimeout: (handle: number) => cleared.push(handle), clearInterval() {},
+  });
+  schedule();
+  assert.equal(delays[0], 1000 / 60);
+  input.timeout = 100;
+  schedule();
+  assert.equal(delays[1], 100);
+  input.kind = "wait";
+  input.timeout = 5;
+  schedule();
+  assert.equal(delays[2], 5);
+  input.kind = "integer";
+  schedule();
+  assert.equal(delays[3], 5);
+  assert.deepEqual(cleared, [1, 2, 3]);
+});
+
 test("mouse and keyboard events reach the input queue while a timed frame is rendering", async () => {
   const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
   const terminalHandlers = new Map<string, { capture: boolean; handler: (event: object) => void }[]>();
