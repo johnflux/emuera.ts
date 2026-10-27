@@ -26,3 +26,9 @@ https://gitgud.io/Legis1998/anon-tw/-/archive/anon-tw_eng-modding/anon-tw-anon-t
 
 See the [developer guide](docs/developer-guide.md) for compatibility details and
 additional documentation.
+
+## License
+
+The original Emuera.ts project source is licensed under the [BSD 3-Clause
+License](LICENSE.md). Bundled games and third-party assets are excluded and
+remain subject to their respective licenses and terms.

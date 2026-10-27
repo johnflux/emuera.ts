@@ -70,6 +70,21 @@ test("loader decodes legacy files and indexes CSV, sprites, headers and scripts"
     await assert.rejects(loadGame(root), /Invalid ERD index definition/);
   } finally { await rm(root, { recursive: true }); }
 });
+test("ERD tables allow unnamed indices while rejecting invalid numeric indices", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "era-erd-"));
+  try {
+    await Promise.all(["ERB", "CSV"].map((dir) => mkdir(path.join(root, dir))));
+    const file = path.join(root, "ERB", "Custom.ERD");
+    await writeFile(file, "\uFEFF; Reserved indices\n0,first\n1,\n2\n3, ; unused\n4,second\n");
+    const game = await loadGame(root);
+    assert.deepEqual([...game.names.get("CUSTOM")!], [["FIRST", 0], ["SECOND", 4]]);
+    assert.deepEqual(game.diagnostics, []);
+    for (const row of ["bad,second", "bad,", "-1,", "1.5,", "9007199254740992,", ",second", ","]) {
+      await writeFile(file, row);
+      await assert.rejects(loadGame(root), /Invalid ERD index definition/, row);
+    }
+  } finally { await rm(root, { recursive: true }); }
+});
 test("HTTP UI, isolated sessions, real image bytes, sprite metadata, errors and traversal protection", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "era-http-"));
   const game = emptyGame(root);

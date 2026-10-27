@@ -112,6 +112,12 @@ the game under `GAMES/`, keeping `ERB/` and `CSV/` together directly or one fold
 down. Then use **Refresh library**. Games can be launched immediately after
 installation; interpreter compatibility is not guaranteed.
 
+ERD name-index tables may contain numeric rows with an empty name (for example
+`1,` in Blue Resort). These reserve unnamed indices and do not create name
+lookups; malformed numeric indices still fail loading. If a download completed
+but loading failed, the game folder is retained. After updating the loader,
+use **Refresh library** rather than downloading the game again.
+
 The **Game library** button returns from a game to the home screen, asking first
 before discarding unsaved progress. Direct `?game=...` / `?demo` links and page
 reloads still open or restore the requested run rather than the library.

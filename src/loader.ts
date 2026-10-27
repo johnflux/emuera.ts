@@ -340,8 +340,10 @@ export async function loadGame(root = GAME_ROOT, options: { debug?: boolean } = 
     const names = new Map<string, number>();
     for (const row of csvRows(await readText(file))) {
       const index = Number(row[0]);
-      if (!/^\d+$/.test(row[0] ?? "") || !Number.isSafeInteger(index) || !row[1])
+      if (!/^\d+$/.test(row[0] ?? "") || !Number.isSafeInteger(index))
         throw new EraError(`Invalid ERD index definition: ${row.join(",")}`, { file, line: 0 });
+      // ERD tables can reserve numeric indices without assigning them a name.
+      if (!row[1]) continue;
       names.set(key(row[1]), index);
     }
     game.names.set(name, names);

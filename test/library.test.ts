@@ -160,6 +160,7 @@ test("empty library serves home, refresh discovers games live, and stop releases
     await mkdir(path.join(gameRoot, "ERB"), { recursive: true });
     await mkdir(path.join(gameRoot, "CSV"));
     await writeFile(path.join(gameRoot, "ERB", "start.erb"), "@SYSTEM_TITLE\nPRINTL Library fixture\nINPUT");
+    await writeFile(path.join(gameRoot, "ERB", "Custom.ERD"), "0,first\n1,\n2,second");
     assert.equal((await post("/api/library/refresh", {})).status, 200);
     const library = await (await fetch(base + "/api/library")).json();
     assert.equal(library.installed.length, 1);
