@@ -1258,7 +1258,7 @@ async function renderHtml(markup, parent, sprites) {
       }
     } else throw new Error(`Unsupported HTML tag: <${node.tagName.toLowerCase()}>`);
     applyClasses(element, node);
-    if (element.classList.contains("era-occupant-label"))
+    if (element.matches(".era-occupant-label, .era-guard-toggle"))
       element.setAttribute("aria-pressed", String(node.getAttribute("aria-pressed") === "true"));
     // Hotpatch extension: data-room links a non-button element to the map's room buttons with that value.
     const room = node.getAttribute("data-room");

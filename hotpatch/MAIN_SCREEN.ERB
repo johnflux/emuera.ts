@@ -163,7 +163,7 @@ IF TARGET > 0
 	CALL HOTPATCH_OCCUPANTS
 	HTML_PRINT "<era-close>"
 	HTML_PRINT "<era-open class='era-character-info'>"
-	HTML_PRINT "<div class='era-card-title era-info-title'>Character Info</div>"
+	HTML_PRINT @"<div class='era-info-tabs'><div class='era-card-title era-info-title'>Character Info</div><button value='-9300' class='era-info-more' title='More about %HOTPATCH_ATTRIBUTE(HTML_ESCAPE(CALLNAME:TARGET))%'>More...</button></div>"
 	HTML_PRINT "<era-open class='era-info-body'>"
 	CALL HOTPATCH_TARGET_SITUATION(FLAG:TARGETの情報表示モード)
 	CALL HOTPATCH_BASE(TARGET)
@@ -204,7 +204,7 @@ CALL SHOW_EQUIP_SP
 CALL SHOW_EQUIP_3
 CALL INFO_GAUGEGROUP
 SIF !GETBIT (FLAG:USERCOMフィルタ, 4)
-	HTML_PRINT "<div class='era-player-actions'><button value='805' class='era-chip-button' title='Item list, quantities, categories and search'>Inventory</button></div>"
+	HTML_PRINT "<div class='era-player-actions'><button value='805' class='era-player-control era-inventory-button' title='Item list, quantities, categories and search'>Inventory<span class='era-control-arrow'>›</span></button></div>"
 HTML_PRINT "<era-close>"
 HTML_PRINT "<era-close>"
 
@@ -849,7 +849,7 @@ IF CFLAG:MASTER:眠気覚まし
 ENDIF
 sHtml += HOTPATCH_STAINS(MASTER)
 sHtml '= @"<div class='era-player-status'><span class='era-status-label'>Status:</span>%sHtml%</div><div class='era-player-toggles'>"
-sHtml += @"<button value='-9200' class='era-toggle%(FLAG:押し倒し ? " era-on" # "")%' title='Pushdown Guard: %(FLAG:押し倒し ? "on" # "off")%&#10;When on, someone only pushes you down if they are stronger than you (fighting ability and build, with shyness, seduction and forwardness); otherwise they just hug you.&#10;When off, anyone in the mood can push you down.'>Pushdown Guard</button>"
+sHtml += @"<button value='-9200' class='era-player-control era-guard-toggle%(FLAG:押し倒し ? " era-on" # "")%' aria-pressed='%(FLAG:押し倒し ? "true" # "false")%' title='Pushdown Guard: %(FLAG:押し倒し ? "on" # "off")%&#10;When on, someone only pushes you down if they are stronger than you (fighting ability and build, with shyness, seduction and forwardness); otherwise they just hug you.&#10;When off, anyone in the mood can push you down.'>Pushdown Guard<span class='era-control-state'>%(FLAG:押し倒し ? "On" # "Off")%</span></button>"
 HTML_PRINT sHtml + "</div>"
 
 ; INFO_CHARA_STAIN as status entries, one per stained body part ("Hands: Semen, Love Juice"). A part's own fluid

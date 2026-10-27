@@ -60,6 +60,21 @@ Keep opens and closes balanced on every path, including early `RETURN`s.
 
 ## Patches
 
+On the main screen, **More...** beside Character Info opens the same room-wide
+character sheet as the player's **See more**, but starts on the selected
+character without changing the target. `CHARA_SHEET.ERB` also replaces
+`@Add_Custom_USERCOM` to handle this presentation-only entry [-9300]; its other
+custom-command handling is unchanged. `@TARGET_LIST_STATE` accepts an optional
+character to focus and still defaults to the player. The player panel's Inventory
+and Pushdown Guard use matching softly bordered controls, with an explicit On/Off
+state and space below the guard. Time Stop keeps its translucent background and
+adds a 3px backdrop blur.
+
+The sheet heading combines "Character sheet" and the character tabs on one row,
+with the viewed character highlighted; only the player's active tab says "You".
+Previous/next arrows [77]/[88] remain available
+for every multi-character list, including short lists with individual tabs.
+
 | File | Replaces | Change |
 |------|----------|--------|
 | `ITEM_LIST.ERB` | `@QoL_AllItemSort` (called by `@SHOW_ALLITEM`) | Inventory [805] opens in the same modal system as the character sheet, with category tabs and a compact, responsive list of item names and quantities. Hover or focus an item for its description. A search box inside the footer filters names instantly, case-insensitively and entirely client-side, with a matching-item count and an explicit empty state. The filter persists across category and item-mod views until the dialog closes; clear the textbox to reset it, or select All to search every category. The browser creates the textbox in an `era-inventory-filter` placeholder, without expanding the game HTML allowlist. Return, Escape and backdrop clicks close it; category IDs [3000–3020], Item mods [777], Back to items [889] and Return [999] remain available. The Inventory button is on the player card, retaining the existing command-filter bit 4 visibility rule. |

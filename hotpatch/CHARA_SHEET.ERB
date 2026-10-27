@@ -4,22 +4,47 @@
 ; (<era-open class='era-dialog'>, see web/style.css): a header with a tab per character (‹ › arrows for long lists)
 ; and a tab per page, a close button, and the game's own page (CHARA_STATE_TR) in a scrolling body.
 ;
-; The input loops are copied unchanged, plus [5000 + n] to pick the nth character of a list. Dropped: the DRAWLINE
-; and the [77]/[88] buttons when the characters fit as tabs (the values still work).
+; The input loops are copied unchanged, plus [5000 + n] to pick the nth character of a list.
+; Lists keep previous/next arrows even when all characters fit as tabs.
 ;
 ; The main screen's "See more" button (hotpatch/MAIN_SCREEN.ERB) sends [803], which shows you and everyone in the
-; room; TARGET_LIST_STATE now starts on you instead of the selected character.
+; room; TARGET_LIST_STATE starts on you unless a character is passed by the "More..." tab [-9300].
 ;-------------------------------------------------------------------------------
-@TARGET_LIST_STATE
+@TARGET_LIST_STATE(nChara = MASTER)
+#DIM DYNAMIC nChara
 #DIM TARGET_LIST, キャラクタ数上限
 #DIM TARGET_NUM
+#DIM DYNAMIC nView
 VARSET TARGET_LIST
 TARGET_NUM = FINDELEMENT(TARGET, 0) - 1
 SIF TARGET_NUM <= 0
 	RETURN
 ARRAYCOPY "TARGET", "TARGET_LIST"
 TARGET_LIST:0 = MASTER
-CALL LIST_CHARA_STATE_TR(TARGET_LIST, 0, TARGET_NUM + 1, "「調教中」")
+nView = MAX(0, FINDELEMENT(TARGET_LIST, nChara, 0, TARGET_NUM + 1))
+CALL LIST_CHARA_STATE_TR(TARGET_LIST, nView, TARGET_NUM + 1, "「調教中」")
+
+; The custom-command dispatcher is unchanged except for the presentation-only character-sheet entry.
+@Add_Custom_USERCOM(ARG)
+#DIM ADD_CUSTOMCOMVALUE
+IF ARG == -9300
+	SIF TARGET > 0
+		CALL TARGET_LIST_STATE(TARGET)
+	TFLAG:Info表示中 = 0
+	RETURN -1
+ENDIF
+ADD_CUSTOMCOMVALUE = Add_Number_To_Custom_COM(ARG)
+ADD_SELECTCUSTOMCOM = -1
+IF ADD_CUSTOMCOMVALUE >= 0
+	RESULT = 0
+	TRYCALLFORM ADD_CUSTOM_COM_ABLE{ADD_CUSTOMCOMVALUE}
+	IF RESULT
+		ADD_SELECTCUSTOMCOM = ADD_CUSTOMCOMVALUE
+		RETURN ADD_CUSTOM_COM
+	ENDIF
+	RETURN -1
+ENDIF
+RETURN ARG
 
 
 @SINGLE_CHARA_STATE_TR(C_ID,OP)
@@ -143,9 +168,11 @@ IF CHARA_CNT <= 12
 		sPeople += HOTPATCH_SHEET_PERSON(CHARA_LIST:LOCAL, 5000 + LOCAL, LOCAL == C_VIEW)
 	NEXT
 ELSE
-	sPeople '= @"<button value='77' class='era-sheet-step'>‹</button>%HOTPATCH_SHEET_PERSON(CHARA_LIST:C_VIEW, 0, 1)%"
-	sPeople += @"<span class='era-sheet-count'>{C_VIEW + 1} / {CHARA_CNT}</span><button value='88' class='era-sheet-step'>›</button>"
+	sPeople '= HOTPATCH_SHEET_PERSON(CHARA_LIST:C_VIEW, 0, 1)
+	sPeople += @"<span class='era-sheet-count'>{C_VIEW + 1} / {CHARA_CNT}</span>"
 ENDIF
+SIF CHARA_CNT > 1
+	sPeople '= @"<button value='77' class='era-sheet-step' title='Previous character'>‹</button>%sPeople%<button value='88' class='era-sheet-step' title='Next character'>›</button>"
 HTML_PRINT "<era-open class='era-dialog era-sheet'>"
 HTML_PRINT HOTPATCH_SHEET_HEADER(sPeople, CHARA_LIST:C_VIEW, PAGE, nSettingsEnable ? 7 # 6)
 HTML_PRINT "<era-open class='era-sheet-body'>"
@@ -252,7 +279,7 @@ GOTO REPRINT
 #DIM DYNAMIC bCurrent
 #DIMS DYNAMIC sLabel
 sLabel '= HTML_ESCAPE(CALLNAME:nChara)
-SIF nChara == MASTER
+SIF nChara == MASTER && bCurrent
 	sLabel += "<span class='era-sub'>You</span>"
 SIF !nValue
 	RETURNF @"<span class='era-sheet-person era-current'>%sLabel%</span>"
@@ -274,7 +301,7 @@ sTabs '= ""
 FOR nIndex, 0, nPages
 	sTabs += @"<button value='{nIndex + 2}' class='era-sheet-page%(nIndex == nPage ? " era-current" # "")%'>%(nChara == MASTER && nIndex == 5 ? "Skill Acquisition" # sName:nIndex)%</button>"
 NEXT
-RETURNF @"<div class='era-sheet-header'><div class='era-sheet-people'>%sPeople%<button value='0' class='era-dialog-close'>×</button></div><div class='era-sheet-pages'>%sTabs%</div></div>"
+RETURNF @"<div class='era-sheet-header'><div class='era-sheet-heading'><span class='era-sheet-caption'>Character sheet</span><div class='era-sheet-people'>%sPeople%</div><button value='0' class='era-dialog-close'>×</button></div><div class='era-sheet-pages'>%sTabs%</div></div>"
 
 ;-------------------------------------------------------------------------------
 ; BASIC_STATE (ERB/ステータス表示関連/能力表示.ERB), the top of every page: verbatim, except that the Sta/Ene/Drunk/

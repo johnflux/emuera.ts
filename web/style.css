@@ -356,9 +356,11 @@ a { color: #8ddaff; }
 .era-dialog::backdrop { background: #000000b0; }
 .era-dialog > .line { flex: none; }
 .era-sheet-header { display: flex; flex-direction: column; gap: 8px; padding: 10px 16px 0; border-bottom: 1px solid #2a3138; background: #111518; }
+.era-sheet-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.era-sheet-caption { color: #788b97; font-size: .85em; }
 .era-sheet-people { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.line .era-sheet-people .era-sheet-person { padding: 3px 12px; border: 1px solid transparent; border-radius: 999px; color: #ddd; font-weight: bold; }
-.line .era-sheet-people .era-sheet-person.era-current { border-color: #2f4a63; background: #1b2a38; color: #8fc8ff; }
+.line .era-sheet-people .era-sheet-person { padding: 3px 12px; border: 1px solid transparent; border-radius: 999px; color: #8998a2; font-weight: normal; }
+.line .era-sheet-people .era-sheet-person.era-current { border-color: #438899; background: #19333e; color: #b7e9f4; font-weight: bold; }
 .era-sheet-person .era-sub { margin-left: 1ch; }
 .line button.choice.era-sheet-step { padding: 0 8px; color: #8fc8ff; font-size: 1.3em; }
 .era-sheet-count { color: #888; font-size: .85em; }
@@ -377,7 +379,17 @@ a { color: #8ddaff; }
 .era-sheet-bars { display: grid; grid-template-columns: repeat(2, 44ch); column-gap: 6ch; row-gap: 2px; margin: 4px 0 6px 2ch; }
 .era-sheet-bars .era-bar { grid-template-columns: 4ch minmax(0, 1fr) 13ch; }
 .era-player-actions { display: flex; margin-top: 12px; padding-top: 10px; border-top: 1px solid #20506a; }
-.line .era-player-actions button.choice { padding: 5px 16px; border: 1px solid #35566d; border-radius: 4px; background: linear-gradient(#102330, #0b1822); color: #8fc8ff; }
+.era-main .era-player .line button.choice.era-player-control { display: inline-flex; align-items: center; gap: 14px; padding: 7px 12px; border: 1px solid #294957; border-radius: 7px; background: linear-gradient(135deg, #16303c99, #0d202b99); color: #b7d5e2; font-size: .9em; line-height: 1.2; }
+.era-player-control .interactive-label { text-decoration: none; }
+.era-main .era-player .line button.choice.era-player-control:enabled:is(:hover, :focus-visible) { border-color: #5da8bf; background: #193744; color: #e2f5ff; }
+.era-main .era-player .line button.choice.era-player-control:focus-visible { outline: 2px solid #7ccce3; outline-offset: 3px; }
+.era-control-arrow { margin-left: auto; color: #71b8cd; font-size: 1.3em; line-height: .8; }
+.era-main .era-player .line button.choice.era-guard-toggle { gap: 10px; }
+.era-guard-toggle::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #647783; }
+.era-control-state { margin-left: auto; color: #8299a6; font-size: .8em; }
+.era-main .era-player .line button.choice.era-guard-toggle.era-on { border-color: #38796e; background: #14332d99; color: #c1e6db; }
+.era-guard-toggle.era-on::before { background: #7cd7b5; box-shadow: 0 0 6px #7cd7b533; }
+.era-guard-toggle.era-on .era-control-state { color: #7cd7b5; }
 .era-inventory:popover-open { width: min(1100px, calc(100vw - 32px)); height: min(820px, calc(100dvh - 32px)); }
 .era-inventory-header { padding: 16px 20px 12px; border-bottom: 1px solid #245066; background: linear-gradient(135deg, #102735, #0b141d); white-space: normal; }
 .era-inventory-heading, .era-inventory-tools, .era-inventory-footer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
@@ -413,6 +425,7 @@ a { color: #8ddaff; }
 /* Time stop: the big control. */
 .era-timestop { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
 .line button.choice.era-timestop-button, .era-timestop-button { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; min-width: 18ch; padding: 8px 18px 7px; border: 2px solid #3aa8d8; border-radius: 10px; background: linear-gradient(#173445aa, #0f2230ee); color: #bfeaff; font-weight: bold; font-size: 1.15em; letter-spacing: .05em; cursor: pointer; }
+.era-timestop-button { -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
 .line button.choice.era-timestop-button.era-stopped { border-color: #c070ff; background: linear-gradient(#3a1d52, #24123a); color: #f0d8ff; box-shadow: 0 0 14px #b060ff66; }
 .era-timestop-button .era-sub { margin: 2px 0 0; font-size: .7em; font-weight: normal; letter-spacing: 0; color: inherit; opacity: .75; }
 .era-timestop-gauge { display: flex; flex-direction: column; align-items: stretch; gap: 3px; align-self: stretch; margin-top: 6px; }
@@ -443,7 +456,7 @@ a { color: #8ddaff; }
 .era-player-status { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 0; margin-top: 6px; }
 .era-status-label { margin-right: 1ch; color: #8a949c; }
 .era-status + .era-status::before { content: "·"; margin: 0 .8ch; color: #5a646c; }
-.era-player-toggles { margin-top: 6px; }
+.era-player-toggles { margin: 10px 0 14px; }
 .era-strong { font-weight: bold; }
 .screen.is-active .line button.choice:is(.era-chip-button, .era-toggle, .era-star):enabled:is(:hover, :focus-visible) { border-color: #8ddaff; }
 /* The room is a row of full portraits, not a tab rail. Crowds scroll without shrinking the sprites. */
@@ -526,7 +539,10 @@ a { color: #8ddaff; }
 .era-portrait:has(.sprite[data-src="時間停止"]) .sprite { opacity: .65; }
 .era-character-info { min-width: 0; width: 100%; max-width: 400px; align-self: stretch; display: flex; flex-direction: column; }
 .era-character-info > .line:has(.era-info-title) { flex: none; }
+.era-info-tabs { display: flex; align-items: stretch; gap: 5px; }
 .era-main .era-info-title { display: inline-flex; margin: 0; padding: 7px 12px; border: 1px solid #3c9bb7; border-bottom: 0; border-radius: 5px 5px 0 0; background: linear-gradient(#16394b, #0b202e); font-size: .9em; font-weight: normal; }
+.era-main .line button.choice.era-info-more { align-self: stretch; padding: 7px 14px; border: 1px solid #28485b; border-bottom: 0; border-radius: 5px 5px 0 0; background: #0c1b27; color: #91adbd; font-size: .9em; }
+.era-main .line button.choice.era-info-more:enabled:is(:hover, :focus-visible) { border-color: #5da8bf; background: #173442; color: #d7eff8; }
 .era-info-body { flex: 1; min-width: 0; padding: 12px; border: 1px solid #24526b; border-radius: 0 5px 5px 5px; background: #05111bd9; }
 .era-info-head { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 10px; align-items: start; margin-bottom: 10px; }
 .era-info-head > .line:has(.era-info-face), .era-info-head > .line > span:has(> .era-info-face) { display: contents; }

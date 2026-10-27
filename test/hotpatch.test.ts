@@ -176,7 +176,8 @@ test("main screen hotpatch opens and closes its panel boxes in balance", {
     assert.ok(screen.some((text) => text.includes("era-timestop-button")), `screen ${index} has the time stop control`);
     const html = screen.join("");
     assert.equal((html.match(/value='805'/g) ?? []).length, 1, "inventory has exactly one entry point");
-    assert.match(html, /era-player-actions'><button value='805'/, "inventory is on the player card");
+    assert.match(html, /era-player-actions'><button value='805' class='era-player-control era-inventory-button'/, "inventory is on the player card");
+    assert.match(html, /era-guard-toggle[^']*' aria-pressed='(?:true|false)'/, "the guard exposes its toggle state");
   }
   assert.ok(screens[1]!.some((text) => /era-stopped'[^>]*value='999'|value='999'[^>]*era-stopped/.test(text)), "time stop switches to Resume Time");
   step("805");
@@ -295,6 +296,7 @@ test("room lineup renders every portrait and preserves target selection", {
     }
     const labels = [...html.matchAll(/<button value='(\d+)' class='era-occupant-label' aria-pressed='(true|false)'/g)];
     assert.match(html, /era-info-title'>Character Info</);
+    assert.match(html, /value='-9300' class='era-info-more'/, "More opens details for the selected character");
     assert.match(html, /<era-open class='era-info-body'>/);
     assert.match(html, /era-info-face/, "the details identify the selected person");
     assert.match(html, /<era-open class='era-info-head'>/);
@@ -314,6 +316,69 @@ test("room lineup renders every portrait and preserves target selection", {
     assert.equal(snapshot.target, Number(next[1]) - 1000);
     if (count > 1) assert.notEqual(snapshot.target, originalTarget);
   }
+});
+
+test("character More opens the selected person's sheet while See more still opens the player", {
+  skip: !existsSync(GAME_ROOT),
+}, async () => {
+  const game = await loadGame();
+  await applyHotpatches(game);
+  const runtime = new Runtime(demoGame(game), GAME_INSTRUCTION_LIMIT);
+  runtime.start();
+  runtime.input("8");
+  let snapshot = runtime.input("3");
+  const settle = () => {
+    for (let waits = 0; snapshot.input?.kind === "wait"; waits++) {
+      assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
+      assert.ok(waits < 40);
+      snapshot = runtime.input("");
+    }
+    assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
+  };
+  const html = () => snapshot.output.flatMap((item) => item.type === "html" ? [item.text] : []).join("");
+  settle();
+  const labels = [...html().matchAll(/value='(\d+)' class='era-occupant-label' aria-pressed='(true|false)'/g)];
+  const next = labels.find((label) => label[2] === "false")!;
+  snapshot = runtime.input(next[1]!);
+  settle();
+  const selected = snapshot.target;
+  assert.equal(selected, Number(next[1]) - 1000);
+  const selectedName = html().match(new RegExp(`value='${next[1]}' class='era-occupant-label'[^>]*>.*?era-occupant-name'[^>]*>([^<]+)<`))![1];
+  for (const command of ["803", "-9300"]) {
+    snapshot = runtime.input(command);
+    assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
+    assert.match(html(), /era-dialog era-sheet/);
+    assert.match(html(), /value='77' class='era-sheet-step'/);
+    assert.match(html(), /value='88' class='era-sheet-step'/);
+    assert.match(html(), /era-sheet-caption'>Character sheet<\/span><div class='era-sheet-people'>/);
+    assert.doesNotMatch(html(), /era-sheet-name/);
+    if (command === "803") assert.match(html(), /value='5000' class='era-sheet-person era-current'/);
+    else {
+      assert.equal(html().match(/class='era-sheet-person era-current'>([^<]+)</)![1], selectedName);
+      assert.doesNotMatch(html(), /value='5000' class='era-sheet-person era-current'/);
+      assert.doesNotMatch(html(), /class='era-sheet-person'>[^<]+<span class='era-sub'>You/);
+    }
+    assert.equal(snapshot.target, selected, "opening a sheet does not change the selected target");
+    const initialName = html().match(/class='era-sheet-person era-current'>([^<]+)</)![1];
+    snapshot = runtime.input("88");
+    assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
+    assert.notEqual(html().match(/class='era-sheet-person era-current'>([^<]+)</)![1], initialName);
+    snapshot = runtime.input("77");
+    assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
+    assert.equal(html().match(/class='era-sheet-person era-current'>([^<]+)</)![1], initialName);
+    assert.equal(snapshot.target, selected, "sheet navigation does not change the room target");
+    snapshot = runtime.input("0");
+    settle();
+    assert.match(html(), /era-info-more/);
+    assert.equal(snapshot.target, selected);
+  }
+  snapshot = runtime.input("-9200");
+  settle();
+  const first = html().match(/era-guard-toggle[^']*' aria-pressed='(true|false)'/)![1];
+  snapshot = runtime.input("-9200");
+  settle();
+  const second = html().match(/era-guard-toggle[^']*' aria-pressed='(true|false)'/)![1];
+  assert.notEqual(first, second, "guard still toggles through the game's command");
 });
 
 test("inventory dialog supplies a live-filter footer and preserves categories, mods and items", {
