@@ -1,10 +1,21 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { emptyGame } from "../src/loader.js";
+import { emptyGame, indexScript } from "../src/loader.js";
 import { patchTitleImage } from "../src/render-patches.js";
 import type { Output, Snapshot, Style } from "../src/runtime.js";
 
 const style: Style = { color: "#fff", background: "#000", alignment: "left", fontStyle: 0 };
+test("Blue Resort Discord button becomes a direct new-tab link without mutating runtime output", () => {
+  const game = emptyGame();
+  indexScript(game, '@SYSTEM_TITLE\nCALLSHARP LAUNCH_BROWSER("https://discord.gg/zCWzA8kbgp")', "title.ERB");
+  const snapshot: Snapshot = { status: "waiting", input: { kind: "integer" }, error: null, title: "", target: 0,
+    output: [{ type: "button", text: "[100] Discord Server (Opens browser)", value: "100", style }] };
+  const original = structuredClone(snapshot);
+  const patched = patchTitleImage(game, snapshot);
+  assert.deepEqual(patched.output, [{ type: "html", text: '<a href="https://discord.gg/zCWzA8kbgp" target="_blank" rel="noopener noreferrer">[100] Discord Server</a>', newline: false, style }]);
+  assert.deepEqual(snapshot, original);
+  assert.deepEqual(patchTitleImage(emptyGame(), snapshot), snapshot);
+});
 function fixture() {
   const game = emptyGame();
   const output: Output[] = [];

@@ -417,7 +417,7 @@ INPUTANY`, "fixture.ERB");
   } finally { await new Promise<void>((resolve, reject) => app.close((error) => error ? reject(error) : resolve())); }
 });
 
-test("tooltip commands send actual settings and CALLSHARP stays explicitly unsupported", () => {
+test("tooltip commands send actual settings and non-allowlisted CALLSHARP stays explicitly unsupported", () => {
   const s = runtime(`@SYSTEM_TITLE
 TOOLTIP_CUSTOM 1
 TOOLTIP_SETFONT "monospace"
@@ -431,9 +431,126 @@ WAIT`).start();
   const r = runtime('@SYSTEM_TITLE\nCALLSHARP "plugin"', true, game);
   assert.match(r.start().error?.message ?? "", /native .NET plugin/);
   assert.deepEqual(compatibility(game).gaps.map((gap) => gap.feature), ["Instruction: CALLSHARP"]);
+  const mixed = emptyGame();
+  indexScript(mixed, `@SYSTEM_TITLE
+CALLSHARP LAUNCH_BROWSER("https://example.com/")
+CALLSHARP FixHTML("text", RESULTS)
+CALLSHARP TranslateDate("text", RESULTS)
+CALLSHARP UnknownPlugin()`, "mixed.ERB");
+  assert.deepEqual(compatibility(mixed).gaps.map(({ feature, count }) => ({ feature, count })),
+    [{ feature: "Instruction: CALLSHARP", count: 1 }]);
+});
+
+test("allowlisted CALLSHARP repairs history with writable outputs in interpreted and warmed JIT execution", () => {
+  const cases: [string, string, string][] = [
+    ["FixHTML", "<font color='#FFCCE7'[Name]</font>", "<font color='#FFCCE7'>[Name]</font>"],
+    ["FixHTML", "<font>500>", "<font>500</font>"],
+    ["FixHTML", "<font>text/font> <font>valid</font>", "<font>text</font> <font>valid</font>"],
+    ["FixHTML", "<font>correct</font>", ""],
+    ["FixHTML", "", ""],
+    ["TranslateDate", "<font>2年目 春の月 1日：</font>event", "<font>Year 2, Spring 1st: </font>event"],
+    ["TranslateDate", "3年目 夏の月 2日：", "Year 3, Summer 2nd: "],
+    ["TranslateDate", "4年目 秋の月 3日：", "Year 4, Autumn 3rd: "],
+    ["TranslateDate", "5年目 冬の月 11日：", "Year 5, Winter 11th: "],
+    ["TranslateDate", "5年目 冬の月 12日：", "Year 5, Winter 12th: "],
+    ["TranslateDate", "5年目 冬の月 13日：", "Year 5, Winter 13th: "],
+    ["TranslateDate", "1年目 春の月 21日：", "Year 1, Spring 21st: "],
+    ["TranslateDate", "1年目 Spring 22日：", "Year 1, Spring 22nd: "],
+    ["TranslateDate", "1年目 春の月 0日：", "Year 1, Spring 0: "],
+    ["TranslateDate", "already translated", ""],
+    ["TranslateDate", "", ""],
+  ];
+  for (const jit of [false, true]) {
+    const game = emptyGame();
+    const source = `@SYSTEM_TITLE
+REPEAT 4
+CALL CHECK
+REND
+RETURN
+@CHECK
+#DIMS OUT, 2
+${cases.map(([method, input]) => `OUT:1 = stale
+CALLSHARP ${method}(${JSON.stringify(input)}, OUT:1)
+PRINTFORML [%OUT:1%]`).join("\n")}`;
+    assert.deepEqual(texts(runtime(source, jit, game).start()),
+      Array.from({ length: 4 }, () => cases.map(([, , output]) => `[${output}]`)).flat());
+    assert.deepEqual(compatibility(game).gaps, []);
+    assert.deepEqual(texts(runtime(`@SYSTEM_TITLE
+#DIMS OUT
+CALLSHARP TranslateDate("1年目 春の月 23日：", OUT)
+PRINTFORML [%OUT%]
+CALLSHARP FixHTML(OUT, OUT)
+PRINTFORML [%OUT%]`, jit).start()), ["[Year 1, Spring 23rd: ]", "[]"]);
+    for (const [call, error] of [
+      ['HelloWorld()', /native .NET plugin/],
+      ['LAUNCH_BROWSER()', /expects one/],
+      ['LAUNCH_BROWSER(1)', /string/],
+      ['LAUNCH_BROWSER("file:///tmp/example")', /HTTP/],
+      ['LAUNCH_BROWSER("javascript:alert(1)")', /HTTP/],
+      ['LAUNCH_BROWSER("https://")', /valid HTTP/],
+      ['LAUNCH_BROWSER("https://user:pass@example.com/")', /credentials/],
+      ['FixHTML("x")', /expects a string/],
+      ['FixHTML("x", "not writable")', /writable/],
+      ['FixHTML("x", RESULT)', /string variable/],
+      ['TranslateDate(1, RESULTS)', /string/],
+      ['TranslateDate("x", RESULTS, 1)', /expects a string/],
+    ] as const) {
+      const failed = runtime(`@SYSTEM_TITLE\nCALLSHARP ${call}`, jit).start();
+      assert.equal(failed.status, "error", call);
+      assert.match(failed.error?.message ?? "", error, call);
+    }
+  }
+});
+
+test("CALLSHARP LAUNCH_BROWSER requests a new tab with a unique replay-safe ID and an escaped fallback link", () => {
+  for (const jit of [false, true]) {
+    const s = runtime(`@SYSTEM_TITLE
+REPEAT 4
+CALL LINK
+REND
+RETURN
+@LINK
+PRINT pending
+CALLSHARP LAUNCH_BROWSER("https://example.com/?a=1&b=2")
+PRINTL continued`, jit).start();
+    assert.deepEqual(texts(s), Array.from({ length: 4 }, () => [
+      "pending", "", '<a href="https://example.com/?a=1&amp;b=2" target="_blank" rel="noopener noreferrer">Open in browser: https://example.com/?a=1&amp;b=2</a>', "continued",
+    ]).flat());
+    assert.equal(s.output.filter((item) => item.type === "html").length, 4);
+    const launches = s.output.flatMap((item) => "browserLaunch" in item && item.browserLaunch ? [item.browserLaunch] : []);
+    assert.equal(launches.length, 4);
+    assert.equal(new Set(launches.map(({ id }) => id)).size, 4);
+    assert.ok(launches.every(({ url }) => url === "https://example.com/?a=1&b=2"));
+  }
 });
 
 const blueRoot = path.resolve("GAMES/erablue_resort");
+test("Blue Resort's actual history repair routines update saved notes through the CALLSHARP replacements", {
+  skip: !existsSync(blueRoot),
+}, async () => {
+  const game = await loadGame(blueRoot);
+  for (const jit of [false, true]) {
+    const r = runtime(`@HISTORY_REGRESSION
+#DIM NoteId
+ADDVOIDCHARA
+DT_CREATE "履歴データベース"
+DT_COLUMN_ADD "履歴データベース", "キャラID", "int32"
+DT_COLUMN_ADD "履歴データベース", "LOOP", "int32"
+DT_COLUMN_ADD "履歴データベース", "DATE", "int32"
+DT_COLUMN_ADD "履歴データベース", "NOTE"
+NoteId = DT_ROW_ADD("履歴データベース", "キャラID", 0, "NOTE", "<font>1年目 春の月 21日：event/font>")
+REPEAT 4
+CALL FIX_HISTORY
+CALL TRANSLATE_DATES
+REND
+PRINTSL DT_CELL_GETS("履歴データベース", NoteId, "NOTE", 1)`, jit, game);
+    let s = r.start("HISTORY_REGRESSION");
+    for (let i = 0; i < 16 && s.status === "waiting"; i++) s = r.input("");
+    assert.equal(s.status, "halted", JSON.stringify(s.error));
+    assert.equal(texts(s).at(-1), "<font>Year 1, Spring 21st: event</font>");
+  }
+});
+
 test("Blue Resort character CSV blocks load without diagnostics and retain settings in template lookups and ADDCHARA", {
   skip: !existsSync(blueRoot),
 }, async () => {
@@ -471,14 +588,18 @@ REND`, jit, game).start("ERD_REGRESSION");
   }
 });
 
-test("Blue Resort boots to its button-restricted title menu with only native plugin instructions unrecognized", {
+test("Blue Resort boots with all three CALLSHARP sites recognized and its Discord link usable", {
   skip: !existsSync(blueRoot),
 }, async () => {
   const game = await loadGame(blueRoot);
-  assert.deepEqual(compatibility(game).gaps.map((gap) => gap.feature), ["Instruction: CALLSHARP"]);
+  assert.deepEqual(compatibility(game).gaps, []);
   const r = new Runtime(game, GAME_INSTRUCTION_LIMIT);
   const snapshot = r.start();
   assert.equal(snapshot.status, "waiting", JSON.stringify(snapshot.error));
   assert.deepEqual(snapshot.input?.buttonValues, ["0", "1", "99", "100"]);
+  const linked = r.input("100");
+  assert.equal(linked.status, "waiting", JSON.stringify(linked.error));
+  assert.ok(linked.output.some((item) => item.type === "html" && item.text.includes('href="https://discord.gg/zCWzA8kbgp"')));
+  assert.deepEqual(linked.input?.buttonValues, ["0", "1", "99", "100"]);
   for (const choice of ["0", "0", "0"]) assert.equal(r.input(choice).status, "waiting");
 });

@@ -53,6 +53,16 @@ function titleRectangle(game: Game): (Sprite & { url: string }) | null {
  * control flow see the unmodified behavior, with no edits to the game's files.
  */
 export function patchTitleImage(game: Game, snapshot: Snapshot): Omit<Snapshot, "output"> & { output: BrowserOutput[] } {
+  const discordCall = 'CALLSHARP LAUNCH_BROWSER("https://discord.gg/zCWzA8kbgp")';
+  if (game.routines.get("SYSTEM_TITLE")?.some((routine) => routine.lines.some((line) => line.text === discordCall))) {
+    snapshot = {
+      ...snapshot,
+      output: snapshot.output.map((item) => item.type === "button" && item.value === "100"
+        && item.text === "[100] Discord Server (Opens browser)"
+        ? { type: "html", text: '<a href="https://discord.gg/zCWzA8kbgp" target="_blank" rel="noopener noreferrer">[100] Discord Server</a>', newline: false, style: item.style }
+        : item),
+    };
+  }
   const sprite = titleRectangle(game);
   if (!sprite) return snapshot;
   const output: BrowserOutput[] = [];

@@ -2,6 +2,7 @@ import { classify, isSupported } from "./compiler.js";
 import { BUILTIN_FUNCTIONS } from "./runtime.js";
 import type { Game } from "./loader.js";
 import { key, LITERAL_TEXT_INSTRUCTION, type Diagnostic, type Line } from "./model.js";
+import { supportedSharpCall } from "./plugin-compat.js";
 
 // Emuera calls are written NAME( with no space; text such as "Hero (x)" is not a call.
 const CALL = /(?<![\p{L}\p{N}_@.$])([\p{L}_][\p{L}\p{N}_]*)\(/gu;
@@ -43,7 +44,7 @@ export function compatibility(game: Game) {
         }
         instructions++;
         // Builtin functions written as statements store their value in RESULT/RESULTS.
-        if (op === "ASSIGN" || isSupported(op) || (BUILTIN_FUNCTIONS.has(op) && !game.routines.has(op))) supported++;
+        if (op === "ASSIGN" || isSupported(op) || (op === "CALLSHARP" && supportedSharpCall(args)) || (BUILTIN_FUNCTIONS.has(op) && !game.routines.has(op))) supported++;
         else record(`Instruction: ${op}`, line);
       }
     }

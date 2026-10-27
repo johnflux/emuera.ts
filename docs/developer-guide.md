@@ -52,8 +52,22 @@ Explicit variable sizes still take precedence, and out-of-range accesses still f
 
 **Blue Resort:** the installed `GAMES/erablue_resort` is regression-tested through
 its title menu and Normal-mode selection to the protagonist-name prompt. Its
-original 20 missing instruction types now have implementations except
-`CALLSHARP`, which still reports an explicit native .NET-plugin limitation.
+original 20 missing instruction types now have implementations, including
+targeted TypeScript replacements for its three `CALLSHARP` sites:
+`LAUNCH_BROWSER(url)` asks the web UI to open an HTTP(S) URL in a new tab,
+with a clickable fallback when browser popup policy blocks it. Unique event IDs
+prevent repeated launches when output is replayed or the page is reloaded in the
+same tab. A browser-presentation hotpatch turns Blue Resort's Discord title-menu
+button into a direct new-tab link, avoiding the extra click and popup restrictions.
+No native browser process is launched by the server.
+`FixHTML(input, output)` repairs known malformed font tags in
+history, and `TranslateDate(input, output)` converts history dates to English
+season/day labels. Both history methods clear the writable string output when
+no repair applies, preventing a previous result from overwriting unrelated notes.
+`FixHTML` preserves already-valid closing tags and does not write the native
+plugin's debug log. It is not a general HTML sanitizer. No DLLs are loaded,
+other `CALLSHARP` methods still fail explicitly, and the lexical compatibility
+report recognizes only these three method names (not arbitrary native plugins).
 `ENUMFUNCBEGINSWITH`, `ENUMFUNCENDSWITH`, and `ENUMFUNCWITH` work as both
 instructions and expressions, with case-insensitive matching and optional
 string-array destinations. `ERDNAME` preserves the original ERD label spelling,

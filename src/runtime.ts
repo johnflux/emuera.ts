@@ -7,7 +7,7 @@ import { allowsFullWidthSpace, characterField, EraError, EVENT_FUNCTIONS, intege
 import { symbolTable, Variables, type GlobalData, type SaveData } from "./variables.js";
 import { parseFormat } from "./format.js";
 import { MemoryGlobalStore, MemorySaveStore, StagedStores, type GlobalStore, type SaveStore } from "./storage.js";
-import { randomInt } from "node:crypto";
+import { randomInt, randomUUID } from "node:crypto";
 import { escapeHtml, htmlButtons, htmlLineCount, htmlSpriteNames, htmlTagSplit, htmlWidth, plainHtml } from "./html.js";
 import { formatInteger, stringWidth, toFullWidth, toHalfWidth } from "./strings.js";
 import { DataTables, TABLE_OPERATIONS } from "./data-tables.js";
@@ -17,6 +17,7 @@ import { addNode, nodeOutput, parseXml, removeNode, selectNodes, serializeXml } 
 import { DECLINE, loadIntrinsics, type Intrinsic } from "./intrinsics.js";
 import { ASYNC, Jit, type CallAnalysis } from "./jit.js";
 import { readNativeSave, writeNativeSave, type NativeSave, type SavedContainers, type SaveMetadata } from "./save-format.js";
+import { fixHistoryHtml, SHARP_METHODS, supportedSharpCall, translateHistoryDate } from "./plugin-compat.js";
 
 export interface Style { color: string; background: string; alignment: "left" | "center" | "right"; fontStyle: number; font?: string }
 type Rect = [x: number, y: number, width: number, height: number];
@@ -66,7 +67,7 @@ function animationFrame(frame: Omit<AnimationFrame, "src" | "offset">, src: Rect
 }
 export type Output =
   /** cell: a PRINTC item that the display wraps as a whole (Emuera's ボタンの途中で行を折りかえさない). */
-  | { type: "text" | "html" | "input"; text: string; newline: boolean; style: Style; plain?: boolean; single?: boolean; cell?: boolean; sprites?: Record<string, SpriteDefinition> }
+  | { type: "text" | "html" | "input"; text: string; newline: boolean; style: Style; plain?: boolean; single?: boolean; cell?: boolean; sprites?: Record<string, SpriteDefinition>; browserLaunch?: { id: string; url: string } }
   | { type: "button"; text: string; value: string; style: Style }
   | { type: "clear"; count: number };
 /**
@@ -3685,7 +3686,37 @@ export class Runtime {
           // Sound and animation timers have no effect in the terminal.
           case "AWAIT": case "PLAYSOUND": case "STOPSOUND": case "PLAYBGM": case "STOPBGM": case "SETANIMETIMER":
             break;
-          case "CALLSHARP": throw new EraError("CALLSHARP requires a native .NET plugin and is not supported by this TypeScript runtime");
+          case "CALLSHARP": {
+            if (!supportedSharpCall(args))
+              throw new EraError("CALLSHARP requires a native .NET plugin; only LAUNCH_BROWSER, FixHTML and TranslateDate have TypeScript replacements");
+            const call = this.parse(args);
+            if (call.kind !== "call" || !SHARP_METHODS.has(call.name)) throw new EraError("CALLSHARP expects a supported method call");
+            if (call.name === "LAUNCH_BROWSER") {
+              if (call.args.length !== 1) throw new EraError("CALLSHARP LAUNCH_BROWSER expects one HTTP(S) URL");
+              const target = text(evaluate(call.args[0]!, frame.context));
+              if (!/^https?:\/\//i.test(target) || !URL.canParse(target))
+                throw new EraError("CALLSHARP LAUNCH_BROWSER expects a valid HTTP(S) URL");
+              const url = new URL(target);
+              if (url.username || url.password) throw new EraError("CALLSHARP LAUNCH_BROWSER does not allow URLs containing credentials");
+              if (!this.skipDisplay) {
+                if (this.lineOpen) yield this.emit("text", "", true);
+                const event = this.emit("html", `<a href="${escapeHtml(url.href)}" target="_blank" rel="noopener noreferrer">Open in browser: ${escapeHtml(target)}</a>`, true);
+                if ("output" in event && event.output.type === "html")
+                  event.output.browserLaunch = { id: randomUUID(), url: url.href };
+                yield event;
+              }
+            } else {
+              const [input, output] = call.args;
+              if (call.args.length !== 2 || !input || output?.kind !== "variable")
+                throw new EraError(`CALLSHARP ${call.name} expects a string and a writable string variable`);
+              const source = text(evaluate(input, frame.context));
+              const reference = settleIndices(output, frame.context);
+              if (!frame.variables.isString(reference.name, frame.context))
+                throw new EraError(`CALLSHARP ${call.name} output must be a string variable`);
+              this.assign(frame, reference, call.name === "FIXHTML" ? fixHistoryHtml(source) : translateHistoryDate(source));
+            }
+            break;
+          }
           case "THROW": throw new EraError(this.formatted(args, frame));
           default: {
             // Emuera lets any built-in method run as a statement, storing its value in RESULT/RESULTS.

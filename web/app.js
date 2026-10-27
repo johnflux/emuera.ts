@@ -1500,6 +1500,17 @@ async function renderSnapshot(snapshot, advanceScreen) {
     currentLine = null;
   }
   for (const output of snapshot.output) {
+    if (output.browserLaunch) {
+      const { id, url } = output.browserLaunch;
+      const parsed = new URL(url);
+      if (!["http:", "https:"].includes(parsed.protocol) || parsed.username || parsed.password)
+        throw new Error("Unsupported browser launch URL");
+      const key = `era-browser-launch:${id}`;
+      if (!sessionStorage.getItem(key)) {
+        sessionStorage.setItem(key, "1");
+        window.open(parsed.href, "_blank", "noopener,noreferrer");
+      }
+    }
     // Input echoes complete the submitted screen, including unfinished prompts.
     if (advanceScreen && output.type === "input" && previousScreen?.parentElement === outputRoot) {
       currentScreen = previousScreen;
