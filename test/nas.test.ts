@@ -44,6 +44,31 @@ RETURN`, "update-check.ERB");
 });
 
 const root = path.join(GAMES_DIR, "pops-tw");
+test("pops-tw title layout ignores numeric assignment comments in interpreted and JIT execution", () => {
+  for (const jit of [false, true]) {
+    const game = emptyGame();
+    indexScript(game, `@SYSTEM_TITLE
+FOR LOCAL, 0, 5
+CALL TITLE_LAYOUT
+NEXT
+RETURN
+@TITLE_LAYOUT
+#DIM MAX_LINES
+#DIMS LABEL
+MAX_LINES = CLIENTHEIGHT() ; can't automatically find it with GETCONFIG("WINDOW HEIGHT") so we have to assume.
+MAX_LINES += 1 ; numeric compound assignment
+LABEL '= "height;value" ; expression assignment
+PRINTFORML {MAX_LINES == CLIENTHEIGHT() + 1} %LABEL%
+LABEL = literal;value
+PRINTSL LABEL
+RETURN`, "title-layout.ERB");
+    const snapshot = new Runtime(game, 50_000, { jit }).start();
+    assert.equal(snapshot.status, "halted", JSON.stringify(snapshot.error));
+    assert.deepEqual(snapshot.output.filter((item) => item.type === "text").map((item) => item.text),
+      Array.from({ length: 5 }, () => ["1 height;value", "literal;value"]).flat());
+  }
+});
+
 test("installed eraNAS has no lexical compatibility gaps or loader diagnostics", { skip: !isGameRoot(root) }, async () => {
   const report = compatibility(await loadGame(root));
   assert.deepEqual(report.gaps, []);

@@ -17,7 +17,7 @@ type CaseTest = { kind: "range"; from: string; to: string } | { kind: "compare";
 export interface JitHost {
   parse(source: string): Expr;
   arguments(source: string): readonly string[];
-  assignment(source: string): { reference: VariableExpr; operator: string; value: string };
+  assignment(source: string): { reference: VariableExpr; operator: string; value: string; expressionValue: string };
   caseTests(source: string): CaseTest[];
   callTarget(source: string): { name: string; parameters: string } | null;
   /** Which parameters of a routine are REF parameters. */
@@ -54,7 +54,7 @@ interface Binding { g: number; st: number; h: Variables; own: boolean; s: Resolv
 // Names the evaluation context answers before consulting variables.
 const SPECIAL = new Set(["LINECOUNT", "LASTLOAD_VERSION", "LASTLOAD_NO", "LASTLOAD_TEXT", "__INT_MAX__", "__INT_MIN__", "__FILE__", "__FUNCTION__", "__LINE__", "DRAWLINESTR", "GAMEBASE_VERSION", "RAND"]);
 const THRESHOLD = 2;
-const LOOP_STATE_OPS = new Set(["FOR", "REPEAT", "NEXT", "REND", "BREAK", "CONTINUE", "RESTART", "GOTO", "GOTOFORM", "TRYGOTO", "TRYGOTOFORM"]);
+const LOOP_STATE_OPS = new Set(["FOR", "REPEAT", "NEXT", "REND", "BREAK", "CONTINUE", "RESTART", "GOTO", "GOTOFORM", "TRYGOTO", "TRYGOTOFORM", "TRYCALLLIST", "TRYJUMPLIST", "TRYGOTOLIST"]);
 const LITERALS: Expr[] = [];
 const indexLiteral = (i: number): Expr => LITERALS[i] ??= { kind: "literal", value: BigInt(i) };
 
@@ -73,6 +73,7 @@ const INPUT_OPS = new Set([
 ]);
 /** Whether running this (non-call) instruction may wait for input. */
 function waits(op: string): boolean {
+  if (op === "CALLEVENT" || op === "TRYCALLLIST" || op === "TRYJUMPLIST") return true;
   if (INPUT_OPS.has(op)) return true;
   return op.startsWith("PRINT") && op.endsWith("W") && (!!printVariant(op) || isPrintData(op));
 }
@@ -316,7 +317,9 @@ class Generator {
     };
     const state = (start: number): string => `f${start}`;
     const p = this.prologue(k);
+    if (line.forbiddenInFunction) return `${p} throw new H.EraError(${JSON.stringify(`${op} instruction cannot be used in #FUNCTION(S)`)});`;
     switch (op) {
+      case "TRYCALLLIST": case "TRYJUMPLIST": case "TRYGOTOLIST": throw new Unsupported();
       case "LABEL": case "ENDIF": case "ENDSELECT": case "DO": case "ENDCATCH": return p;
       case "ASSIGN": return this.assign(k, line);
       case "IF": {
@@ -480,7 +483,7 @@ class Generator {
   private assign(k: number, line: Instruction): string {
     let assignment: ReturnType<JitHost["assignment"]>;
     try { assignment = (line.assignment ??= this.host.assignment(line.args)) as typeof assignment; } catch { return this.single(k); }
-    const { reference, operator, value: source } = assignment;
+    const { reference, operator, value: source, expressionValue } = assignment;
     if (SPECIAL.has(reference.name)) return this.single(k);
     const j = this.site(reference);
     if (j === undefined) return this.single(k);
@@ -500,7 +503,7 @@ class Generator {
             try { format = parseFormat(source); } catch { return undefined; }
             rhs = `H.txt(${this.expr(format)})`;
           } else {
-            const parts = this.arguments(source).slice();
+            const parts = this.arguments(expressionValue).slice();
             if (parts.at(-1) === "") parts.pop();
             if (parts.length !== 1) return undefined;
             rhs = this.expr(this.parse(parts[0]!));
@@ -508,10 +511,10 @@ class Generator {
           const v = this.temp();
           return `${v} = ${rhs}; ${resolve} H.wr(${b}, ${at}, ${v});`;
         }
-        if ((operator === "++" || operator === "--") && source) return undefined;
+        if ((operator === "++" || operator === "--") && expressionValue) return undefined;
         const helper = BINARY[operator === "++" ? "+" : operator === "--" ? "-" : operator.slice(0, -1)];
         if (!helper) return undefined;
-        const rhs = operator === "++" || operator === "--" ? "1n" : this.expr(this.parse(source));
+        const rhs = operator === "++" || operator === "--" ? "1n" : this.expr(this.parse(expressionValue));
         const v = this.temp(), index = this.temp();
         return `${v} = ${rhs}; ${resolve} ${index} = ${at}; H.wr(${b}, ${index}, H.${helper}(H.get(${b}, ${index}), ${v}));`;
       } catch (error) {

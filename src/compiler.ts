@@ -3,6 +3,7 @@ import { TABLE_OPERATIONS } from "./data-tables.js";
 import type { Expr } from "./expression.js";
 
 const TRY_CATCH = new Set(["TRYCCALL", "TRYCJUMP", "TRYCCALLFORM", "TRYCJUMPFORM"]);
+const TRY_LIST = new Set(["TRYCALLLIST", "TRYJUMPLIST", "TRYGOTOLIST"]);
 export const SUPPORTED = new Set([
   ...TABLE_OPERATIONS,
   "PRINT", "PRINTL", "PRINTW", "PRINTFORM", "PRINTFORML", "PRINTFORMW",
@@ -21,6 +22,7 @@ export const SUPPORTED = new Set([
   "MAP_RELEASE", "MAP_CREATE", "MAP_SET", "STRDATA", "DATA", "DATAFORM", "DATALIST", "ENDLIST", "ENDDATA",
   "DEBUGPRINT", "DEBUGPRINTL", "DEBUGPRINTFORM", "DEBUGPRINTFORML", "DEBUGCLEAR", "ASSERT",
   "SPLIT", "VARI", "VARS", "VARSIZE", "VARSET", "ARRAYREMOVE", "SETBIT", "CLEARBIT", "INVERTBIT",
+  ...TRY_LIST, "FUNC", "ENDFUNC", "CALLEVENT", "ISDEFINED", "PRINTCPERLINE",
   "BITMAP_CACHE_ENABLE", "SETFONT", "RESETDATA", "ADDCHARA", "ADDDEFCHARA", "ADDVOIDCHARA", "DELCHARA", "DELALLCHARA", "COPYCHARA", "ADDCOPYCHARA", "SWAPCHARA", "PICKUPCHARA", "SORTCHARA", "BEGIN", "CALLF", "TRYCALLF", "CALLFORM", "CALLFORMF", "TRYCALLFORM", "TRYCALLFORMF", "TRYCCALLFORM", "TRYCALL", "TRYJUMP", "TRYCCALL", "TRYCJUMP", "JUMPFORM", "TRYJUMPFORM", "TRYCJUMPFORM", "CATCH", "ENDCATCH",
   "FORCE_BEGIN", "TIMES", "BAR", "BARL", "BARSTR", "SKIPDISP", "SKIPLOG", "PRINT_MARK", "NOSKIP", "ENDNOSKIP", "ISSKIP", "MOUSESKIP", "REUSELASTLINE", "CVARSET",
   "ARRAYSHIFT", "ARRAYSORT", "ARRAYCOPY", "SWAP", "POWER", "HTML_TAGSPLIT", "EXISTFUNCTION", "CLIENTWIDTH", "CLIENTHEIGHT", "FIND_CHARADATA", "EXISTFILE",
@@ -68,6 +70,7 @@ export interface Instruction extends Line {
   op: string; args: string; target: number;
   /** Runtime parse caches; parsing is deterministic, so they live as long as the compiled routine. */
   parsed?: Expr; assignment?: unknown; values?: Expr[]; cases?: unknown[];
+  forbiddenInFunction?: boolean;
 }
 export interface InlineDeclaration {
   name: string;
@@ -77,6 +80,7 @@ export interface InlineDeclaration {
   line: Line;
 }
 export function inlineDeclaration(line: Line): InlineDeclaration | undefined {
+  if (/^VAR[IS]\s/i.test(line.text) && classify(line).op === "ASSIGN") return undefined;
   const match = /^(VARI|VARS)\s+([^,\s=]+)\s*([^=]*)(?:=(.*))?$/i.exec(line.text);
   if (!match) {
     if (/^VAR[IS](?:\s|$)/i.test(line.text)) throw new EraError("VARI/VARS expects name[, dimensions][ = initializer]", line);
@@ -103,26 +107,45 @@ export function classify(line: Line): { op: string; args: string } {
   if (print && LITERAL_TEXT_INSTRUCTION.test(print[1]!)) return { op: key(print[1]!), args: print[2] ?? "" };
   const command = /^(\S+)\s*(.*)$/.exec(line.text)!;
   const op = key(command[1]!);
+  if ((op === "VARI" || op === "VARS") && /^(?:=|\+=|-=|\*=|\/=|%=|&=|\|=|\^=|<<=|>>=|'=|\+\+|--)/.test(command[2]!))
+    return { op: "ASSIGN", args: line.assignmentText ?? line.text };
   // Instructions match whole identifiers: "printNum ++" assigns a variable, it is not a PRINT variant.
   if (isSupported(op) || op.startsWith("DEBUGPRINT")) return { op, args: command[2]! };
   // `VALUE ,= ,` is still an assignment line in Emuera (rejected for the extra left-hand comma).
   if (/^(?:\+\+|--)\s*\S/u.test(line.text) || /^[^\s=,]+(?:\s*:.*?)?(?:\s*,[\s\w]*)?\s*(?:==|\+\+|--|(?:'|<<|>>|[+\-*/%&|^])?=)(?!=)/u.test(line.text))
-    return { op: "ASSIGN", args: line.text };
+    return { op: "ASSIGN", args: line.assignmentText ?? line.text };
   return { op, args: command[2]! };
 }
 export function compile(routine: Routine): Compiled {
-  const code = routine.lines.map((line) => ({ ...line, ...classify(line), target: -1 }));
+  const expressionFunction = routine.directives.some((line) => /^#FUNCTIONS?$/i.test(line.text));
+  const code: Instruction[] = routine.lines.map((line) => {
+    const instruction = { ...line, ...classify(line), target: -1 };
+    return expressionFunction && !methodSafe(instruction.op) ? { ...instruction, forbiddenInFunction: true } : instruction;
+  });
   const labels = new Map<string, number>();
   const stack: { op: string; start: number; branches: number[] }[] = [];
   const loops: Compiled["loops"] = [];
   const closes: Record<string, string> = { ENDIF: "IF", ENDSELECT: "SELECTCASE", NEXT: "FOR", WEND: "WHILE", LOOP: "DO", REND: "REPEAT" };
   code.forEach((line, i) => {
+    if (stack.at(-1) && TRY_LIST.has(stack.at(-1)!.op) && line.op !== "FUNC" && line.op !== "ENDFUNC")
+      throw new EraError("TRYLIST blocks may contain only FUNC entries", line);
     if (line.op === "LABEL") {
       const name = key(line.args);
       if (labels.has(name)) throw new EraError(`Duplicate label: ${name}`, line);
       labels.set(name, i);
     }
-    if (["IF", "SELECTCASE", "FOR", "WHILE", "DO", "REPEAT"].includes(line.op))
+    if (TRY_LIST.has(line.op)) stack.push({ op: line.op, start: i, branches: [] });
+    else if (line.op === "FUNC") {
+      const frame = stack.at(-1);
+      if (!frame || !TRY_LIST.has(frame.op)) throw new EraError("FUNC outside a TRYLIST block", line);
+      frame.branches.push(i);
+    } else if (line.op === "ENDFUNC") {
+      if (line.args) throw new EraError("ENDFUNC takes no arguments", line);
+      const frame = stack.pop();
+      if (!frame || !TRY_LIST.has(frame.op)) throw new EraError("Unmatched ENDFUNC", line);
+      code[frame.start]!.target = i;
+      for (const branch of frame.branches) code[branch]!.target = i;
+    } else if (["IF", "SELECTCASE", "FOR", "WHILE", "DO", "REPEAT"].includes(line.op))
       stack.push({ op: line.op, start: i, branches: [i] });
     else if (TRY_CATCH.has(line.op)) stack.push({ op: line.op, start: i, branches: [i] });
     else if (line.op === "CATCH") {
@@ -155,9 +178,23 @@ export function compile(routine: Routine): Compiled {
       line.target = frame.start;
       if (["FOR", "WHILE", "DO", "REPEAT"].includes(frame.op)) loops.push({ start: frame.start, end: i });
     }
-    if (line.op === "SIF" && (!code[i + 1] || ["IF", "SELECTCASE", "FOR", "WHILE", "DO", "REPEAT", "SIF"].includes(code[i + 1]!.op)))
+    if (line.op === "SIF" && (!code[i + 1] || ["IF", "SELECTCASE", "FOR", "WHILE", "DO", "REPEAT", "SIF", ...TRY_LIST].includes(code[i + 1]!.op)))
       throw new EraError("SIF must precede one non-block instruction", line);
   });
   if (stack.length) throw new EraError(`Unclosed ${stack.at(-1)!.op}`, code[stack.at(-1)!.start]);
   return { code, labels, loops };
+}
+
+const METHOD_UNSAFE = new Set([
+  "AWAIT", "BEGIN", "FORCE_BEGIN", "DOTRAIN", "CALLTRAIN", "STOPCALLTRAIN", "CALLEVENT",
+  "QUIT", "QUIT_AND_RESTART", "FORCE_QUIT_AND_RESTART", "RETURN", "RETURNFORM", "OUTPUTLOG", "LOADDATA",
+  "WAIT", "FORCEWAIT", "TWAIT", "WAITANYKEY", "INPUTMOUSEKEY", "FUNC", "ENDFUNC",
+  "TOOLTIP_CUSTOM", "TOOLTIP_FORMAT", "TOOLTIP_SETFONT", "TOOLTIP_SETFONTSIZE",
+]);
+function methodSafe(op: string): boolean {
+  if (METHOD_UNSAFE.has(op) || TRY_LIST.has(op)) return false;
+  if (/^(?:T?ONE|B|T)?INPUTS?$/.test(op) || op === "INPUTANY") return false;
+  if (/^(?:TRY|TRYC)(?:CALL|JUMP)(?:FORM)?$/.test(op)) return false;
+  if (["CALL", "JUMP", "CALLFORM", "JUMPFORM"].includes(op)) return false;
+  return !op.endsWith("W") || (!printVariant(op) && !isPrintData(op));
 }

@@ -2,7 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { closeSync, existsSync, openSync, readdirSync, readFileSync, readSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { characterField, EraError, EVENT_FUNCTIONS, isCharacterNumberField, key, allowsFullWidthSpace, stripComment, splitArguments, type Diagnostic, type Line, type Routine } from "./model.js";
+import { characterField, EraError, EVENT_FUNCTIONS, isCharacterNumberField, key, allowsFullWidthSpace, stripComment, splitArguments, trimEndWhitespace, type Diagnostic, type Line, type Routine } from "./model.js";
 import { CONFIG_ITEMS, configSetting } from "./config-items.js";
 
 /** Browser-presentation ERB layered over eraToho The World without editing its files (see docs/hotpatches.md). */
@@ -252,8 +252,10 @@ export function indexScript(game: Game, source: string, file: string, header = f
   for (const logical of logicalLines(source, file)) {
     lastLine = logical.line;
     // Emuera joins continuation rows before interpreting comments.
-    const content = stripComment(logical.text.replace(/\[\[([^\]]+)\]\]/g, (match, name: string) => game.renames.get(name) ?? match), fullWidthSpace).trimStart();
+    const raw = logical.text.replace(/\[\[([^\]]+)\]\]/g, (match, name: string) => game.renames.get(name) ?? match);
+    const content = stripComment(raw, fullWidthSpace).trimStart();
     const line: Line = { ...logical, text: content };
+    if (raw.includes(";")) line.assignmentText = trimEndWhitespace(raw, fullWidthSpace).trimStart();
     if (content === "[SKIPSTART]") { skipBlock = true; continue; }
     if (content === "[SKIPEND]") { skipBlock = false; continue; }
     if (skipBlock) continue;
@@ -426,15 +428,28 @@ export async function loadGame(root = GAME_ROOT, options: { debug?: boolean } = 
         }
       }
     }
-    if (/(?:^|\/)CHARA\d/i.test(name)) {
-      const number = rows.find((row) => isCharacterNumberField(row[0]))?.[1];
-      if (!number || !/^\d+$/.test(number)) throw new EraError("Character CSV requires a numeric 番号", { file, line: 0 });
-      const id = Number(number);
-      if (game.characters.has(id)) throw new EraError(`Duplicate character number: ${id}`, { file, line: 0 });
-      game.characters.set(id, { file: path.relative(root, file), rows });
-      // Like Emuera, an unknown key only warns and its row is skipped.
+    if (/^CHARA/i.test(path.basename(name))) {
+      let id: number | undefined;
+      const characterRows: string[][] = [];
+      const characterFile = path.relative(root, file);
       for (const { row, line } of records) {
-        if (!isCharacterNumberField(row[0]) && !characterField(row[0])) game.diagnostics.push({ file: path.relative(root, file), line, message: `Unknown character CSV field "${row[0]}"; this row is ignored` });
+        const warn = (message: string): void => { game.diagnostics.push({ file: characterFile, line, message }); };
+        if (isCharacterNumberField(row[0])) {
+          if (id !== undefined) { warn("Duplicate character 番号 row; this row is ignored"); continue; }
+          const number = row[1] ?? "";
+          if (!/^\d+$/.test(number) || !Number.isSafeInteger(Number(number))) {
+            warn(`Invalid character 番号 "${number}"; this row is ignored`);
+            continue;
+          }
+          id = Number(number);
+        } else if (id === undefined) { warn("Character CSV data before 番号; this row is ignored"); continue; }
+        else if (!characterField(row[0])) warn(`Unknown character CSV field "${row[0]}"; this row is ignored`);
+        characterRows.push(row);
+      }
+      if (id !== undefined) {
+        if (game.characters.has(id))
+          game.diagnostics.push({ file: characterFile, line: 0, message: `Duplicate character number: ${id}; this template is ignored` });
+        else game.characters.set(id, { file: characterFile, rows: characterRows });
       }
     }
     if (name === "VARIABLESIZE") {

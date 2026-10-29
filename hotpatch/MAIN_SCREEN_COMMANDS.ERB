@@ -105,7 +105,8 @@ FOR nIndex, 0, nAbleCount
 	sKind '= HOTPATCH_ACTION_KIND(LOCAL)
 	SIF STRLENS(sKind)
 		HTML_PRINT @"<era-open class='era-kind era-kind-%sKind%'>"
-	SIF HOTPATCH_PRINT_COM(LOCAL)
+	CALL HOTPATCH_PRINT_COM(LOCAL)
+	SIF RESULT
 		printKojoCom = 1
 	SIF STRLENS(sKind)
 		HTML_PRINT "<era-close>"
@@ -493,7 +494,6 @@ RETURNF 6
 ; Returns 1 for a kojo command.
 ;-------------------------------------------------------------------------------
 @HOTPATCH_PRINT_COM(nCom)
-#FUNCTION
 #DIM DYNAMIC nCom
 #DIM DYNAMIC nKojo
 #DIMS DYNAMIC COM_NAME
@@ -540,7 +540,7 @@ ELSEIF STRLENS(TRAINNAME_TR(nCom))
 	PRINTFORMC %TRAINNAME_TR(nCom)%[{nCom,3}]
 	RESETCOLOR
 ENDIF
-RETURNF nKojo
+RETURN nKojo
 
 ; Which filter toggle shows a command (QUICKFILTER's rules), so both share a tint: petting, housekeeping
 ; ("chores") or the character's own dialogue topics; "" for the rest.

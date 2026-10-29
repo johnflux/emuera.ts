@@ -2,7 +2,11 @@ import { conditionalEnd, quotedEnd } from "./strings.js";
 
 export type Value = bigint | string;
 export interface Source { file: string; line: number }
-export interface Line extends Source { text: string }
+export interface Line extends Source {
+  text: string;
+  /** Assignment text before comment stripping; string assignments treat semicolons as data. */
+  assignmentText?: string;
+}
 export interface Routine extends Source {
   name: string;
   /** The label as written, for GETDOINGFUNCTION. */

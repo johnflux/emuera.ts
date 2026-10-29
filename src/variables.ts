@@ -183,6 +183,7 @@ export class Variables {
     return known;
   }
   private hasKey(name: string): boolean {
+    if (name === "GAMEBASE_GAMECODE") name = "GAMEBASE_CODE";
     return this.values.has(name) || this.declarations.has(name) || !!this.parent?.hasKey(name);
   }
   isCharacter(name: string, context: EvaluationContext): boolean {
@@ -430,6 +431,7 @@ export class Variables {
   }
   // Internal lookups expect names already normalized with key().
   private resolve(name: string, context: EvaluationContext): Variable {
+    if (name === "GAMEBASE_GAMECODE") name = "GAMEBASE_CODE";
     const existing = this.values.get(name);
     if (existing) return existing;
     const line = this.declarations.get(name);

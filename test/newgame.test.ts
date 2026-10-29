@@ -131,7 +131,7 @@ PRINTFORML %ARGS% {ARG}`);
     [["a", "#ff0000"], ["b", "#00ff00"], ["[]", "#c0c0c0"]]);
   const waitingFunction = run('@SYSTEM_TITLE\nCALLFORMF BAD()\n@BAD\n#FUNCTION\nWAIT\nRETURNF 1');
   assert.equal(waitingFunction.status, "error");
-  assert.match(waitingFunction.error!.message, /attempted input/);
+  assert.match(waitingFunction.error!.message, /cannot be used in #FUNCTION/);
 });
 test("REF parameters bind whole arrays like Emuera and validate types", () => {
   const result = run(`@SYSTEM_TITLE

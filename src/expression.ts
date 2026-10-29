@@ -1,6 +1,6 @@
 import { EraError, integer, integerLiteral, INTEGER_LITERAL, key, text, type Value } from "./model.js";
 import { readConditional, readFormattedLiteral } from "./format.js";
-import { stringWidth } from "./strings.js";
+import { conditionalEnd, quotedEnd, stringWidth } from "./strings.js";
 
 export type Expr =
   | { kind: "literal"; value: Value }
@@ -21,8 +21,36 @@ const precedence: Record<string, number> = {
   "+": 6, "-": 6, "*": 7, "/": 7, "%": 7,
 };
 let macros: ReadonlyMap<string, string> = new Map();
+const IDENTIFIER = /^[^ \t\r\n+\-*/%=!<>|&^~?#)}\]\[,:({$\\'"@.;\u3000]+/u;
 /** Activates a game's #DEFINE table; Emuera expands macros only inside expressions. */
 export function useMacros(table: ReadonlyMap<string, string>): void { macros = table; }
+/** Expand before splitting statement expression arguments, since a macro may supply commas. */
+export function expandArgumentMacros(source: string, table: ReadonlyMap<string, string>, depth = 0): string {
+  if (!table.size) return source;
+  let result = "";
+  for (let i = 0; i < source.length;) {
+    let end: number;
+    if (source.startsWith("\\@", i)) end = conditionalEnd(source, i);
+    else if (source[i] === '"' || source.startsWith('@"', i)) end = quotedEnd(source, i);
+    else {
+      const number = INTEGER_LITERAL.exec(source.slice(i));
+      const name = number ? undefined : IDENTIFIER.exec(source.slice(i));
+      if (name) {
+        const body = table.get(key(name[0]));
+        if (body !== undefined) {
+          if (depth >= 64) throw new EraError(`Macro expansion does not terminate (circular #DEFINE?): ${name[0]}`);
+          result += expandArgumentMacros(body, table, depth + 1);
+        } else result += name[0];
+        i += name[0].length;
+        continue;
+      }
+      end = i + (number?.[0].length ?? 1);
+    }
+    result += source.slice(i, end);
+    i = end;
+  }
+  return result;
+}
 export function repeatString(value: string, count: bigint): string {
   if (count < 0n || count * BigInt(value.length) > 1_000_000n) throw new EraError("String repetition exceeds limit");
   return value ? value.repeat(Number(count)) : "";
@@ -66,7 +94,7 @@ function tokenize(source: string, depth = 0): Token[] {
     const number = INTEGER_LITERAL.exec(rest);
     if (number) { tokens.push({ type: "number", value: number[0] }); i += number[0].length; continue; }
     // Emuera reads identifiers up to an ASCII delimiter, so full-width symbols such as ／ belong to names.
-    const name = /^[^ \t\r\n+\-*/%=!<>|&^~?#)}\]\[,:({$\\'"@.;\u3000]+/u.exec(rest);
+    const name = IDENTIFIER.exec(rest);
     if (name) {
       i += name[0].length;
       const id = key(name[0]), body = macros.get(id);

@@ -1,9 +1,9 @@
 import { compile, inlineDeclaration, isPrintData, printVariant, PRINTDATA_PATTERN, type Compiled, type InlineDeclaration, type Instruction } from "./compiler.js";
-import { evaluate, parseExpression, settleIndices, useMacros, type EvaluationContext, type Expr } from "./expression.js";
+import { evaluate, expandArgumentMacros, parseExpression, settleIndices, useMacros, type EvaluationContext, type Expr } from "./expression.js";
 import { displayDefaults, gameDirectory, imageSize, readTextFileSync, type Sprite, type ContainerScope, type DisplaySettings, type Game } from "./loader.js";
 import path from "node:path";
 import { readdirSync, realpathSync, statSync } from "node:fs";
-import { allowsFullWidthSpace, characterField, EraError, EVENT_FUNCTIONS, integer, integerLiteral, numericString, INTEGER_LITERAL, key, splitArguments, text, type Diagnostic, type Routine, type Source, type Value } from "./model.js";
+import { allowsFullWidthSpace, characterField, EraError, EVENT_FUNCTIONS, integer, integerLiteral, numericString, INTEGER_LITERAL, key, splitArguments, stripComment, text, type Diagnostic, type Routine, type Source, type Value } from "./model.js";
 import { symbolTable, Variables, type GlobalData, type SaveData } from "./variables.js";
 import { parseFormat } from "./format.js";
 import { MemoryGlobalStore, MemorySaveStore, StagedStores, type GlobalStore, type SaveStore } from "./storage.js";
@@ -152,7 +152,7 @@ function argText(args: (Value | undefined)[], name: string, i: number): string {
   return text(value);
 }
 interface Evaluators { ev(source: string): Value; num(source: string): bigint; lineNum(instruction: Instruction): bigint }
-interface Assignment { reference: Extract<Expr, { kind: "variable" }>; operator: string; value: string }
+interface Assignment { reference: Extract<Expr, { kind: "variable" }>; operator: string; value: string; expressionValue: string }
 interface CallTarget { name: string; parameters: string }
 const NO_VARIABLES: EvaluationContext = {
   get() { throw new EraError("Unexpected variable"); },
@@ -242,7 +242,7 @@ const BUILTIN_ARITIES: Record<string, [number, number]> = {
     EXISTCSV: [1, 2], RAND: [1, 2], ISSKIP: [0, 0], GETPALAMLV: [2, 2], GETEXPLV: [2, 2], MOUSESKIP: [0, 0], GETCHARA: [1, 2], CSVNAME: [1, 2], CSVCALLNAME: [1, 2], CSVNICKNAME: [1, 2], CSVMASTERNAME: [1, 2],
     CHKCHARADATA: [1, 1], SAVETEXT: [2, 4], LOADTEXT: [1, 3],
     INRANGE: [3, 3], ESCAPE: [1, 1],
-    ISNUMERIC: [1, 1],
+    ISNUMERIC: [1, 1], ISDEFINED: [1, 1],
     GROUPMATCH: [2, 1000], GETBIT: [2, 2],
     UNICODE: [1, 1],
     TOLOWER: [1, 1], TOUPPER: [1, 1], STRLENSU: [1, 1], HTML_ESCAPE: [1, 1],
@@ -506,6 +506,7 @@ export class Runtime {
     numeric.forEach((name) => globals.define(name, false, game.variableSizes.get(name) ?? [name === "FLAG" ? 10000 : 1000]));
     for (const name of ["ITEMSALES", "NOITEM", "BOUGHT", "PBAND", "ASSIPLAY", "UP", "DOWN", "LOSEBASE", "PALAMLV", "EXPLV", "EJAC", "PREVCOM", "SELECTCOM", "NEXTCOM"])
       globals.define(name, false, game.variableSizes.get(name) ?? [1000]);
+    globals.seed("EJAC", 0, 10000n);
     for (const name of ["BASE", "MAXBASE", "ABL", "TALENT", "EXP", "MARK", "PALAM", "SOURCE", "EX", "CFLAG", "JUEL", "RELATION", "EQUIP", "TEQUIP", "STAIN", "GOTJUEL", "NOWEX", "TCVAR"])
       globals.defineCharacter(name, false, game.variableSizes.get(name) ?? [1000]);
     for (const name of ["NO", "ISASSI"]) globals.defineCharacter(name);
@@ -856,7 +857,7 @@ export class Runtime {
           if (this.game.routines.has(`COM_ABLE${id}`)) {
             yield* this.system(`COM_ABLE${id}`, true);
             if (this.number("RESULT") === 0n) continue;
-          }
+          } else if (integer(this.configValue("ComAbleDefault")) === 0n) continue;
           available[shown] = id;
           if (this.ctrain) continue;
           line += this.printC(`${names.get(id)![0] ?? ""}[${String(shown).padStart(3)}]`, "C");
@@ -1889,6 +1890,7 @@ export class Runtime {
           case "ESCAPE": return argText(args, name, 0).replace(/[\t\n\f\r #$()*+.?[\^{|\\]/g, (c) =>
             ({ "\t": "\\t", "\n": "\\n", "\f": "\\f", "\r": "\\r" })[c] ?? "\\" + c);
           case "ISNUMERIC": return numericString(argText(args, name, 0)) === undefined ? 0n : 1n;
+          case "ISDEFINED": return this.game.macros.has(key(argText(args, name, 0))) ? 1n : 0n;
           case "GROUPMATCH": return BigInt(args.slice(1).filter((value) => value === args[0]).length);
           case "TOLOWER": return argText(args, name, 0).toLowerCase();
           case "TOUPPER": return argText(args, name, 0).toUpperCase();
@@ -2627,7 +2629,7 @@ export class Runtime {
     if (prefix) {
       const reference = this.parse(prefix[2]!);
       if (reference.kind !== "variable") throw new EraError("Invalid assignment target");
-      assignment = { reference, operator: prefix[1]!, value: "" };
+      assignment = { reference, operator: prefix[1]!, value: "", expressionValue: "" };
       this.assignmentCache.set(source, assignment);
       return assignment;
     }
@@ -2648,7 +2650,8 @@ export class Runtime {
     if (splitArguments(target).length > 1) throw new EraError("Left side of assignment has an extra ','");
     const reference = this.parse(target);
     if (reference.kind !== "variable") throw new EraError("Invalid assignment target");
-    assignment = { reference, operator: operator === "==" ? "=" : operator, value: source.slice(at + match[0].length) };
+    const value = source.slice(at + match[0].length);
+    assignment = { reference, operator: operator === "==" ? "=" : operator, value, expressionValue: stripComment(value, this.fullWidthSpace) };
     this.assignmentCache.set(source, assignment);
     return assignment;
   }
@@ -2664,6 +2667,24 @@ export class Runtime {
     } else target = null;
     this.callCache.set(source, target);
     return target;
+  }
+  private formattedCallTarget(source: string, frame: Frame): CallTarget | null {
+    const split = formNameEnd(source);
+    const name = key(this.formatted(source.slice(0, split), frame).trim());
+    let parameters = source.slice(split).trim();
+    if (parameters.startsWith("(") && parameters.endsWith(")")) parameters = parameters.slice(1, -1);
+    else parameters = parameters.replace(/^,/, "");
+    return name ? { name, parameters: parameters.trim() } : null;
+  }
+  private gotoDestination(compiled: Compiled, pc: number, destination: number, states: Map<number, LoopState>): number {
+    const { loops } = compiled;
+    if (loops.some((loop) => destination > loop.start && destination <= loop.end && !(pc > loop.start && pc <= loop.end)))
+      throw new EraError("GOTO into a loop is not supported");
+    for (const start of states.keys()) {
+      const loop = loops.find((loop) => loop.start === start)!;
+      if (destination < start || destination > loop.end) states.delete(start);
+    }
+    return destination;
   }
   private caseTests(source: string): CaseTest[] {
     let tests = this.caseCache.get(source);
@@ -2765,7 +2786,7 @@ export class Runtime {
   private arguments(source: string): readonly string[] {
     let parts = this.argumentCache.get(source);
     if (!parts) {
-      const values = splitArguments(source);
+      const values = splitArguments(expandArgumentMacros(source, this.game.macros));
       if (values.length > 1 && values.at(-1) === "") values.pop();
       parts = values;
       if (source.length <= 4096 && this.argumentCache.size < 16_384)
@@ -2986,6 +3007,7 @@ export class Runtime {
       let next = pc + 1;
       try {
         const { op, args, target } = line;
+        if (line.forbiddenInFunction) throw new EraError(`${op} instruction cannot be used in #FUNCTION(S)`, line);
         const special = !HOT_OPS.has(op);
         if (special && (op.startsWith("DEBUGPRINT") || op === "DEBUGCLEAR" || op === "ASSERT")) {
           // Outside debug mode Emuera skips debug instructions (DEBUG_FUNC) without evaluating them.
@@ -3042,9 +3064,10 @@ export class Runtime {
           case "LABEL": case "ENDIF": case "ENDSELECT": break;
           case "ASSIGN": {
             const assignment = (line.assignment ??= this.assignment(args)) as Assignment;
-            const { operator, value: source } = assignment;
+            const { operator } = assignment;
             const reference = settleIndices(assignment.reference, frame.context);
             const string = frame.variables.isString(reference.name, frame.context);
+            const source = operator === "=" && string ? assignment.value : assignment.expressionValue;
             if (operator === "'=" || (operator === "=" && !string)) {
               let parsed = line.values;
               if (!parsed) {
@@ -3282,6 +3305,40 @@ export class Runtime {
           case "SAVENOS":
             this.assign(frame, this.parse(args.trim() || "RESULT"), integer(this.configValue("SaveDataNos")));
             break;
+          case "PRINTCPERLINE":
+            this.assign(frame, this.parse(args.trim() || "RESULT"), BigInt(this.printCPerLine));
+            break;
+          case "CALLEVENT": {
+            const name = key(args.trim());
+            if (!EVENT_FUNCTIONS.has(name)) throw new EraError(`CALLEVENT: @${name} is not an event function`);
+            yield* this.dispatch(name, []);
+            break;
+          }
+          case "TRYCALLLIST": case "TRYJUMPLIST": case "TRYGOTOLIST": {
+            if (args) throw new EraError(`${op} takes no arguments`);
+            next = target + 1;
+            for (let entry = pc + 1; entry < target; entry++) {
+              const candidate = code[entry]!;
+              this.currentSource = candidate;
+              if (++this.steps > this.maxSteps) throw new EraError("Instruction limit exceeded between inputs", candidate);
+              const call = this.formattedCallTarget(candidate.args, frame);
+              if (!call) continue;
+              const { name, parameters } = call;
+              if (op === "TRYGOTOLIST") {
+                if (!labels.has(name)) continue;
+                next = this.gotoDestination(frame.compiled, pc, labels.get(name)!, loopStates);
+                break;
+              }
+              if (!this.game.routines.has(name)) continue;
+              const values = this.callArguments(name, parameters ? this.arguments(parameters) : [], frame);
+              const result = yield* this.execute(name, values);
+              if (result !== undefined) this.globals.set(typeof result === "string" ? "RESULTS" : "RESULT", [], result, frame.context);
+              if (op === "TRYJUMPLIST") return result;
+              break;
+            }
+            break;
+          }
+          case "FUNC": case "ENDFUNC": throw new EraError(`${op} reached outside a TRYLIST instruction`);
           case "PUTFORM":
             this.globals.set("SAVEDATA_TEXT", [], text(this.globals.get("SAVEDATA_TEXT", [], frame.context)) + this.formatted(args, frame), frame.context);
             break;
@@ -3299,14 +3356,8 @@ export class Runtime {
           case "CALLFORM": case "JUMPFORM": case "TRYCALLFORM": case "TRYJUMPFORM": case "TRYCCALLFORM": case "TRYCJUMPFORM":
           case "CALLFORMF": case "TRYCALLFORMF": {
             let call: CallTarget | null;
-            if (op.includes("FORM")) {
-              const split = formNameEnd(args);
-              const name = key(this.formatted(args.slice(0, split), frame).trim());
-              let parameters = args.slice(split).trim();
-              if (parameters.startsWith("(") && parameters.endsWith(")")) parameters = parameters.slice(1, -1);
-              else parameters = parameters.replace(/^,/, "");
-              call = name ? { name, parameters: parameters.trim() } : null;
-            } else call = this.callTarget(args);
+            if (op.includes("FORM")) call = this.formattedCallTarget(args, frame);
+            else call = this.callTarget(args);
             if (!call) {
               if (!op.startsWith("TRY") || !op.includes("FORM")) throw new EraError(`Missing ${op} target`);
               if (/^TRYC(?:CALL|JUMP)/.test(op)) next = target + 1;
@@ -3511,13 +3562,7 @@ export class Runtime {
               if (op.startsWith("TRY")) break;
               throw new EraError(`Unknown label: ${label}`);
             }
-            if (loops.some((loop) => destination > loop.start && destination <= loop.end && !(pc > loop.start && pc <= loop.end)))
-              throw new EraError("GOTO into a loop is not supported");
-            for (const start of loopStates.keys()) {
-              const loop = loops.find((l) => l.start === start)!;
-              if (destination < start || destination > loop.end) loopStates.delete(start);
-            }
-            next = destination; break;
+            next = this.gotoDestination(frame.compiled, pc, destination, loopStates); break;
           }
           case "RETURN": case "RETURNFORM": {
             const source = op === "RETURNFORM" ? this.formatted(args, frame) : args;
@@ -3561,7 +3606,7 @@ export class Runtime {
           case "CLIENTWIDTH": case "CLIENTHEIGHT": case "ISACTIVE": case "MOUSEX": case "MOUSEY": case "FIND_CHARADATA": case "EXISTFILE":
           case "SIGN": case "ALLSAMES": case "NOSAMES": case "COLOR_FROMNAME": case "COLOR_FROMRGB": case "CHKFONT": case "LINEISEMPTY": case "HTML_GETPRINTEDSTR":
           case "GETDOINGFUNCTION": case "MESSKIP": case "GETKEY": case "GETKEYTRIGGERED": case "GETTEXTBOX": case "REGEXPMATCH": case "STRJOIN":
-          case "INRANGEARRAY": case "INRANGECARRAY": case "CLEARMEMORY": case "GETMEMORYUSAGE": {
+          case "INRANGEARRAY": case "INRANGECARRAY": case "CLEARMEMORY": case "GETMEMORYUSAGE": case "ISDEFINED": {
             // Instruction forms of string functions store the result in RESULT or RESULTS.
             const result = evaluate({ kind: "call", name: op, args: args.trim() ? this.arguments(args).map((part) => this.parse(part)) : [] }, frame.context);
             this.globals.set(typeof result === "string" ? "RESULTS" : "RESULT", [], result, frame.context);

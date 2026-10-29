@@ -16,6 +16,9 @@ hotpatch only changes presentation.
   at startup (`Hotpatched @…`).
 - Use `#DIM DYNAMIC` / `#DIMS DYNAMIC` for locals. Plain `#DIM` locals are
   static in Emuera and keep their values between calls.
+- Helpers that use `CALL` must be ordinary routines, not `#FUNCTION(S)`.
+  Return values with `RETURN` and read `RESULT` at the call site; expression
+  functions can invoke other expression functions with `CALLF`.
 - Keep `LINECOUNT` intact: one `HTML_PRINT` is one logical line however many
   rows it wraps to on screen, and the client clears it as one line.
 - `npm run dev` watches `hotpatch/` and restarts the server on changes.

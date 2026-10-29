@@ -534,13 +534,15 @@ game's `ERB/`, `CSV/`, and `resources/` directories.
 
 ### Native compatibility checks
 
-`test/native-compat.test.ts` runs the ERB fixtures in `test/fixtures/` in both
-interpreted and warmed JIT execution. The control-flow, numeric, and string-builtin
+`test/native-compat.test.ts` and `test/history-compat.test.ts` run the ERB fixtures
+in `test/fixtures/` in interpreted and warmed JIT execution. The control-flow,
+numeric, history, and string-builtin
 fixtures were also run unchanged with **Emuera.NET 1.824+v24+EMv18+EEv56
 NAudio** under Wine. To repeat the native check, make a throwaway game folder
 with empty `CSV/` and an `ERB/` containing one fixture, copy a compatible
 `Emuera.exe` there, enable `システム関数の上書きを許可する:YES` in
-`emuera.config`, and run `wine ./Emuera.exe` from that folder. Each fixture
+`emuera.config`, and run `wine ./Emuera.exe` from that folder. For
+`native-history.erb`, also copy `native-history.erh` into `ERB/`. Each fixture
 writes `emuera.log` with `OUTPUTLOG` and ends at `DONE`; compare its printed
 lines with the expectations in the TypeScript test. Do not run these probes
 inside an installed game's directory. The browser runtime additionally prints
@@ -555,6 +557,32 @@ of `-1`. Native string `<=` and `>=` both behave as strict `<`; this legacy
 quirk is intentional, including in JIT and `CASE IS` comparisons. Shift-JIS
 width counts an unencodable supplementary character as two UTF-16 fallback bytes.
 Scripts, CSVs, and config files accept CRLF, LF, and lone CR line endings.
+
+History-derived regressions preserve semicolons in string `=` assignments while
+retaining comments in numeric and string-expression assignments, including when
+a local shadows a differently typed global. Statement expression arguments expand
+`#DEFINE` macros before splitting on commas; literal output and quoted strings
+are not expanded. A game variable named `VARS` can be assigned normally.
+Character templates accept `Chara*.csv` names without numeric suffixes. Empty
+templates are skipped, malformed number rows and data before the number produce
+diagnostics, and duplicate template numbers keep the first definition.
+
+`EJAC:0` starts at 10000; `GAMEBASE_GAMECODE` aliases `GAMEBASE_CODE`;
+`ISDEFINED` tests macro existence, not variable existence. `PRINTCPERLINE X`
+stores the configured count in X (or RESULT when omitted). TRAIN respects
+`COM_ABLE初期値` when a command has no explicit `@COM_ABLEn` routine.
+TRYLIST blocks attempt formatted FUNC targets in order and execute only the first
+existing target, without evaluating arguments of missing targets. Calls can wait
+for input; jumps unwind the current routine. As with other computed gotos,
+TRYGOTOLIST cannot enter a loop from outside. Routines containing TRYLIST remain
+interpreted; JIT callers correctly handle their suspension.
+
+Expression functions reject executed native method-unsafe instructions such as
+CALL/JUMP, RETURN, BEGIN, QUIT and waits, including PRINT...W variants.
+Plain printing, RETURNF and CALLF remain allowed. The existing eraFL VARI/VARS
+local-declaration extension remains supported inside expression functions.
+The main-screen hotpatch's command-rendering helper is an ordinary CALL/RETURN
+routine because it calls game routines, rather than a #FUNCTION.
 
 Numeric conversion checks distinguish `ISNUMERIC` from `TOINT`: empty base
 prefixes are not numeric, signed exponents are rejected by `ISNUMERIC` but
@@ -577,6 +605,8 @@ Reference checks:
 [BREAK/CONTINUE](https://evilmask.gitlab.io/emuera.em.doc/Reference/CONTINUE.html),
 [configuration](https://evilmask.gitlab.io/emuera.em.doc/Emuera/config.html),
 [TOINT/ISNUMERIC](https://evilmask.gitlab.io/emuera.em.doc/Reference/TOINT.html),
+[ISDEFINED](https://evilmask.gitlab.io/emuera.em.doc/Reference/ISDEFINED.html),
+[TRYLIST](https://evilmask.gitlab.io/emuera.em.doc/Reference/TRYLIST.html),
 [.NET regex substitutions](https://learn.microsoft.com/en-us/dotnet/standard/base-types/substitutions-in-regular-expressions),
 and [.NET character classes](https://learn.microsoft.com/en-us/dotnet/standard/base-types/character-classes-in-regular-expressions).
 Other engines' tests are leads, not an oracle: native EE reports errors for
@@ -747,6 +777,8 @@ declarations and the expression evaluator. No single routine dominates.
   string `=` formatted assignment and `'=` expression assignment;
   numeric compound assignment and increment/decrement. Numeric `=` and string
   `'=` batch assignments advance along the final array dimension without wrapping.
+  Expression assignments ignore trailing `;` comments while retaining semicolons
+  inside quoted strings; string `=` formatted assignments keep literal semicolons.
 - `@"..."` formatted string expressions, nested interpolation and lazy
   `\@ condition ? true text # false text \@` FORM conditionals. As in Emuera's
   lexer, conditionals do not nest: inside an arm the next `\@` closes it (a

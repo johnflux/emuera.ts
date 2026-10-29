@@ -151,7 +151,7 @@ RETURNF ARGS`)).start();
   assert.equal(printed(result), "12 default");
   assert.equal(result.status, "halted", JSON.stringify(result.error));
   for (const [body, expected] of [
-    ['WAIT\nRETURNF 1', /attempted input/],
+    ['WAIT\nRETURNF 1', /cannot be used in #FUNCTION/],
     ['RETURNF "wrong"', /integer/],
   ] as const) {
     const invalid = new Runtime(game("@SYSTEM_TITLE\nA = FUNC()\nRETURN\n@FUNC\n#FUNCTION\n" + body)).start();
