@@ -51,11 +51,11 @@ In the bundled eraToho The World checkout, the current compatibility inventory c
 - **194 CSV tables**
 - **21,812 sprite definitions**
 
-The instruction inventory currently recognizes every instruction *name* it encounters. That is a useful sign that the parser knows the vocabulary of this particular game, but it is not a claim that every instruction argument, expression, variable, preprocessor feature, or reachable gameplay path is fully compatible. In other words, “all names recognized” is not “the whole game is playable.” The compatibility report is deliberately a lexical inventory, not a playability percentage.
+The instruction inventory lists every instruction *name* recognized in this game.
 
 For scale, one representative “Wake up” flow in the project involves about **580,000 ERB lines**. This kind of workload is why the implementation includes compiled routines, carefully scoped caches, and a JIT path for frequently called code. The JIT remains an optimization: unsupported constructs fall back to interpreter execution, and tests compare compiled results with interpreter results.
 
-Today, the documented verified path reaches the real title screen, performs real custom-character creation, and proceeds through setup to the pre-game settings menu. Full day-to-day gameplay is not yet supported end to end. Unsupported operations stop with a source filename and line number instead of pretending that execution succeeded.
+Today, the documented verified path reaches the real title screen, performs real custom-character creation, and proceeds through setup to the pre-game settings menu. Full day-to-day gameplay is not yet supported end to end. Unsupported operations report a source filename and line number.
 
 ## The gotchas are where compatibility lives
 

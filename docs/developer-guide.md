@@ -39,8 +39,7 @@ Unsupported operations stop with their source filename and line.
 
 **eraToho Reverse:** the installed `GAMES/eratohoreverse` is tested through its
 title, Normal-mode character creation, character-template and game saving, trainer selection,
-the shop, and several initial training turns. This is not a claim of complete gameplay
-or Anchor-fork compatibility. ARG/ARGS arrays grow to fit each routine's declared
+the shop, and several initial training turns. ARG/ARGS arrays grow to fit each routine's declared
 parameter indices without enlarging other routines or changing `VariableSize.csv`.
 Spaced array references, prefix increments, comma-style `CALLF`, empty optional
 `TRYCALLFORM` hooks, `CURRENTALIGN()` and integer-times-string repetition work in
@@ -54,8 +53,7 @@ Explicit variable sizes still take precedence, and out-of-range accesses still f
 
 **eraOCG2:** the installed `GAMES/eraocg2` is regression-tested through the
 title animation, new-game confirmation, Story-mode selection, and player-name
-entry. Its lexical compatibility report now has no gaps; this does not establish
-complete gameplay support. No game scripts or data are patched.
+entry. Its lexical compatibility report now has no gaps. No game scripts or data are patched.
 `ADDDEFCHARA`, restricted to `@SYSTEM_TITLE`, adds character template 0 and
 the optional positive `最初からいるキャラ` number from `GameBase.csv`, using
 the same CSV initialization as `ADDCHARA`. `PRINT_MARK` prints named, nonzero
@@ -69,15 +67,11 @@ and console history while retaining saved files and the current browser
 display settings. Interpreter and JIT paths are covered by command regressions.
 
 **eraNAS:** the installed `GAMES/pops-tw` has no lexical compatibility gaps or
-loader diagnostics; this is not a full-gameplay guarantee.
+loader diagnostics.
 `FORCE_QUIT_AND_RESTART` uses the same full runtime reset as
 `QUIT_AND_RESTART`, including unwinding nested calls and clearing `SKIPDISP`.
-`UPDATECHECK` takes no arguments and sets `RESULT:0` to native code **4**
-(update checks disabled), leaving other result slots unchanged. Network update
-checks are always disabled in this interpreter, regardless of the game's
-`ForbidUpdateCheck` setting: game-provided update URLs are not fetched and no
-download links or external updaters are launched. This does not claim that the
-installed game is up to date; update it manually through its project page.
+`UPDATECHECK` takes no arguments and sets `RESULT:0` to **4** (disabled).
+Other result slots are unchanged.
 `CLEARLINE` follows native signed 32-bit count conversion; zero or negative counts
 leave output unchanged. This allows loading screens to compare saved line numbers
 after other code has cleared the console without aborting on a negative difference.
@@ -226,12 +220,10 @@ Git LFS; existing Pops TW installations keep the same folder.
 **Install with Git** asks before cloning a catalog repository into `GAMES/`.
 It requires Git and an internet connection, uses a shallow clone (the repository's
 default branch), and may take several minutes. Failed downloads/clones are cleaned
-up. Only catalog sources can be installed, not arbitrary URLs. Downloaded game
-scripts are third-party code: only install games you trust. For manual installs,
+up. Only catalog sources can be installed, not arbitrary URLs. For manual installs,
 follow **Project page** or **Find downloads**, download an archive, and extract
 the game under `GAMES/`, keeping `ERB/` and `CSV/` together directly or one folder
-down. Then use **Refresh library**. Games can be launched immediately after
-installation; interpreter compatibility is not guaranteed.
+down. Then use **Refresh library**.
 
 ERD name-index tables may contain numeric rows with an empty name (for example
 `1,` in Blue Resort). These reserve unnamed indices and do not create name
@@ -744,7 +736,7 @@ declarations and the expression evaluator. No single routine dominates.
   `DEBUGCLEAR`, `ASSERT`) do not evaluate their arguments; in debug mode they
   write to the debug output panel or check the assertion. `CLEARMEMORY` clears interpreter parser/compiler caches and
   requests V8 garbage collection when Node exposes it; it returns observed
-  reclaimed heap bytes (possibly zero), not a promise to release native resources.
+  reclaimed heap bytes (possibly zero).
 - `CALLTRAIN`/`STOPCALLTRAIN` queue `SELECTCOM:1..n` train commands as in
   Emuera: status/command list output is skipped during the run, each step prints
   `＜コマンド連続実行：i/n＞`, unavailable commands go to `USERCOM`, and
@@ -859,8 +851,7 @@ declarations and the expression evaluator. No single routine dominates.
   Movement and upward flaps are tested with a controlled clock. The browser's
   60 FPS cap keeps the game's integer-divided physics from rounding to zero
   at sub-15 ms frame times; no game scripts are patched.
-  Its lowercase `csv/` directory works without renaming. Full gameplay and the
-  sorting demo shown in external feedback have not been verified.
+  Its lowercase `csv/` directory works without renaming.
 - A presentation-only patch recognizes the title's exact 35-strip HTML sequence
   and contiguous resource rectangles, rendering one cropped image instead of
   35 images and metadata requests. ERB files, runtime output and `LINECOUNT`
@@ -871,8 +862,8 @@ declarations and the expression evaluator. No single routine dominates.
 
 ## Deliberate limits
 
-The compatibility inventory is **lexical**, not a playability score: recognizing
-an opcode does not validate its expressions, argument forms, or reachable paths.
+The compatibility inventory tracks recognized opcodes. Runtime support depends
+on their expressions, argument forms, and reachable paths.
 For example, this game uses millions of instructions, macros, game-save loading,
 character-management operations, additional engine lifecycle transitions, drawing
 APIs, and extensions that are not implemented yet.
@@ -912,8 +903,7 @@ within that budget. The server's demo shares the budget because its scenarios ru
 50,000. All runs retain a 2 MB
 output limit between input
 requests, 128 call frames, 16 KB request bodies, and eight active sessions
-(30-minute idle expiry). This is a **local development tool**, not a hosted
-multi-user service or a sandbox for untrusted games. It listens only on loopback,
+(30-minute idle expiry). This is a **local development tool**. It listens only on loopback,
 checks Host/Origin, uses a CSP, and prevents resource traversal (including
 symlinks). No game-supplied scripts or event attributes are attached to the DOM.
 
@@ -936,8 +926,7 @@ renderer, then housing/options and the `BEGIN SHOP` game loop.
 Pre-defined character selection needs additional character-management operations.
 Native Continue is covered through the bundled save's post-load gameplay input;
 later gameplay can still encounter unsupported operations.
-Keep unsupported behavior explicit and add conformance tests for each feature
-before claiming more of the game is supported.
+Keep unsupported behavior explicit and add conformance tests for each feature.
 
 Language references: [Emuera wiki](https://wiki.eragames.rip/index.php/Emuera),
 [ERB format](https://wiki.eragames.rip/index.php/Emuera/eramaerb),

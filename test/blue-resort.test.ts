@@ -209,9 +209,9 @@ People:Label = 40
 MAXBASE:Health = 50
 PRINTFORML {Grid:1:2} {Grid:0:2} {Cube:1:2:3} {Legacy:1:1} {People:0:Label} {MAXBASE:0:Health}
 RETURN
-@BUMP(R)
-#DIM REF R, 0, 0
-R:1:2 += 1`, jit, game).start();
+@BUMP(ARRAY_REF)
+#DIM REF ARRAY_REF, 0, 0
+ARRAY_REF:1:2 += 1`, jit, game).start();
       assert.deepEqual(texts(s), Array(4).fill("9 20 9 30 40 50"));
       for (const [access, error] of [
         ["Grid:TooFar:Label", /out of range/],
@@ -223,9 +223,9 @@ REPEAT 4
 CALL CHECK(COUNT)
 REND
 RETURN
-@CHECK(N)
-#DIM N
-SIF N == 3
+@CHECK(INDEX_VALUE)
+#DIM INDEX_VALUE
+SIF INDEX_VALUE == 3
 PRINTFORML {${access}}`, jit, await loadGame(root)).start();
         assert.equal(failed.status, "error", `${access}, jit=${jit}`);
         assert.match(failed.error?.message ?? "", error);
@@ -262,12 +262,12 @@ ARRAYMSORTEX "SORTKEY", NAMES, 1, 3
 PRINTFORML {SORTKEY:0},{SORTKEY:1},{SORTKEY:2} {DATA:0:0},{DATA:0:1}`;
     assert.deepEqual(texts(runtime(source, jit).start()), ["1 3,2,1,9 20,21", "1,2,3 10,11"]);
     const s = runtime(`@SYSTEM_TITLE
-#DIM K, 3
+#DIM SORT_VALUES, 3
 #DIM TOO_SMALL, 1
-#DIMS NAMES = "K", "TOO_SMALL"
-K = 3, 1, 2
-ARRAYMSORTEX K, NAMES, 1, 3
-PRINTFORML {RESULT} {K:0},{K:1},{K:2}`, jit).start();
+#DIMS NAMES = "SORT_VALUES", "TOO_SMALL"
+SORT_VALUES = 3, 1, 2
+ARRAYMSORTEX SORT_VALUES, NAMES, 1, 3
+PRINTFORML {RESULT} {SORT_VALUES:0},{SORT_VALUES:1},{SORT_VALUES:2}`, jit).start();
     assert.deepEqual(texts(s), ["0 3,1,2"]);
   }
 });

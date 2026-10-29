@@ -694,10 +694,10 @@ test("full-width spaces are kept in values when the config excludes them from wh
 
 test("TIMES, BAR, SWAP, array shift/sort/copy/multi-sort, SETVAR, VARSETEX and seeded RAND", () => {
   const result = runtime(`@SYSTEM_TITLE
-#DIM A, 5
-#DIM B, 5
-#DIM C, 3
-#DIMS S, 5
+#DIM ARRAY_A, 5
+#DIM ARRAY_B, 5
+#DIM ARRAY_C, 3
+#DIMS ARRAY_S, 5
 #DIM GRID, 2, 3
 LOCAL = 100
 TIMES LOCAL, 1.25
@@ -708,29 +708,29 @@ BAR 3, 10, 5
 BARL 20, 10, 4
 BARSTR -1, 10, 3
 PRINTSL RESULTS
-A:0 = 1, 2
-SWAP A:0, A:1
-PRINTFORML {A:0}{A:1}
-A:0 = 1, 2, 3, 4, 5
-ARRAYSHIFT A, 2, 9
-ARRAYSHIFT A, -1, 0, 1, 3
-PRINTFORML {A:0}{A:1}{A:2}{A:3}{A:4}
-ARRAYSORT A
-ARRAYSORT A, BACK, 1, 3
-ARRAYCOPY "A", "C"
-PRINTFORML {A:0}{A:1}{A:2}{A:3}{A:4} {C:0}{C:1}{C:2}
-B:0 = 3, 1, 2, 0, 5
-S:0 = c
-S:1 = a
-S:2 = b
-S:3 = x
-S:4 = y
-ARRAYMSORT B, S
-PRINTFORML {B:0}{B:1}{B:2}{B:3}{B:4} %S:0%%S:1%%S:2%%S:3%%S:4% {RESULT}
-SETVAR "A:1", 42
+ARRAY_A:0 = 1, 2
+SWAP ARRAY_A:0, ARRAY_A:1
+PRINTFORML {ARRAY_A:0}{ARRAY_A:1}
+ARRAY_A:0 = 1, 2, 3, 4, 5
+ARRAYSHIFT ARRAY_A, 2, 9
+ARRAYSHIFT ARRAY_A, -1, 0, 1, 3
+PRINTFORML {ARRAY_A:0}{ARRAY_A:1}{ARRAY_A:2}{ARRAY_A:3}{ARRAY_A:4}
+ARRAYSORT ARRAY_A
+ARRAYSORT ARRAY_A, BACK, 1, 3
+ARRAYCOPY "ARRAY_A", "ARRAY_C"
+PRINTFORML {ARRAY_A:0}{ARRAY_A:1}{ARRAY_A:2}{ARRAY_A:3}{ARRAY_A:4} {ARRAY_C:0}{ARRAY_C:1}{ARRAY_C:2}
+ARRAY_B:0 = 3, 1, 2, 0, 5
+ARRAY_S:0 = c
+ARRAY_S:1 = a
+ARRAY_S:2 = b
+ARRAY_S:3 = x
+ARRAY_S:4 = y
+ARRAYMSORT ARRAY_B, ARRAY_S
+PRINTFORML {ARRAY_B:0}{ARRAY_B:1}{ARRAY_B:2}{ARRAY_B:3}{ARRAY_B:4} %ARRAY_S:0%%ARRAY_S:1%%ARRAY_S:2%%ARRAY_S:3%%ARRAY_S:4% {RESULT}
+SETVAR "ARRAY_A:1", 42
 VARSETEX "GRID", 7, 1, 1
 VARSETEX "GRID:1:0", 5, 0
-PRINTFORML {A:1} {GRID:0:0}{GRID:0:1}{GRID:0:2}{GRID:1:0}{GRID:1:2}
+PRINTFORML {ARRAY_A:1} {GRID:0:0}{GRID:0:1}{GRID:0:2}{GRID:1:0}{GRID:1:2}
 RANDOMIZE 5
 DUMPRAND
 LOCAL:2 = RAND(10, 20)
@@ -1270,10 +1270,10 @@ QUIT
 
 test("FORM conditionals inside @-strings do not hide trailing comments", () => {
   const result = runtime(`@SYSTEM_TITLE
-#DIMS T
+#DIMS TEXT
 LOCAL = 1
-T += "a" + @"<\\@LOCAL % 2 ?/#\\@b>" ;comment with % sign
-PRINTSL T
+TEXT += "a" + @"<\\@LOCAL % 2 ?/#\\@b>" ;comment with % sign
+PRINTSL TEXT
 QUIT
 `).start();
   assert.deepEqual(texts(result), ["a</b>"]);
@@ -1520,15 +1520,15 @@ QUIT`).start();
 
 test("FORM conditionals close at the next \\@ like Emuera, with literal quotes in arms", () => {
   const result = runtime(`@SYSTEM_TITLE
-#DIM M = 5
-PRINTSL JOIN2(@"It's \\@ M >= 3 ? rich # poor\\@, ok", "Why?!")
-PRINTFORML [\\@ M ? "a" # b\\@]\\s[\\@ M == 1 ? x\\@]
+#DIM VALUE = 5
+PRINTSL JOIN2(@"It's \\@ VALUE >= 3 ? rich # poor\\@, ok", "Why?!")
+PRINTFORML [\\@ VALUE ? "a" # b\\@]\\s[\\@ VALUE == 1 ? x\\@]
 QUIT
-@JOIN2(A, B)
+@JOIN2(LEFT_TEXT, RIGHT_TEXT)
 #FUNCTIONS
-#DIMS A
-#DIMS B
-RETURNF A + "|" + B`).start();
+#DIMS LEFT_TEXT
+#DIMS RIGHT_TEXT
+RETURNF LEFT_TEXT + "|" + RIGHT_TEXT`).start();
   assert.deepEqual(texts(result), ["It's rich, ok|Why?!", `["a"] []`]);
 });
 

@@ -381,7 +381,7 @@ PRINTFORML %LABEL% {GRID:1:2}`, "test.ERB");
   assert.equal(output(snapshot), "score 4");
 });
 test("one-letter variables cannot be declared as routine-local variables", () => {
-  for (const declaration of ["#DIM DYNAMIC l, 2", "#DIMS L", "#DIM L"]) {
+  for (const declaration of ["#DIM DYNAMIC l, 2", "#DIMS L", "#DIM L", "#DIM REF L"]) {
     const result = runtime(`@SYSTEM_TITLE
 CALL BAD
 RETURN

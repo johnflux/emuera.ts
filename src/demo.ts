@@ -3,7 +3,6 @@ import { indexScript, type Game } from "./loader.js";
 // Original conformance program, not a replacement implementation of the bundled game.
 const source = `
 @SYSTEM_TITLE
-#DIM I
 SETCOLOR 100, 220, 255
 PRINTL Emuera.ts - ERB interpreter conformance demo
 RESETCOLOR
@@ -84,7 +83,6 @@ GOTO MENU
 
 @SCENARIOS
 #DIMS SCENE, 12 = "", "Alone", "One person", "Two people", "Crowd (six people)", "Time stopped, two people", "Time stopped, alone", "Partner asleep", "Exhausted", "Outdoors at night, in the rain", "Asleep, before waking (the sleep menu)", "Crowd stress test (24 people)"
-#DIM I
 ; RESETDATA resets static locals too.
 #DIM DYNAMIC CHOICE
 PRINTL Start the bundled game on its main screen in a prepared situation (Quicktest player, Hakurei Shrine back room).
@@ -131,8 +129,6 @@ CALL GAME_SHOW_STATUS
 @ARRANGE_SCENE
 #DIM CHARA, 6 = 1, 11, 120, 57, 10, 21
 #DIM COUNT
-#DIM C
-#DIM N
 #DIM ROOM
 DevTest = 0
 SELECTCASE DEMO_SCENARIO
@@ -240,7 +236,6 @@ ENDIF
 #DIM CLOSEUP
 #DIMS VIEW
 #DIM SIZE = 180
-#DIM I
 #DIM PAD
 #DIM LINE_HEIGHT
 #DIM LINES

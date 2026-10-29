@@ -65,7 +65,7 @@ export const GAME_CATALOG: readonly CatalogGame[] = [
     id: "toho-reverse", title: "eraToho Reverse", genre: "Character simulation", folder: "eratohoreverse", stars: 65, monogram: "RV",
     blurb: "A Touhou character simulation that reverses the usual roles, with a custom protagonist and character-specific dialogue.",
     source: "https://gitgud.io/Pedy/eratohoreverse", repository: "https://gitgud.io/Pedy/eratohoreverse.git",
-    requirements: "Uses Emuera-Anchor extensions. Title, normal character creation and initial training are tested here; full gameplay compatibility is not guaranteed.",
+    requirements: "Uses Emuera-Anchor extensions.",
   },
   {
     id: "eraas", title: "eraAS", genre: "Post-apocalyptic", folder: "eraAS", stars: 58,

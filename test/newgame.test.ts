@@ -158,7 +158,7 @@ VARSET DEST`);
     ['@SYSTEM_TITLE\nCALL BAD(A)\n@BAD(ARRAY)\n#DIMS REF ARRAY, 0', /REF type mismatch/],
     ['@SYSTEM_TITLE\n#DIM D2, 2, 2\nCALL BAD(D2)\n@BAD(ARRAY)\n#DIM REF ARRAY', /REF dimension mismatch/],
     ['@SYSTEM_TITLE\nCALL BAD(CFLAG)\n@BAD(ARRAY)\n#DIM REF ARRAY', /character variable/],
-    ['@SYSTEM_TITLE\n#DIM CONST K = 1, 2\nCALL BAD(K)\n@BAD(ARRAY)\n#DIM REF ARRAY', /constant/],
+    ['@SYSTEM_TITLE\n#DIM CONST FIXED_KEY = 1, 2\nCALL BAD(FIXED_KEY)\n@BAD(ARRAY)\n#DIM REF ARRAY', /constant/],
   ] as const) {
     const wrong = run(source);
     assert.equal(wrong.status, "error", source);
@@ -185,13 +185,13 @@ PRINTFORML {FINDELEMENT(DATA,50)}`);
 test("recursive dynamic locals, local size directives and legacy comma signatures work", () => {
   const result = run(`@SYSTEM_TITLE
 CALL COUNTDOWN(3)
-@COUNTDOWN, N
-#DIM DYNAMIC N
+@COUNTDOWN, COUNT_VALUE
+#DIM DYNAMIC COUNT_VALUE
 #LOCALSIZE 2
 LOCAL:1 += 1
-PRINTFORML {N} {LOCAL:1}
-SIF N > 0
-  CALL COUNTDOWN(N - 1)`);
+PRINTFORML {COUNT_VALUE} {LOCAL:1}
+SIF COUNT_VALUE > 0
+  CALL COUNTDOWN(COUNT_VALUE - 1)`);
   assert.deepEqual(printed(result), ["3 1", "2 2", "1 3", "0 4"]);
 });
 test("new-game formatting, bit operations, Rename replacements and random bounds", () => {
