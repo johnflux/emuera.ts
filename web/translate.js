@@ -11,6 +11,18 @@ const SKIP = ".era-map-art, .era-map-picture, script, style, textarea, [translat
 // Text art drawn with box and block characters (maps printed outside the map panels).
 const ART = /[\u2500-\u257f∴]/;
 
+/** Protect complete text-art rows, including labels printed in separate colored spans. */
+export function protectMapTranslation(root) {
+  for (const element of root.querySelectorAll(".era-map-art, .era-map-picture, .line")) {
+    const text = element.textContent;
+    const structure = text.match(/[\u2500-\u259f\u25a0\u25a1]/g);
+    if (!element.matches(".era-map-art, .era-map-picture")
+      && (structure?.length ?? 0) < 3 && !/[森林木]{3}|[森林木]{2}.*[森林木]{2}/.test(text)) continue;
+    element.setAttribute("translate", "no");
+    element.classList.add("notranslate");
+  }
+}
+
 export function createTranslation({ onChange = () => {} } = {}) {
   const originals = new WeakMap();
   const cache = new Map();
@@ -108,6 +120,7 @@ export function createTranslation({ onChange = () => {} } = {}) {
   /** Translates Japanese text under root now and, once a model is ready, keeps doing so on every call. */
   function translateTree(root) {
     roots.add(root);
+    protectMapTranslation(root);
     if (!enabled()) return;
     if (!translator) { start(); return; }
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {

@@ -68,6 +68,20 @@ title state, clearing variables, characters, runtime containers, graphics,
 and console history while retaining saved files and the current browser
 display settings. Interpreter and JIT paths are covered by command regressions.
 
+**eraNAS:** the installed `GAMES/pops-tw` has no lexical compatibility gaps or
+loader diagnostics; this is not a full-gameplay guarantee.
+`FORCE_QUIT_AND_RESTART` uses the same full runtime reset as
+`QUIT_AND_RESTART`, including unwinding nested calls and clearing `SKIPDISP`.
+`UPDATECHECK` takes no arguments and sets `RESULT:0` to native code **4**
+(update checks disabled), leaving other result slots unchanged. Network update
+checks are always disabled in this interpreter, regardless of the game's
+`ForbidUpdateCheck` setting: game-provided update URLs are not fetched and no
+download links or external updaters are launched. This does not claim that the
+installed game is up to date; update it manually through its project page.
+`CLEARLINE` follows native signed 32-bit count conversion; zero or negative counts
+leave output unchanged. This allows loading screens to compare saved line numbers
+after other code has cleared the console without aborting on a negative difference.
+
 **eraFL:** startup is regression-tested through initialization, companion-mode
 selection, and the unique-companion list with portraits. The engine loads
 `CSV/_default.config` (or `default.config`), then `emuera.config`, then
@@ -818,6 +832,16 @@ declarations and the expression evaluator. No single routine dominates.
   coordinates, rather than always reporting the configured desktop window size.
   Headless runs retain the configured dimensions. `ISACTIVE()` reports browser
   visibility/focus (headless runs default to active).
+  `MOUSEX()`/`MOUSEY()` report the latest pointer position at each execution step,
+  in the same game pixels as `INPUTMOUSEKEY`: the origin is the drawable area's
+  bottom-left and Y is negative above it. Movement is tracked without clicking,
+  including outside the drawable area; coordinates are not clamped.
+  Headless runs and browser runs before the first pointer event default to zero.
+  Translation protects marked map panels and unmarked text-art rows (box/block
+  drawing or repeated forest/tree scenery), including labels in separate spans.
+  These receive `translate="no"` and `notranslate` before staged output is shown,
+  preserving their character-cell layout with both the on-device translator and
+  browser page translation. Ordinary descriptions and menus remain translatable.
   Timed `INPUTMOUSEKEY` frames are capped at 60 FPS: delays shorter than
   1/60 second use that interval, while longer delays and other input timers
   are unchanged. Mouse clicks, wheel events and keys received during a timed

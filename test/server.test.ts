@@ -60,13 +60,13 @@ INPUT`),
 test("browser client state reaches start, input, timeout and prefetched continuations", async () => {
   const game = emptyGame();
   indexScript(game, `@SYSTEM_TITLE
-PRINTFORML {CLIENTWIDTH()} {CLIENTHEIGHT()} {ISACTIVE()}
+PRINTFORML {CLIENTWIDTH()} {CLIENTHEIGHT()} {ISACTIVE()} {MOUSEX()} {MOUSEY()}
 INPUT
-PRINTFORML {CLIENTWIDTH()} {CLIENTHEIGHT()} {ISACTIVE()}
+PRINTFORML {CLIENTWIDTH()} {CLIENTHEIGHT()} {ISACTIVE()} {MOUSEX()} {MOUSEY()}
 AWAIT 1
-PRINTFORML {CLIENTWIDTH()} {CLIENTHEIGHT()} {ISACTIVE()}
+PRINTFORML {CLIENTWIDTH()} {CLIENTHEIGHT()} {ISACTIVE()} {MOUSEX()} {MOUSEY()}
 WAIT
-PRINTFORML {CLIENTWIDTH()} {CLIENTHEIGHT()} {ISACTIVE()}
+PRINTFORML {CLIENTWIDTH()} {CLIENTHEIGHT()} {ISACTIVE()} {MOUSEX()} {MOUSEY()}
 RETURN`, "client.ERB");
   const app = createApp(game);
   try {
@@ -80,23 +80,25 @@ RETURN`, "client.ERB");
     });
     const invalid = [null, [], {}, "bad", { width: -1, height: 1, active: true },
       { width: 1.5, height: 1, active: true }, { width: 1, height: 65536, active: true },
-      { width: 1, height: 1, active: "yes" }];
+      { width: 1, height: 1, active: "yes" },
+      ...[null, "1", 1.5, -2147483649, 2147483648].flatMap((position) =>
+        ["mouseX", "mouseY"].map((axis) => ({ width: 1, height: 1, active: true, [axis]: position })))];
     for (const client of invalid)
       assert.equal((await post("/api/start", { mode: "game", client })).status, 400);
-    const start = await (await post("/api/start", { mode: "game", client: { width: 1200, height: 800, active: true } })).json();
+    const start = await (await post("/api/start", { mode: "game", client: { width: 1200, height: 800, active: true, mouseX: 120, mouseY: -45 } })).json();
     const session = start.session;
-    assert.equal(start.output[0].text, "1200 800 1");
+    assert.equal(start.output[0].text, "1200 800 1 120 -45");
     for (const client of invalid) {
       for (const route of ["/api/input", "/api/timeout", "/api/prefetch"])
         assert.equal((await post(route, { session, value: "0", client })).status, 400, route);
     }
-    const input = await (await post("/api/input", { session, value: "0", client: { width: 900, height: 600, active: false } })).json();
-    assert.equal(input.output.at(-1).text, "900 600 0");
+    const input = await (await post("/api/input", { session, value: "0", client: { width: 900, height: 600, active: false, mouseX: -10, mouseY: 20 } })).json();
+    assert.equal(input.output.at(-1).text, "900 600 0 -10 20");
     const timeout = await (await post("/api/timeout", { session, client: { width: 800, height: 500, active: true } })).json();
-    assert.equal(timeout.output.at(-1).text, "800 500 1");
-    assert.equal((await (await post("/api/prefetch", { session, client: { width: 700, height: 400, active: false } })).json()).prefetched, true);
+    assert.equal(timeout.output.at(-1).text, "800 500 1 0 0");
+    assert.equal((await (await post("/api/prefetch", { session, client: { width: 700, height: 400, active: false, mouseX: 35, mouseY: -70 } })).json()).prefetched, true);
     const continued = await (await post("/api/input", { session, value: "" })).json();
-    assert.equal(continued.output.at(-1).text, "700 400 0");
+    assert.equal(continued.output.at(-1).text, "700 400 0 35 -70");
   } finally {
     if (app.listening) await new Promise<void>((resolve, reject) => app.close((error) => error ? reject(error) : resolve()));
   }

@@ -159,10 +159,10 @@ SELECTCASE V
     LABEL '= "mid"
 ENDSELECT
 PRINTFORML {V}:%LABEL%
-@BUMP(R, N)
-#DIM REF R
-R += N
-R ++`).start();
+@BUMP(REFERENCE, N)
+#DIM REF REFERENCE
+REFERENCE += N
+REFERENCE ++`).start();
   assert.equal(result.status, "halted", JSON.stringify(result.error));
   assert.equal(output(result), "0:low\n1:low\n2:mid\n3:mid\n4:high4\n5:high5\ntotal=42");
 });
@@ -371,14 +371,30 @@ test("global/private declarations, multidimensional arrays and CSV aliases", () 
   game.names.set("FLAG", new Map([["SCORE", 7]]));
   indexScript(game, '#DIM CONST SIZE_CONST = 3\n#DIMS LABEL = "score"\n#DIM GRID, 2, 3', "test.ERH", true);
   indexScript(game, `@SYSTEM_TITLE
-#DIM X
-X = SIZE_CONST + 1
-FLAG:SCORE = X
+#DIM VALUE
+VALUE = SIZE_CONST + 1
+FLAG:SCORE = VALUE
 GRID:1:2 = FLAG:SCORE
 PRINTFORML %LABEL% {GRID:1:2}`, "test.ERB");
   const snapshot = new Runtime(game).start();
   assert.equal(snapshot.status, "halted", JSON.stringify(snapshot.error));
   assert.equal(output(snapshot), "score 4");
+});
+test("one-letter variables cannot be declared as routine-local variables", () => {
+  for (const declaration of ["#DIM DYNAMIC l, 2", "#DIMS L", "#DIM L"]) {
+    const result = runtime(`@SYSTEM_TITLE
+CALL BAD
+RETURN
+@BAD
+${declaration}
+RETURN`).start();
+    assert.equal(result.status, "error", declaration);
+    assert.match(result.error!.message, /one-letter local variable: L/);
+    assert.equal(result.error!.line, 5);
+  }
+  const builtIn = runtime("@SYSTEM_TITLE\nL = 3\nPRINTFORML {L}").start();
+  assert.equal(builtIn.status, "halted", JSON.stringify(builtIn.error));
+  assert.equal(output(builtIn), "3");
 });
 test("constants, unknown variables, bounds, bad declarations and directives fail with locations", () => {
   for (const [body, headers, expected] of [

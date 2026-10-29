@@ -144,10 +144,11 @@ export class Variables {
       if (variable.character) variable.dimensions[0] = 0;
     }
   }
-  declare(line: Line): void {
+  declare(line: Line, local = false): void {
     const match = /^#DIM(S)?\s+((?:(?:CONST|DYNAMIC|GLOBAL|SAVEDATA|REF|CHARADATA)\s+)*)([^\s,=]+)(.*)$/i.exec(line.text);
     if (!match) throw new EraError(`Unsupported declaration: ${line.text}`, line);
     const name = key(match[3]!);
+    if (local && /^[A-Z]$/i.test(match[3]!)) throw new EraError(`Cannot declare one-letter local variable: ${name}`, line);
     if (this.values.has(name) || this.declarations.has(name)) throw new EraError(`Duplicate variable: ${name}`, line);
     this.declarations.set(name, line);
     this.invalidate();

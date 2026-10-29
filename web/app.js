@@ -1,4 +1,4 @@
-import { createTranslation } from "./translate.js";
+import { createTranslation, protectMapTranslation } from "./translate.js";
 import { createLibrary } from "./library.js";
 
 const terminal = document.querySelector("#terminal");
@@ -721,13 +721,21 @@ function imageScale() {
   const lineHeight = Number.parseFloat(style.lineHeight);
   return (Number.isFinite(lineHeight) ? lineHeight : Number.parseFloat(style.fontSize) * 1.25) / metrics.lineHeight;
 }
+let mousePosition = null;
+for (const name of ["pointermove", "pointerdown", "pointerup", "wheel"]) {
+  document.addEventListener(name, (event) => {
+    mousePosition = { clientX: event.clientX, clientY: event.clientY };
+  }, { capture: true, passive: true });
+}
 /** Use the same game-pixel coordinates as CBG placement and mouse hit testing. */
 function clientState() {
   const scale = imageScale();
+  const [mouseX, mouseY] = mousePosition ? clientPoint(mousePosition) : [0, 0];
   return {
     width: Math.max(0, Math.floor(terminal.clientWidth / scale)),
     height: Math.max(0, Math.floor(terminal.clientHeight / scale)),
     active: !document.hidden && document.hasFocus(),
+    mouseX, mouseY,
   };
 }
 /** CSS pixels per Emuera pixel across the line: a column is half the configured font size wide in Emuera. */
@@ -1433,6 +1441,7 @@ async function renderSteps(steps, fresh = false, keepFocus = false, toBottom = f
     for (const { snapshot, advanceScreen } of steps) await renderSnapshot(snapshot, advanceScreen);
     await Promise.all(pendingImages);
   } finally {
+    protectMapTranslation(staged);
     if (!live) terminal.replaceChildren(...staged.childNodes);
     outputRoot = terminal;
     pendingImages = [];

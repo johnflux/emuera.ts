@@ -117,8 +117,8 @@ WAITANYKEY`), 50_000, { jit });
   assert.equal(invalid.status, "error");
 });
 
-test("QUIT_AND_RESTART unwinds callers, resets runtime data and UI, and preserves persisted saves", () => {
-  for (const jit of [false, true]) {
+test("restart instructions unwind callers, reset runtime data and UI, and preserve persisted saves", () => {
+  for (const jit of [false, true]) for (const op of ["QUIT_AND_RESTART", "FORCE_QUIT_AND_RESTART"]) {
     const saves = new MemorySaveStore(), store = new MemoryGlobalStore();
     const runtime = new Runtime(game(`@SYSTEM_TITLE
 #DIM COUNTER
@@ -143,7 +143,7 @@ RETURN
 @REBOOT
 SKIPDISP 1
 SKIPLOG 1
-QUIT_AND_RESTART
+${op}
 THROW callee survived restart`, characters), 50_000, { jit, saves, store });
     const first = runtime.start();
     assert.equal(first.status, "waiting", JSON.stringify(first.error));
@@ -155,33 +155,35 @@ THROW callee survived restart`, characters), 50_000, { jit, saves, store });
       assert.ok(saves.read("save02.sav"));
       assert.notEqual(store.load(), null);
     }
-    const invalid = new Runtime(game("@SYSTEM_TITLE\nQUIT_AND_RESTART 1"), 50_000, { jit }).start();
+    const invalid = new Runtime(game(`@SYSTEM_TITLE\n${op} 1`), 50_000, { jit }).start();
     assert.equal(invalid.status, "error");
     assert.match(invalid.error!.message, /takes no arguments/);
-    const infinite = new Runtime(game("@SYSTEM_TITLE\nQUIT_AND_RESTART"), 100, { jit }).start();
+    const infinite = new Runtime(game(`@SYSTEM_TITLE\n${op}`), 100, { jit }).start();
     assert.equal(infinite.status, "error");
     assert.match(infinite.error!.message, /Instruction limit/);
   }
 });
 
-test("prefetching across QUIT_AND_RESTART stages writes until the player continues", () => {
-  const saves = new MemorySaveStore(), store = new MemoryGlobalStore();
-  const runtime = new Runtime(game(`@SYSTEM_TITLE
+test("prefetching across restart instructions stages writes until the player continues", () => {
+  for (const op of ["QUIT_AND_RESTART", "FORCE_QUIT_AND_RESTART"]) {
+    const saves = new MemorySaveStore(), store = new MemoryGlobalStore();
+    const runtime = new Runtime(game(`@SYSTEM_TITLE
 PRINTW title
 GLOBAL = 8
 SAVEGLOBAL
 SAVEDATA 2, "kept"
-QUIT_AND_RESTART`), 50_000, { saves, store });
-  const title = runtime.start();
-  assert.equal(title.status, "waiting");
-  assert.equal(runtime.prefetch(), true);
-  assert.equal(store.load(), null);
-  assert.deepEqual(saves.list(), []);
-  const restarted = runtime.input("");
-  assert.equal(restarted.status, "waiting", JSON.stringify(restarted.error));
-  assert.equal(text(restarted), text(title));
-  assert.notEqual(store.load(), null);
-  assert.ok(saves.read("save02.sav"));
+${op}`), 50_000, { saves, store });
+    const title = runtime.start();
+    assert.equal(title.status, "waiting");
+    assert.equal(runtime.prefetch(), true);
+    assert.equal(store.load(), null);
+    assert.deepEqual(saves.list(), []);
+    const restarted = runtime.input("");
+    assert.equal(restarted.status, "waiting", JSON.stringify(restarted.error));
+    assert.equal(text(restarted), text(title));
+    assert.notEqual(store.load(), null);
+    assert.ok(saves.read("save02.sav"));
+  }
 });
 
 const root = path.join(GAMES_DIR, "eraocg2");

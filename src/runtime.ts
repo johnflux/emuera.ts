@@ -259,7 +259,7 @@ const BUILTIN_ARITIES: Record<string, [number, number]> = {
   CONVERT: [2, 2], SUBSTRINGU: [2, 3], CHARATU: [2, 2],
   SIGN: [1, 1], ALLSAMES: [1, 10000], NOSAMES: [1, 10000], COLOR_FROMNAME: [1, 1], COLOR_FROMRGB: [3, 3], ENCODETOUNI: [1, 2], CHKFONT: [1, 1], CHKDATA: [1, 1],
   LINEISEMPTY: [0, 0], HTML_GETPRINTEDSTR: [0, 1], GETDOINGFUNCTION: [0, 0], MESSKIP: [0, 0], ISACTIVE: [0, 0], GETKEY: [1, 1], GETKEYTRIGGERED: [1, 1],
-  MOUSEB: [0, 0], GETTEXTBOX: [0, 0], REGEXPMATCH: [2, 3], CLEARMEMORY: [0, 0], GETMEMORYUSAGE: [0, 0], PRINTCPERLINE: [0, 0], PRINTCLENGTH: [0, 0],
+  MOUSEX: [0, 0], MOUSEY: [0, 0], MOUSEB: [0, 0], GETTEXTBOX: [0, 0], REGEXPMATCH: [2, 3], CLEARMEMORY: [0, 0], GETMEMORYUSAGE: [0, 0], PRINTCPERLINE: [0, 0], PRINTCLENGTH: [0, 0],
     CSVCSTR: [2, 3], CSVABL: [2, 3], CSVTALENT: [2, 3], CSVBASE: [2, 3], CSVEXP: [2, 3], CSVRELATION: [2, 3], CSVFLAG: [2, 3],
     CSVCFLAG: [2, 3], CSVMARK: [2, 3], CSVJUEL: [2, 3], CSVEQUIP: [2, 3],
 };
@@ -313,7 +313,7 @@ export const BUILTIN_FUNCTIONS: ReadonlySet<string> = new Set([
   ...Object.keys(BUILTIN_ARITIES), ...Object.keys(CSV_FIELDS), ...RAW_FUNCTIONS, ...ARRAY_SCANS, ...CHARACTER_SCANS,
   ...XML_FUNCTIONS, ...TABLE_REFERENCE_OPERATIONS, ...TABLE_OPERATIONS,
 ]);
-export interface ClientState { width: number; height: number; active: boolean }
+export interface ClientState { width: number; height: number; active: boolean; mouseX?: number; mouseY?: number }
 export interface RuntimeOptions {
   store?: GlobalStore; saves?: SaveStore; columns?: number; display?: Partial<DisplaySettings>;
   /** Drawable client area in game pixels; omitted for headless runs using the configured window size. */
@@ -662,6 +662,9 @@ export class Runtime {
   setClient(client: ClientState): void {
     if (![client.width, client.height].every((size) => Number.isSafeInteger(size) && size >= 0 && size <= 65535)
       || typeof client.active !== "boolean") throw new EraError("Client dimensions must be integers from 0 to 65535 and active must be a boolean");
+    if ([client.mouseX, client.mouseY].some((position) => position !== undefined
+      && (!Number.isInteger(position) || position < -2147483648 || position > 2147483647)))
+      throw new EraError("Client mouse coordinates must be signed 32-bit integers");
     this.client = { ...client };
   }
   start(entry = "SYSTEM_TITLE"): Snapshot {
@@ -2245,6 +2248,8 @@ export class Runtime {
             if (!variables.has(variable)) throw new EraError(`GETNUMB: unknown variable ${variable}`);
             return BigInt(this.game.names.get(symbolTable(variable))?.get(key(argText(args, name, 1))) ?? -1);
           }
+          case "MOUSEX": return BigInt(this.client?.mouseX ?? 0);
+          case "MOUSEY": return BigInt(this.client?.mouseY ?? 0);
           case "EXISTSOUND": return this.gameFile("sound/" + argText(args, name, 0)) ? 1n : 0n;
           case "STRFORM": return evaluate(parseFormat(argText(args, name, 0).split(/\r?\n/)[0]!), context);
           case "HTML_POPPRINTINGSTR": {
@@ -2858,14 +2863,14 @@ export class Runtime {
         if (/^#(?:PRI|LATER|SINGLE|ONLY)$/i.test(directive.text.trim())) continue;
         if (!/^#DIMS?\s/i.test(directive.text)) throw new EraError(`Unsupported function directive: ${directive.text}`, directive);
         if (/\b(?:DYNAMIC|REF)\b/i.test(directive.text)) continue;
-        variables.declare(directive);
+        variables.declare(directive, true);
       }
       this.statics.set(routine, variables);
     }
     if (info.dynamic.length || info.inline.size) {
       variables = new Variables(this.game, variables);
       variables.transient = true;
-      for (const declaration of info.dynamic) variables.declare(declaration);
+      for (const declaration of info.dynamic) variables.declare(declaration, true);
       for (const declaration of info.inline.values()) {
         if (variables.owns(declaration.name) || variables.parent!.owns(declaration.name)) continue;
         variables.define(declaration.name, declaration.string, declaration.dimensions);
@@ -3409,8 +3414,8 @@ export class Runtime {
             break;
           }
           case "CLEARLINE": {
-            const count = Number(num(args));
-            if (count < 0 || !Number.isSafeInteger(count)) throw new EraError("Invalid CLEARLINE count");
+            const count = Number(BigInt.asIntN(32, num(args)));
+            if (count <= 0) break;
             this.dropLines(count);
             if (count) { this.printingHtml = ""; this.printedLine = ""; this.lineButtons = []; this.temporaryLine = false; this.lineOpen = false; }
             yield { output: { type: "clear", count } };
@@ -3487,7 +3492,7 @@ export class Runtime {
             break;
           }
           case "STRLENS": case "STRLENSU": case "SUBSTRING": case "SUBSTRINGU": case "STRFIND": case "STRFINDU": case "STRCOUNT": case "EXISTFUNCTION":
-          case "CLIENTWIDTH": case "CLIENTHEIGHT": case "ISACTIVE": case "FIND_CHARADATA": case "EXISTFILE":
+          case "CLIENTWIDTH": case "CLIENTHEIGHT": case "ISACTIVE": case "MOUSEX": case "MOUSEY": case "FIND_CHARADATA": case "EXISTFILE":
           case "SIGN": case "ALLSAMES": case "NOSAMES": case "COLOR_FROMNAME": case "COLOR_FROMRGB": case "CHKFONT": case "LINEISEMPTY": case "HTML_GETPRINTEDSTR":
           case "GETDOINGFUNCTION": case "MESSKIP": case "GETKEY": case "GETKEYTRIGGERED": case "GETTEXTBOX": case "REGEXPMATCH": case "STRJOIN":
           case "INRANGEARRAY": case "INRANGECARRAY": case "CLEARMEMORY": case "GETMEMORYUSAGE": {
@@ -3532,8 +3537,13 @@ export class Runtime {
             this.assign(frame, count, BigInt(pieces?.length ?? -1));
             break;
           }
-          case "QUIT_AND_RESTART":
-            if (args) throw new EraError("QUIT_AND_RESTART takes no arguments");
+          case "UPDATECHECK":
+            if (args) throw new EraError("UPDATECHECK takes no arguments");
+            // Native result 4 means update checks are disabled; game-provided URLs are never fetched.
+            this.globals.set("RESULT", [], 4n, frame.context);
+            break;
+          case "QUIT_AND_RESTART": case "FORCE_QUIT_AND_RESTART":
+            if (args) throw new EraError(`${op} takes no arguments`);
             throw new RestartTransition();
           case "QUIT": this.finished = true; return;
           case "BINPUT": case "BINPUTS": {

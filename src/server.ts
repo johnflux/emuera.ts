@@ -145,11 +145,20 @@ function displaySettings(value: unknown): Partial<DisplaySettings> | undefined {
 function clientState(value: unknown): ClientState | undefined {
   if (value === undefined) return undefined;
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw new HttpError(400, "client must be an object");
-  const { width, height, active } = value as Record<string, unknown>;
+  const fields = value as Record<string, unknown>;
+  const { width, height, active } = fields;
   if (typeof width !== "number" || typeof height !== "number"
     || ![width, height].every((size) => Number.isSafeInteger(size) && size >= 0 && size <= 65535)
     || typeof active !== "boolean") throw new HttpError(400, "client requires integer width/height from 0 to 65535 and a boolean active");
-  return { width, height, active };
+  const result: ClientState = { width, height, active };
+  for (const axis of ["mouseX", "mouseY"] as const) {
+    const position = fields[axis];
+    if (position === undefined) continue;
+    if (typeof position !== "number" || !Number.isInteger(position) || position < -2147483648 || position > 2147483647)
+      throw new HttpError(400, "client mouse coordinates must be signed 32-bit integers");
+    result[axis] = position;
+  }
+  return result;
 }
 
 /**

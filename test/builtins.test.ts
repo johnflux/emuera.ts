@@ -87,6 +87,38 @@ RETURN`, undefined, { jit, client: { width: 1200, height: 800, active: true } })
   }
 });
 
+test("mouse coordinates follow host state in interpreted and JIT routines", () => {
+  for (const jit of [false, true]) {
+    const run = runtime(`@SYSTEM_TITLE
+FOR LOCAL, 0, 4
+CALL POSITION
+NEXT
+INPUT
+CALL POSITION
+INPUT
+CALL POSITION
+RETURN
+@POSITION
+MOUSEX
+PRINTFORML {MOUSEX()} {MOUSEY()} {RESULT}
+MOUSEY
+PRINTVL RESULT
+RETURN`, undefined, { jit, client: { width: 640, height: 480, active: true, mouseX: 120, mouseY: -35 } });
+    assert.deepEqual(texts(run.start()), Array(4).fill(["120 -35 120", "-35"]).flat());
+    run.setClient({ width: 640, height: 480, active: true, mouseX: -20, mouseY: 10 });
+    assert.deepEqual(texts(run.input("0")), ["0", "-20 10 -20", "10"]);
+    run.setClient({ width: 640, height: 480, active: true });
+    assert.deepEqual(texts(run.input("0")), ["0", "0 0 0", "0"]);
+    for (const position of [NaN, Infinity, 1.5, -2147483649, 2147483648]) {
+      for (const axis of ["mouseX", "mouseY"])
+        assert.throws(() => run.setClient({ width: 1, height: 1, active: true, [axis]: position }), /mouse coordinates/);
+    }
+    assert.deepEqual(texts(runtime("@SYSTEM_TITLE\nPRINTFORML {MOUSEX()} {MOUSEY()}", undefined, { jit }).start()), ["0 0"]);
+    for (const name of ["MOUSEX", "MOUSEY"])
+      assert.match(runtime(`@SYSTEM_TITLE\nPRINTVL ${name}(1)`, undefined, { jit }).start().error!.message, new RegExp(name));
+  }
+});
+
 test("VARSIZE statements inspect bare arrays and write every dimension without reading elements", () => {
   for (const jit of [false, true]) {
     const result = runtime(`@SYSTEM_TITLE
@@ -231,6 +263,34 @@ PRINTFORML {PALAM:0:0}`, (game) => {
   const invalid = runtime("@SYSTEM_TITLE\nUPCHECK 1").start();
   assert.equal(invalid.status, "error");
   assert.match(invalid.error!.message, /UPCHECK takes no arguments/);
+});
+
+test("CLEARLINE uses native signed 32-bit counts and leaves pending output intact for nonpositive counts", () => {
+  for (const jit of [false, true]) {
+    const snapshot = runtime(`@SYSTEM_TITLE
+FOR LOCAL, 0, 4
+CALL CLEAR_TEST
+NEXT
+RETURN
+@CLEAR_TEST
+PRINTL loading tip
+L = LINECOUNT
+CLEARLINE LINECOUNT + 100
+PRINT pending
+CLEARLINE LINECOUNT - L
+CLEARLINE 0
+CLEARLINE 2147483648
+CLEARLINE 4294967296
+PRINTFORML {LINEISEMPTY()} {LINECOUNT}
+PRINTL remove me
+CLEARLINE 4294967297
+PRINTFORML {LINECOUNT}
+RETURN`, undefined, { jit }).start();
+    assert.equal(snapshot.status, "halted", JSON.stringify(snapshot.error));
+    assert.deepEqual(texts(snapshot), Array(4).fill(["loading tip", "pending", "0 0", "remove me", "1"]).flat());
+    assert.deepEqual(snapshot.output.filter((item) => item.type === "clear").map((item) => item.count),
+      [101, 1, 103, 1, 103, 1, 103, 1]);
+  }
 });
 
 test("OUTPUTLOG persists visible plain text including pending output and reports storage failures", async () => {

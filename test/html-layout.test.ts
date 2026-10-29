@@ -4,6 +4,35 @@ import { test } from "node:test";
 import { runInNewContext } from "node:vm";
 import { parseFragment, type DefaultTreeAdapterMap } from "parse5";
 
+test("unmarked map rows protect scenery and separate labels from both translation methods", async () => {
+  const source = await readFile(new URL("../web/translate.js", import.meta.url), "utf8");
+  const start = source.indexOf("export function protectMapTranslation(");
+  const end = source.indexOf("export function createTranslation(", start);
+  const protect = runInNewContext(`${source.slice(start, end).replace("export ", "")}\nprotectMapTranslation`);
+  const row = (textContent: string, marked = false) => ({
+    textContent, attributes: new Map<string, string>(), classes: new Set<string>(),
+    matches: () => marked,
+    setAttribute(name: string, value: string) { this.attributes.set(name, value); },
+    get classList() { return { add: (value: string) => this.classes.add(value) }; },
+  });
+  const maps = [
+    row("■林　　　■14│　　│ 08 　　 07 　■"),
+    row("森林林木林林林林林林林林林林林林"),
+    row("　森森　　　　　　　森森"),
+    row("　　　┃┃┃22→"),
+    row("霊夢の部屋", true),
+  ];
+  const prose = [row("■博麗神社"), row("施設：【風呂】【台所】"), row("森へ移動しますか？"), row("│ 霊夢と話す │")];
+  const root = { querySelectorAll: () => [...maps, ...prose] };
+  protect(root);
+  protect(root);
+  for (const element of maps) {
+    assert.equal(element.attributes.get("translate"), "no");
+    assert.ok(element.classes.has("notranslate"));
+  }
+  for (const element of prose) assert.equal(element.attributes.has("translate"), false);
+});
+
 test("timed mouse frames are capped at 60 FPS without changing longer waits or other input timers", async () => {
   const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
   const start = source.indexOf("const FRAME_INTERVAL =");
@@ -94,7 +123,11 @@ test("client dimensions, background scaling and mouse coordinates share game-pix
     clientWidth: 1200, clientHeight: 800, clientLeft: 2, clientTop: 3, offsetLeft: 10, offsetTop: 20,
     getBoundingClientRect: () => ({ left: 10, top: 20 }),
   };
-  const document = { hidden: false, hasFocus: () => true, querySelectorAll: () => [canvas] };
+  const handlers = new Map<string, (event: object) => void>();
+  const document = {
+    hidden: false, hasFocus: () => true, querySelectorAll: () => [canvas],
+    addEventListener: (name: string, handler: (event: object) => void) => handlers.set(name, handler),
+  };
   const canvas = { dataset: { x: 10, y: -20, width: 600, height: 400 }, style: {} as Record<string, string> };
   const layers = { back: { style: {} }, front: { style: {} } };
   let lineHeight = 38;
@@ -108,15 +141,26 @@ test("client dimensions, background scaling and mouse coordinates share game-pix
     terminal, document, backgroundLayers: layers, metrics: { lineHeight: 19 },
     getComputedStyle: () => ({ lineHeight: String(lineHeight) }),
   });
-  assert.equal(JSON.stringify(browser.clientState()), JSON.stringify({ width: 600, height: 400, active: true }));
+  assert.equal(JSON.stringify(browser.clientState()), JSON.stringify({ width: 600, height: 400, active: true, mouseX: 0, mouseY: 0 }));
   browser.placeBackground();
   assert.equal(canvas.style.width, "1200px");
   assert.equal(canvas.style.height, "800px");
   assert.equal(canvas.style.left, "20px");
   assert.equal(canvas.style.bottom, "40px");
   assert.equal(JSON.stringify(browser.clientPoint({ clientX: 212, clientY: 623 })), "[100,-100]");
+  handlers.get("pointermove")!({ clientX: 212, clientY: 623 });
+  assert.equal(browser.clientState().mouseX, 100);
+  assert.equal(browser.clientState().mouseY, -100);
   lineHeight = 19;
   assert.equal(browser.clientState().width, 1200);
+  assert.equal(browser.clientState().mouseX, 200);
+  assert.equal(browser.clientState().mouseY, -200);
+  handlers.get("pointerdown")!({ clientX: -8, clientY: 833 });
+  assert.equal(browser.clientState().mouseX, -20);
+  assert.equal(browser.clientState().mouseY, 10);
+  handlers.get("wheel")!({ clientX: 12, clientY: 823 });
+  assert.equal(browser.clientState().mouseX, 0);
+  assert.equal(browser.clientState().mouseY, 0);
   browser.placeBackground();
   assert.equal(canvas.style.width, "600px");
   document.hidden = true;
