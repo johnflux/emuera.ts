@@ -241,7 +241,7 @@ const BUILTIN_ARITIES: Record<string, [number, number]> = {
     ABS: [1, 1], MIN: [1, 1000], MAX: [1, 1000], LIMIT: [3, 3], BARSTR: [3, 3], SAVENOS: [0, 0],
     TOSTR: [1, 2], MONEYSTR: [1, 2], TOINT: [1, 1], STRLENU: [1, 1], MAXWIDTH: [0, 0],
     GETCOLOR: [0, 0], GETSTYLE: [0, 0], GETCONFIG: [1, 1], GETCONFIGS: [1, 1], GETMETH: [1, 10000], GETMETHS: [1, 10000], POWER: [2, 2], HTML_STRINGLEN: [1, 2], EXISTVAR: [1, 1], GETVAR: [1, 1], GETVARS: [1, 1], VARSIZE: [1, 2],
-    MAP_EXIST: [1, 1], MAP_SIZE: [1, 1], MAP_HAS: [2, 2], MAP_GET: [2, 2], MAP_CLEAR: [1, 1], MAP_FROMXML: [2, 2],
+    MAP_CREATE: [1, 1], MAP_RELEASE: [1, 1], MAP_SET: [3, 3], MAP_EXIST: [1, 1], MAP_SIZE: [1, 1], MAP_HAS: [2, 2], MAP_GET: [2, 2], MAP_CLEAR: [1, 1], MAP_FROMXML: [2, 2],
     HTML_POPPRINTINGSTR: [0, 0], STRFIND: [2, 3], STRFINDU: [2, 3], TOFULL: [1, 1], TOHALF: [1, 1], HTML_TOPLAINTEXT: [1, 1], STRLENS: [1, 1],
     STRCOUNT: [2, 2],     REPLACE: [3, 4], SUBSTRING: [2, 3],
     EXISTCSV: [1, 2], RAND: [1, 2], ISSKIP: [0, 0], GETPALAMLV: [2, 2], GETEXPLV: [2, 2], MOUSESKIP: [0, 0], GETCHARA: [1, 2], CSVNAME: [1, 2], CSVCALLNAME: [1, 2], CSVNICKNAME: [1, 2], CSVMASTERNAME: [1, 2],
@@ -262,7 +262,7 @@ const BUILTIN_ARITIES: Record<string, [number, number]> = {
     GSETCOLOR: [4, 4], GGETCOLOR: [3, 3], GDRAWG: [10, 11], GDRAWGWITHMASK: [5, 5], GDRAWGWITHROTATE: [3, 5], GDRAWSPRITE: [2, 7], GFILLRECTANGLE: [5, 5],
     GSETBRUSH: [2, 2], GSETPEN: [3, 3], GSETFONT: [3, 4], GSAVE: [2, 2], GLOAD: [2, 2],
     GDRAWTEXT: [2, 4], GDRAWLINE: [5, 5], GGETTEXTSIZE: [3, 4], GGETFONT: [1, 1], GGETFONTSIZE: [1, 1], GGETFONTSTYLE: [1, 1],
-  GETTIME: [0, 0], GETTIMES: [0, 0], EXISTFUNCTION: [1, 1], CLIENTWIDTH: [0, 0], CLIENTHEIGHT: [0, 0], FIND_CHARADATA: [0, 1], EXISTFILE: [1, 1], SQRT: [1, 1], CBRT: [1, 1], LOG: [1, 1], LOG10: [1, 1], EXPONENT: [1, 1], GETMILLISECOND: [0, 0], GETSECOND: [0, 0], GETDEFCOLOR: [0, 0], GETBGCOLOR: [0, 0], GETDEFBGCOLOR: [0, 0], GETFONT: [0, 0],
+  GETTIME: [0, 0], GETTIMES: [0, 0], EXISTFUNCTION: [1, 1], EXISTMETH: [1, 1], CLIENTWIDTH: [0, 0], CLIENTHEIGHT: [0, 0], FIND_CHARADATA: [0, 1], EXISTFILE: [1, 1], SQRT: [1, 1], CBRT: [1, 1], LOG: [1, 1], LOG10: [1, 1], EXPONENT: [1, 1], GETMILLISECOND: [0, 0], GETSECOND: [0, 0], GETDEFCOLOR: [0, 0], GETBGCOLOR: [0, 0], GETDEFBGCOLOR: [0, 0], GETFONT: [0, 0],
   CONVERT: [2, 2], SUBSTRINGU: [2, 3], CHARATU: [2, 2],
   SIGN: [1, 1], ALLSAMES: [1, 10000], NOSAMES: [1, 10000], COLOR_FROMNAME: [1, 1], COLOR_FROMRGB: [3, 3], ENCODETOUNI: [1, 2], CHKFONT: [1, 1], CHKDATA: [1, 1],
   LINEISEMPTY: [0, 0], HTML_GETPRINTEDSTR: [0, 1], GETDOINGFUNCTION: [0, 0], MESSKIP: [0, 0], ISACTIVE: [0, 0], GETKEY: [1, 1], GETKEYTRIGGERED: [1, 1],
@@ -515,13 +515,19 @@ export class Runtime {
       globals.define(name, false, game.variableSizes.get(name) ?? [1000]);
     globals.seed("EJAC", 0, 10000n);
     for (const name of ["BASE", "MAXBASE", "ABL", "TALENT", "EXP", "MARK", "PALAM", "SOURCE", "EX", "CFLAG", "JUEL", "RELATION", "EQUIP", "TEQUIP", "STAIN", "GOTJUEL", "NOWEX", "TCVAR"])
-      globals.defineCharacter(name, false, game.variableSizes.get(name) ?? [1000]);
+      globals.defineCharacter(name, false, game.variableSizes.get(name) ?? [
+        name === "TALENT" || name === "CFLAG" ? 1000 : name === "JUEL" || name === "GOTJUEL" ? 200 : 100,
+      ]);
+    for (const name of ["DITEMTYPE", "DA", "DB", "DC", "DD", "DE"])
+      globals.define(name, false, game.variableSizes.get(name) ?? [100, 100]);
+    for (const name of ["TA", "TB"])
+      globals.define(name, false, game.variableSizes.get(name) ?? [100, 100, 100]);
     for (const name of ["NO", "ISASSI"]) globals.defineCharacter(name);
     for (const name of ["NAME", "CALLNAME", "NICKNAME", "MASTERNAME"]) globals.defineCharacter(name, true);
     globals.defineCharacter("CSTR", true, game.variableSizes.get("CSTR") ?? [100]);
     globals.defineCharacter("CDFLAG", false, game.variableSizes.get("CDFLAG") ?? [1, 1]);
     globals.defineCharacter("DOWNBASE", false, game.variableSizes.get("BASE") ?? [100]);
-    for (const name of ["CUP", "CDOWN"]) globals.defineCharacter(name, false, game.variableSizes.get("PALAM") ?? [200]);
+    for (const name of ["CUP", "CDOWN"]) globals.defineCharacter(name, false, game.variableSizes.get("PALAM") ?? [100]);
     globals.define("TSTR", true, game.variableSizes.get("TSTR") ?? [100]);
     globals.define("SAVEDATA_TEXT", true, [1]);
     for (const axis of [1, 2]) {
@@ -530,7 +536,8 @@ export class Runtime {
       for (const [index, row] of game.tables.get(`CDFLAG${axis}`) ?? [])
         if (index < size) globals.seed(name, index, row[0] ?? "");
     }
-    ["STR", "SAVESTR", "GLOBALS", "RESULTS", "WINDOW_TITLE", "GAMEBASE_TITLE", "GAMEBASE_INFO", "GAMEBASE_YEAR", "GAMEBASE_AUTHOR"].forEach((name) => globals.define(name, true, game.variableSizes.get(name) ?? [name === "STR" ? 20000 : 1000]));
+    ["STR", "SAVESTR", "GLOBALS", "RESULTS", "WINDOW_TITLE", "GAMEBASE_TITLE", "GAMEBASE_INFO", "GAMEBASE_YEAR", "GAMEBASE_AUTHOR"].forEach((name) =>
+      globals.define(name, true, game.variableSizes.get(name) ?? [name === "STR" ? 20000 : ["SAVESTR", "GLOBALS", "RESULTS"].includes(name) ? 100 : 1000]));
     for (const name of ["GAMEBASE_VERSION", "GAMEBASE_CODE", "GAMEBASE_ALLOWVERSION", "GAMEBASE_DEFAULTCHARA", "GAMEBASE_NOITEM", "CHARANUM"]) globals.define(name);
     globals.seed("GAMEBASE_DEFAULTCHARA", 0, -1n);
     const base = new Map([...(game.tables.get("GAMEBASE")?.values() ?? [])].map((row) => [row[0], row[1] ?? ""]));
@@ -664,8 +671,10 @@ export class Runtime {
     for (const [name, source] of Object.entries(saved?.xmls ?? {})) this.xmlDocuments.set(name, parseXml(source));
     for (const [name, table] of Object.entries(saved?.dts ?? {})) this.dataTables.import(name, table);
   }
-  /** Values Emuera restores whenever data is reset: STR from Str.csv and the PALAMLV/EXPLV thresholds. */
+  /** Initial selection indices, STR from Str.csv, and PALAMLV/EXPLV thresholds restored by RESETDATA. */
   private seedDefaults(): void {
+    this.globals.seed("TARGET", 0, 1n);
+    this.globals.seed("ASSI", 0, -1n);
     for (const [index, row] of this.game.tables.get("STR") ?? []) this.globals.seed("STR", index, row[0] ?? "");
     [0n, 100n, 500n, 3000n, 10000n, 30000n, 60000n, 100000n, 150000n, 250000n].forEach((n, i) => this.globals.seed("PALAMLV", i, n));
     [0n, 1n, 4n, 20n, 50n, 200n].forEach((n, i) => this.globals.seed("EXPLV", i, n));
@@ -2012,25 +2021,16 @@ export class Runtime {
           case "LIMIT":
             if (argInt(args, name, 1) > argInt(args, name, 2)) throw new EraError("LIMIT minimum exceeds maximum");
             return argInt(args, name, 0) < argInt(args, name, 1) ? argInt(args, name, 1) : argInt(args, name, 0) > argInt(args, name, 2) ? argInt(args, name, 2) : argInt(args, name, 0);
-          case "MONEYSTR": {
-            const value = argInt(args, name, 0);
-            let formatted = value.toString();
+          case "MONEYSTR": case "TOSTR": {
+            const value = argInt(args, name, 0).toString();
+            let result = value;
             if (args[1] !== undefined) {
               const format = argText(args, name, 1);
-              if (format === "#,##0") formatted = formatted.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-              else if (/^0{1,100}$/.test(format))
-                formatted = (value < 0n ? "-" : "") + (value < 0n ? -value : value).toString().padStart(format.length, "0");
-              else throw new EraError(`Unsupported MONEYSTR format: ${format}`);
+              const formatted = format.length <= 100 ? formatInteger(argInt(args, name, 0), format) : undefined;
+              if (formatted === undefined) throw new EraError(`Unsupported ${name} format: ${format}`);
+              result = formatted;
             }
-            return this.game.money.first ? this.game.money.label + formatted : formatted + this.game.money.label;
-          }
-          case "TOSTR": {
-            const value = argInt(args, name, 0).toString();
-            if (args.length < 2) return value;
-            const format = argText(args, name, 1);
-            const result = format.length <= 100 ? formatInteger(argInt(args, name, 0), format) : undefined;
-            if (result === undefined) throw new EraError(`Unsupported TOSTR format: ${format}`);
-            return result;
+            return name === "TOSTR" ? result : this.game.money.first ? this.game.money.label + result : result + this.game.money.label;
           }
           case "TOINT": {
             return numericString(argText(args, name, 0), "convert") ?? 0n;
@@ -2277,11 +2277,12 @@ export class Runtime {
           case "CURRENTALIGN": return this.style.alignment.toUpperCase();
           case "GETCOLOR": return BigInt("0x" + this.style.color.slice(1));
           case "POWER": return power(argInt(args, name, 0), argInt(args, name, 1));
-          case "EXISTFUNCTION": {
+          case "EXISTFUNCTION": case "EXISTMETH": {
             // 1: ordinary function, 2: #FUNCTION, 3: #FUNCTIONS; built-ins and undefined names give 0.
             const routines = this.game.routines.get(key(argText(args, name, 0)));
             if (!routines?.length) return 0n;
             const returnType = this.info(routines[0]!).returnType;
+            if (name === "EXISTMETH") return returnType === "string" ? 2n : returnType === "integer" ? 1n : 0n;
             return returnType === "string" ? 3n : returnType === "integer" ? 2n : 1n;
           }
           case "GETMETH": case "GETMETHS": {
@@ -2385,9 +2386,27 @@ export class Runtime {
             return BigInt(size);
           }
           case "MAP_EXIST": return this.maps.has(argText(args, name, 0)) ? 1n : 0n;
-          case "MAP_SIZE": return BigInt(this.map(argText(args, name, 0)).size);
-          case "MAP_HAS": return this.maps.get(argText(args, name, 0))?.has(argText(args, name, 1)) ? 1n : 0n;
-          case "MAP_GET": return this.map(argText(args, name, 0)).get(argText(args, name, 1)) ?? "";
+          case "MAP_CREATE": {
+            const mapName = argText(args, name, 0);
+            if (this.maps.has(mapName)) return 0n;
+            this.maps.set(mapName, new Map());
+            return 1n;
+          }
+          case "MAP_RELEASE":
+            this.maps.delete(argText(args, name, 0));
+            return 1n;
+          case "MAP_SET": {
+            const map = this.maps.get(argText(args, name, 0));
+            if (!map) return -1n;
+            map.set(argText(args, name, 1), argText(args, name, 2));
+            return 1n;
+          }
+          case "MAP_SIZE": return BigInt(this.maps.get(argText(args, name, 0))?.size ?? -1);
+          case "MAP_HAS": {
+            const map = this.maps.get(argText(args, name, 0));
+            return map ? map.has(argText(args, name, 1)) ? 1n : 0n : -1n;
+          }
+          case "MAP_GET": return this.maps.get(argText(args, name, 0))?.get(argText(args, name, 1)) ?? "";
           case "MAP_CLEAR": {
             const map = this.maps.get(argText(args, name, 0));
             if (!map) return -1n;
@@ -2407,7 +2426,8 @@ export class Runtime {
           case "MAP_REMOVE": {
             const map = this.maps.get(argText(args, name, 0));
             if (!map) return -1n;
-            return map.delete(argText(args, name, 1)) ? 1n : 0n;
+            map.delete(argText(args, name, 1));
+            return 1n;
           }
           case "MAP_TOXML": {
             const map = this.maps.get(argText(args, name, 0));
@@ -2469,9 +2489,9 @@ export class Runtime {
           }
           case "STRFIND": case "STRFINDU": {
             const source = argText(args, name, 0), sought = argText(args, name, 1);
-            let start = args[2] === undefined ? 0 : Number(argInt(args, name, 2));
-            if (!Number.isSafeInteger(start) || start < 0) throw new EraError(`Invalid ${name} start index`);
-            if (name === "STRFINDU") return start > source.length ? -1n : BigInt(source.indexOf(sought, start));
+            const start = args[2] === undefined ? 0 : Number(BigInt.asIntN(32, argInt(args, name, 2)));
+            if (name === "STRFINDU") return start < 0 || start >= source.length ? -1n : BigInt(source.indexOf(sought, start));
+            if (Math.max(0, start) >= stringWidth(source)) return -1n;
             // STRFIND counts full-width characters as two positions.
             let index = 0;
             for (let width = 0; index < source.length && width < start; index++) width += stringWidth(source[index]!);
@@ -2668,11 +2688,6 @@ export class Runtime {
       variables.set(target.name, target.indices, serializeXml(document.documentElement!), context);
     }
     return BigInt(count);
-  }
-  private map(name: string): Map<string, string> {
-    const map = this.maps.get(name);
-    if (!map) throw new EraError(`Map does not exist: ${name}`);
-    return map;
   }
   /** REGEXPMATCH: the match count, groups per match (group 0 included) and each match's groups in order. */
   private regexpMatch(source: string, pattern: string): { count: number; groups: number; values: string[] } {
@@ -3581,19 +3596,6 @@ export class Runtime {
             // Only affects graphics caching; no graphics are cached here.
             num(args);
             break;
-          case "MAP_RELEASE": this.maps.delete(text(ev(args))); break;
-          case "MAP_CREATE": {
-            const name = text(ev(args));
-            if (this.maps.has(name)) throw new EraError(`Map already exists: ${name}`);
-            this.maps.set(name, new Map());
-            break;
-          }
-          case "MAP_SET": {
-            const parts = this.arguments(args);
-            if (parts.length !== 3) throw new EraError("MAP_SET expects map, key and value");
-            this.map(text(ev(parts[0]!))).set(text(ev(parts[1]!)), text(ev(parts[2]!)));
-            break;
-          }
           case "REDRAW": {
             this.redraw = num(args) & 1n;
             // Bit 1 requests an immediate refresh in Emuera; snapshots already flush at INPUT/WAIT.
@@ -4329,8 +4331,11 @@ export class Runtime {
     return current;
   }
   private matchesCase(value: Value, test: CaseTest, ev: (source: string) => Value): boolean {
-    if (test.kind === "range") return integer(value) >= integer(ev(test.from)) && integer(value) <= integer(ev(test.to));
-    if (test.kind === "compare") return integer(evaluate({ kind: "binary", op: test.op, left: literal(value), right: literal(ev(test.operand)) }, NO_VARIABLES)) !== 0n;
+    const compare = (op: string, operand: string) => integer(evaluate({
+      kind: "binary", op, left: literal(value), right: literal(ev(operand)),
+    }, NO_VARIABLES)) !== 0n;
+    if (test.kind === "range") return !compare("<", test.from) && !compare(">", test.to);
+    if (test.kind === "compare") return compare(test.op, test.operand);
     return value === ev(test.source);
   }
 }

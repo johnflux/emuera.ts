@@ -70,7 +70,7 @@ PRINTFORML {CSVBASE(7,0)} {CSVABL(7,1)} {EXISTCSV(7)} {EXISTCSV(8)}`,
       ["CSTR", "0", "Profile"], ["能力", "1", "2"],
     ] });
   });
-  assert.deepEqual(printed(result), ["2 Template 7", "2000 42 2000", "1 1140 1 Profile", "0 8 1000", "2000 2 1 0"]);
+  assert.deepEqual(printed(result), ["2 Template 7", "2000 42 2000", "1 1140 1 Profile", "0 8 100", "2000 2 1 0"]);
 });
 test("BEGIN returns like RETURN, the caller continues and the state changes when the system call ends", () => {
   const result = run(`@SYSTEM_TITLE

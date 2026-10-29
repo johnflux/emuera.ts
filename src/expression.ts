@@ -277,8 +277,7 @@ export function evaluate(expr: Expr, context: EvaluationContext): Value {
           if (y === 0n) throw new EraError("Division by zero");
           result = expr.op === "/" ? x / y : x % y; break;
         case "<<": case ">>":
-          if (y < 0n || y > 63n) throw new EraError("Shift count must be between 0 and 63");
-          result = expr.op === "<<" ? x << y : x >> y; break;
+          result = expr.op === "<<" ? x << (y & 63n) : x >> (y & 63n); break;
         case "&": result = x & y; break;
         case "|": result = x | y; break;
         case "^": result = x ^ y; break;

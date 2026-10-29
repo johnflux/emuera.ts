@@ -89,6 +89,12 @@ loader diagnostics.
 `QUIT_AND_RESTART`, including unwinding nested calls and clearing `SKIPDISP`.
 `UPDATECHECK` takes no arguments and sets `RESULT:0` to **4** (disabled).
 Other result slots are unchanged.
+`STRFINDU` returns `-1` for negative starts and starts at or beyond the string's
+UTF-16 length, rather than throwing. `STRFIND` clamps negative starts to zero
+and returns `-1` at or beyond the display-width length. Both first narrow the
+start to signed 32 bits, matching EE even for large Int64 values; an empty search
+term does not match at the end of the string. These native-verified rules let the
+settings-column renderer stop scanning when a closing bracket is absent.
 `CLEARLINE` follows native signed 32-bit count conversion; zero or negative counts
 leave output unchanged. This allows loading screens to compare saved line numbers
 after other code has cleared the console without aborting on a negative difference.
@@ -541,8 +547,9 @@ game's `ERB/`, `CSV/`, and `resources/` directories.
 
 ### Native compatibility checks
 
-`test/native-compat.test.ts`, `test/history-compat.test.ts`, and
-`test/remaining-history.test.ts` run the ERB fixtures
+`test/native-compat.test.ts`, `test/history-compat.test.ts`,
+`test/remaining-history.test.ts`, `test/core-conformance.test.ts`, and
+`test/string-search.test.ts`, run the ERB fixtures
 in `test/fixtures/` in interpreted and warmed JIT execution. The control-flow,
 numeric, history (including `native-history-arrays.erb` and
 `native-history-print.erb`, and `native-history-remaining.erb`), and string-builtin
@@ -558,6 +565,29 @@ writes `emuera.log` with `OUTPUTLOG` and ends at `DONE`; compare its printed
 lines with the expectations in the TypeScript test. Do not run these probes
 inside an installed game's directory. The browser runtime additionally prints
 its existing `Log written to emuera.log` notification.
+
+The core conformance fixtures verify native shift-count masking (low six bits,
+including negative counts), inclusive string `CASE ... TO ...` ranges, and
+default built-in array dimensions. `CASE IS` deliberately retains the native
+string `<=`/`>=` quirk; it is not used to implement range endpoints.
+Character arrays normally default to 100 elements, except `TALENT`/`CFLAG`
+(1000) and `JUEL`/`GOTJUEL` (200). `RESULTS`, `SAVESTR`, `GLOBALS`, `TSTR`,
+`CUP`, and `CDOWN` default to 100. `DITEMTYPE` and `DA`-`DE` are 100-by-100
+integer arrays; `TA`/`TB` are 100-by-100-by-100. `VariableSize.csv` overrides
+remain supported.
+Startup and `RESETDATA` restore `TARGET` to 1 and `ASSI` to -1, even before
+characters exist. The default currency is `$`; `_Replace.csv` can override
+its label and prefix/suffix placement. `MONEYSTR` shares `TOSTR`'s supported
+standard and custom numeric formats.
+
+The optional installed-suite test loads `OTHER/emuera-tty/compat` unchanged
+and uses in-memory stores. At eraBasic revision
+`f9966ea295cd9af37385d3dc2d8ae96a2cad3648`, all **528 checks** pass in both
+execution modes. This includes the core, reflection, map, XML and data-table
+topics, not every command of every Emuera variant. The test skips when the
+ignored checkout is absent. Independent fixtures above capture the actual
+fixes and their native results without copying the external suite into the
+repository.
 
 The verified behavior includes NAND/NOR short-circuiting, `RETURN 0` when a
 normal routine reaches its end (without clearing other result slots),
@@ -858,11 +888,13 @@ declarations and the expression evaluator. No single routine dominates.
 - Achievement helpers: `SUMARRAY` for bare one-dimensional numeric arrays with
   optional start/end-exclusive bounds; binary/decimal exponent integer literals
   (`1p4`, `2e3`); string-valued FORM conditionals inside expressions;
-  and `MONEYSTR` with plain, zero-padded or `#,##0` formatting. Currency label
+  and `MONEYSTR` using the same numeric formatting as `TOSTR`. Currency label
   and prefix/suffix placement come from `_Replace.csv`.
 - User-defined `#FUNCTION` / `#FUNCTIONS` expression functions and `RETURNF`,
   typed results, defaults and omitted expression-call arguments. Expression
   functions cannot yield output or request input.
+  `EXISTMETH` returns 1 for numeric methods, 2 for string methods, and 0 for
+  ordinary routines, built-ins and missing names; statement form sets `RESULT`.
 - A parsed expression AST, never JavaScript `eval`. Signed 64-bit integer
   arithmetic, comparisons, bitwise operators, short-circuit logical operators,
   `? ... # ...` conditionals, strings, array access, and selected built-ins
@@ -910,7 +942,11 @@ declarations and the expression evaluator. No single routine dominates.
   expressions. `\s`/`\S` are half/full-width spaces. Comments and argument lists
   correctly handle nested quoted expressions inside FORM strings.
 - `MAP_CREATE`, `MAP_RELEASE`, `MAP_SET` and `MAP_EXIST`/`MAP_SIZE`/`MAP_HAS`/
-  `MAP_GET`, backed by actual runtime maps. Flat `PRINTDATA`/`PRINTDATAL`/
+  `MAP_GET`, backed by actual runtime maps with matching expression and
+  statement forms. Duplicate creation returns 0 without clearing the map.
+  Missing maps return -1 from size/has/set/remove/clear, or empty from get;
+  release always returns 1. Removing a missing key from an existing map also
+  returns 1. Names and keys remain case-sensitive. Flat `PRINTDATA`/`PRINTDATAL`/
   `PRINTDATAW` blocks choose randomly among `DATA`/`DATAFORM` entries.
 - Array scans (`MATCH`, `MAXARRAY`, `MINARRAY`, `FINDELEMENT`, `FINDLASTELEMENT`,
   `SUMARRAY`) and character scans (`CMATCH`, `MAXCARRAY`, `MINCARRAY`,

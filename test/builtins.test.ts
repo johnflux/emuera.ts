@@ -261,6 +261,7 @@ VARSET STR, "", 1030, 1038`, (game) => {
 test("UPCHECK applies and prints target deltas, wraps Int64, and clears changes even without a target", () => {
   const result = runtime(`@SYSTEM_TITLE
 ADDCHARA 0
+TARGET = 0
 PALAM:0:0 = 10, 9223372036854775807, 30
 UP = 5, 2, -3
 DOWN = 2, -1, -4

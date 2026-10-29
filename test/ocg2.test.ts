@@ -56,6 +56,7 @@ test("PRINT_MARK prints named nonzero levels in index order and ends the line", 
   for (const jit of [false, true]) {
     const result = new Runtime(game(`@SYSTEM_TITLE
 ADDCHARA 0
+TARGET = 0
 MARK:0:0 = 3
 MARK:0:1 = 0
 MARK:0:2 = -1

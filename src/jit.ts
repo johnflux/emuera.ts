@@ -172,13 +172,11 @@ const H = {
   },
   shl(a: Value, b: Value): bigint {
     const x = integer(a), y = integer(b);
-    if (y < 0n || y > 63n) throw new EraError("Shift count must be between 0 and 63");
-    return BigInt.asIntN(64, x << y);
+    return BigInt.asIntN(64, x << (y & 63n));
   },
   shr(a: Value, b: Value): bigint {
     const x = integer(a), y = integer(b);
-    if (y < 0n || y > 63n) throw new EraError("Shift count must be between 0 and 63");
-    return BigInt.asIntN(64, x >> y);
+    return BigInt.asIntN(64, x >> (y & 63n));
   },
   and: (a: Value, b: Value): bigint => BigInt.asIntN(64, integer(a) & integer(b)),
   or: (a: Value, b: Value): bigint => BigInt.asIntN(64, integer(a) | integer(b)),
@@ -345,7 +343,7 @@ class Generator {
           let tests: CaseTest[];
           try { tests = (candidate.cases ??= this.host.caseTests(candidate.args)) as CaseTest[]; } catch { throw new Unsupported(); }
           const conditions = tests.map((test) => test.kind === "range"
-            ? `(H.int(${value}) >= H.int(${this.expr(this.parse(test.from))}) && H.int(${value}) <= H.int(${this.expr(this.parse(test.to))}))`
+            ? `(H.int(H.bin("<", ${value}, ${this.expr(this.parse(test.from))})) === 0n && H.int(H.bin(">", ${value}, ${this.expr(this.parse(test.to))})) === 0n)`
             : test.kind === "compare" ? `(H.int(H.bin(${JSON.stringify(test.op)}, ${value}, ${this.expr(this.parse(test.operand))})) !== 0n)`
             : `(${value} === ${this.expr(this.parse(test.source))})`);
           if (conditions.length) body += ` if (${conditions.join(" || ")}) { ${jump(branch + 1)} }`;

@@ -250,7 +250,7 @@ function* anchorTranslationLines(source: string): Generator<AnchorTranslationLin
   }
 }
 export function emptyGame(root = ""): Game {
-  return { root, routines: new Map(), headers: [], tables: new Map(), names: new Map(), translations: new Map(), erdNames: new Map(), sprites: new Map(), diagnostics: [], scriptFiles: 0, variableSizes: new Map(), macros: new Map(), characters: new Map(), renames: new Map(), money: { label: "\u00a5", first: true }, config: new Map(), replacements: new Map(), containers: { SAVE: containerNames(), GLOBAL: containerNames(), STATIC: containerNames() }, resourceBase: "/resources/" };
+  return { root, routines: new Map(), headers: [], tables: new Map(), names: new Map(), translations: new Map(), erdNames: new Map(), sprites: new Map(), diagnostics: [], scriptFiles: 0, variableSizes: new Map(), macros: new Map(), characters: new Map(), renames: new Map(), money: { label: "$", first: true }, config: new Map(), replacements: new Map(), containers: { SAVE: containerNames(), GLOBAL: containerNames(), STATIC: containerNames() }, resourceBase: "/resources/" };
 }
 function* logicalLines(source: string, file: string): Generator<Line> {
   const rows = source.replace(/^\uFEFF/, "").split(/\r\n|[\r\n]/);

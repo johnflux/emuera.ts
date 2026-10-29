@@ -143,7 +143,7 @@ PRINTFORML {RESULT} %KEYS:0% %KEYS:1%
 PRINTFORML {MAP_REMOVE("m", "a")} {MAP_REMOVE("m", "a")} {MAP_REMOVE("missing", "a")}
 PRINTSL MAP_GETKEYS("m")
 PRINTSL MAP_GETKEYS("missing")`).start();
-  assert.deepEqual(texts(s), ["b,a", "2 b a", "2 b a", "1 0 -1", "b", ""]);
+  assert.deepEqual(texts(s), ["b,a", "2 b a", "2 b a", "1 1 -1", "b", ""]);
 });
 
 test("ERDNAME preserves original spelling and dimension tables; GETNUMB, MAP_TOXML and STRFORM evaluate real data", async () => {

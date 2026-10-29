@@ -175,7 +175,7 @@ PRINTFORML %MONEYSTR(5000, "#,##0")% %MONEYSTR(-9223372036854775808, "#,##0")%
 PRINTFORML %MONEYSTR(7, "000")% %MONEYSTR(-7)%`);
   const snapshot = new Runtime(value).start();
   assert.equal(snapshot.status, "halted", JSON.stringify(snapshot.error));
-  assert.equal(printed(snapshot), "\u00a55,000 \u00a5-9,223,372,036,854,775,808\n\u00a5007 \u00a5-7");
+  assert.equal(printed(snapshot), "$5,000 $-9,223,372,036,854,775,808\n$007 $-7");
   value.money = { label: " coins", first: false };
   assert.equal(printed(new Runtime(value).start()).split("\n")[1], "007 coins -7 coins");
   const invalid = new Runtime(game('@SYSTEM_TITLE\nPRINTSL MONEYSTR(5, "unsupported")')).start();

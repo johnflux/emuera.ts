@@ -1,0 +1,18 @@
+@SYSTEM_TITLE
+FOR A,0,45
+CALL MAP_PROBE
+NEXT
+PRINTL DONE
+OUTPUTLOG
+QUIT
+@MAP_PROBE
+PRINTFORML ABSENT {MAP_SIZE("ProbeMap")} {MAP_HAS("ProbeMap", "key")} [%MAP_GET("ProbeMap", "key")%] {MAP_SET("ProbeMap", "key", "value")} {MAP_RELEASE("ProbeMap")}
+PRINTFORML CREATE {MAP_CREATE("ProbeMap")} {MAP_CREATE("ProbeMap")} {MAP_EXIST("probemap")} {MAP_EXIST("ProbeMap")}
+PRINTFORML SET {MAP_SET("ProbeMap", "key", "one")} {MAP_SET("ProbeMap", "key", "two")} {MAP_SIZE("ProbeMap")} [%MAP_GET("ProbeMap", "key")%]
+PRINTFORML KEYS {MAP_HAS("ProbeMap", "key")} {MAP_HAS("ProbeMap", "KEY")} {MAP_REMOVE("ProbeMap", "KEY")} {MAP_REMOVE("ProbeMap", "key")}
+MAP_CREATE "ProbeMap"
+PRINTFORML STATEMENT {RESULT}
+MAP_SET "ProbeMap", "another", "three"
+PRINTFORML STATEMENT {RESULT} [%MAP_GET("ProbeMap", "another")%]
+MAP_RELEASE "ProbeMap"
+PRINTFORML RELEASE {RESULT} {MAP_EXIST("ProbeMap")} {MAP_CLEAR("ProbeMap")}

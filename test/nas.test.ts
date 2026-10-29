@@ -75,3 +75,17 @@ test("installed eraNAS has no lexical compatibility gaps or loader diagnostics",
   assert.equal(report.recognizedInstructions, report.instructions);
   assert.equal(report.diagnosticCount, 0);
 });
+
+test("installed eraNAS settings renders columns and waits for a choice", { skip: !isGameRoot(root) }, async () => {
+  const game = await loadGame(root);
+  indexScript(game, `@CHECK_SETTINGS
+DAY = 1
+CALL NAS_SETTINGS
+QUIT`, "settings-probe.erb");
+  for (const jit of [false, true]) {
+    const snapshot = new Runtime(game, 250_000_000, { jit }).start("CHECK_SETTINGS");
+    assert.equal(snapshot.status, "waiting", JSON.stringify(snapshot.error));
+    assert.equal(snapshot.input?.kind, "integer");
+    assert.ok(snapshot.output.some(line => line.type === "html" && line.text.includes("Visuals") && line.text.includes("<button")));
+  }
+});
