@@ -15,6 +15,52 @@ function run(body: string, jit: boolean, setup?: (game: Game) => void) {
 const texts = (snapshot: ReturnType<Runtime["start"]>) =>
   snapshot.output.filter((line) => line.type === "text").map((line) => line.text);
 
+test("native array fixture covers VARSETEX expression results, embedded indices and numeric versus string rows", async () => {
+  const source = await readFile(new URL("./fixtures/native-history-arrays.erb", import.meta.url), "utf8");
+  for (const jit of [false, true]) {
+    const snapshot = run(source, jit);
+    assert.equal(snapshot.status, "halted", JSON.stringify(snapshot.error));
+    assert.deepEqual(texts(snapshot), [
+      ...Array.from({ length: 5 }, () => [
+        "VECTOR 7 7 7 7", "SET 1", "GRID 0 0 9 9", "WORDS [] [x] [x]", "RESULT 1 88 7 3 3 7",
+        "IGNORED 4 4", "CUBE 0 7 7 7 7", "CHARA 8 0 0 0", "EXPLICIT 6 6 0 0 0",
+      ]).flat(), "DONE", "Log written to emuera.log",
+    ]);
+  }
+});
+
+test("VARSETEX expression functions resolve local arrays and preserve mutation guards", () => {
+  for (const jit of [false, true]) {
+    const snapshot = run(`@SYSTEM_TITLE
+FOR A,0,5
+PRINTFORML {FILL()}
+NEXT
+QUIT
+@FILL
+#FUNCTION
+#DIM VALUES,3
+RETURNF VARSETEX("VALUES",5,0,1,3) + VALUES:0 + VALUES:1 + VALUES:2`, jit);
+    assert.equal(snapshot.status, "halted", JSON.stringify(snapshot.error));
+    assert.deepEqual(texts(snapshot), Array(5).fill("11"));
+    for (const [declaration, expression, message] of [
+      ["#DIM CONST VALUES = 1,2", 'VARSETEX("VALUES",3)', /constant/i],
+      ["#DIM VALUES,3", 'VARSETEX("VALUES","x")', /type mismatch/],
+      ["#DIMS VALUES,3", 'VARSETEX("VALUES",1)', /type mismatch/],
+      ["#DIM VALUES,2,3", 'VARSETEX("VALUES:2:0",1)', /out of range/],
+      ["#DIM VALUES,3", 'VARSETEX("VALUES",1,0,0,2,3)', /arguments/],
+      ["#DIM VALUES,3", 'VARSETEX("VALUES",1,0,-1,2)', /range out of bounds/],
+      ["#DIM VALUES,3", 'VARSETEX("VALUES",1,0,0,4)', /range out of bounds/],
+      ["#DIM VALUES,3", 'VARSETEX("VALUES")', /arguments/],
+      ["#DIM VALUES,3", 'VARSETEX("VALUES",)', /arguments/],
+      ["#DIM VALUES,3", 'VARSETEX("VALUES",,1)', /requires a value/],
+    ] as const) {
+      const invalid = run(`@SYSTEM_TITLE\n${declaration}\nPRINTFORML {${expression}}\nQUIT`, jit);
+      assert.equal(invalid.status, "error");
+      assert.match(invalid.error!.message, message);
+    }
+  }
+});
+
 test("native history fixture covers semicolons, macro lists, VARS, defaults and formatted TRYLIST calls", async () => {
   const [header, source] = await Promise.all([
     readFile(new URL("./fixtures/native-history.erh", import.meta.url), "utf8"),

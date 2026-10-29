@@ -536,7 +536,7 @@ game's `ERB/`, `CSV/`, and `resources/` directories.
 
 `test/native-compat.test.ts` and `test/history-compat.test.ts` run the ERB fixtures
 in `test/fixtures/` in interpreted and warmed JIT execution. The control-flow,
-numeric, history, and string-builtin
+numeric, history (including `native-history-arrays.erb`), and string-builtin
 fixtures were also run unchanged with **Emuera.NET 1.824+v24+EMv18+EEv56
 NAudio** under Wine. To repeat the native check, make a throwaway game folder
 with empty `CSV/` and an `ERB/` containing one fixture, copy a compatible
@@ -576,6 +576,22 @@ existing target, without evaluating arguments of missing targets. Calls can wait
 for input; jumps unwind the current routine. As with other computed gotos,
 TRYGOTOLIST cannot enter a loop from outside. Routines containing TRYLIST remain
 interpreted; JIT callers correctly handle their suspension.
+
+`VARSETEX` works as both an instruction and an expression returning 1; only the
+instruction writes RESULT. One-dimensional fills ignore an embedded element
+index. Numeric multidimensional fills can span all rows, beginning at the larger
+of the embedded final index and `from`; string arrays fill only the selected row,
+even with `setAllDim` enabled. These cases are checked against the native fixture
+and the [VARSETEX reference](https://evilmask.gitlab.io/emuera.em.doc/Reference/VARSETEX.html).
+Native character fills use character zero and interpret embedded indices as data
+coordinates, not normal explicit-character/TARGET addressing. Missing values and
+fills outside the final dimension report script errors rather than silently
+defaulting or truncating the range.
+`ENUMFILES` preserves the script's directory spelling in returned Windows paths,
+while resolving directories case-insensitively. Native probes and the
+[ENUMFILES reference](https://evilmask.gitlab.io/emuera.em.doc/Reference/ENUMFILES.html)
+confirm the prefix behavior; game-directory confinement and symlink protection
+remain enforced.
 
 Expression functions reject executed native method-unsafe instructions such as
 CALL/JUMP, RETURN, BEGIN, QUIT and waits, including PRINT...W variants.

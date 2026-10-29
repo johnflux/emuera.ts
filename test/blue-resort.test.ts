@@ -116,10 +116,12 @@ PRINTFORML {ENUMFILES("RESOURCES", "*.png")} %RESULTS:0%
 ENUMFILES "resources", "*.png", 1
 PRINTFORML {RESULT} %RESULTS:0% %RESULTS:1%
 PRINTFORML {ENUMFILES("resources", "*.*", 1, FOUND)} %FOUND%
+PRINTFORML {ENUMFILES("RESOURCES/NESTED/", "*.png")} %RESULTS:0%
+PRINTFORML {ENUMFILES("RESOURCES\\\\Nested", "*.png")} %RESULTS:0%
 PRINTFORML {ENUMFILES("missing")} {ENUMFILES("resources", "*.missing")}`, true, game).start();
     assert.deepEqual(texts(s), [
-      "1 resources\\Face.PNG", "2 resources\\Face.PNG resources\\Nested\\Face2.png",
-      "1 resources\\Face.PNG", "-1 0",
+      "1 RESOURCES\\Face.PNG", "2 resources\\Face.PNG resources\\Nested\\Face2.png",
+      "1 resources\\Face.PNG", "1 RESOURCES\\NESTED\\Face2.png", "1 RESOURCES\\Nested\\Face2.png", "-1 0",
     ]);
     assert.match(runtime('@SYSTEM_TITLE\nENUMFILES "../"', true, emptyGame(root)).start().error?.message ?? "", /within the game directory/);
     await symlink(tmpdir(), path.join(root, "outside"));

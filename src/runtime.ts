@@ -242,7 +242,7 @@ const BUILTIN_ARITIES: Record<string, [number, number]> = {
     EXISTCSV: [1, 2], RAND: [1, 2], ISSKIP: [0, 0], GETPALAMLV: [2, 2], GETEXPLV: [2, 2], MOUSESKIP: [0, 0], GETCHARA: [1, 2], CSVNAME: [1, 2], CSVCALLNAME: [1, 2], CSVNICKNAME: [1, 2], CSVMASTERNAME: [1, 2],
     CHKCHARADATA: [1, 1], SAVETEXT: [2, 4], LOADTEXT: [1, 3],
     INRANGE: [3, 3], ESCAPE: [1, 1],
-    ISNUMERIC: [1, 1], ISDEFINED: [1, 1],
+    ISNUMERIC: [1, 1], ISDEFINED: [1, 1], VARSETEX: [2, 5],
     GROUPMATCH: [2, 1000], GETBIT: [2, 2],
     UNICODE: [1, 1],
     TOLOWER: [1, 1], TOUPPER: [1, 1], STRLENSU: [1, 1], HTML_ESCAPE: [1, 1],
@@ -1161,13 +1161,18 @@ export class Runtime {
       const wildcard = pattern === "*.*" ? "*" : pattern;
       const matcher = new RegExp("^" + wildcard.split("").map((c) => c === "*" ? ".*" : c === "?" ? "." : c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("") + "$", "iu");
       const files: string[] = [];
+      const prefix = parts.join("\\");
+      const base = current;
       const visit = (dir: string): void => {
         for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) => key(a.name) < key(b.name) ? -1 : key(a.name) > key(b.name) ? 1 : 0)) {
           const file = path.join(dir, entry.name);
           // Do not follow directory links (cycles) or expose files outside the game.
           if (entry.isSymbolicLink()) continue;
           if (entry.isDirectory() && recursive) visit(file);
-          else if (entry.isFile() && matcher.test(entry.name)) files.push(path.relative(root, file).split(path.sep).join("\\"));
+          else if (entry.isFile() && matcher.test(entry.name)) {
+            const relative = path.relative(base, file).split(path.sep).join("\\");
+            files.push(prefix ? `${prefix}\\${relative}` : relative);
+          }
         }
       };
       visit(current);
@@ -1807,6 +1812,14 @@ export class Runtime {
         if (arity && (args.length < arity[0] || args.length > arity[1]))
           throw new EraError(`Invalid number of arguments for ${name}`);
         switch (name) {
+          case "VARSETEX": {
+            const reference = this.parse(argText(args, name, 0));
+            if (reference.kind !== "variable") throw new EraError("VARSETEX name must be a variable");
+            if (args[1] === undefined) throw new EraError("VARSETEX requires a value");
+            variables.fillExtended(reference.name, reference.indices, args[1], args[2] === undefined || argInt(args, name, 2) !== 0n,
+              args[3] === undefined ? 0n : argInt(args, name, 3), args[4] === undefined ? undefined : argInt(args, name, 4), context);
+            return 1n;
+          }
           case "BARSTR": return this.bar(argInt(args, name, 0), argInt(args, name, 1), argInt(args, name, 2));
           case "SAVENOS": return integer(this.configValue("SaveDataNos"));
           case "EXISTCSV": return this.game.characters.has(Number(argInt(args, name, 0))) ? 1n : 0n;
@@ -3986,29 +3999,8 @@ export class Runtime {
           }
           case "VARSETEX": {
             const parts = this.arguments(args);
-            if (parts.length < 1 || parts.length > 5) throw new EraError("VARSETEX expects name[, value, setAllDim, from, to]");
-            const reference = this.parse(text(ev(parts[0]!)));
-            if (reference.kind !== "variable") throw new EraError("VARSETEX name must be a variable");
-            const string = frame.variables.isString(reference.name, frame.context);
-            const value = parts[1] ? ev(parts[1]) : string ? "" : 0n;
-            const all = parts[2] ? num(parts[2]) !== 0n : true;
-            const dimensions = frame.variables.dimensions(reference.name, frame.context);
-            const named = reference.indices.length === dimensions.length ? Number(integer(evaluate(reference.indices.at(-1)!, frame.context))) : 0;
-            const from = Math.max(parts[3] ? Number(num(parts[3])) : 0, named);
-            const rows: Expr[][] = [];
-            if (all && dimensions.length > 1 && !frame.variables.isCharacter(reference.name, frame.context)) {
-              const visit = (prefix: Expr[]): void => {
-                if (prefix.length === dimensions.length - 1) { rows.push(prefix); return; }
-                for (let i = 0; i < dimensions[prefix.length]!; i++) visit([...prefix, literal(BigInt(i))]);
-              };
-              visit([]);
-            } else rows.push(reference.indices);
-            for (const indices of rows) {
-              const row = frame.variables.row(reference.name, indices, frame.context);
-              const to = parts[4] ? Math.min(Number(num(parts[4])), row.size) : row.size;
-              for (let i = from; i < to; i++) row.set(i, value);
-            }
-            this.globals.set("RESULT", [], 1n, frame.context);
+            const value = frame.context.call(op, parts.map((part) => part ? ev(part) : undefined));
+            this.globals.set("RESULT", [], value, frame.context);
             break;
           }
           case "SETCOLORBYNAME": case "SETBGCOLORBYNAME": {

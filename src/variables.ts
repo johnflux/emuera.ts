@@ -262,6 +262,35 @@ export class Variables {
       },
     };
   }
+  /** VARSETEX fills final-dimension slices; only numeric non-character arrays expand across rows. */
+  fillExtended(name: string, indices: Expr[], value: Value, all: boolean, from: bigint, to: bigint | undefined, context: EvaluationContext): void {
+    const variable = this.lookup(name, context).variable;
+    if (variable.constant) throw new EraError(`Cannot modify constant: ${name}`);
+    if ((typeof value === "string") !== variable.string) throw new EraError(`Assignment type mismatch: ${name}`);
+    const rank = variable.dimensions.length;
+    // Native VARSETEX names use data coordinates, with character zero rather than implicit TARGET.
+    const zero: Expr = { kind: "literal", value: 0n };
+    const full = variable.character ? [zero, ...indices.slice(0, rank - 1)] : rank === 1 ? [zero] : [...indices];
+    while (full.length < rank) full.push(zero);
+    const address = this.address(name, full, context);
+    const width = variable.dimensions.at(-1)!;
+    const column = rank === 1 ? 0 : address % width;
+    const firstColumn = rank === 1 ? from : from < BigInt(column) ? BigInt(column) : from;
+    const lastColumn = to ?? BigInt(width);
+    if (firstColumn >= lastColumn) return;
+    if (firstColumn < 0n || lastColumn > BigInt(width)) throw new EraError(`VARSETEX range out of bounds for ${name}`);
+    const start = Number(firstColumn), end = Number(lastColumn);
+    const rowStart = address - address % width;
+    const allRows = all && rank > 1 && !variable.string && !variable.character;
+    const first = allRows ? 0 : rowStart;
+    const limit = allRows ? variable.dimensions.reduce((a, b) => a * b, 1) : rowStart + width;
+    for (let base = first; base < limit; base += width) {
+      for (let i = start; i < end; i++) {
+        if (value === (variable.string ? "" : 0n)) variable.values.delete(base + i);
+        else variable.values.set(base + i, value);
+      }
+    }
+  }
   /** ARRAYCOPY: copies the overlapping region of two same-typed, same-rank, non-character arrays. */
   copyArray(fromName: string, toName: string, context: EvaluationContext): void {
     const from = this.resolve(key(fromName), context), to = this.resolve(key(toName), context);
