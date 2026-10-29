@@ -378,6 +378,20 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
         }
         return;
       }
+      if (request.method === "POST" && url.pathname === "/api/character-history") {
+        const data = await body(request);
+        if (typeof data.session !== "string" || typeof data.character !== "string" || !Number.isSafeInteger(data.step))
+          throw new HttpError(400, "Expected session, character and step");
+        const session = sessions.get(data.session);
+        if (!session) throw new HttpError(404, "Session expired or does not exist; start a new run");
+        if (data.step !== session.step) throw new HttpError(409, "This run has moved on; reopen history on the current screen");
+        const history = session.history.at(-1)?.snapshot.characterHistory;
+        if (!history || history.character.id !== data.character)
+          throw new HttpError(409, "The selected character has changed; reopen history on the current screen");
+        session.used = Date.now();
+        json(response, session.runtime.fullCharacterHistory(history));
+        return;
+      }
       if (request.method === "POST" && url.pathname === "/api/resume") {
         // Lets a reloaded page reattach to its still-running session: replays what was shown, without advancing it.
         const data = await body(request);
@@ -437,7 +451,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
         return;
       }
       const pages: Record<string, string> = {
-        "/": "index.html", "/app.js": "app.js", "/translate.js": "translate.js", "/style.css": "style.css",
+        "/": "index.html", "/app.js": "app.js", "/translate.js": "translate.js", "/interaction-history.js": "interaction-history.js", "/style.css": "style.css",
         "/library.js": "library.js", "/library.css": "library.css",
         "/fonts/BIZUDGothic-Regular.ttf": "fonts/BIZUDGothic-Regular.ttf",
         "/fonts/OFL.txt": "fonts/OFL.txt",
@@ -465,7 +479,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
     });
   });
 }
-export async function startServer(port = 3000, gamesDir = GAMES_DIR, development = false): Promise<Server> {
+export async function startServer(port = 3003, gamesDir = GAMES_DIR, development = false): Promise<Server> {
   gamesDir = path.resolve(gamesDir);
   const known = KNOWN_GAMES.map((game) => ({ ...game, root: path.join(gamesDir, path.relative(GAMES_DIR, game.root)) }));
   const loaded: GameEntry[] = [];
@@ -503,7 +517,7 @@ export async function startServer(port = 3000, gamesDir = GAMES_DIR, development
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const rawPort = process.env.PORT ?? "3000";
+    const rawPort = process.env.PORT ?? "3003";
     const port = Number(rawPort);
     if (!/^\d+$/.test(rawPort) || port < 1 || port > 65535) throw new Error("PORT must be an integer from 1 to 65535");
     await startServer(port, GAMES_DIR, process.argv.includes("--dev"));

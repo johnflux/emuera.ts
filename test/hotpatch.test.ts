@@ -279,6 +279,33 @@ WAIT`, "<info-title-test>");
   }
 });
 
+test("alcohol availability excludes empty inventory and non-alcohol drinks", {
+  skip: !existsSync(GAME_ROOT),
+}, async () => {
+  const game = await loadGame();
+  await applyHotpatches(game);
+  const stub = emptyGame();
+  indexScript(stub, `@SYSTEM_TITLE
+VALID_DRINK_COUNT = 2
+VALID_DRINKS_LIST:0 = 100
+VALID_DRINKS_LIST:1 = 101
+ITEM:100 = 3
+ITEM:101 = 0
+PRINTFORML {HOTPATCH_HAS_ALCOHOL()}
+ITEM:101 = 1
+PRINTFORML {HOTPATCH_HAS_ALCOHOL()}
+ITEM:101 = 0
+PRINTFORML {HOTPATCH_HAS_ALCOHOL()}
+QUIT
+@IS_ALC(ARG)
+#FUNCTION
+RETURNF ARG == 101`, "alcohol-test.ERB");
+  for (const [name, routine] of stub.routines) game.routines.set(name, routine);
+  const snapshot = new Runtime(game, GAME_INSTRUCTION_LIMIT).start();
+  assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
+  assert.deepEqual(snapshot.output.filter((item) => item.type === "text").map((item) => item.text), ["0", "1", "0"]);
+});
+
 test("room lineup renders every portrait and preserves target selection", {
   skip: !existsSync(GAME_ROOT),
 }, async () => {

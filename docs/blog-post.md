@@ -20,7 +20,7 @@ The backend is a Node.js process written in TypeScript. At startup it discovers 
 
 The HTTP server offers the browser UI and a small JSON API. When a player starts a run, the server creates a runtime for that game and keeps the live session on the server. The browser submits choices or typed input to endpoints such as `/api/input`; the runtime resumes from its wait point and returns the next snapshot. A run can therefore pause at an `INPUT` or `WAIT`, return control to the browser, and pick up again when the player acts.
 
-For development, `npm start` runs the TypeScript server with `tsx` and watches the frontend and game files. For a production-style run, `npm run build` compiles TypeScript and `npm run start:prod` starts the compiled server. The browser interface is served locally, usually at `http://127.0.0.1:3000`.
+For development, `npm start` runs the TypeScript server with `tsx` and watches the frontend and game files. For a production-style run, `npm run build` compiles TypeScript and `npm run start:prod` starts the compiled server. The browser interface is served locally, usually at `http://127.0.0.1:3003`.
 
 The bundled conformance demo is useful here: it is itself a small ERB program, not a second hand-coded interpreter or a static showcase. It exercises the same runtime with loops, calls, text and single-character input, click-to-continue dialogue, HTML, sprites, and `PRINTC` menus.
 

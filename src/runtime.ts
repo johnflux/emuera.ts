@@ -20,6 +20,7 @@ import { readNativeSave, writeNativeSave, type NativeSave, type SavedContainers,
 import { fixHistoryHtml, SHARP_METHODS, supportedSharpCall, translateHistoryDate } from "./plugin-compat.js";
 import { regexCharacterClasses, regexGroupOrder, replaceRegex } from "./regex.js";
 import { decodePicture, encodePicture, InvalidGraphicsImage, pictureColor, resourceColor } from "./graphics.js";
+import { TwInteractionHistory, type CharacterHistory } from "./interaction-history.js";
 
 export interface Style { color: string; background: string; alignment: "left" | "center" | "right"; fontStyle: number; font?: string }
 type Rect = [x: number, y: number, width: number, height: number];
@@ -121,6 +122,7 @@ export interface Snapshot {
   title: string;
   /** The TARGET character index, so the client can mark that character's picture. */
   target: number;
+  characterHistory?: CharacterHistory;
   /** Debug mode: text for Emuera's debug window since the previous snapshot; `debugClear` (DEBUGCLEAR) empties it first. */
   debug?: string;
   debugClear?: boolean;
@@ -423,6 +425,7 @@ export class Runtime {
   private animationTimer: number | undefined;
   private saves: SaveStore;
   private staged: StagedStores;
+  private interactionHistory: TwInteractionHistory | undefined;
   /** The result of continuing a click-to-continue wait ahead of the click; see prefetch(). */
   private ahead: { snapshot: Snapshot } | { error: unknown } | null = null;
   private stainDefault: bigint[];
@@ -477,6 +480,13 @@ export class Runtime {
     this.buttonWrap = this.configValue("ボタンの途中で行を折りかえさない") === 1n;
     this.autoToStr = this.configValue("ユーザー関数の引数に自動的にTOSTRを補完する") === 1n;
     this.saves = this.staged.saves;
+    if (game.routines.has("HOTPATCH_TARGET_DATAGROUP") && game.routines.has("KOJO_MESSAGE_SEND") && game.routines.has("TRAINNAME_TR")) {
+      this.interactionHistory = new TwInteractionHistory(this.saves, {
+        read: (name, indices = []) => this.globals.get(name, indices.map(literal), this.context(this.globals)),
+        label: (command) => text(this.expressionFunction("TRAINNAME_TR", [BigInt(command)])),
+        count: () => this.globals.characterCount(),
+      });
+    }
     this.seedDefaults();
     if (options.intrinsics !== false) {
       const { functions, enabled } = loadIntrinsics({
@@ -602,6 +612,7 @@ export class Runtime {
   }
   /** RESETDATA: non-global variables return to their defaults and the VarExt SAVE_* containers are emptied. */
   private resetData(): void {
+    this.interactionHistory?.reset();
     this.globals.resetData();
     for (const variables of this.statics.values()) variables.resetData();
     this.seedDefaults();
@@ -609,6 +620,7 @@ export class Runtime {
     this.lastLoad = { version: -1n, slot: -1n, text: "" };
   }
   private restart(): void {
+    this.interactionHistory?.reset();
     this.statics.clear();
     this.contexts = new WeakMap();
     this.evaluatorCache = new WeakMap();
@@ -948,12 +960,16 @@ export class Runtime {
       this.globals.clear("NOWEX", this.context(this.globals));
       yield* this.system("EVENTCOM", false);
       yield* this.system(`COM${this.number("SELECTCOM")}`, true);
-      if (this.number("RESULT") === 0n) return yield* this.commandEnded();
+      if (this.number("RESULT") === 0n) {
+        this.interactionHistory?.finish();
+        return yield* this.commandEnded();
+      }
       yield* this.system("SOURCE_CHECK", true);
       this.globals.clear("SOURCE", this.context(this.globals));
       const waits = this.waits;
       yield* this.trainPhase("EVENTCOMEND", false);
       const next = this.takeTrain();
+      this.interactionHistory?.finish();
       if (next !== undefined) { this.setNumber("SELECTCOM", next); continue; }
       if (yield* this.commandEnded()) return true;
       if (this.waits === waits) yield { input: { kind: "wait" } };
@@ -1278,7 +1294,9 @@ export class Runtime {
     const record: NativeSave = { type: 0, ...this.gameStamp(), text: message, data: this.globals.exportSave(context),
       characters: this.globals.exportCharacters(Array.from({ length: this.globals.characterCount() }, (_, i) => i), context),
       containers: this.exportContainers("SAVE") };
-    this.saves.write(this.saveFile(slot), writeNativeSave(record, this.saveMetadata()));
+    const file = this.saveFile(slot), bytes = writeNativeSave(record, this.saveMetadata());
+    this.saves.write(file, bytes);
+    this.interactionHistory?.checkpoint(file, bytes);
   }
   private saveMetadata(global = false): SaveMetadata {
     return { ...this.gameStamp(), layout: this.globals.saveLayout(this.context(this.globals), global),
@@ -1302,6 +1320,10 @@ export class Runtime {
   }
   /** Whether a click-to-continue has been run ahead and is waiting for the player. */
   get prefetched(): boolean { return this.ahead !== null; }
+  fullCharacterHistory(history: CharacterHistory): CharacterHistory {
+    if (!this.interactionHistory) throw new EraError("Interaction history is unavailable for this game");
+    return this.interactionHistory.forCharacter(history.character, history.entries[0]?.id ?? null);
+  }
   input(value: string): Snapshot {
     if (this.ahead) {
       const ahead = this.ahead;
@@ -1327,6 +1349,7 @@ export class Runtime {
     }
     const accepted = this.pending.kind === "integer" ? BigInt(value.trim()).toString() : value;
     if (this.pending.buttonValues && !this.pending.buttonValues.includes(accepted)) throw new EraError("Choose one of the displayed button values");
+    if (this.pending.kind !== "wait") this.interactionHistory?.choice(accepted);
     this.action = `${this.prefetching ? "prefetch" : "input"} (${this.pending.kind})`;
     this.messageSkip = false;
     this.textbox = "";
@@ -1506,6 +1529,7 @@ export class Runtime {
         }
       }
     }
+    this.interactionHistory?.rearrange(order, op === "COPYCHARA" || op === "ADDCOPYCHARA");
     this.globals.rearrangeCharacters(order.length, (i) => order[i]!);
     this.globals.set("CHARANUM", [], BigInt(order.length), context);
   }
@@ -1540,6 +1564,7 @@ export class Runtime {
       const old = Number(this.number(name));
       if (old >= 0 && old < count) this.setNumber(name, BigInt(order.indexOf(old)));
     }
+    this.interactionHistory?.rearrange(order);
     this.globals.rearrangeCharacters(count, (i) => order[i]!);
   }
   private bar(value: bigint, maximum: bigint, length: bigint, op = "BARSTR"): string {
@@ -2755,6 +2780,11 @@ export class Runtime {
   }
   /** Adds the debug window text gathered since the last snapshot. */
   private withDebug(snapshot: Snapshot): Snapshot {
+    if (snapshot.status === "halted") this.interactionHistory?.finish();
+    if (snapshot.status === "error") this.interactionHistory?.cancel();
+    const history = snapshot.output.some((item) => item.type === "html" && item.text === "<div class='era-interaction-history'></div>")
+      ? this.interactionHistory?.selected() : undefined;
+    if (history) snapshot.characterHistory = history;
     if (this.debugClear) snapshot.debugClear = true;
     if (this.debugText) snapshot.debug = this.debugText;
     this.debugText = "";
@@ -2894,6 +2924,7 @@ export class Runtime {
     const sprites = type === "html" ? this.htmlSprites(value) : undefined;
     const output: Output = { type, text: value, newline, style: { ...(options.style ?? this.style) }, ...(plain ? { plain: true } : {}), ...(options.single ? { single: true } : {}), ...(options.cell ? { cell: true } : {}), ...(sprites ? { sprites } : {}) };
     this.accountOutput(output);
+    this.interactionHistory?.output(type, value, newline, (options.style ?? this.style).color);
     return { output };
   }
   private accountOutput(output: Output): void {
@@ -3045,14 +3076,19 @@ export class Runtime {
     if (++this.depth > 128) throw new EraError("Call depth limit exceeded", this.currentSource);
     try {
       const { frame, routine, info } = this.prepare(name, args, false, routines[0]!);
+      const historyScope = this.interactionHistory?.enter(name, args);
       this.doing.push(routine);
       let result: Value | undefined;
-      try { result = entry.run(this, frame) as Value | undefined; }
+      let success = false;
+      try { result = entry.run(this, frame) as Value | undefined; success = true; }
       catch (error) {
         if (error instanceof EraError) this.captureError(error);
         throw error;
       }
-      finally { this.doing.pop(); }
+      finally {
+        this.doing.pop();
+        if (historyScope) this.interactionHistory?.leave(historyScope, success);
+      }
       if (info.returnType && result === undefined) return frame.returnType === "string" ? "" : 0n;
       return result;
     } finally { this.depth--; }
@@ -3068,14 +3104,19 @@ export class Runtime {
         return undefined;
       }
       const { frame, routine, info } = this.prepare(name, args, expression, selected ?? routines[0]!);
+      const historyScope = this.interactionHistory?.enter(name, args);
       this.doing.push(routine);
       let result: Value | undefined;
-      try { result = yield* this.runFrame(frame); }
+      let success = false;
+      try { result = yield* this.runFrame(frame); success = true; }
       catch (error) {
         if (error instanceof EraError) this.captureError(error);
         throw error;
       }
-      finally { this.doing.pop(); }
+      finally {
+        this.doing.pop();
+        if (historyScope) this.interactionHistory?.leave(historyScope, success);
+      }
       if (info.returnType && result === undefined) return frame.returnType === "string" ? "" : 0n;
       return result;
     } finally { this.depth--; }
@@ -3447,12 +3488,20 @@ export class Runtime {
             const result = this.checkSave(file);
             if (result.state !== 0n || !result.record?.data) throw new EraError(`LOADDATA: ${result.message}`);
             this.loadGame(result.record.data, result.record.containers);
+            if (this.interactionHistory) {
+              const bytes = this.saves.read(file);
+              if (!Buffer.isBuffer(bytes)) throw new EraError("Expected binary save for interaction history");
+              this.interactionHistory.restore(file, bytes);
+            }
             this.lastLoad = { version: BigInt(result.record.gameVersion), slot, text: result.record.text };
             throw new LoadTransition();
           }
-          case "DELDATA":
-            this.saves.remove(this.saveFile(num(args)));
+          case "DELDATA": {
+            const file = this.saveFile(num(args));
+            this.saves.remove(file);
+            this.interactionHistory?.remove(file);
             break;
+          }
           case "CHKDATA": {
             const result = this.checkSave(this.saveFile(num(args)));
             this.globals.set("RESULTS", [], result.message, frame.context);

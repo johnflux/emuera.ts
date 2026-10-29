@@ -542,13 +542,30 @@ a { color: #8ddaff; }
    card's gradient; fading the picture by the same amount (its alpha is 35%) gives the intended dimming. */
 .era-portrait .sprite[data-src="時間停止"] { display: none; }
 .era-portrait:has(.sprite[data-src="時間停止"]) .sprite { opacity: .65; }
-.era-character-info { min-width: 0; width: 100%; max-width: 400px; align-self: stretch; display: flex; flex-direction: column; }
+.era-character-info { min-width: 0; width: 100%; max-width: 400px; align-self: stretch; display: grid; grid-template-rows: auto 1fr; }
 .era-character-info > .line:has(.era-info-title) { flex: none; }
-.era-info-tabs { display: flex; align-items: stretch; gap: 5px; }
+.era-info-tabs { display: flex; align-items: stretch; gap: 0; flex-wrap: wrap; }
+.era-info-tab { padding: 7px 12px; border: 1px solid #28485b; border-bottom: 0; border-radius: 5px 5px 0 0; background: #0c1b27; color: #91adbd; font: inherit; font-size: .9em; cursor: pointer; }
+.era-info-tab[aria-pressed="true"] { border-color: #3c9bb7; background: linear-gradient(#16394b, #0b202e); color: #b7dbea; }
+.era-character-info .era-info-body[hidden] { display: flex !important; visibility: hidden; pointer-events: none; }
+.era-interaction-history[hidden] { display: none !important; }
+.era-character-info > .era-info-body, .era-character-info > .line:has(.era-interaction-history) { grid-row: 2; grid-column: 1; }
+.era-character-info > .line:has(.era-interaction-history) { position: relative; min-height: 0; contain: size; overflow: hidden; }
+.era-character-info .era-interaction-history { position: absolute; inset: 0; margin-top: 0; border-radius: 0 5px 5px 5px; min-height: 0; overflow: auto; }
+.era-character-info .era-history-body { max-height: none; overflow: visible; }
+.era-history-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px; }
+.era-history-toolbar button { font: inherit; color: #b7dbea; background: #16394b; border: 1px solid #3c9bb7; border-radius: 4px; padding: 5px 10px; cursor: pointer; }
+.era-history-more { float: right; position: relative; z-index: 1; margin: 3px 8px 0 6px; padding: 0; border: 0; background: transparent; color: #b7dbea; font: inherit; cursor: pointer; }
+.era-history-more:is(:hover, :focus-visible) { text-decoration: underline; }
+.era-history-dialog { width: min(960px, calc(100vw - 48px)); max-height: calc(100dvh - 48px); padding: 12px; border: 1px solid #3c9bb7; border-radius: 6px; background: #0b1c28; color: #d7eff8; }
+.era-history-dialog::backdrop { background: #000000b0; }
+.era-history-dialog h2 { font-size: 1.1em; margin: 0; }
+.era-history-dialog .era-history-body { max-height: none; overflow: visible; }
 .era-main .era-info-title { display: inline-flex; margin: 0; padding: 7px 12px; border: 1px solid #3c9bb7; border-bottom: 0; border-radius: 5px 5px 0 0; background: linear-gradient(#16394b, #0b202e); font-size: .9em; font-weight: normal; }
 .era-main .line button.choice.era-info-more { align-self: stretch; padding: 7px 14px; border: 1px solid #28485b; border-bottom: 0; border-radius: 5px 5px 0 0; background: #0c1b27; color: #91adbd; font-size: .9em; }
 .era-main .line button.choice.era-info-more:enabled:is(:hover, :focus-visible) { border-color: #5da8bf; background: #173442; color: #d7eff8; }
-.era-info-body { flex: 1; min-width: 0; padding: 12px; border: 1px solid #24526b; border-radius: 0 5px 5px 5px; background: #05111bd9; }
+.era-info-body { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 12px; border: 1px solid #24526b; border-radius: 0 5px 5px 5px; background: #05111bd9; }
+.era-info-body > :not(.era-history-preview-space) { flex-shrink: 0; }
 .era-info-head { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 10px; align-items: start; margin-bottom: 10px; }
 .era-info-head > .line:has(.era-info-face), .era-info-head > .line > span:has(> .era-info-face) { display: contents; }
 .era-info-face { width: 76px; height: 76px; overflow: hidden; border: 1px solid #3b6274; border-radius: 5px; background: #142a36; line-height: 0; }
@@ -564,6 +581,22 @@ a { color: #8ddaff; }
 .era-info-body .era-fact-label { margin-right: 0; }
 .era-character-blurb { margin: 8px 0 12px; color: #a7bbc8; font-size: .9em; line-height: 1.35; }
 .era-info-body .era-look { margin-top: 14px; font-size: .9em; }
+.era-info-body.era-info-with-preview { padding-top: 6px; padding-bottom: 6px; }
+.era-info-with-preview .era-look { margin-top: 0; }
+.era-history-preview-space { position: relative; flex: 1 1 0; min-height: 0; margin-top: 1lh; }
+.era-history-preview { position: absolute; inset: 0; display: block; width: 100%; height: 100%; box-sizing: border-box; overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; padding: 0; border: 0; background: transparent; color: #a7bbc8; text-align: left; font: inherit; font-size: .8em; line-height: 1.25; cursor: pointer; }
+.era-history-preview-content { position: absolute; bottom: 0; left: 0; width: 100%; }
+.era-history-preview:focus-visible { outline: 1px solid #5da8bf; outline-offset: 1px; }
+.era-interaction-history { margin-top: 8px; border: 1px solid #24526b; border-radius: 5px; background: #05111bd9; font-size: .85em; }
+.era-interaction-history:empty { display: none; }
+.era-interaction-history summary { cursor: pointer; padding: 8px; color: #b7dbea; overflow-wrap: anywhere; }
+.era-history-body { max-height: 22rem; overflow: auto; padding: 0 10px 8px; }
+.era-history-body p { margin: 6px 0; }
+.era-history-note { color: #9ab3c3; font-size: .9em; }
+.era-history-notice { color: #efca8a; }
+.era-history-entry { border: 0; padding: 0; }
+.era-history-entry > summary { padding: 2px 0; }
+.era-history-text { white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
 @container (max-width: 760px) {
   .era-character { grid-template-columns: minmax(0, 1fr); row-gap: 10px; }
 }

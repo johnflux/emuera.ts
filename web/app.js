@@ -1,5 +1,6 @@
 import { createTranslation, protectMapTranslation } from "./translate.js";
 import { createLibrary } from "./library.js";
+import { setupCharacterHistory } from "./interaction-history.js";
 
 const terminal = document.querySelector("#terminal");
 const status = document.querySelector("#status");
@@ -1765,6 +1766,12 @@ async function renderSnapshot(snapshot, advanceScreen) {
     continuedScreens = [];
   }
   markTarget(snapshot.target);
+  if (snapshot.characterHistory) {
+    for (const parent of outputRoot.querySelectorAll(".screen.is-active .era-interaction-history:empty"))
+      setupCharacterHistory(parent, snapshot.characterHistory, () => api("/api/character-history", {
+        session, step, character: snapshot.characterHistory.character.id,
+      }));
+  }
   await prepareMapPictures();
   await prepareAreaArt();
   const revived = outputRoot.querySelectorAll(".screen.is-active button.choice.is-revived");

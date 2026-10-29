@@ -16,7 +16,7 @@ npm install
 npm start
 ```
 
-Open [http://127.0.0.1:3000](http://127.0.0.1:3000) in your browser. Add games
+Open [http://127.0.0.1:3003](http://127.0.0.1:3003) in your browser. Add games
 under `GAMES/`, then choose **Refresh library** in the app.
 I recommend starting with:
 

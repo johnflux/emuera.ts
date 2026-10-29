@@ -23,6 +23,11 @@ hotpatch only changes presentation.
   rows it wraps to on screen, and the client clears it as one line.
 - `npm run dev` watches `hotpatch/` and restarts the server on changes.
 
+The eraTW main-screen character card uses adjoining Character Info and Interaction
+History tabs; history can expand into a read-only dialog showing the full timeline.
+Serve Alcohol (332) is omitted when the inventory has no selectable alcohol,
+using the same valid-drink list and `IS_ALC` rule as the game's alcohol menu.
+
 ## HTML extensions
 
 Hotpatches print HTML with `HTML_PRINT`. On top of Emuera's tags, the browser
@@ -62,6 +67,14 @@ out in panels with CSS grid or flex, while the lines stay in output order:
 Keep opens and closes balanced on every path, including early `RETURN`s.
 
 ## Patches
+
+Below the selected character's **Character Info**, a history placeholder is filled
+by the browser with the latest 20 recorded interactions. Its expand/collapse
+controls are local UI controls, not ERB command buttons; inspecting history does
+not advance the game. The placeholder is one logical HTML line, so `CLEARLINE`
+continues to remove it with the rest of the screen. See
+[character interaction history](developer-guide.md#eratw-character-interaction-history)
+for the initial command coverage, capture semantics, and save checkpoints.
 
 On the main screen, **More...** beside Character Info opens the same room-wide
 character sheet as the player's **See more**, but starts on the selected

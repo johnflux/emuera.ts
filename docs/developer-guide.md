@@ -201,7 +201,7 @@ npm install
 npm start
 ```
 
-Open **http://127.0.0.1:3000**. Set `PORT` to choose another port.
+Open **http://127.0.0.1:3003**. Set `PORT` to choose another port.
 
 Fresh visits open the **game library**, with **Installed** and **Not installed**
 tabs, short game descriptions, and a Play button for each local game. The library
@@ -361,6 +361,92 @@ Emuera's saves too. Back up saves before switching engines and avoid running
 both engines against the same save directory at once.
 Writes use atomic replacement, and corrupt files or I/O failures stop execution
 with a diagnostic. The demo uses isolated in-memory globals instead.
+
+### eraTW character interaction history
+
+The selected character's card has adjacent **Character Info** and
+**Interaction History** tabs. The history tab shows recent interactions and an
+right-aligned **more...** button opens a read-only dialog containing the character's
+entire saved timeline (loaded on demand, without advancing the game).
+Character Info also shows up to ten recent lines from the latest interaction
+beneath clothing, with one line of spacing above. The preview fills only remaining
+panel space and clips overflow without contributing to the card's height.
+The preview is bottom-aligned: the newest line stays visible and older text
+is clipped at the top.
+The history tab scrolls within the same panel dimensions.
+History opens at the bottom and scrolls to the newest text when refreshed.
+Collapsed entries use closely spaced headings without divider lines.
+Clicking the preview switches to Interaction History.
+The adapter records first meetings, daily greetings,
+room encounters, conversation (300), serving tea (301), apologizing (303), and
+the custom **Play a game** action. Games are captured when an `ADD_GAME<n>`
+routine actually runs, excluding setup menus and cancelled selections; the game's
+participant list is included.
+Time-resume cleanup also records state-derived English aftereffect summaries for
+each affected character, including characters in other rooms, before
+`TIMESTOP_RESET` clears the pending flags. These include missing underwear,
+unexplained pleasure (with the game's intensity threshold), virginity loss or
+restored-virginity loss, and the five ejaculation-related aftereffect markers.
+Multiple pending markers form one event per character. These events have `source: "state"`
+and a neutral `reaction` action. Their English text describes perceived symptoms,
+not the hidden cause or inferred virginity loss. Legacy time-resume entries are
+normalized on read for both recent and full history; immutable originals remain
+on disk. This is not a general character-knowledge filter for arbitrary script text.
+and use that character's location. They summarize the game state rather than
+inventing an off-screen dialogue transcript. “Unusual Sense of Liberation” is
+a printed scene heading, not a persistent trait.
+Meetings are captured through `AFFAIR_DISCLOSURE`, `SYOTAIMEN`, `FirstMeetToday`,
+and `KOJO_MESSAGE_SEND("ENCOUNTER", ...)`, using their character argument rather
+than the selected target. Command dialogue dispatched by `KOJO_MESSAGE_SEND`
+or `COM_KOJO_CALL` during post-command processing is included in the active
+interaction, not just text printed inside `COM300`/`COM301`/`COM303`.
+Nested greeting hooks form one event; silent checks
+do not create entries. Other commands, menus, maps, and status redraws are not
+general-purpose transcript sources. This is local logging, not an LLM integration;
+no history is sent to a service.
+
+Each structured event preserves the command id and translated label, participants,
+script text, player inputs within the command, game day/time and location, and
+before/after affection and trust. `COM_KOJO_CALL` and `KOJO_MESSAGE_SEND` identify
+a character's scene; they do not prove that every line is spoken by that character.
+The panel does not guess individual speakers. Text and HTML
+output are captured before browser translation. Text colors (including nested HTML
+font colors) are retained as colored text runs, not executable markup. Older
+plain-text history remains readable but cannot recover colors that were not saved.
+Per-event text and inputs are limited to 16,000 characters, with an explicit
+truncation indicator. The panel shows the most recent 20 interactions for that
+character, oldest first with the newest at the bottom. Stat changes use compact
+deltas such as `Favor+3` and `Trust-1`, without repeating the timestamp.
+Older event files are retained.
+The panel hides blank lines and hyphen-only dividers and shows the room and
+participants separated by a center dot, without scene labels. Stored text remains unchanged.
+Stock room-arrival and tea-serving intro lines are hidden in the panel, but
+retained in stored history; dialogue and other narration remain visible.
+
+The adapter activates only for the patched eraTW routine set. Other games keep
+their existing output and save behavior. Instance UUIDs, rather than mutable roster
+indices or shared CSV character numbers, follow character sorting, swapping and
+deletion. Copies and imported character exports get new identities and do not
+inherit the original's history.
+
+App-owned `era-history-event-<uuid>.json` files in the configured save directory
+store immutable events once, with links to their predecessors and per-character
+indexes. Each `era-history-saveNN.sav.json` checkpoint records the saved history
+heads, roster identities, and SHA-256 of the native save. Native save bytes and
+formats are unchanged. Loading a checkpoint restores only that timeline; subsequent
+interactions branch from it, never from an abandoned future. Prefetched writes
+use the existing staged stores and persist only when the player continues.
+Only completed interactions are checkpointed.
+
+Back up the history files along with native saves to retain history across
+machines or installations. Old saves without a checkpoint start with empty
+history. If a native save is replaced by another engine, a mismatching checkpoint
+is not attached. The snapshot retains the reason as metadata; the panel's empty
+state simply says *No interaction yet*.
+Corrupt metadata and I/O errors are reported explicitly. Deleting a save removes
+its checkpoint, not immutable events that another slot or branch may reference.
+Unsaved/abandoned branches may therefore leave unreferenced event files; automatic
+garbage collection and cross-engine history synchronization are not implemented.
 
 Typing anywhere in the game page goes to the input line while the interpreter
 is waiting, without needing to click it first. Browser shortcuts, Tab navigation,

@@ -4,6 +4,242 @@ import { test } from "node:test";
 import { runInNewContext } from "node:vm";
 import { parseFragment, type DefaultTreeAdapterMap } from "parse5";
 
+test("character history renders literal text and local controls without game input handlers", async () => {
+  const source = await readFile(new URL("../web/interaction-history.js", import.meta.url), "utf8");
+  class Element {
+    children: Element[] = [];
+    textContent = "";
+    className = "";
+    hidden = false;
+    parentElement: Element | null = null;
+    isConnected = true;
+    focused = false;
+    scrollTop = 0;
+    scrollHeight = 500;
+    style: { color?: string } = {};
+    attributes = new Map<string, string>();
+    open = false;
+    listeners = new Map<string, (event: { stopPropagation(): void; preventDefault(): void }) => unknown>();
+    constructor(public tag: string) {}
+    append(element: Element) { this.children.push(element); element.parentElement = this; }
+    setAttribute(name: string, value: string) { this.attributes.set(name, value); }
+    replaceChildren() { this.children = []; }
+    addEventListener(type: string, handler: (event: { stopPropagation(): void; preventDefault(): void }) => unknown) {
+      const previous = this.listeners.get(type);
+      this.listeners.set(type, (event) => { previous?.(event); return handler(event); });
+    }
+    closest(selector: string): Element | null {
+      return this.className.split(" ").includes(selector.slice(1)) ? this : this.parentElement?.closest(selector) ?? null;
+    }
+    querySelector(selector: string): Element | null {
+      for (const child of this.children) {
+        if (child.className.split(" ").includes(selector.slice(1))) return child;
+        const found = child.querySelector(selector);
+        if (found) return found;
+      }
+      return null;
+    }
+    replaceWith(element: Element) {
+      const siblings = this.parentElement!.children;
+      siblings.splice(siblings.indexOf(this), 1, element);
+      element.parentElement = this.parentElement;
+    }
+    after(element: Element) {
+      const siblings = this.parentElement!.children;
+      siblings.splice(siblings.indexOf(this) + 1, 0, element);
+      element.parentElement = this.parentElement;
+    }
+    remove() {
+      const siblings = this.parentElement!.children;
+      siblings.splice(siblings.indexOf(this), 1);
+      this.isConnected = false;
+    }
+    showModal() { this.open = true; }
+    close() { this.open = false; this.listeners.get("close")?.({ stopPropagation() {}, preventDefault() {} }); }
+    focus() { this.focused = true; }
+    set innerHTML(_value: string) { throw new Error("History must be rendered as text, not HTML"); }
+  }
+  const { render, setup } = runInNewContext(`${source.replaceAll("export function ", "function ")}\n({render: renderCharacterHistory, setup: setupCharacterHistory})`, {
+    document: { createElement: (tag: string) => new Element(tag) },
+    requestAnimationFrame: (callback: () => void) => callback(),
+  });
+  const context = { day: "5", time: ["600"], location: "9", locationName: "Living room", affection: "1", trust: "2" };
+  const history = {
+    character: { id: "alice", name: "Alice", number: "1" }, limit: 20, notice: "Earlier interactions are unavailable.",
+    entries: [{
+      action: { label: "Talk" }, target: "alice", before: context, after: { ...context, affection: "3" },
+      participants: [{ id: "alice", name: "Alice" }],
+      lines: [{ character: "alice", text: '<img src=x onerror="bad()">Hello.' }, { character: null, text: "Narration." }],
+      choices: ["A choice"], truncated: true,
+    }],
+  };
+  const parent = new Element("div");
+  render(parent, history);
+  const nodes = (root: Element): Element[] => [root, ...root.children.flatMap(nodes)];
+  const all = nodes(parent);
+  assert.equal(parent.scrollTop, parent.scrollHeight, "new history scrolls to the bottom");
+  assert.ok(all.every((element) => !["button", "img", "script"].includes(element.tag)));
+  const text = all.map((element) => element.textContent).join("\n");
+  assert.match(text, /Alice's interaction history \(1\)/);
+  assert.match(text, /Talk · Day 5, 10:00/);
+  assert.ok(text.includes(history.entries[0]!.lines[0]!.text));
+  const metadata = all.find((node) => node.tag === "p" && node.className === "era-history-note")!;
+  assert.equal(metadata.children.map((node) => node.textContent).join(""), "Living room · Alice");
+  assert.equal(metadata.children[1]!.attributes.get("translate"), "no");
+  assert.equal(metadata.children[1]!.className, "notranslate");
+  assert.doesNotMatch(text, /Alice's scene|may include narration|Script \/ narration/);
+  assert.match(text, /Favor\+2/);
+  assert.doesNotMatch(text, /affection:|→ 3/);
+  assert.equal((text.match(/Day 5, 10:00/g) ?? []).length, 1, "timestamp appears only in the entry heading");
+  assert.match(text, /truncated/);
+  assert.doesNotMatch(text, /Earlier interactions are unavailable|Scripted interactions|no AI requests/);
+  for (const type of ["click", "pointerdown", "keydown", "contextmenu"]) {
+    let stopped = false;
+    parent.listeners.get(type)!({ stopPropagation() { stopped = true; }, preventDefault() {} });
+    assert.equal(stopped, true, `${type} cannot reach the game's input handlers`);
+  }
+  const panel = parent.children[0]!;
+  panel.open = false;
+  panel.listeners.get("toggle")!({ stopPropagation() {}, preventDefault() {} });
+  const empty = new Element("div");
+  render(empty, { ...history, entries: [] });
+  assert.equal(empty.children[0]!.open, false, "collapse preference survives main-screen redraws");
+  const emptyBody = empty.children[0]!.children[1]!;
+  assert.equal(emptyBody.children.length, 1);
+  assert.equal(emptyBody.children[0]!.tag, "em");
+  assert.equal(emptyBody.children[0]!.textContent, "No interaction yet");
+  const colored = new Element("div");
+  render(colored, { ...history, entries: [{ ...history.entries[0], lines: [{
+    character: "alice", text: "Red green unsafe",
+    runs: [
+      { text: "<red>", color: "#ff0000" },
+      { text: " green ", color: "green" },
+      { text: "unsafe", color: "url(https://example.com)" },
+    ],
+  }] }] });
+  const spans = nodes(colored).filter((node) => node.className === "era-history-text").flatMap((node) => node.children);
+  assert.equal(spans[0]!.textContent, "<red>");
+  assert.equal(spans[0]!.style.color, "#ff0000");
+  assert.equal(spans[1]!.style.color, "green");
+  assert.equal(spans[2]!.style.color, undefined);
+  const padded = new Element("div");
+  render(padded, { ...history, entries: [{ ...history.entries[0], lines: [{
+    character: "alice", text: "\n\n  \nKana is here.\nYou realize you haven't greeted her today.\n \n",
+    runs: [
+      { text: "\n\n", color: "white" },
+      { text: "  \nKana is here.\n", color: "#c0c0c0" },
+      { text: "You realize you haven't greeted her today.\n ", color: "green" },
+      { text: "\n", color: "white" },
+    ],
+  }] }] });
+  const trimmedSpans = nodes(padded).filter((node) => node.className === "era-history-text").flatMap((node) => node.children);
+  assert.equal(trimmedSpans.length, 2);
+  assert.equal(trimmedSpans[0]!.textContent, "Kana is here.\n");
+  assert.equal(trimmedSpans[0]!.style.color, "#c0c0c0");
+  assert.equal(trimmedSpans[1]!.textContent, "You realize you haven't greeted her today.");
+  assert.equal(trimmedSpans[1]!.style.color, "green");
+  const whitespace = new Element("div");
+  render(whitespace, { ...history, entries: [{ ...history.entries[0], lines: [{
+    character: "alice", text: " \n ", runs: [{ text: " \n ", color: "white" }],
+  }] }] });
+  assert.equal(nodes(whitespace).filter((node) => node.className === "era-history-text").flatMap((node) => node.children).length, 0);
+  const ordered = new Element("div");
+  render(ordered, { ...history, entries: [
+    { ...history.entries[0], action: { label: "Newest" }, after: { ...context, affection: "4", trust: "1" } },
+    { ...history.entries[0], action: { label: "Oldest" }, after: context },
+  ] });
+  const entries = nodes(ordered).filter((node) => node.className === "era-history-entry");
+  assert.match(entries[0]!.children[0]!.textContent, /^Oldest/);
+  assert.equal(entries[0]!.open, false);
+  assert.match(entries[1]!.children[0]!.textContent, /^Newest/);
+  assert.equal(entries[1]!.open, true);
+  assert.ok(nodes(entries[1]!).some((node) => node.textContent === "Favor+3 · Trust-1"));
+  assert.ok(!nodes(entries[0]!).some((node) => /Favor|Trust/.test(node.textContent)), "omit unchanged stats");
+  assert.equal(history.entries[0]!.action.label, "Talk", "rendering does not reorder the source history");
+  for (const colored of [false, true]) {
+    const compact = new Element("div");
+    const content = "\n--------------------\nYou and the Robot Maid talk...\n\n \n「Nice weather.」\n---\n\n";
+    render(compact, { ...history, entries: [{ ...history.entries[0], lines: [{
+      character: "alice", text: content,
+      ...(colored ? { runs: [
+        { text: content.slice(0, 10), color: "red" },
+        { text: content.slice(10), color: "green" },
+      ] } : {}),
+    }] }] });
+    const paragraphs = nodes(compact).filter((node) => node.className === "era-history-text");
+    const dialogue = paragraphs[0]!.children.map((node) => node.textContent).join("");
+    assert.equal(dialogue, "You and the Robot Maid talk...\n「Nice weather.」");
+    if (colored) assert.ok(paragraphs[0]!.children.every((node) => node.style.color === "green"));
+    const note = nodes(compact).find((node) => node.tag === "p" && node.className === "era-history-note");
+    assert.equal(note!.children.map((node) => node.textContent).join(""), "Living room · Alice");
+    assert.ok(!nodes(compact).some((node) => node.textContent === "Alice's scene"));
+  }
+  for (const colored of [false, true]) {
+    const intro = new Element("div");
+    const content = "Alice was in the Living room.\nYou serve some tea to Alice...\n「You serve some tea to Alice...」\nAlice enjoys the tea.\n";
+    render(intro, { ...history, entries: [{ ...history.entries[0], action: { id: 301, label: "Serve tea" }, lines: [{
+      character: "alice", text: content,
+      ...(colored ? { runs: [{ text: content, color: "green" }] } : {}),
+    }] }] });
+    const dialogue = nodes(intro).filter((node) => node.className === "era-history-text")[0]!;
+    assert.equal(dialogue.children.map((node) => node.textContent).join(""), "「You serve some tea to Alice...」\nAlice enjoys the tea.");
+    if (colored) assert.equal(dialogue.children[0]!.style.color, "green");
+  }
+  const card = new Element("div");
+  card.className = "era-character-info";
+  const tabs = new Element("div");
+  tabs.className = "era-info-tabs";
+  const title = new Element("div");
+  title.className = "era-info-title";
+  tabs.append(title);
+  const info = new Element("div");
+  info.className = "era-info-body";
+  const historyPanel = new Element("div");
+  card.append(tabs);
+  card.append(info);
+  card.append(historyPanel);
+  let requests = 0;
+  setup(historyPanel, { ...history, entries: [{ ...history.entries[0], lines: [{
+    character: "alice", text: "Earlier line.\nRecent line.\nLatest line.",
+    runs: [{ text: "Earlier line.\n", color: "red" }, { text: "Recent line.\nLatest line.", color: "green" }],
+  }] }] }, async () => { requests++; return history; });
+  assert.equal(historyPanel.hidden, true);
+  assert.equal(info.hidden, false);
+  const localEvent = { stopPropagation() {}, preventDefault() {} };
+  const preview = info.querySelector(".era-history-preview")!;
+  const previewText = preview.querySelector(".era-history-preview-content")!;
+  assert.equal(previewText.children.map((node) => node.textContent).join(""), "Earlier line.\nRecent line.\nLatest line.");
+  assert.equal(previewText.children[0]!.style.color, "red");
+  assert.equal(previewText.children[1]!.style.color, "green");
+  assert.ok(info.className.includes("era-info-with-preview"));
+  preview.listeners.get("click")!(localEvent);
+  assert.equal(historyPanel.hidden, false);
+  assert.equal(historyPanel.scrollTop, historyPanel.scrollHeight, "opening the history tab shows the newest text");
+  assert.equal(tabs.children[1]!.focused, true);
+  tabs.children[1]!.listeners.get("click")!(localEvent);
+  assert.equal(historyPanel.hidden, false);
+  assert.equal(info.hidden, true);
+  assert.equal(tabs.children[1]!.attributes.get("aria-pressed"), "true");
+  const expand = nodes(historyPanel).find((node) => node.tag === "button")!;
+  assert.equal(expand.textContent, "more...");
+  assert.ok(!nodes(historyPanel).some((node) => /Latest \d+ interactions/.test(node.textContent)));
+  await expand.listeners.get("click")!(localEvent);
+  assert.equal(requests, 1, "all history is loaded only when expanded");
+  const dialog = nodes(historyPanel).find((node) => node.tag === "dialog")!;
+  assert.equal(dialog.open, true);
+  assert.ok(nodes(dialog).filter((node) => node.className === "era-history-entry").every((node) => node.open));
+  dialog.listeners.get("cancel")!(localEvent);
+  assert.equal(dialog.isConnected, false);
+  assert.equal(expand.focused, true);
+  tabs.children[0]!.listeners.get("click")!(localEvent);
+  assert.equal(info.hidden, false);
+  assert.equal(historyPanel.hidden, true);
+  const failure = new Element("div");
+  render(failure, history, { loadAll: async () => { throw new Error("Session expired"); } });
+  await nodes(failure).find((node) => node.tag === "button")!.listeners.get("click")!(localEvent);
+  assert.ok(nodes(failure).some((node) => node.textContent === "Could not load interaction history: Session expired"));
+});
+
 test("crash reports render as text and copy with explicit clipboard error feedback", async () => {
   const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
   const start = source.indexOf("  if (snapshot.error) {");

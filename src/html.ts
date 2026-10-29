@@ -14,6 +14,27 @@ export function plainHtml(value: string): string {
   return visit(parseFragment(value));
 }
 
+export interface ColoredText { text: string; color: string }
+export function coloredHtml(value: string, defaultColor: string): ColoredText[] {
+  const runs: ColoredText[] = [];
+  function append(text: string, color: string): void {
+    if (!text) return;
+    const last = runs.at(-1);
+    if (last?.color === color) last.text += text;
+    else runs.push({ text, color });
+  }
+  function visit(node: DefaultTreeAdapterMap["node"], inherited: string): void {
+    const attribute = "attrs" in node ? node.attrs.find((item) => item.name === "color")?.value : undefined;
+    const candidate = attribute?.replace(/^#0x([0-9a-f]{6})$/i, "#$1");
+    const color = candidate && /^(?:#[0-9a-f]{3}(?:[0-9a-f]{3})?|[a-z]{1,30})$/i.test(candidate) ? candidate : inherited;
+    if ("value" in node) append(node.value, color);
+    else if (node.nodeName === "br") append("\n", color);
+    else if ("childNodes" in node) node.childNodes.forEach((child) => visit(child, color));
+  }
+  visit(parseFragment(value), defaultColor);
+  return runs;
+}
+
 /** Values exposed by HTML buttons, with entities decoded as they are in the browser. */
 export function htmlButtons(value: string): string[] {
   if (!/<button\b/i.test(value)) return [];

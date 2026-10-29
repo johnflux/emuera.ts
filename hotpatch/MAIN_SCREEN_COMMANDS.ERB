@@ -6,6 +6,19 @@
 ; - the "Go & Manage" card with the menu commands and the settings buttons of QOL_EXTRA_COMMAND_BUTTONS as chips.
 ; Dropped: the [Commands] collapse toggle [3002] (always expanded) and the line-filling "=" padding.
 ;-------------------------------------------------------------------------------
+@HOTPATCH_HAS_ALCOHOL()
+#FUNCTION
+#DIM DYNAMIC nIndex
+#DIM DYNAMIC nItem
+FOR nIndex, 0, VALID_DRINK_COUNT
+	nItem = VALID_DRINKS_LIST:nIndex
+	SIF ITEM:nItem < 1
+		CONTINUE
+	SIF IS_ALC(nItem)
+		RETURNF 1
+NEXT
+RETURNF 0
+
 @SHOW_USERCOM
 #DIM DYNAMIC printKojoCom
 #DIMS DYNAMIC COM_NAME
@@ -39,6 +52,10 @@ nAbleCount = 0
 
 ;コマンド表示 (the usable commands first, so the filters can leave out toggles that would change nothing)
 FOR LOCAL,0,800
+	IF LOCAL == 332
+		SIF !HOTPATCH_HAS_ALCOHOL()
+			CONTINUE
+	ENDIF
 	SIF QOL_BLOCKED_COM_HIDDEN_SEX(LOCAL) ;qol custom code
 		CONTINUE
 	;qol custom code
