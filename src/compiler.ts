@@ -38,11 +38,11 @@ export interface PrintVariant {
   single: boolean;
   align: "" | "C" | "LC";
   mode: "" | "K" | "D";
-  end: "" | "L" | "W";
+  end: "" | "L" | "W" | "N";
 }
-const PRINT_PATTERN = /^PRINT(SINGLE)?(V|S|FORMS|FORM)?(C|LC)?([KD])?([LW])?$/;
+const PRINT_PATTERN = /^PRINT(SINGLE)?(V|S|FORMS|FORM)?(C|LC)?([KD])?([LWN])?$/;
 export const PRINTDATA_PATTERN = /^PRINTDATA([KD])?([LW])?$/;
-// PRINT(SINGLE)(|V|S|FORM|FORMS)(|C|LC)(|K|D)(|L|W), with Emuera's combination rules.
+// PRINT(SINGLE)(|V|S|FORM|FORMS)(|C|LC)(|K|D)(|L|W|N), with Emuera's combination rules.
 const printVariants = new Map<string, PrintVariant | undefined>();
 // Memoized because the runtime classifies every executed instruction.
 export function printVariant(op: string): PrintVariant | undefined {
@@ -51,7 +51,7 @@ export function printVariant(op: string): PrintVariant | undefined {
   let variant: PrintVariant | undefined;
   if (match) {
     const [, single, argument = "", align = "", mode = "", end = ""] = match;
-    if (!(single && (align || end)) && !(align && argument !== "" && argument !== "FORM"))
+    if (!(single && (align || end)) && !(align && argument !== "" && argument !== "FORM") && !(end === "N" && (align || mode)))
       variant = { argument, single: !!single, align, mode, end } as PrintVariant;
   }
   printVariants.set(op, variant);
@@ -196,5 +196,5 @@ function methodSafe(op: string): boolean {
   if (/^(?:T?ONE|B|T)?INPUTS?$/.test(op) || op === "INPUTANY") return false;
   if (/^(?:TRY|TRYC)(?:CALL|JUMP)(?:FORM)?$/.test(op)) return false;
   if (["CALL", "JUMP", "CALLFORM", "JUMPFORM"].includes(op)) return false;
-  return !op.endsWith("W") || (!printVariant(op) && !isPrintData(op));
+  return !/[WN]$/.test(op) || (!printVariant(op) && !isPrintData(op));
 }

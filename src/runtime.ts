@@ -106,6 +106,8 @@ export interface InputRequest {
   blocking?: boolean;
   /** FORCEWAIT stops automatic message skipping without disabling click-to-continue. */
   stopSkipping?: boolean;
+  /** PRINT...N waits without terminating the current output line. */
+  keepLineOpen?: boolean;
   /** AWAIT yields to the host even when SKIPDISP is hiding output. */
   sleep?: boolean;
 }
@@ -1334,9 +1336,8 @@ export class Runtime {
             this.timed = undefined;
             continue;
           }
-          // Emuera's RunEmueraProgram PrintFlush(false)s whenever the script stops to wait, so a line left open
-          // (PRINT "[0] - Return " then INPUT) is finished and the echoed input goes on a line of its own.
-          if (this.lineOpen) {
+          // Ordinary waits flush an open line (PRINT then INPUT); PRINT...N explicitly keeps it open.
+          if (this.lineOpen && !next.value.input.keepLineOpen) {
             const flush = this.emit("text", "", true);
             if (flush !== SKIPPED && "output" in flush) output.push(flush.output);
           }
@@ -3038,8 +3039,9 @@ export class Runtime {
             : variant.argument === "V" ? this.arguments(args).map((part) => String(ev(part))).join("")
             : args;
           const value = this.kana(this.printC(raw, variant.align), variant.mode);
-          yield this.emit("text", value, variant.single || variant.end !== "", false, { style: this.printStyle(variant.mode), single: variant.single, cell: !!variant.align && this.isButtonCell(value) });
+          yield this.emit("text", value, variant.single || variant.end === "L" || variant.end === "W", false, { style: this.printStyle(variant.mode), single: variant.single, cell: !!variant.align && this.isButtonCell(value) });
           if (variant.end === "W") yield { input: { kind: "wait" } };
+          else if (variant.end === "N") yield { input: { kind: "wait", keepLineOpen: true } };
         } else if (special && (op === "STRDATA" || op.startsWith("PRINTDATA") && isPrintData(op))) {
           const groups: Instruction[][] = [];
           for (let i = pc + 1; i < target; i++) {

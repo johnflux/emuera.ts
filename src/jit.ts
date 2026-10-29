@@ -75,7 +75,7 @@ const INPUT_OPS = new Set([
 function waits(op: string): boolean {
   if (op === "CALLEVENT" || op === "TRYCALLLIST" || op === "TRYJUMPLIST") return true;
   if (INPUT_OPS.has(op)) return true;
-  return op.startsWith("PRINT") && op.endsWith("W") && (!!printVariant(op) || isPrintData(op));
+  return op.startsWith("PRINT") && /[WN]$/.test(op) && (!!printVariant(op) || isPrintData(op));
 }
 
 // Runtime helpers referenced by generated code; each mirrors `evaluate` or the interpreter exactly.

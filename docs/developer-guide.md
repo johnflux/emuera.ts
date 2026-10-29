@@ -434,6 +434,13 @@ does not enter the scrollback. Echoed input counts as a logical line for
 As in Emuera (which `PrintFlush`es whenever the script stops to wait), a line
 left open when input is requested (`PRINT [0] - Return` then `INPUT`) is ended
 there, so the echo is a line of its own and `CLEARLINE 1` removes only the echo.
+`PRINTN`, `PRINTFORMN`, `PRINTFORMSN`, `PRINTVN`, and `PRINTSN` are exceptions:
+they wait for a click/key without ending the current line, so subsequent output
+continues on that line. Unlike the L/W suffixes, N cannot be combined with K/D,
+PRINTC/PRINTLC, or PRINTSINGLE.
+These suffix rules and the distinction between W and N follow the
+[PRINT reference](https://evilmask.gitlab.io/emuera.em.doc/Reference/PRINT.html);
+the portable print fixture was also run unchanged under native Emuera.
 Output continued past a click-to-continue wait stays bright: a run of dialogue
 greys out together only once the game stops at a real input (a menu or prompt),
 so new choices are shown against greyed history.
@@ -536,7 +543,8 @@ game's `ERB/`, `CSV/`, and `resources/` directories.
 
 `test/native-compat.test.ts` and `test/history-compat.test.ts` run the ERB fixtures
 in `test/fixtures/` in interpreted and warmed JIT execution. The control-flow,
-numeric, history (including `native-history-arrays.erb`), and string-builtin
+numeric, history (including `native-history-arrays.erb` and
+`native-history-print.erb`), and string-builtin
 fixtures were also run unchanged with **Emuera.NET 1.824+v24+EMv18+EEv56
 NAudio** under Wine. To repeat the native check, make a throwaway game folder
 with empty `CSV/` and an `ERB/` containing one fixture, copy a compatible
@@ -594,7 +602,7 @@ confirm the prefix behavior; game-directory confinement and symlink protection
 remain enforced.
 
 Expression functions reject executed native method-unsafe instructions such as
-CALL/JUMP, RETURN, BEGIN, QUIT and waits, including PRINT...W variants.
+CALL/JUMP, RETURN, BEGIN, QUIT and waits, including PRINT...W and PRINT...N variants.
 Plain printing, RETURNF and CALLF remain allowed. The existing eraFL VARI/VARS
 local-declaration extension remains supported inside expression functions.
 The main-screen hotpatch's command-rendering helper is an ordinary CALL/RETURN

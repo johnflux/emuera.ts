@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
+import { isSupported } from "../src/compiler.js";
 import { emptyGame, indexScript, loadGame, type Game } from "../src/loader.js";
 import { Runtime } from "../src/runtime.js";
 
@@ -14,6 +15,57 @@ function run(body: string, jit: boolean, setup?: (game: Game) => void) {
 }
 const texts = (snapshot: ReturnType<Runtime["start"]>) =>
   snapshot.output.filter((line) => line.type === "text").map((line) => line.text);
+
+test("native PRINTN fixture preserves lines through waits, prefetch and warmed JIT callers", async () => {
+  const source = await readFile(new URL("./fixtures/native-history-print.erb", import.meta.url), "utf8");
+  for (const jit of [false, true]) for (const prefetch of [false, true]) {
+    const game = emptyGame();
+    indexScript(game, source, "native-history-print.erb");
+    const runtime = new Runtime(game, 50_000, { jit });
+    let snapshot = runtime.start();
+    let line = "", waits = 0;
+    const lines: string[] = [];
+    while (true) {
+      for (const output of snapshot.output) if (output.type === "text") {
+        line += output.text;
+        if (output.newline) { lines.push(line); line = ""; }
+      }
+      if (snapshot.status !== "waiting") break;
+      assert.equal(snapshot.input?.kind, "wait");
+      assert.equal(snapshot.input.keepLineOpen, true);
+      assert.equal(snapshot.output.some((output) => "newline" in output && output.newline), waits % 5 === 0 && waits > 0);
+      assert.ok(++waits <= 25, "fixture should finish after 25 waits");
+      if (prefetch) assert.equal(runtime.prefetch(), true);
+      snapshot = runtime.input("");
+    }
+    assert.equal(snapshot.status, "halted", JSON.stringify(snapshot.error));
+    assert.equal(waits, 25);
+    assert.equal(line, "");
+    assert.deepEqual(lines, [
+      ...Array(5).fill("prefix:literal;still-text:form57string:forms7:end"), "DONE", "Log written to emuera.log",
+    ]);
+  }
+});
+
+test("PRINTN supports only native combinations and obeys SKIPDISP and message skipping", () => {
+  for (const op of ["PRINTN", "PRINTFORMN", "PRINTFORMSN", "PRINTVN", "PRINTSN"]) assert.ok(isSupported(op));
+  for (const op of ["PRINTKN", "PRINTDN", "PRINTFORMKN", "PRINTCN", "PRINTLCN", "PRINTSINGLEN", "PRINTDATAN"])
+    assert.equal(isSupported(op), false, op);
+  for (const jit of [false, true]) {
+    const snapshot = run(`@SYSTEM_TITLE
+SKIPDISP 1
+PRINTN hidden
+SKIPDISP 0
+SKIPLOG 1
+PRINT before:
+PRINTN skipped
+PRINTL :after
+QUIT`, jit);
+    assert.equal(snapshot.status, "halted", JSON.stringify(snapshot.error));
+    assert.deepEqual(texts(snapshot), ["before:", "skipped", ":after"]);
+    assert.deepEqual(snapshot.output.filter((output) => output.type === "text").map((output) => output.newline), [false, false, true]);
+  }
+});
 
 test("native array fixture covers VARSETEX expression results, embedded indices and numeric versus string rows", async () => {
   const source = await readFile(new URL("./fixtures/native-history-arrays.erb", import.meta.url), "utf8");
@@ -172,7 +224,8 @@ test("expression functions reject unsafe executed statements in interpreted and 
   for (const jit of [false, true]) for (const statement of [
     "CALL NORMAL", "TRYCALL MISSING", "CALLFORM NORMAL", "JUMP NORMAL", "RETURN 7", "QUIT",
     "BEGIN SHOP", "PRINTW not allowed", "PRINTDATAW\nDATA not allowed\nENDDATA", "WAIT", "INPUT",
-    "TRYCALLLIST\nFUNC NORMAL\nENDFUNC", "OUTPUTLOG",
+    "TRYCALLLIST\nFUNC NORMAL\nENDFUNC", "OUTPUTLOG", "PRINTN unsafe", "PRINTFORMN unsafe",
+    'PRINTFORMSN "unsafe"', "PRINTVN 1", 'PRINTSN "unsafe"',
   ]) {
     const snapshot = run(`@SYSTEM_TITLE
 FOR A,0,5
