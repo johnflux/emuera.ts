@@ -1,0 +1,5 @@
+#DIM ProbeGlobal
+#DIMS ProbeWords
+#DEFINE ProbeOne 1
+#DEFINE ProbeTwo 2
+#DIM GLOBAL NativeInitial = 11

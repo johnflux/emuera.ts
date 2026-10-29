@@ -183,6 +183,8 @@ export function parseExpression(source: string): Expr {
 }
 export interface EvaluationContext {
   get(name: string, indices: Expr[]): Value;
+  /** Optional Emuera-Anchor translation used only by translated FORM evaluation. */
+  translateName?(name: string, value: Value): Value;
   call(name: string, args: (Value | undefined)[]): Value;
   referenceCall?(name: string, args: Expr[]): Value | undefined;
   set?(name: string, indices: Expr[], value: Value): void;
@@ -198,7 +200,10 @@ const COMPARISONS = new Set(["==", "!=", "<", ">", "<=", ">="]);
 export function evaluate(expr: Expr, context: EvaluationContext): Value {
   switch (expr.kind) {
     case "literal": return expr.value;
-    case "variable": return context.get(expr.name, expr.indices);
+    case "variable": {
+      const value = context.get(expr.name, expr.indices);
+      return context.translateName?.(expr.name, value) ?? value;
+    }
     case "call": {
       const result = context.referenceCall?.(expr.name, expr.args);
       if (result !== undefined) return result;

@@ -180,6 +180,32 @@ RETURN`, undefined, { jit }).start();
   }
 });
 
+test("TOSTR custom positive, negative and zero sections follow native selection and rounding", () => {
+  for (const jit of [false, true]) {
+    const result = runtime(`@SYSTEM_TITLE
+FOR A, 0, 45
+CALL SECTION_FORMATS
+NEXT
+RETURN
+@SECTION_FORMATS
+PRINTSL TOSTR(7, " 000;-000")
+PRINTSL TOSTR(-7, " 000;-000")
+PRINTSL TOSTR(0, "#;(#);zero")
+PRINTSL TOSTR(-7, "000;;")
+PRINTSL TOSTR(0, "000;;")
+PRINTSL TOSTR(-7, ";(000)")
+PRINTSL TOSTR(-1, "0,;(0,);zero")
+PRINTSL TOSTR(1, "0,;(0,);zero")
+PRINTSL TOSTR(-1000, "0,;(0,);zero")
+PRINTSL TOSTR(0, "0;(0);'none;today'")
+PRINTSL TOSTR(-9223372036854775808, "0;(0);zero")
+RETURN`, undefined, { jit }).start();
+    assert.deepEqual(texts(result), Array(45).fill([
+      " 007", "-007", "zero", "-007", "000", "(007)", "zero", "zero", "(1)", "none;today", "(9223372036854775808)",
+    ]).flat());
+  }
+});
+
 test(".NET escaped commas work in Unicode regexes without changing escaped backslashes or invalid escapes", () => {
   const result = runtime(String.raw`@SYSTEM_TITLE
 PRINTSL REPLACE("a,b,c", "\,(?!.*\,)", " and ")
@@ -1017,6 +1043,7 @@ DT_CREATE "db"
 DT_COLUMN_ADD "db", "name"
 DT_COLUMN_ADD "db", "age", "int16"
 DT_COLUMN_ADD "db", "height", "int16"
+DT_NOCASE "db", 1
 DT_ROW_ADD "db", "name", "Ann", "age", 11, "height", 132
 DT_ROW_ADD "db", "name", "bob", "age", 21, "height", 164
 DT_ROW_ADD "db", "name", "Cy", "age", 18, "height", 159
@@ -1560,7 +1587,7 @@ IF RESULT == 0
 ENDIF
 ADDCHARA 0, 0, 0
 TARGET = 1
-GRID:1:2 = 12
+GRID:1:1:2 = 12
 GRID:0:1:0 = 1
 LABEL:2:1 = two
 TEMP = 5

@@ -132,6 +132,8 @@ a { color: #8ddaff; }
 .has-tooltip:focus-visible { outline: 1px dotted #aaa; outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { .has-tooltip, .line button.choice.has-tooltip, .has-tooltip .interactive-label { transition: none; } }
 #game-tooltip { position: fixed; z-index: 10; inset: auto; margin: 0; max-width: min(480px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow: auto; padding: 10px 12px; border: 1px solid #777; background: #181818; color: #fff; font-size: 14px; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; pointer-events: none; box-shadow: 0 3px 12px #000; }
+#game-tooltip:has(> canvas) { padding: 0; border: 0; }
+#game-tooltip > canvas { display: block; }
 /* Emuera images don't size their line: the holder is zero-height at the line top and the picture overflows below. */
 .sprite { display: inline-block; position: relative; height: 0; vertical-align: top; }
 .sprite-clip { position: absolute; left: 0; overflow: hidden; }

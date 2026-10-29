@@ -54,7 +54,7 @@ interface Binding { g: number; st: number; h: Variables; own: boolean; s: Resolv
 // Names the evaluation context answers before consulting variables.
 const SPECIAL = new Set(["LINECOUNT", "LASTLOAD_VERSION", "LASTLOAD_NO", "LASTLOAD_TEXT", "__INT_MAX__", "__INT_MIN__", "__FILE__", "__FUNCTION__", "__LINE__", "DRAWLINESTR", "GAMEBASE_VERSION", "RAND"]);
 const THRESHOLD = 2;
-const LOOP_STATE_OPS = new Set(["FOR", "REPEAT", "NEXT", "REND", "BREAK", "CONTINUE", "RESTART", "GOTO", "GOTOFORM", "TRYGOTO", "TRYGOTOFORM", "TRYCALLLIST", "TRYJUMPLIST", "TRYGOTOLIST"]);
+const LOOP_STATE_OPS = new Set(["FOR", "REPEAT", "NEXT", "REND", "BREAK", "CONTINUE", "RESTART", "GOTO", "GOTOFORM", "TRYGOTO", "TRYGOTOFORM", "TRYCGOTO", "TRYCGOTOFORM", "TRYCALLLIST", "TRYJUMPLIST", "TRYGOTOLIST"]);
 const LITERALS: Expr[] = [];
 const indexLiteral = (i: number): Expr => LITERALS[i] ??= { kind: "literal", value: BigInt(i) };
 
@@ -68,7 +68,7 @@ const CALL_OPS = new Set([
 // instruction runs to completion when single-stepped (output is deferred as `advance` would have collected it).
 const INPUT_OPS = new Set([
   "INPUT", "INPUTS", "ONEINPUT", "ONEINPUTS", "TINPUT", "TINPUTS", "TONEINPUT", "TONEINPUTS",
-  "BINPUT", "BINPUTS", "INPUTANY",
+  "BINPUT", "BINPUTS", "ONEBINPUT", "ONEBINPUTS", "INPUTANY",
   "WAIT", "FORCEWAIT", "TWAIT", "WAITANYKEY", "STOPCALLTRAIN", "INPUTMOUSEKEY", "AWAIT",
 ]);
 /** Whether running this (non-call) instruction may wait for input. */
@@ -400,7 +400,7 @@ class Generator {
         return `${p} ${cleared.map((l) => `${state(l.start)} = false; `).join("")}${jump(destination)}`;
       }
       // Computed or optional labels: the interpreter runs the routine (see LOOP_STATE_OPS).
-      case "GOTOFORM": case "TRYGOTO": case "TRYGOTOFORM": throw new Unsupported();
+      case "GOTOFORM": case "TRYGOTO": case "TRYGOTOFORM": case "TRYCGOTO": case "TRYCGOTOFORM": throw new Unsupported();
       case "RETURN": {
         if (!args) return `${p} H.ret(R, C, [0n]); return undefined;`;
         let values: string[];

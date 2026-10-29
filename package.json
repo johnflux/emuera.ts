@@ -8,6 +8,8 @@
     "node": ">=22.6"
   },
   "dependencies": {
+    "@napi-rs/canvas": "^0.1.80",
+    "@napi-rs/image": "^1.16.0",
     "@xmldom/xmldom": "^0.9.12",
     "parse5": "^8.0.0",
     "xpath": "^0.0.35",

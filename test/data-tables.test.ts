@@ -28,7 +28,8 @@ test("data tables retain typed cells, stable IDs, nullable defaults and ordered 
   assert.equal(exec("DT_CELL_ISNULL", "t", 0n, "completed"), 1n);
   assert.equal(exec("DT_CELL_GET", "t", second, "completed", 1n), 2n);
   assert.deepEqual(tables.execute("DT_SELECT", ["t", "label = 'O''Brien'"]), { value: 2n, selected: [first, second] });
-  // .NET DataTable string comparisons are case-insensitive unless CaseSensitive is set.
+  assert.deepEqual(tables.execute("DT_SELECT", ["t", "label = 'o''brien'"]), { value: 0n, selected: [] });
+  assert.equal(exec("DT_NOCASE", "t", 1n), 1n);
   assert.deepEqual(tables.execute("DT_SELECT", ["t", "label = 'o''brien'"]), { value: 2n, selected: [first, second] });
   assert.deepEqual(tables.execute("DT_SELECT", ["t", "completed = 2"]), { value: 1n, selected: [second] });
   assert.equal(exec("DT_CELL_SET", "t", first, "completed", -1n, 1n), 1n);

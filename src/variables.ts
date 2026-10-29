@@ -48,6 +48,7 @@ function parseAddress(variable: Variable, address: string): number | undefined {
 const SYMBOL_ALIASES: Record<string, string> = {
   MAXBASE: "BASE", DOWNBASE: "BASE", LOSEBASE: "BASE", JUEL: "PALAM", GOTJUEL: "PALAM", UP: "PALAM", DOWN: "PALAM",
   CUP: "PALAM", CDOWN: "PALAM", NOWEX: "EX", ITEMSALES: "ITEM", ITEMPRICE: "ITEM",
+  CDFLAGNAME1: "CDFLAG1", CDFLAGNAME2: "CDFLAG2",
 };
 const symbolTables = new Map<string, string>();
 /** The CSV name table a variable's indices are named by (TRAINNAME → TRAIN, MAXBASE → BASE). */
@@ -143,6 +144,23 @@ export class Variables {
       else variable.values.clear();
       if (variable.character) variable.dimensions[0] = 0;
     }
+  }
+  resetGlobals(context: EvaluationContext): void {
+    for (const name of this.globalNames()) {
+      const variable = this.resolve(name, context);
+      if (this.declarations.has(name)) {
+        this.values.delete(name);
+        this.invalidate();
+        const initial = this.resolve(name, context);
+        variable.values = initial.values;
+        this.values.set(name, variable);
+        this.invalidate();
+      } else variable.values.clear();
+    }
+  }
+  declaredNames(): string[] {
+    return [...new Set([...this.values.keys(), ...this.declarations.keys()])].map((name) =>
+      /^#DIMS?\s+(?:(?:CONST|DYNAMIC|GLOBAL|SAVEDATA|REF|CHARADATA)\s+)*([^\s,=]+)/i.exec(this.declarations.get(name)?.text ?? "")?.[1] ?? name);
   }
   declare(line: Line, local = false): void {
     const match = /^#DIM(S)?\s+((?:(?:CONST|DYNAMIC|GLOBAL|SAVEDATA|REF|CHARADATA)\s+)*)([^\s,=]+)(.*)$/i.exec(line.text);
@@ -513,7 +531,7 @@ export class Variables {
       if (this.cacheGeneration !== GENERATION.value) { this.resolved.clear(); this.known.clear(); this.cacheGeneration = GENERATION.value; }
       entry = {
         name, variable, symbols: this.game.names.get(symbolTable(name)),
-        dimensionSymbols: variable.dimensions.map((_, i) => this.game.names.get(`${name}@${i + 1}`)),
+        dimensionSymbols: variable.dimensions.map((_, i) => this.game.names.get(name === "CDFLAG" && i > 0 ? `CDFLAG${i}` : `${name}@${i + 1}`)),
       };
       this.resolved.set(written, entry);
     }
@@ -527,6 +545,8 @@ export class Variables {
     const count = indices.length;
     const dimensions = variable.dimensions;
     const rank = dimensions.length;
+    if (variable.character && rank === 3 && count !== rank)
+      throw new EraError(`Expected ${rank} indices for ${name}; cannot omit character-array arguments`);
     const stride = variable.strides ?? strides(variable);
     if (!count) {
       let index = 0;
@@ -629,6 +649,8 @@ export function locate(slot: Resolved, context: EvaluationContext, count: number
   const { name, variable } = slot;
   const dimensions = variable.dimensions;
   const rank = dimensions.length;
+  if (variable.character && rank === 3 && count !== rank)
+    throw new EraError(`Expected ${rank} indices for ${name}; cannot omit character-array arguments`);
   const stride = variable.strides ?? strides(variable);
   if (!count) {
     if (variable.character) {

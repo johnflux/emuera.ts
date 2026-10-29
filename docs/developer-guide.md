@@ -541,16 +541,19 @@ game's `ERB/`, `CSV/`, and `resources/` directories.
 
 ### Native compatibility checks
 
-`test/native-compat.test.ts` and `test/history-compat.test.ts` run the ERB fixtures
+`test/native-compat.test.ts`, `test/history-compat.test.ts`, and
+`test/remaining-history.test.ts` run the ERB fixtures
 in `test/fixtures/` in interpreted and warmed JIT execution. The control-flow,
 numeric, history (including `native-history-arrays.erb` and
-`native-history-print.erb`), and string-builtin
+`native-history-print.erb`, and `native-history-remaining.erb`), and string-builtin
 fixtures were also run unchanged with **Emuera.NET 1.824+v24+EMv18+EEv56
 NAudio** under Wine. To repeat the native check, make a throwaway game folder
 with empty `CSV/` and an `ERB/` containing one fixture, copy a compatible
 `Emuera.exe` there, enable `システム関数の上書きを許可する:YES` in
 `emuera.config`, and run `wine ./Emuera.exe` from that folder. For
-`native-history.erb`, also copy `native-history.erh` into `ERB/`. Each fixture
+`native-history.erb`, also copy `native-history.erh` into `ERB/`. For
+`native-history-remaining.erb`, copy its matching `.erh` and put
+`CDFLAG,2,3` in `CSV/VariableSize.csv`. Each fixture
 writes `emuera.log` with `OUTPUTLOG` and ends at `DONE`; compare its printed
 lines with the expectations in the TypeScript test. Do not run these probes
 inside an installed game's directory. The browser runtime additionally prints
@@ -600,6 +603,57 @@ while resolving directories case-insensitively. Native probes and the
 [ENUMFILES reference](https://evilmask.gitlab.io/emuera.em.doc/Reference/ENUMFILES.html)
 confirm the prefix behavior; game-directory confinement and symlink protection
 remain enforced.
+Files written by string-path `SAVETEXT` also participate in `ENUMFILES`, including
+virtual directories not present on disk, case-insensitive `LOADTEXT`, and
+prefetch staging. They remain in the save store; installed game files are not changed.
+
+The remaining-history regressions cover `TRYCGOTO`/`TRYCGOTOFORM`,
+`ENUMVAR`/`ENUMMACRO` begins-with/ends-with/contains searches, `RESETGLOBAL`,
+`CUPCHECK`, `GETFOCUSCOLOR`, `GETLINESTR`, and `GETDISPLAYLINE`.
+Enumeration preserves declaration spelling and omits routine-private variables.
+RESETGLOBAL restores declared global initializers rather than erasing them.
+CDFLAG supports both data axes, `CDFLAG1.csv`/`CDFLAG2.csv` symbols,
+`CDFLAGNAME1`/`CDFLAGNAME2`, character reordering, and binary save round trips.
+Its default dimensions are 1 by 1; CSV names do not enlarge those dimensions.
+Two-dimensional character arrays, built-in CDFLAG and declared CHARADATA alike,
+require the character index and both data indices; TARGET shorthand is not valid.
+Native EE falls through the first branch of a missing conditional goto, even
+for FORM targets; it does not enter CATCH. Native CUPCHECK prints the applied
+change despite the older reference describing it as silent.
+
+`REPLACE` mode 1 consumes a one-dimensional string array, one literal replacement
+per match (exhausted entries become empty); mode 2 replaces literal substrings.
+Ordinary three-argument regex replacements keep their .NET token behavior.
+Native four-argument REPLACE reads the mode twice, before and after the source;
+this observable order is retained for expressions with side effects.
+Custom `TOSTR` formats support positive/negative/zero sections, empty-section
+fallback, and selecting the zero section after scaling rounds a value to zero.
+This is not arbitrary .NET custom-format support.
+
+`ONEBINPUT`/`ONEBINPUTS` combine single-character answers with live-button
+validation. Defaults and skipping use complete values, not their first character.
+`CLEARTEXTBOX` synchronizes the browser input field. `TOOLTIP_IMG` enables
+graphics-ID titles for custom tooltips and falls back to text when an ID is absent.
+`DT_NOCASE` changes string filter comparisons per table, including cached filters
+and XML round trips; newly created tables are case-sensitive, as in native EE.
+Active timed numeric inputs reject empty submissions; only timeout (or an
+input with no running timer) uses the numeric default.
+
+Graphics readback (`GGETCOLOR`, `SPRITEGETCOLOR`) reports unsigned ARGB, including
+low-alpha pixel values and live static-sprite crops. `GDASHSTYLE` affects server
+readback and browser drawing; `CBGSETG`/`CBGCLEAR` also work as expressions.
+`GSAVE`/`GLOAD` persist real `imgNNNN.png` files through the save store and refuse
+missing/corrupt images or loading into an existing graphics ID. Storage errors
+are surfaced rather than mistaken for a missing image.
+The server uses the native Node modules `@napi-rs/canvas` and `@napi-rs/image`;
+dependency installation must include the package for the host OS/CPU.
+Fonts, text rasterization, triangle dash caps, and antialiasing can differ from
+Windows GDI+. Readback of animation sprites is explicitly unsupported.
+`SETANIMETIMER` sets RESULT to 1 in the verified native EE build. Explicit
+positive intervals throttle browser animation during ordinary input waits;
+nonpositive intervals stop refreshes, and timed input waits suppress them.
+Without an explicit timer command the browser retains its existing automatic
+animation behavior.
 
 Expression functions reject executed native method-unsafe instructions such as
 CALL/JUMP, RETURN, BEGIN, QUIT and waits, including PRINT...W and PRINT...N variants.
@@ -634,9 +688,55 @@ Reference checks:
 [.NET regex substitutions](https://learn.microsoft.com/en-us/dotnet/standard/base-types/substitutions-in-regular-expressions),
 and [.NET character classes](https://learn.microsoft.com/en-us/dotnet/standard/base-types/character-classes-in-regular-expressions).
 Other engines' tests are leads, not an oracle: native EE reports errors for
-numeric overflow and uses culture-dependent number formatting. Broader `TOSTR`
-formats, additional `REPLACE` modes, Anchor translation, and
-full filename-collation/priority behavior still need separate compatibility work.
+numeric overflow and uses culture-dependent number formatting. Its one-letter
+built-in variables cannot be redeclared as private `#DIM` parameters, bare CSV
+labels are not ordinary expression variables, and string FORM substitutions use
+`%...%`, not numeric `{...}`. `ADDDEFCHARA` is restricted to the direct
+`@SYSTEM_TITLE` routine. SP commands require the compatibility option; current EE
+creates ordinary characters with `ADDSPCHARA`, and `GETSPCHARA` still returns -1.
+`INITRAND` restores previously dumped state; it is not seeded by an argument.
+Before a dump, native's zeroed RANDDATA produces zeros, so a repeatability test
+there is not evidence that an INITRAND seed works. This runtime uses a different
+random generator and does not emulate invalid/uninitialized RANDDATA.
+Puchi-only FADE/SHAKE/font-edge/OUTPUTHINTS effects are not copied as no-ops.
+Broader `TOSTR` formats, complete Anchor translation semantics, and full
+filename-collation/priority behavior remain separate compatibility work.
+
+### Offline Anchor name translations
+
+This is script compatibility, not a second machine-translation service. Chrome's
+on-device Translator API and the browser's page translation remain unchanged.
+For games containing `Emuera-Anchor.exe`, recognized top-level `CSV/*_TR.csv`
+files supply original-name/translated-name pairs. Basic FORM reads such as
+`%ABLNAME:LOCAL%` use the supplied name translation; translated names can then
+index the corresponding CSV-backed array. Subdirectory translation files and
+unknown translation-table names are not used. PALAM uses `Param_TR.csv` when
+`PARAM.CSV` exists, otherwise `Palam_TR.csv`.
+
+The loader's `anchorTranslation` option explicitly enables this subset for an
+Anchor game distributed without its executable, or disables it when needed.
+Ordinary EE games do not acquire translation aliases merely because these
+files exist. This gate intentionally avoids changing their script semantics.
+Malformed translation rows and duplicate original names stop loading with a
+filename/line error, matching Anchor rather than emuera-tty's skip-and-warn
+behavior. Whitespace, comments and brace-continued entries are preserved.
+
+The installed Anchor executable's retained Wine probe output verifies
+`NAME=[Technique]` followed by `VALUE=42` after assigning through that translated
+name; malformed/duplicate probes verify initialization failure. The original
+managed assembly was also inspected without execution to confirm the table
+list, exact-key mappings, comment handling and fatal validation. No Windows .NET
+installation is required by this application or its tests.
+This is not full Anchor support: translation memory, ALL fallbacks, TR_NAME,
+TRCHARA, translated literals and complete translation-context propagation are
+not implemented. The browser translator is still responsible for automatic
+translation of displayed text.
+The history/test audit exercised 21 executable topic suites (plus shared helper
+files). Native-invalid test constructs were checked separately, not adopted as
+compatibility requirements: private one-letter names, bare CSV labels in ordinary
+expressions, string values in numeric FORM braces, SP defaults, and INITRAND seeds.
+The reference timed-input script also assumes defaults on empty submissions;
+native timed string input accepts empty text, while timed numeric input rejects it.
 
 ## Implemented subset
 
@@ -999,7 +1099,7 @@ Not supported: older text-format Emuera saves, `BEGIN` states other
 than `FIRST`, full character-management APIs, general random APIs, other event
 dispatch or overloaded functions, general macro expansion and replace tables,
 the full configuration and
-variable-size rules, audio APIs, pixel read-back, arbitrary HTML/CSS, resource animations,
+variable-size rules, audio APIs, arbitrary HTML/CSS, exact Windows animation timing,
 or exact Emuera layout/line-measurement semantics. `MAXWIDTH()` uses terminal
 columns measured at browser run start, never fewer than the configured window
 width (default 120 in direct/API runs); restart
@@ -1008,11 +1108,9 @@ fixed window width (for example the Palam list's items per row), so a wider brow
 can wrap them early. `STRLENS`/`SUBSTRING` count CP932 bytes. Regex helpers use
 JavaScript regex syntax plus .NET inline options (`(?i)`, `(?m)`, `(?s)`), not
 all .NET regex extensions. Only argument-free flat
-print-data blocks, basic/padded FORM interpolation, and zero-padded/hexadecimal
+print-data blocks, basic/padded FORM interpolation, and standard/sectioned numeric
 `TOSTR` formatting are supported; more complex forms still fail explicitly.
-The full data-table extension is not implemented: XML import/export and
-persistence, row/column removal, array-reference argument forms, sorting, custom
-selection destinations, and general filter expressions still fail explicitly.
+Data-table filters support a defined expression subset, not arbitrary .NET expressions.
 Tables are isolated per runtime and are not saved by `SAVEGLOBAL`; IDs use a
 monotonic session-local counter rather than the native engine's time-derived values.
 The colored-map renderer and subsequent new-game setup remain unsupported.

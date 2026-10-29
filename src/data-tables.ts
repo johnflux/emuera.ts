@@ -16,7 +16,7 @@ export const TABLE_OPERATIONS = new Set([
   "DT_ROW_ADD", "DT_ROW_LENGTH", "DT_COLUMN_LENGTH", "DT_CELL_GET",
   "DT_CELL_GETS", "DT_CELL_ISNULL", "DT_CELL_SET", "DT_SELECT",
   "DT_ROW_SET", "DT_ROW_REMOVE", "DT_COLUMN_EXIST", "DT_COLUMN_REMOVE",
-  "DT_COLUMN_OPTIONS", "DT_COLUMN_NAMES", "DT_TOXML", "DT_FROMXML",
+  "DT_COLUMN_OPTIONS", "DT_COLUMN_NAMES", "DT_TOXML", "DT_FROMXML", "DT_NOCASE",
 ]);
 const escape = (value: string): string => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
@@ -47,7 +47,7 @@ export class DataTables {
 
   execute(op: string, args: (Value | undefined)[]): TableResult {
     const arities: Record<string, [number, number]> = {
-      DT_CREATE: [1, 1], DT_EXIST: [1, 1], DT_RELEASE: [1, 1], DT_CLEAR: [1, 1],
+      DT_CREATE: [1, 1], DT_EXIST: [1, 1], DT_RELEASE: [1, 1], DT_CLEAR: [1, 1], DT_NOCASE: [2, 2],
       DT_COLUMN_ADD: [2, 4], DT_ROW_ADD: [1, 10000], DT_ROW_LENGTH: [1, 1],
       DT_COLUMN_LENGTH: [1, 1], DT_CELL_GET: [3, 4], DT_CELL_GETS: [3, 4],
       DT_CELL_ISNULL: [3, 4], DT_CELL_SET: [3, 5], DT_SELECT: [1, 4],
@@ -70,7 +70,7 @@ export class DataTables {
     if (op === "DT_EXIST") return result(table ? 1n : 0n);
     if (op === "DT_CREATE") {
       if (table) return result(0n);
-      this.tables.set(name, { name, columns: new Map([["id", { type: "int64", nullable: false }]]), rows: [] });
+      this.tables.set(name, { name, columns: new Map([["id", { type: "int64", nullable: false }]]), rows: [], caseSensitive: true });
       return result(1n);
     }
     if (op === "DT_FROMXML") {
@@ -81,6 +81,7 @@ export class DataTables {
     }
     if (!table) return result(op === "DT_CELL_GETS" || op === "DT_TOXML" ? "" : op === "DT_CELL_GET" || op === "DT_COLUMN_EXIST" ? 0n : -1n);
     switch (op) {
+      case "DT_NOCASE": table.caseSensitive = n(1) === 0n; return result(1n);
       case "DT_CLEAR": table.rows = []; return result(1n);
       case "DT_ROW_LENGTH": return result(BigInt(table.rows.length));
       case "DT_COLUMN_LENGTH": return result(BigInt(table.columns.size));
@@ -229,7 +230,7 @@ export class DataTables {
       `              <xs:element name="${escape(column)}" type="${XSD_TYPES[type]}"${fallback === undefined ? "" : ` default="${escape(String(fallback))}"`}${nullable ? ` minOccurs="0"` : ""} />\r\n`).join("");
     return `<?xml version="1.0" encoding="utf-16"?>\r\n<xs:schema id="NewDataSet" xmlns="" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">\r\n`
       + `  <xs:element name="NewDataSet" msdata:IsDataSet="true" msdata:MainDataTable="${name}" msdata:UseCurrentLocale="true">\r\n    <xs:complexType>\r\n      <xs:choice minOccurs="0" maxOccurs="unbounded">\r\n`
-      + `        <xs:element name="${name}">\r\n          <xs:complexType>\r\n            <xs:sequence>\r\n${columns}            </xs:sequence>\r\n          </xs:complexType>\r\n        </xs:element>\r\n`
+      + `        <xs:element name="${name}"${table.caseSensitive ? ' msdata:CaseSensitive="true"' : ""}>\r\n          <xs:complexType>\r\n            <xs:sequence>\r\n${columns}            </xs:sequence>\r\n          </xs:complexType>\r\n        </xs:element>\r\n`
       + `      </xs:choice>\r\n    </xs:complexType>\r\n  </xs:element>\r\n</xs:schema>`;
   }
 

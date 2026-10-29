@@ -402,15 +402,30 @@ function describe(element, description) {
   element.classList.add("has-tooltip");
   element.dataset.tooltip = description;
   if (!element.matches("button, a[href]")) element.tabIndex = 0;
-  function show() {
+  async function show() {
     if (busy || !element.closest(".screen.is-active, .cbg-layer") || element.matches(".is-stale")) return;
     if (element.closest(".era-occupant-list") && element.querySelector(".sprite")) return;
     hideTooltip();
     tooltipTarget = element;
-    // Each line is translated on its own so line breaks survive translation.
-    const lines = description.split("\n");
-    const translated = () => lines.map((line) => translation.text(line, () => { if (tooltipTarget === element) tooltip.textContent = translated(); })).join("\n");
-    tooltip.textContent = translated();
+    const id = description.trim();
+    const picture = tooltipSettings?.custom && tooltipSettings.image && /^[+-]?\d+$/.test(id)
+      && Number(id) >= -2147483648 && Number(id) <= 2147483647
+      ? tooltipSettings.pictures?.[String(Number(id))] : null;
+    const painted = picture ? await paintPicture(picture).catch((error) => {
+      console.error("Could not render image tooltip:", error);
+      return null;
+    }) : null;
+    if (tooltipTarget !== element) return;
+    if (painted) {
+      const canvas = newCanvas(picture.width, picture.height);
+      canvas.getContext("2d").drawImage(painted, 0, 0);
+      tooltip.replaceChildren(canvas);
+    } else {
+      // Each line is translated on its own so line breaks survive translation.
+      const lines = description.split("\n");
+      const translated = () => lines.map((line) => translation.text(line, () => { if (tooltipTarget === element) tooltip.textContent = translated(); })).join("\n");
+      tooltip.textContent = translated();
+    }
     tooltip.hidden = false;
     // In the top layer, so it shows above an open dialog.
     if (tooltip.popover && !tooltip.matches(":popover-open")) tooltip.showPopover();
@@ -861,8 +876,11 @@ async function paintOps(picture) {
       context.fillRect(x, y, width, height);
       if (op.absolute) context.restore();
     } else if (op.op === "line") {
+      if (op.dashStyle === 5) return;
       context.strokeStyle = op.color;
       context.lineWidth = op.width;
+      context.setLineDash(([[], [3, 1], [1, 1], [3, 1, 1, 1], [3, 1, 1, 1, 1, 1]][op.dashStyle ?? 0] ?? []).map((n) => n * op.width));
+      context.lineCap = op.dashCap === 2 ? "round" : "butt";
       context.beginPath();
       context.moveTo(...op.from);
       context.lineTo(...op.to);
@@ -905,6 +923,8 @@ async function paintOps(picture) {
 const animationClocks = new Map();
 const animations = new Set();
 let animationLoop = 0;
+let animationInterval;
+let lastAnimationRefresh = -Infinity;
 /** Emuera GetCurrentFrame: the first frame whose cumulative delay reaches the elapsed time. */
 function animationFrameIndex(delays, total, start, now) {
   let elapsed = Math.floor(now - start) % total;
@@ -915,10 +935,14 @@ function animationFrameIndex(delays, total, start, now) {
   return delays.length - 1;
 }
 function tickAnimations(now) {
+  const refresh = animationInterval === undefined || animationInterval > 0 && !busy && input && !input.timeout
+    && now - lastAnimationRefresh >= animationInterval;
+  if (refresh) lastAnimationRefresh = now;
   for (const animation of animations) {
     const { holder, layers, delays, total, start, token } = animation;
     if (token !== generation || (animation.shown && !holder.isConnected)) { animations.delete(animation); continue; }
     animation.shown ||= holder.isConnected;
+    if (!refresh) continue;
     const index = animationFrameIndex(delays, total, start, now);
     if (index === animation.index) continue;
     layers[animation.index].hidden = true;
@@ -1602,6 +1626,7 @@ function useAudioSettings(settings) {
 }
 /** advanceScreen: true after a submitted input (retires the screen), "continue" after a click-to-continue wait. */
 async function renderSnapshot(snapshot, advanceScreen) {
+  if (snapshot.animationTimer !== undefined) animationInterval = snapshot.animationTimer ?? undefined;
   hideTooltip();
   document.title = snapshot.title || "Emuera.ts";
   showDebugOutput(snapshot);
@@ -1888,6 +1913,8 @@ function resetRun() {
   input = null;
   clearTimedWait();
   generation++;
+  animationInterval = undefined;
+  lastAnimationRefresh = -Infinity;
   updateControls();
   beginActivity();
   currentScreen = null;

@@ -119,8 +119,33 @@ export function toHalfWidth(value: string): string {
     return kana.get(c) ?? c;
   }).join("");
 }
-/** Formats integers with standard D/X/N/F/G formats or 0/#/,/. patterns with literal currency affixes. */
+/** Formats integers with standard D/X/N/F/G formats or sectioned 0/#/,/. patterns with currency affixes. */
 export function formatInteger(value: bigint, format: string): string | undefined {
+  if (format.includes(";")) {
+    const sections: string[] = [];
+    let start = 0, quote = "";
+    for (let i = 0; i < format.length; i++) {
+      const c = format[i]!;
+      if (c === "\\") { i++; continue; }
+      if (quote) { if (c === quote) quote = ""; }
+      else if (c === "'" || c === '"') quote = c;
+      else if (c === ";") { sections.push(format.slice(start, i)); start = i + 1; }
+    }
+    if (quote) return undefined;
+    sections.push(format.slice(start));
+    if (sections.length > 3) return undefined;
+    if (sections.length > 1) {
+      const index = value === 0n && sections.length === 3 ? 2 : value < 0n ? 1 : 0;
+      const selected = sections[index] || sections[0]!;
+      const render = (section: string, input: bigint): string | undefined => /[0#]/.test(section)
+        ? formatInteger(input, section)
+        : section.replace(/'([^']*)'|"([^"]*)"|\\(.)/g, (_, single: string | undefined, double: string | undefined, escaped: string | undefined) => single ?? double ?? escaped ?? "");
+      const result = render(selected, value < 0n && index === 1 && sections[1] ? -value : value);
+      // .NET reselects the zero section when scaling rounds a nonzero number to zero.
+      return value !== 0n && /[0#]/.test(selected) && result !== undefined && !/[1-9]/.test(result)
+        ? render(sections[2] || sections[0]!, 0n) : result;
+    }
+  }
   const negative = value < 0n;
   const magnitude = negative ? -value : value;
   const group = (digits: string): string => digits.replace(/\B(?=(\d{3})+$)/g, ",");

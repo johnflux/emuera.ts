@@ -2,7 +2,7 @@ import { compile, inlineDeclaration, isPrintData, printVariant, PRINTDATA_PATTER
 import { evaluate, expandArgumentMacros, parseExpression, settleIndices, useMacros, type EvaluationContext, type Expr } from "./expression.js";
 import { displayDefaults, gameDirectory, imageSize, readTextFileSync, type Sprite, type ContainerScope, type DisplaySettings, type Game } from "./loader.js";
 import path from "node:path";
-import { readdirSync, realpathSync, statSync } from "node:fs";
+import { readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { allowsFullWidthSpace, characterField, EraError, EVENT_FUNCTIONS, integer, integerLiteral, numericString, INTEGER_LITERAL, key, splitArguments, stripComment, text, type Diagnostic, type Routine, type Source, type Value } from "./model.js";
 import { symbolTable, Variables, type GlobalData, type SaveData } from "./variables.js";
 import { parseFormat } from "./format.js";
@@ -19,6 +19,7 @@ import { ASYNC, Jit, type CallAnalysis } from "./jit.js";
 import { readNativeSave, writeNativeSave, type NativeSave, type SavedContainers, type SaveMetadata } from "./save-format.js";
 import { fixHistoryHtml, SHARP_METHODS, supportedSharpCall, translateHistoryDate } from "./plugin-compat.js";
 import { regexCharacterClasses, regexGroupOrder, replaceRegex } from "./regex.js";
+import { decodePicture, encodePicture, InvalidGraphicsImage, pictureColor, resourceColor } from "./graphics.js";
 
 export interface Style { color: string; background: string; alignment: "left" | "center" | "right"; fontStyle: number; font?: string }
 type Rect = [x: number, y: number, width: number, height: number];
@@ -31,7 +32,7 @@ export type GraphicOp =
   | { op: "graphics"; source: Picture; src: Rect; dest: Rect; matrix?: ColorMatrix }
   /** Blends a CSS color over rect; replace first clears it (GCLEAR, GSETCOLOR). */
   | { op: "fill"; color: string; rect: Rect; replace?: boolean; absolute?: boolean }
-  | { op: "line"; color: string; width: number; from: [number, number]; to: [number, number] }
+  | { op: "line"; color: string; width: number; dashStyle?: number; dashCap?: number; from: [number, number]; to: [number, number] }
   | { op: "text"; text: string; color: string; x: number; y: number; font: GraphicFont }
   /** GDRAWGWITHMASK: the mask's blue channel blends source over the destination. */
   | { op: "mask"; source: Picture; mask: Picture; x: number; y: number };
@@ -48,7 +49,7 @@ interface AnimationFrame {
   src: Rect; offset: [x: number, y: number]; delay: number;
 }
 export interface GraphicFont { name: string; size: number; style: number }
-interface Canvas extends Picture { brush?: string; pen?: { color: string; width: number }; font?: GraphicFont }
+interface Canvas extends Picture { brush?: string; pen?: { color: string; width: number; dashStyle?: number; dashCap?: number }; font?: GraphicFont }
 interface SpriteInfo {
   width: number; height: number;
   /** SPRITEPOS offset (Emuera DestBasePosition). */
@@ -78,7 +79,7 @@ export type Output =
  */
 export interface BackgroundLayer { z: number; x: number; y: number; picture: Picture; hover?: Picture; buttonValue?: number; tooltip?: string }
 interface BackgroundSource { z: number; x: number; y: number; graphics?: bigint; sprite?: string; hover?: string; buttonValue?: number; tooltip?: string }
-export interface TooltipSettings { custom: boolean; font: string; fontSize: number; delay: number; duration: number; color: string; background: string; format?: number }
+export interface TooltipSettings { custom: boolean; font: string; fontSize: number; delay: number; duration: number; color: string; background: string; format?: number; image?: boolean; pictures?: Record<string, Picture> }
 export interface AudioSettings {
   soundVolume: number; bgmVolume: number;
   bgm: { id: string; url: string } | null;
@@ -129,6 +130,8 @@ export interface Snapshot {
   textbox?: string;
   tooltip?: TooltipSettings;
   audio?: AudioSettings;
+  /** Explicit SETANIMETIMER interval; nonpositive values disable input-wait animation refreshes. */
+  animationTimer?: number | null;
   /** CBG hit map, independent of the visible layers; null removes it. */
   cbgMap?: Picture | null;
 }
@@ -182,7 +185,7 @@ class Halt {}
 const BEGIN_STATES = new Set(["SHOP", "TRAIN", "AFTERTRAIN", "ABLUP", "TURNEND", "FIRST", "TITLE"]);
 // Executed most often; they skip the PRINT/DATA/table prefix checks and sit at the head of runFrame's switch.
 const HOT_OPS = new Set(["ASSIGN", "SIF", "RETURNF", "IF", "ELSEIF", "ELSE", "ENDIF", "FOR", "REPEAT", "NEXT", "REND", "SELECTCASE", "CASE", "CASEELSE", "ENDSELECT", "LABEL"]);
-const SKIPPED_INPUTS = new Set(["INPUT", "INPUTS", "ONEINPUT", "ONEINPUTS", "TINPUT", "TINPUTS", "TONEINPUT", "TONEINPUTS", "BINPUT", "BINPUTS", "INPUTANY"]);
+const SKIPPED_INPUTS = new Set(["INPUT", "INPUTS", "ONEINPUT", "ONEINPUTS", "TINPUT", "TINPUTS", "TONEINPUT", "TONEINPUTS", "BINPUT", "BINPUTS", "ONEBINPUT", "ONEBINPUTS", "INPUTANY"]);
 /** Variables that start a new turn of training at zero. */
 const TRAIN_RESET = { global: ["TFLAG", "TSTR"], character: ["GOTJUEL", "TEQUIP", "EX", "PALAM", "SOURCE", "TCVAR"] };
 const COMMAND_RESET = { global: ["UP", "DOWN", "LOSEBASE"], character: ["DOWNBASE", "CUP", "CDOWN"] };
@@ -240,16 +243,17 @@ const BUILTIN_ARITIES: Record<string, [number, number]> = {
     GETCOLOR: [0, 0], GETSTYLE: [0, 0], GETCONFIG: [1, 1], GETCONFIGS: [1, 1], GETMETH: [1, 10000], GETMETHS: [1, 10000], POWER: [2, 2], HTML_STRINGLEN: [1, 2], EXISTVAR: [1, 1], GETVAR: [1, 1], GETVARS: [1, 1], VARSIZE: [1, 2],
     MAP_EXIST: [1, 1], MAP_SIZE: [1, 1], MAP_HAS: [2, 2], MAP_GET: [2, 2], MAP_CLEAR: [1, 1], MAP_FROMXML: [2, 2],
     HTML_POPPRINTINGSTR: [0, 0], STRFIND: [2, 3], STRFINDU: [2, 3], TOFULL: [1, 1], TOHALF: [1, 1], HTML_TOPLAINTEXT: [1, 1], STRLENS: [1, 1],
-    STRCOUNT: [2, 2], REPLACE: [3, 3], SUBSTRING: [2, 3],
+    STRCOUNT: [2, 2],     REPLACE: [3, 4], SUBSTRING: [2, 3],
     EXISTCSV: [1, 2], RAND: [1, 2], ISSKIP: [0, 0], GETPALAMLV: [2, 2], GETEXPLV: [2, 2], MOUSESKIP: [0, 0], GETCHARA: [1, 2], CSVNAME: [1, 2], CSVCALLNAME: [1, 2], CSVNICKNAME: [1, 2], CSVMASTERNAME: [1, 2],
     CHKCHARADATA: [1, 1], SAVETEXT: [2, 4], LOADTEXT: [1, 3],
     INRANGE: [3, 3], ESCAPE: [1, 1],
-    ISNUMERIC: [1, 1], ISDEFINED: [1, 1], VARSETEX: [2, 5],
+    ISNUMERIC: [1, 1], ISDEFINED: [1, 1], VARSETEX: [2, 5], GETFOCUSCOLOR: [0, 0], GETLINESTR: [1, 1], GETDISPLAYLINE: [1, 1], GETSPCHARA: [1, 1],
     GROUPMATCH: [2, 1000], GETBIT: [2, 2],
     UNICODE: [1, 1],
     TOLOWER: [1, 1], TOUPPER: [1, 1], STRLENSU: [1, 1], HTML_ESCAPE: [1, 1],
     CURRENTREDRAW: [0, 0], CURRENTALIGN: [0, 0],
     SPRITECREATED: [1, 1], SPRITEWIDTH: [1, 1], SPRITEHEIGHT: [1, 1], SPRITEPOSX: [1, 1], SPRITEPOSY: [1, 1],
+    SPRITEGETCOLOR: [3, 3], GDASHSTYLE: [3, 3], CBGSETG: [4, 4], CBGCLEAR: [0, 0],
     SPRITECREATE: [2, 6], SPRITEDISPOSE: [1, 1], SPRITEANIMECREATE: [3, 3], SPRITEANIMEADDFRAME: [9, 9], SPRITESETPOS: [3, 3], SPRITEMOVE: [3, 3],
     SPRITEDISPOSEALL: [1, 1], SETTEXTBOX: [1, 1], MAP_REMOVE: [2, 2],
     GETNUMB: [2, 2], MAP_TOXML: [1, 1], EXISTSOUND: [1, 1], STRFORM: [1, 1],
@@ -293,7 +297,7 @@ function optionalInteger(expr: Expr | undefined, fallback: number, context: Eval
   return expr && expr.kind !== "omitted" ? Number(integer(evaluate(expr, context))) : fallback;
 }
 /** Builtin expression functions evaluated outside BUILTIN_ARITIES; all of them may also be used as statements. */
-const FUNCTION_ENUMERATIONS = new Set(["ENUMFUNCBEGINSWITH", "ENUMFUNCENDSWITH", "ENUMFUNCWITH"]);
+const FUNCTION_ENUMERATIONS = new Set(["ENUMFUNCBEGINSWITH", "ENUMFUNCENDSWITH", "ENUMFUNCWITH", "ENUMVARBEGINSWITH", "ENUMVARENDSWITH", "ENUMVARWITH", "ENUMMACROBEGINSWITH", "ENUMMACROENDSWITH", "ENUMMACROWITH"]);
 const RAW_FUNCTIONS = ["ARRAYMSORT", "ARRAYMSORTEX", ...FUNCTION_ENUMERATIONS, "ENUMFILES", "MAP_GETKEYS", "ERDNAME", "FINDCHARA", "FINDLASTCHARA", "REGEXPMATCH", "STRJOIN", "INRANGEARRAY", "INRANGECARRAY", "GDRAWG", "GDRAWSPRITE", "GETNUM"];
 const ARRAY_SCANS = new Set(["SUMARRAY", "MATCH", "MAXARRAY", "MINARRAY", "FINDELEMENT", "FINDLASTELEMENT"]);
 const CHARACTER_SCANS = new Set(["SUMCARRAY", "CMATCH", "MAXCARRAY", "MINCARRAY"]);
@@ -416,6 +420,7 @@ export class Runtime {
   private printCLength: number;
   private deferred: Output[] = [];
   private redraw = 1n;
+  private animationTimer: number | undefined;
   private saves: SaveStore;
   private staged: StagedStores;
   /** The result of continuing a click-to-continue wait ahead of the click; see prefetch(). */
@@ -514,10 +519,17 @@ export class Runtime {
     for (const name of ["NO", "ISASSI"]) globals.defineCharacter(name);
     for (const name of ["NAME", "CALLNAME", "NICKNAME", "MASTERNAME"]) globals.defineCharacter(name, true);
     globals.defineCharacter("CSTR", true, game.variableSizes.get("CSTR") ?? [100]);
+    globals.defineCharacter("CDFLAG", false, game.variableSizes.get("CDFLAG") ?? [1, 1]);
     globals.defineCharacter("DOWNBASE", false, game.variableSizes.get("BASE") ?? [100]);
     for (const name of ["CUP", "CDOWN"]) globals.defineCharacter(name, false, game.variableSizes.get("PALAM") ?? [200]);
     globals.define("TSTR", true, game.variableSizes.get("TSTR") ?? [100]);
     globals.define("SAVEDATA_TEXT", true, [1]);
+    for (const axis of [1, 2]) {
+      const name = `CDFLAGNAME${axis}`, size = game.variableSizes.get("CDFLAG")?.[axis - 1] ?? 1;
+      globals.define(name, true, [size], true);
+      for (const [index, row] of game.tables.get(`CDFLAG${axis}`) ?? [])
+        if (index < size) globals.seed(name, index, row[0] ?? "");
+    }
     ["STR", "SAVESTR", "GLOBALS", "RESULTS", "WINDOW_TITLE", "GAMEBASE_TITLE", "GAMEBASE_INFO", "GAMEBASE_YEAR", "GAMEBASE_AUTHOR"].forEach((name) => globals.define(name, true, game.variableSizes.get(name) ?? [name === "STR" ? 20000 : 1000]));
     for (const name of ["GAMEBASE_VERSION", "GAMEBASE_CODE", "GAMEBASE_ALLOWVERSION", "GAMEBASE_DEFAULTCHARA", "GAMEBASE_NOITEM", "CHARANUM"]) globals.define(name);
     globals.seed("GAMEBASE_DEFAULTCHARA", 0, -1n);
@@ -624,6 +636,7 @@ export class Runtime {
     this.audio = { soundVolume: 100, bgmVolume: 100, bgm: null, sounds: [], stopSounds: true };
     this.forceKana = 0;
     this.redraw = 1n;
+    this.animationTimer = undefined;
     this.pendingBegin = undefined;
     this.pendingTrain = undefined;
     this.trainPhaseActive = false;
@@ -1015,6 +1028,13 @@ export class Runtime {
     const canvas = this.graphics.get(id);
     return canvas && { width: canvas.width, height: canvas.height, ops: canvas.ops.slice() };
   }
+  private graphicImage = (url: string): Buffer => {
+    if (!this.game.root || !url.startsWith(this.game.resourceBase)) throw new EraError("Graphics resource is unavailable");
+    const resources = path.resolve(gameDirectory(this.game.root, "resources"));
+    const file = path.resolve(resources, decodeURIComponent(url.slice(this.game.resourceBase.length)));
+    if (!file.startsWith(resources + path.sep)) throw new EraError("Graphics resource is outside resources");
+    return readFileSync(file);
+  };
   private spritePicture(name: string): Picture | undefined {
     const sprite = this.sprite(name);
     if (!sprite) return undefined;
@@ -1147,7 +1167,22 @@ export class Runtime {
     if (parts.includes("..") || path.isAbsolute(directory) || /^[A-Za-z]:/.test(directory))
       throw new EraError("ENUMFILES requires a path within the game directory");
     if (!pattern || /[\\/]/.test(pattern)) throw new EraError("ENUMFILES pattern must be a file name wildcard");
-    if (!this.game.root) return undefined;
+    const wildcard = pattern === "*.*" ? "*" : pattern;
+    const matcher = new RegExp("^" + wildcard.split("").map((c) => c === "*" ? ".*" : c === "?" ? "." : c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("") + "$", "iu");
+    const prefix = parts.join("\\");
+    const stored = this.saves.list().filter((file) => file.startsWith("text-")).map((file) => Buffer.from(file.slice(5), "base64url").toString("utf8"));
+    let virtualDirectory = parts.length === 0;
+    const virtual = stored.flatMap((file) => {
+      const components = file.split("/");
+      if (components.some((part) => !part || part === "." || part === "..") || components.length <= parts.length
+        || parts.some((part, i) => key(part) !== key(components[i]!))) return [];
+      virtualDirectory = true;
+      const suffix = components.slice(parts.length);
+      if ((!recursive && suffix.length > 1) || !matcher.test(suffix.at(-1)!)) return [];
+      return [(prefix ? prefix + "\\" : "") + suffix.join("\\")];
+    });
+    const virtualOnly = (): string[] | undefined => virtualDirectory ? virtual : undefined;
+    if (!this.game.root) return virtualOnly();
     const missing = (error: unknown): boolean => error instanceof Error && "code" in error && (error.code === "ENOENT" || error.code === "ENOTDIR");
     const root = realpathSync(this.game.root);
     const inside = (file: string): boolean => file === root || file.startsWith(root + path.sep);
@@ -1156,14 +1191,11 @@ export class Runtime {
       for (const part of parts) {
         const entries = readdirSync(current);
         const match = entries.find((entry) => entry === part) ?? entries.find((entry) => key(entry) === key(part));
-        if (!match) return undefined;
+        if (!match) return virtualOnly();
         current = realpathSync(path.join(current, match));
         if (!inside(current)) throw new EraError("ENUMFILES cannot follow a link outside the game directory");
       }
-      const wildcard = pattern === "*.*" ? "*" : pattern;
-      const matcher = new RegExp("^" + wildcard.split("").map((c) => c === "*" ? ".*" : c === "?" ? "." : c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("") + "$", "iu");
       const files: string[] = [];
-      const prefix = parts.join("\\");
       const base = current;
       const visit = (dir: string): void => {
         for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) => key(a.name) < key(b.name) ? -1 : key(a.name) > key(b.name) ? 1 : 0)) {
@@ -1178,21 +1210,25 @@ export class Runtime {
         }
       };
       visit(current);
-      return files;
+      const combined = new Map(files.map((file) => [key(file), file]));
+      for (const file of virtual) combined.set(key(file), file);
+      return [...combined.values()];
     } catch (error) {
-      if (missing(error)) return undefined;
+      if (missing(error)) return virtualOnly();
       throw new EraError(`ENUMFILES: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
   private textFile(value: Value | undefined): { store: string; game?: string } | undefined {
     if (typeof value === "bigint") return value >= 0n ? { store: `text${value}.txt` } : undefined;
     if (typeof value !== "string") return undefined;
-    const relative = value.replace(/\\/g, "/");
-    if (!relative || relative.split("/").includes("..") || path.isAbsolute(relative) || /^[A-Za-z]:/.test(relative)) return undefined;
+    const relative = value.replace(/\\/g, "/").split("/").filter((part) => part && part !== ".").join("/");
+    if (!relative || relative.split("/").includes("..") || /^[\\/]/.test(value) || /^[A-Za-z]:/.test(relative)) return undefined;
     const extensions = ["txt", ...(this.game.config.get("LOADTEXTとSAVETEXTで使える拡張子") ?? "").split(",").map((ext) => ext.trim().toLowerCase()).filter(Boolean)];
     if (!extensions.includes(path.extname(relative).slice(1).toLowerCase())) return undefined;
     const game = this.gameFile(relative);
-    return { store: `text-${Buffer.from(relative, "utf8").toString("base64url")}`, ...(game ? { game } : {}) };
+    const store = this.saves.list().find((name) => name.startsWith("text-") && key(Buffer.from(name.slice(5), "base64url").toString("utf8")) === key(relative))
+      ?? `text-${Buffer.from(relative, "utf8").toString("base64url")}`;
+    return { store, ...(game ? { game } : {}) };
   }
   private gameStamp(): { code: string; gameVersion: string } {
     const context = this.context(this.globals);
@@ -1560,6 +1596,21 @@ export class Runtime {
       set: (name, indices, value) => { variables.set(name, indices, value, context); },
       referenceCall: (name, args) => {
         if (this.userFunctions.has(name)) return this.expressionFunction(name, args.map((arg) => arg.kind === "omitted" ? undefined : evaluate(arg, context)));
+        if (name === "REPLACE" && args.length === 4) {
+          // Native EE reads the mode before the source and again before the pattern.
+          integer(evaluate(args[3]!, context));
+          const source = text(evaluate(args[0]!, context));
+          const mode = integer(evaluate(args[3]!, context)), pattern = text(evaluate(args[1]!, context));
+          if (mode !== 1n) return context.call(name, [source, pattern, evaluate(args[2]!, context), mode]);
+          const regex = this.regex(pattern);
+          const reference = args[2]!;
+          if (reference.kind !== "variable" || !variables.isString(reference.name, context) || variables.isCharacter(reference.name, context)
+            || variables.dimensions(reference.name, context).length !== 1)
+            throw new EraError("REPLACE mode 1 requires a one-dimensional string array");
+          const row = variables.row(reference.name, reference.indices, context);
+          let index = 0;
+          return source.replace(regex, () => index < row.size ? text(row.get(index++)) : "");
+        }
         const routine = this.game.routines.get(name)?.[0];
         if (routine && this.info(routine).references.some(Boolean)) {
           const references = this.info(routine).references;
@@ -1697,10 +1748,14 @@ export class Runtime {
             || variables.isCharacter(destination.name, context) || variables.dimensions(destination.name, context).length !== 1)
             throw new EraError(`${name} output must be a one-dimensional string array`);
           const first = text(evaluate(args[0]!, context));
-          const matches = (id: string): boolean => name === "ENUMFUNCENDSWITH" ? id.endsWith(key(first)) : name === "ENUMFUNCWITH" ? id.includes(key(first)) : id.startsWith(key(first));
+          const matches = (id: string): boolean => name.endsWith("ENDSWITH") ? key(id).endsWith(key(first)) : name.endsWith("BEGINSWITH") ? key(id).startsWith(key(first)) : key(id).includes(key(first));
+          const macroLabels = name.startsWith("ENUMMACRO")
+            ? new Map(this.game.headers.map((line) => /^#DEFINE\s+(\S+)/i.exec(line.text)).filter((match) => match !== null).map((match) => [key(match[1]!), match[1]!])) : undefined;
+          const names = name.startsWith("ENUMVAR") ? this.globals.declaredNames()
+            : name.startsWith("ENUMMACRO") ? [...this.game.macros.keys()].map((id) => macroLabels?.get(id) ?? id) : undefined;
           const values = name === "ENUMFILES"
             ? this.enumerateFiles(first, args[1] && args[1].kind !== "omitted" ? text(evaluate(args[1], context)) : "*", optionalInteger(args[2], 0, context) !== 0)
-            : first ? [...this.game.routines].filter(([id]) => !EVENT_FUNCTIONS.has(id) && matches(id)).map(([id, routines]) => routines[0]?.label ?? id) : [];
+            : first ? names ? names.filter(matches) : [...this.game.routines].filter(([id]) => !EVENT_FUNCTIONS.has(id) && matches(id)).map(([id, routines]) => routines[0]?.label ?? id) : [];
           if (!values) return -1n;
           const count = Math.min(values.length, variables.dimensions(destination.name, context)[0]!);
           this.writeArray(variables, context, destination, values.slice(0, count));
@@ -1823,6 +1878,16 @@ export class Runtime {
           }
           case "BARSTR": return this.bar(argInt(args, name, 0), argInt(args, name, 1), argInt(args, name, 2));
           case "SAVENOS": return integer(this.configValue("SaveDataNos"));
+          case "GETFOCUSCOLOR": return integer(this.configValue("FocusColor"));
+          case "GETLINESTR": {
+            const pattern = argText(args, name, 0), width = stringWidth(pattern);
+            return width ? pattern.repeat(Math.floor(this.columns / width)) : "";
+          }
+          case "GETDISPLAYLINE": {
+            const index = argInt(args, name, 0);
+            if (index < 0n || index >= BigInt(this.printedLines.length)) throw new EraError(`GETDISPLAYLINE: line ${index} is out of range`);
+            return plainHtml(this.printedLines[Number(index)]!);
+          }
           case "EXISTCSV": return this.game.characters.has(Number(argInt(args, name, 0))) ? 1n : 0n;
           case "ISSKIP": return this.skipDisplay ? 1n : 0n;
           case "GETPALAMLV": case "GETEXPLV": {
@@ -1842,6 +1907,11 @@ export class Runtime {
             for (let i = 0; i < count; i++) if (this.globals.get("NO", [literal(BigInt(i))], context) === sought) return BigInt(i);
             return -1n;
           }
+          case "GETSPCHARA":
+            argInt(args, name, 0);
+            if (!integer(this.configValue("CompatiSPChara"))) throw new EraError("SP character features require the Allow SP characters compatibility option");
+            // Modern native EE retains the legacy command but no longer creates SP-marked characters.
+            return -1n;
           case "CSVNAME": case "CSVCALLNAME": case "CSVNICKNAME": case "CSVMASTERNAME": {
             const field = ({ CSVNAME: "名前", CSVCALLNAME: "呼び名", CSVNICKNAME: "あだ名", CSVMASTERNAME: "主人の呼び方" } as Record<string, string>)[name]!;
             return this.characterTemplate(argInt(args, name, 0)).rows.find((r) => r[0] === field)?.[1] ?? "";
@@ -2051,7 +2121,37 @@ export class Runtime {
           case "GWIDTH": return BigInt(this.graphics.get(argInt(args, name, 0))?.width ?? 0);
           case "GHEIGHT": return BigInt(this.graphics.get(argInt(args, name, 0))?.height ?? 0);
           case "GDISPOSE": return this.graphics.delete(argInt(args, name, 0)) ? 1n : 0n;
-          case "GGETCOLOR": return this.graphics.has(argInt(args, name, 0)) ? 0n : -1n;
+          case "GGETCOLOR": return pictureColor(this.picture(argInt(args, name, 0)), Number(argInt(args, name, 1)), Number(argInt(args, name, 2)), this.graphicImage);
+          case "SPRITEGETCOLOR": {
+            const sprite = this.sprite(argText(args, name, 0));
+            if (!sprite) return -1n;
+            const x = Number(argInt(args, name, 1)), y = Number(argInt(args, name, 2));
+            if (x < 0 || y < 0 || x >= sprite.width || y >= sprite.height) return -1n;
+            if (sprite.frames) throw new EraError("SPRITEGETCOLOR does not support animation sprites");
+            if (sprite.graphics !== undefined && sprite.rect)
+              return pictureColor(this.picture(sprite.graphics), x + sprite.rect[0], y + sprite.rect[1], this.graphicImage);
+            if (sprite.url && sprite.src)
+              return resourceColor(sprite.url, x + sprite.src[0], y + sprite.src[1], this.graphicImage);
+            // Sprite positions affect drawing, not coordinates within the underlying sprite.
+            const draw = this.spriteOp({ ...sprite, x: 0, y: 0 }, [0, 0, sprite.width, sprite.height]);
+            return pictureColor({ width: sprite.width, height: sprite.height, ops: draw ? [draw] : [] },
+              x, y, this.graphicImage);
+          }
+          case "CBGCLEAR":
+            this.background = [];
+            this.backgroundMap = undefined;
+            this.backgroundChanged = true;
+            return 1n;
+          case "CBGSETG": {
+            const id = argInt(args, name, 0), z = Number(argInt(args, name, 3));
+            if (!z) throw new EraError("CBGSETG: zDepth must not be 0 (the text layer)");
+            if (!this.graphics.has(id)) return 0n;
+            const at = this.background.findIndex((other) => other.z < z);
+            this.background.splice(at < 0 ? this.background.length : at, 0,
+              { graphics: id, x: Number(argInt(args, name, 1)), y: Number(argInt(args, name, 2)), z });
+            this.backgroundChanged = true;
+            return 1n;
+          }
           case "GDRAWSPRITE": case "GDRAWG": return this.draw(name, args);
           case "GDRAWGWITHROTATE": {
             if (args.length !== 3 && args.length !== 5) throw new EraError("GDRAWGWITHROTATE takes 3 or 5 arguments");
@@ -2087,7 +2187,7 @@ export class Runtime {
             const canvas = this.graphics.get(argInt(args, name, 0));
             if (!canvas) return 0n;
             const x = Number(argInt(args, name, 2)), y = Number(argInt(args, name, 3));
-            if (x < 0 || y < 0 || x >= canvas.width || y >= canvas.height) throw new EraError("GSETCOLOR position is outside the graphics");
+            if (x < 0 || y < 0 || x >= canvas.width || y >= canvas.height) return 0n;
             canvas.ops.push({ op: "fill", color: argbColor(argInt(args, name, 1), name), rect: [x, y, 1, 1], replace: true,
               ...(canvas.ops.some((op) => op.op === "rotate") ? { absolute: true } : {}) });
             return 1n;
@@ -2120,6 +2220,14 @@ export class Runtime {
             canvas.font = font;
             return 1n;
           }
+          case "GDASHSTYLE": {
+            const canvas = this.graphics.get(argInt(args, name, 0));
+            if (!canvas) return 0n;
+            const style = Number(argInt(args, name, 1)), cap = Number(argInt(args, name, 2));
+            if (style < 0 || style > 5 || ![0, 2, 3].includes(cap)) throw new EraError("GDASHSTYLE requires style 0–5 and cap 0, 2 or 3");
+            canvas.pen = { ...(canvas.pen ?? { color: this.display.foreground, width: 1 }), dashStyle: style, dashCap: cap };
+            return 1n;
+          }
           case "GGETFONT": return this.graphics.get(argInt(args, name, 0))?.font?.name ?? this.defaultGraphicFont().name;
           case "GGETFONTSIZE": return BigInt(this.graphics.get(argInt(args, name, 0))?.font?.size ?? this.defaultGraphicFont().size);
           case "GGETFONTSTYLE": return BigInt(this.graphics.get(argInt(args, name, 0))?.font?.style ?? 0);
@@ -2146,7 +2254,26 @@ export class Runtime {
             this.globals.set("RESULT", [literal(1n)], BigInt(font.size * lines.length), context);
             return BigInt(Math.ceil(Math.max(...lines.map((line) => stringWidth(line))) * font.size / 2));
           }
-          case "GSAVE": case "GLOAD": return 0n;
+          case "GSAVE": case "GLOAD": {
+            const id = argInt(args, name, 0), slot = argInt(args, name, 1);
+            if (slot < 0n || slot > 2147483647n) return 0n;
+            const file = `img${slot.toString().padStart(4, "0")}.png`;
+            if (name === "GSAVE") {
+              const picture = this.picture(id);
+              if (!picture) return 0n;
+              this.saves.write(file, encodePicture(picture, this.graphicImage));
+            } else {
+              if (this.graphics.has(id)) return 0n;
+              const bytes = this.saves.read(file);
+              if (!Buffer.isBuffer(bytes)) return 0n;
+              try { this.graphics.set(id, decodePicture(bytes)); }
+              catch (error) {
+                if (error instanceof InvalidGraphicsImage) return 0n;
+                throw error;
+              }
+            }
+            return 1n;
+          }
           case "CURRENTALIGN": return this.style.alignment.toUpperCase();
           case "GETCOLOR": return BigInt("0x" + this.style.color.slice(1));
           case "POWER": return power(argInt(args, name, 0), argInt(args, name, 1));
@@ -2333,7 +2460,13 @@ export class Runtime {
             }
             return BigInt(result.count);
           }
-          case "REPLACE": return replaceRegex(argText(args, name, 0), this.regex(argText(args, name, 1)), argText(args, name, 2));
+          case "REPLACE": {
+            const source = argText(args, name, 0), pattern = argText(args, name, 1), replacement = argText(args, name, 2);
+            const mode = args[3] === undefined ? 0n : argInt(args, name, 3);
+            if (mode === 2n) return pattern ? source.split(pattern).join(replacement) : source;
+            if (mode === 1n) throw new EraError("REPLACE mode 1 requires a string array reference");
+            return replaceRegex(source, this.regex(pattern), replacement);
+          }
           case "STRFIND": case "STRFINDU": {
             const source = argText(args, name, 0), sought = argText(args, name, 1);
             let start = args[2] === undefined ? 0 : Number(argInt(args, name, 2));
@@ -2583,7 +2716,15 @@ export class Runtime {
   private formatted(source: string, frame: Frame): string {
     let expr = this.formatCache.get(source);
     if (!expr) { expr = parseFormat(source); this.formatCache.set(source, expr); }
-    return text(evaluate(expr, frame.context));
+    const context: EvaluationContext = {
+      ...frame.context,
+      translateName: (name, value) => {
+        if (typeof value !== "string" || name === "NAME" || !name.endsWith("NAME") && !/^CDFLAGNAME[12]$/.test(name)) return value;
+        const table = name === "STRNAME" ? "STR" : symbolTable(name);
+        return this.game.translations.get(table)?.get(value) ?? value;
+      },
+    };
+    return text(evaluate(expr, context));
   }
   private debugInstruction(op: string, args: string, frame: Frame): void {
     if (op === "ASSERT") {
@@ -2625,12 +2766,19 @@ export class Runtime {
     if (this.textboxChanged) snapshot.textbox = this.textbox;
     this.textboxChanged = false;
     if (this.tooltipChanged) snapshot.tooltip = { ...this.tooltipSettings };
+    if (this.tooltipSettings.custom && this.tooltipSettings.image) {
+      snapshot.tooltip = { ...this.tooltipSettings, pictures: Object.fromEntries([...this.graphics.keys()].flatMap((id) => {
+        const picture = this.picture(id);
+        return picture ? [[id.toString(), picture]] : [];
+      })) };
+    }
     this.tooltipChanged = false;
     if (this.audio) {
       snapshot.audio = { ...this.audio, sounds: this.audio.sounds.slice() };
       this.audio.sounds = [];
       this.audio.stopSounds = false;
     }
+    snapshot.animationTimer = this.animationTimer ?? null;
     return snapshot;
   }
   private resourceUrl(file: string): string {
@@ -3178,7 +3326,14 @@ export class Runtime {
             if (args) throw new EraError("RESETDATA takes no arguments");
             this.resetData();
             break;
-          case "ADDCHARA":
+          case "RESETGLOBAL":
+            if (args) throw new EraError("RESETGLOBAL takes no arguments");
+            this.globals.resetGlobals(frame.context);
+            this.clearContainers("GLOBAL");
+            break;
+          case "ADDCHARA": case "ADDSPCHARA":
+            if (op === "ADDSPCHARA" && !integer(this.configValue("CompatiSPChara")))
+              throw new EraError("SP character features require the Allow SP characters compatibility option");
             for (const part of this.arguments(args)) this.addCharacter(Number(num(part)), frame.context);
             break;
           case "ADDDEFCHARA": {
@@ -3219,11 +3374,14 @@ export class Runtime {
             this.pendingTrain = command;
             break;
           }
-          case "UPCHECK": {
-            if (args) throw new EraError("UPCHECK takes no arguments");
-            const up = this.globals.row("UP", [], frame.context);
-            const down = this.globals.row("DOWN", [], frame.context);
-            const character = integer(this.globals.get("TARGET", [], frame.context));
+          case "UPCHECK": case "CUPCHECK": {
+            if (op === "UPCHECK" && args) throw new EraError("UPCHECK takes no arguments");
+            const character = op === "CUPCHECK" ? num(args) : integer(this.globals.get("TARGET", [], frame.context));
+            if (op === "CUPCHECK" && (character < 0n || character >= BigInt(this.globals.characterCount())))
+              throw new EraError(`CUPCHECK: character ${character} does not exist`);
+            const indices = op === "CUPCHECK" ? [literal(character), literal(0n)] : [];
+            const up = this.globals.row(op === "CUPCHECK" ? "CUP" : "UP", indices, frame.context);
+            const down = this.globals.row(op === "CUPCHECK" ? "CDOWN" : "DOWN", indices, frame.context);
             if (character >= 0n && character < BigInt(this.globals.characterCount())) {
               const palam = this.globals.row("PALAM", [literal(character), literal(0n)], frame.context);
               for (let i = 0; i < Math.min(palam.size, up.size, down.size); i++) {
@@ -3236,8 +3394,8 @@ export class Runtime {
                 yield this.emit("text", `${name} ${before}${gain > 0n ? `+${gain}` : ""}${loss > 0n ? `-${loss}` : ""}=${after}`, true);
               }
             }
-            this.globals.clear("UP", frame.context);
-            this.globals.clear("DOWN", frame.context);
+            for (let i = 0; i < up.size; i++) up.set(i, 0n);
+            for (let i = 0; i < down.size; i++) down.set(i, 0n);
             break;
           }
           case "OUTPUTLOG": {
@@ -3569,7 +3727,7 @@ export class Runtime {
             loopStates.clear();
             next = 0;
             break;
-          case "GOTO": case "GOTOFORM": case "TRYGOTO": case "TRYGOTOFORM": {
+          case "GOTO": case "GOTOFORM": case "TRYGOTO": case "TRYGOTOFORM": case "TRYCGOTO": case "TRYCGOTOFORM": {
             const label = op.endsWith("FORM") ? this.formatted(args, frame).trim() : args;
             const destination = labels.get(key(label));
             if (destination === undefined) {
@@ -3672,14 +3830,24 @@ export class Runtime {
             if (args) throw new EraError(`${op} takes no arguments`);
             throw new RestartTransition();
           case "QUIT": this.finished = true; return;
-          case "BINPUT": case "BINPUTS": {
-            const numeric = op === "BINPUT";
+          case "CLEARTEXTBOX":
+            if (args.trim()) throw new EraError("CLEARTEXTBOX takes no arguments");
+            this.textbox = "";
+            this.textboxChanged = true;
+            break;
+          case "BINPUT": case "BINPUTS": case "ONEBINPUT": case "ONEBINPUTS": {
+            const numeric = !op.endsWith("S"), singleCharacter = op.startsWith("ONE");
             const parts = args.trim() ? this.arguments(args) : [];
             if (parts.length > 3) throw new EraError(`${op} expects default[, allowClick, canSkip]`);
             // Mouse side-channel extensions must not be silently accepted without implementing their result slots.
             if (parts[1] && num(parts[1]) !== 0n) throw new EraError(`${op} mouse side-channel mode is not supported`);
-            if (parts[2]) num(parts[2]);
-            const fallback = parts[0] ? numeric ? integer(ev(parts[0])).toString() : text(ev(parts[0])) : undefined;
+            const canSkip = !!parts[2] && num(parts[2]) !== 0n;
+            const fallback = parts[0] ? numeric ? integer(ev(parts[0])).toString() : singleCharacter ? this.formatted(parts[0], frame) : text(ev(parts[0])) : undefined;
+            if (canSkip && this.messageSkip) {
+              if (fallback === undefined) throw new EraError(`${op} requires a default value when skipping input`);
+              this.globals.set(numeric ? "RESULT" : "RESULTS", [], numeric ? BigInt(fallback) : fallback, frame.context);
+              break;
+            }
             const values = [...new Set([...this.buttonLines.flat(), ...this.lineButtons])]
               .filter((value) => !numeric || /^-?\d+$/.test(value))
               .map((value) => numeric ? BigInt(value).toString() : value);
@@ -3689,6 +3857,7 @@ export class Runtime {
               break;
             }
             const request: InputRequest = { kind: numeric ? "integer" : "string", buttonValues: values };
+            if (singleCharacter) request.singleCharacter = true;
             if (fallback !== undefined) request.defaultValue = fallback;
             const value = yield { input: request };
             yield this.emit("input", value, true);
@@ -3822,6 +3991,7 @@ export class Runtime {
             if (parts.length < 2 || parts.length > 4 || !parts[0] || !parts[1]) throw new EraError(`${op} expects time, default{, display, message}`);
             const time = Number(num(parts[0]));
             let fallback = numeric ? integer(ev(parts[1])).toString() : text(ev(parts[1]));
+            const inputFallback = fallback;
             if (single) {
               // TONEINPUT keeps only the leading digit of the absolute default; TONEINPUTS its first character.
               if (numeric && fallback.startsWith("-")) fallback = fallback.slice(1);
@@ -3831,6 +4001,7 @@ export class Runtime {
             const message = parts[3] !== undefined ? text(ev(parts[3])) : this.game.config.get("時間切れ表示") ?? "時間切れ";
             const request: InputRequest = { kind: numeric ? "integer" : "string" };
             if (single) request.singleCharacter = true;
+            if (time <= 0) request.defaultValue = inputFallback;
             if (time > 0) {
               request.timeout = Math.min(time, 2 ** 31 - 1);
               if (countdown) {
@@ -4030,7 +4201,7 @@ export class Runtime {
           case "DUMPRAND": this.dumpedRandom = this.randomState; break;
           case "INITRAND": if (this.dumpedRandom !== undefined) this.randomState = this.dumpedRandom; break;
           case "WAITANYKEY": yield { input: { kind: "wait" } }; break;
-          case "TOOLTIP_CUSTOM": case "TOOLTIP_SETFONTSIZE": case "TOOLTIP_SETFONT": case "TOOLTIP_FORMAT":
+          case "TOOLTIP_IMG": case "TOOLTIP_CUSTOM": case "TOOLTIP_SETFONTSIZE": case "TOOLTIP_SETFONT": case "TOOLTIP_FORMAT":
           case "TOOLTIP_SETDELAY": case "TOOLTIP_SETDURATION": case "TOOLTIP_SETCOLOR": {
             const parts = this.arguments(args), count = op === "TOOLTIP_SETCOLOR" ? 2 : 1;
             if (parts.length !== count || parts.some((part) => !part)) throw new EraError(`${op} expects ${count} argument(s)`);
@@ -4043,6 +4214,7 @@ export class Runtime {
               this.tooltipSettings.color = rgbColor(num(parts[0]!));
               this.tooltipSettings.background = rgbColor(num(parts[1]!));
             } else if (op === "TOOLTIP_CUSTOM") this.tooltipSettings.custom = num(parts[0]!) !== 0n;
+            else if (op === "TOOLTIP_IMG") this.tooltipSettings.image = num(parts[0]!) !== 0n;
             else {
               const value = Number(num(parts[0]!));
               if (value < 0 || value > 2 ** 31 - 1 || op === "TOOLTIP_SETFONTSIZE" && (value < 1 || value > 8192))
@@ -4088,8 +4260,12 @@ export class Runtime {
             yield { input: { kind: "wait", timeout: Math.max(1, time), blocking: true, stopSkipping: true, sleep: true } };
             break;
           }
-          case "SETANIMETIMER":
+          case "SETANIMETIMER": {
+            if (this.arguments(args).length !== 1 || !args.trim()) throw new EraError("SETANIMETIMER expects one integer argument");
+            this.animationTimer = Number(BigInt.asIntN(32, num(args)));
+            this.globals.set("RESULT", [], 1n, frame.context);
             break;
+          }
           case "CALLSHARP": {
             if (!supportedSharpCall(args))
               throw new EraError("CALLSHARP requires a native .NET plugin; only LAUNCH_BROWSER, FixHTML and TranslateDate have TypeScript replacements");

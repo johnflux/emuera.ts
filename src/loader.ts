@@ -119,6 +119,8 @@ export interface Game {
   headers: Line[];
   tables: Map<string, Map<number, string[]>>;
   names: Map<string, Map<string, number>>;
+  /** Recognized Emuera-Anchor *_TR.csv entries, keyed by source name table and original name. */
+  translations: Map<string, Map<string, string>>;
   /** ERD reverse lookups preserve the spelling of names, independently of CSV name tables. */
   erdNames: Map<string, Map<number, string>>;
   sprites: Map<string, Sprite>;
@@ -211,8 +213,44 @@ function* csvRecords(source: string, file: string): Generator<{ row: string[]; l
 export function csvRows(source: string): string[][] {
   return Array.from(csvRecords(source, ""), ({ row }) => row);
 }
+type AnchorTranslationLine = { line: number; text: string } | { line: number; error: string };
+function* anchorTranslationLines(source: string): Generator<AnchorTranslationLine> {
+  const lines = source.split(/\r\n|[\r\n]/);
+  for (let i = 0; i < lines.length; i++) {
+    const number = i + 1;
+    const line = lines[i]!.replace(/^[ \t\u3000]+/u, "").replace(/^\uFEFF/, "");
+    if (!line) continue;
+    if (line.startsWith("}")) {
+      yield { line: number, error: "'}' without a '{' before it" };
+      continue;
+    }
+    if (!line.startsWith("{")) {
+      yield { line: number, text: line };
+      continue;
+    }
+    if (line.trim() !== "{") {
+      yield { line: number, error: "a '{' line can't hold anything else" };
+      continue;
+    }
+    let text = "", error: string | undefined, closed = false;
+    while (++i < lines.length) {
+      const body = lines[i]!;
+      const boundary = body.trimStart();
+      if (boundary.startsWith("}")) {
+        closed = true;
+        if (boundary.trim() !== "}") error = "a '}' line can't hold anything else";
+        break;
+      }
+      if (boundary.startsWith("{")) error = "'{' inside a '{' … '}' block";
+      text += body + " ";
+    }
+    if (!closed) error ??= "'{' without a '}' after it";
+    if (error) yield { line: number, error };
+    else if (text.trim()) yield { line: number, text: text.replace(/^[ \t\u3000]+/u, "") };
+  }
+}
 export function emptyGame(root = ""): Game {
-  return { root, routines: new Map(), headers: [], tables: new Map(), names: new Map(), erdNames: new Map(), sprites: new Map(), diagnostics: [], scriptFiles: 0, variableSizes: new Map(), macros: new Map(), characters: new Map(), renames: new Map(), money: { label: "\u00a5", first: true }, config: new Map(), replacements: new Map(), containers: { SAVE: containerNames(), GLOBAL: containerNames(), STATIC: containerNames() }, resourceBase: "/resources/" };
+  return { root, routines: new Map(), headers: [], tables: new Map(), names: new Map(), translations: new Map(), erdNames: new Map(), sprites: new Map(), diagnostics: [], scriptFiles: 0, variableSizes: new Map(), macros: new Map(), characters: new Map(), renames: new Map(), money: { label: "\u00a5", first: true }, config: new Map(), replacements: new Map(), containers: { SAVE: containerNames(), GLOBAL: containerNames(), STATIC: containerNames() }, resourceBase: "/resources/" };
 }
 function* logicalLines(source: string, file: string): Generator<Line> {
   const rows = source.replace(/^\uFEFF/, "").split(/\r\n|[\r\n]/);
@@ -349,12 +387,14 @@ export async function applyHotpatches(game: Game, dir = HOTPATCH_ROOT): Promise<
   }
   return replaced;
 }
-export async function loadGame(root = GAME_ROOT, options: { debug?: boolean } = {}): Promise<Game> {
+export async function loadGame(root = GAME_ROOT, options: { debug?: boolean; anchorTranslation?: boolean } = {}): Promise<Game> {
   const game = emptyGame(root);
   if (options.debug) game.debug = true;
+  const anchor = existsSync(path.join(root, "Emuera-Anchor.exe"));
+  const anchorTranslation = options.anchorTranslation ?? anchor;
   // Anchor games such as Reverse rely on integer arguments to string parameters.
   // Keep this compatibility default local to the detected fork; explicit config still wins.
-  if (existsSync(path.join(root, "Emuera-Anchor.exe")))
+  if (anchor)
     game.config.set("ユーザー関数の引数に自動的にTOSTRを補完する", "YES");
   const csvRoot = gameDirectory(root, "CSV");
   const defaultConfig = ["_default.config", "default.config"].map((name) => path.join(csvRoot, name)).find(existsSync);
@@ -405,9 +445,21 @@ export async function loadGame(root = GAME_ROOT, options: { debug?: boolean } = 
     indexScript(game, await readText(file), path.relative(root, file), /\.erh$/i.test(file));
     game.scriptFiles++;
   }
+  const translationTables: Record<string, string> = {
+    ABL: "ABL", TALENT: "TALENT", EXP: "EXP", MARK: "MARK", PALAM: "PALAM", PARAM: "PALAM",
+    ITEM: "ITEM", TRAIN: "TRAIN", BASE: "BASE", SOURCE: "SOURCE", EX: "EX", EQUIP: "EQUIP",
+    TEQUIP: "TEQUIP", FLAG: "FLAG", TFLAG: "TFLAG", CFLAG: "CFLAG", TCVAR: "TCVAR",
+    CSTR: "CSTR", STAIN: "STAIN", CDFLAG1: "CDFLAG1", CDFLAG2: "CDFLAG2", STR: "STR",
+    TSTR: "TSTR", SAVESTR: "SAVESTR", GLOBAL: "GLOBAL", GLOBALS: "GLOBALS", ALL: "ALL",
+  };
+  const topCsvFiles = csvFiles.filter((file) => path.dirname(file) === csvRoot);
+  const hasParamCsv = topCsvFiles.some((file) => path.basename(file).toUpperCase() === "PARAM.CSV");
   for (const file of csvFiles) {
     const relative = path.relative(csvRoot, file).split(path.sep).join("/");
     const name = key(relative.replace(/\.csv$/i, ""));
+    const basename = path.basename(file).toUpperCase();
+    const trPrefix = basename.endsWith("_TR.CSV") ? basename.slice(0, -7) : "";
+    if (path.dirname(file) === csvRoot && translationTables[trPrefix]) continue;
     const records = [...csvRecords(await readText(file), path.relative(root, file))];
     const rows = records.map(({ row }) => row);
     if (/^VAREXT/.test(path.basename(name))) {
@@ -478,6 +530,40 @@ export async function loadGame(root = GAME_ROOT, options: { debug?: boolean } = 
     if (name === "GAMEBASE") {
       // GameBase uses textual keys rather than numeric indices.
       game.tables.set(name, new Map(rows.map((row, i) => [i, row])));
+    }
+  }
+  for (const file of anchorTranslation ? topCsvFiles : []) {
+    const basename = path.basename(file).toUpperCase();
+    const prefix = basename.endsWith("_TR.CSV") ? basename.slice(0, -7) : "";
+    const table = translationTables[prefix];
+    if (!table || prefix === (hasParamCsv ? "PALAM" : "PARAM")) continue;
+    const fileName = path.relative(root, file);
+    let translations = game.translations.get(table);
+    if (!translations) game.translations.set(table, translations = new Map());
+    for (const entry of anchorTranslationLines(await readText(file))) {
+      if ("error" in entry) {
+        throw new EraError(`Anchor translation ${entry.error}`, { file: fileName, line: entry.line });
+      }
+      if (entry.text.startsWith(";")) continue;
+      const enabled = entry.text.split(";", 1)[0]!;
+      const comma = enabled.indexOf(",");
+      if (comma < 0 || enabled.indexOf(",", comma + 1) >= 0) {
+        throw new EraError("Anchor translation row needs exactly one comma between original and translation", { file: fileName, line: entry.line });
+      }
+      const original = enabled.slice(0, comma);
+      const translated = enabled.slice(comma + 1);
+      if (translations.has(original)) {
+        throw new EraError(`Duplicate Anchor translation for "${original}"`, { file: fileName, line: entry.line });
+      }
+      translations.set(original, translated);
+    }
+  }
+  for (const [table, translations] of game.translations) {
+    const symbols = game.names.get(table) ?? (table === "PALAM" ? game.names.get("PARAM") : undefined);
+    if (!symbols) continue;
+    for (const [original, translated] of translations) {
+      const index = symbols.get(key(original));
+      if (index !== undefined && translated && !symbols.has(key(translated))) symbols.set(key(translated), index);
     }
   }
   const resources = gameDirectory(root, "resources");

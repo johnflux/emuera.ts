@@ -97,7 +97,7 @@ export class FileSaveStore implements SaveStore {
   read(name: string): string | Buffer | null {
     try {
       const bytes = readFileSync(savePath(this.directoryFor(name), checkSaveName(name)));
-      return /\.(sav|dat)$/i.test(name) ? bytes : bytes.toString("utf8");
+      return /\.(sav|dat|png)$/i.test(name) ? bytes : bytes.toString("utf8");
     }
     catch (error) {
       if (error instanceof Error && "code" in error && error.code === "ENOENT") return null;
