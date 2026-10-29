@@ -1,0 +1,17 @@
+@SYSTEM_TITLE
+FOR A, 0, 5
+CALL PROBE
+NEXT
+PRINTL DONE
+OUTPUTLOG
+QUIT
+
+@PROBE
+PRINTFORML WIDTH {STRLENS("🙂")} {STRLENSU("🙂")}
+PRINTFORML STRCMP {"x" >= "x"} {"x" <= "x"} {"z" >= "a"} {"a" >= "z"} {"a" <= "z"} {2 >= 2} {2 <= 2}
+PRINTFORML REPLACEMENT [%REPLACE("x9", "9", "$_")%] [%REPLACE("xy", "(x)(y)", "$+")%] [%REPLACE("x9", "(?<digit>[0-9])", "${digit}")%]
+PRINTFORML GROUPS [%REPLACE("xy", "(x)(y)", "$12")%] [%REPLACE("xy", "(x)(y)", "$0")%] [%REPLACE("xy", "(?<first>x)(y)", "$1,$2")%]
+PRINTFORML UNMATCHED [%REPLACE("y", "(x)?y", "$1")%] [%REPLACE("y", "(x)?y", "$+")%] [%REPLACE("y", "(x)?y", "$9")%]
+PRINTFORML ESCAPE [%ESCAPE("a #b]")%]
+PRINTFORML REGEX_CLASSES {STRCOUNT("漢", "\\w")} {STRCOUNT("٣", "\\d")} {STRCOUNT("x漢 y", "\\b")}
+RETURN

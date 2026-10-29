@@ -10,8 +10,12 @@ or one level down (e.g. an unzipped `name/name-master`), titled and identified
 by the folder name. Use **Refresh library** after adding a game; a restart is not required.
 Standard folder names are matched case-insensitively, including `erb/`, `csv/`,
 `Resources/` and `Sound/`, on Linux as well as macOS/Windows. Files are not renamed.
-ERB files load in Emuera's order: in each directory, subdirectories first, then
-files, each sorted case-insensitively. As in Emuera, a non-event function defined
+ERB files load in each directory before its subdirectories, matching the native
+EE engine checked under Wine. `SearchSubdirectory` (Japanese:
+`サブディレクトリを検索する`) controls recursion and defaults to off; config layers
+apply before discovery. Filenames currently use deterministic case-insensitive
+code-unit order, not full .NET culture collation or EE's `#`-folder priority.
+As in Emuera, a non-event function defined
 twice keeps its first definition and the later one is reported in the
 loader diagnostics; only the system `EVENT*` functions may have several.
 Game scripts, data, and images are read in place and are not bundled or copied.
@@ -527,6 +531,58 @@ npm run compat   # JSON compatibility inventory on stdout
 The local-game integration test skips when the ignored game directory is absent.
 Keep `web/` alongside `dist/` when running the build. The server requires the
 game's `ERB/`, `CSV/`, and `resources/` directories.
+
+### Native compatibility checks
+
+`test/native-compat.test.ts` runs the ERB fixtures in `test/fixtures/` in both
+interpreted and warmed JIT execution. The control-flow, numeric, and string-builtin
+fixtures were also run unchanged with **Emuera.NET 1.824+v24+EMv18+EEv56
+NAudio** under Wine. To repeat the native check, make a throwaway game folder
+with empty `CSV/` and an `ERB/` containing one fixture, copy a compatible
+`Emuera.exe` there, enable `システム関数の上書きを許可する:YES` in
+`emuera.config`, and run `wine ./Emuera.exe` from that folder. Each fixture
+writes `emuera.log` with `OUTPUTLOG` and ends at `DONE`; compare its printed
+lines with the expectations in the TypeScript test. Do not run these probes
+inside an installed game's directory. The browser runtime additionally prints
+its existing `Log written to emuera.log` notification.
+
+The verified behavior includes NAND/NOR short-circuiting, `RETURN 0` when a
+normal routine reaches its end (without clearing other result slots),
+expression-function fall-through preserving `RESULT`, FOR/REPEAT counters
+advancing on `BREAK`, ignored trailing argument separators, comma-before-compound
+assignments, statement `==` assignment, and the unset default-character value
+of `-1`. Native string `<=` and `>=` both behave as strict `<`; this legacy
+quirk is intentional, including in JIT and `CASE IS` comparisons. Shift-JIS
+width counts an unencodable supplementary character as two UTF-16 fallback bytes.
+Scripts, CSVs, and config files accept CRLF, LF, and lone CR line endings.
+
+Numeric conversion checks distinguish `ISNUMERIC` from `TOINT`: empty base
+prefixes are not numeric, signed exponents are rejected by `ISNUMERIC` but
+accepted by `TOINT`, and a missing exponent in `TOINT("4e")` is an error.
+Both functions report overflow instead of wrapping or quietly returning zero.
+Full 64-bit hexadecimal/binary bit patterns still convert to signed values.
+
+Regex compatibility includes Unicode predefined classes and word boundaries,
+.NET capture numbering (unnamed groups before named groups), `Regex.Escape`
+punctuation/whitespace, and replacement tokens `${name}`, `$0`, `$+`, `$_`,
+`$&`, ``$` ``, `$'`, and `$$`. An undefined numeric group such as `$12`
+stays literal rather than falling back to `$1` plus `2`. This is not complete
+.NET regex compatibility: supplementary-character matching still uses JavaScript
+Unicode semantics, and numeric pattern backreferences are not remapped for
+mixed named/unnamed captures. Invalid JavaScript regex syntax reports a script error.
+
+Reference checks:
+[Emuera operators](https://evilmask.gitlab.io/emuera.em.doc/Emuera/operand.html),
+[RETURN](https://evilmask.gitlab.io/emuera.em.doc/Reference/RETURN.html),
+[BREAK/CONTINUE](https://evilmask.gitlab.io/emuera.em.doc/Reference/CONTINUE.html),
+[configuration](https://evilmask.gitlab.io/emuera.em.doc/Emuera/config.html),
+[TOINT/ISNUMERIC](https://evilmask.gitlab.io/emuera.em.doc/Reference/TOINT.html),
+[.NET regex substitutions](https://learn.microsoft.com/en-us/dotnet/standard/base-types/substitutions-in-regular-expressions),
+and [.NET character classes](https://learn.microsoft.com/en-us/dotnet/standard/base-types/character-classes-in-regular-expressions).
+Other engines' tests are leads, not an oracle: native EE reports errors for
+numeric overflow and uses culture-dependent number formatting. Broader `TOSTR`
+formats, additional `REPLACE` modes, Anchor translation, and
+full filename-collation/priority behavior still need separate compatibility work.
 
 ## Implemented subset
 

@@ -106,7 +106,7 @@ export function classify(line: Line): { op: string; args: string } {
   // Instructions match whole identifiers: "printNum ++" assigns a variable, it is not a PRINT variant.
   if (isSupported(op) || op.startsWith("DEBUGPRINT")) return { op, args: command[2]! };
   // `VALUE ,= ,` is still an assignment line in Emuera (rejected for the extra left-hand comma).
-  if (/^(?:\+\+|--)\s*\S/u.test(line.text) || /^[^\s=,]+(?:\s*:.*?)?(?:\s*,[\s\w]*)?\s*(?:\+\+|--|(?:'|<<|>>|[+\-*/%&|^])?=)(?!=)/u.test(line.text))
+  if (/^(?:\+\+|--)\s*\S/u.test(line.text) || /^[^\s=,]+(?:\s*:.*?)?(?:\s*,[\s\w]*)?\s*(?:==|\+\+|--|(?:'|<<|>>|[+\-*/%&|^])?=)(?!=)/u.test(line.text))
     return { op: "ASSIGN", args: line.text };
   return { op, args: command[2]! };
 }

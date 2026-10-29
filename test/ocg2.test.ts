@@ -102,7 +102,8 @@ RETURN
 @MESSAGE
 PRINTW visible
 WAIT
-WAITANYKEY`), 50_000, { jit });
+WAITANYKEY
+RETURN RESULT`), 50_000, { jit });
     const forced = runtime.start();
     assert.equal(forced.input?.stopSkipping, true, JSON.stringify(forced.error));
     assert.equal(text(forced), "visible\nvisible\nvisible\nvisible\n42 1 0");

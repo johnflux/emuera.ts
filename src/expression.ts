@@ -114,6 +114,7 @@ export function parseExpression(source: string): Expr {
           args.push(at(",") || at(")") ? { kind: "omitted" } : expression(0));
           if (!at(",")) break;
           take();
+          if (at(")")) break;
         } while (true);
       }
       expect(")");
@@ -219,12 +220,16 @@ export function evaluate(expr: Expr, context: EvaluationContext): Value {
       const a = evaluate(expr.left, context);
       if (expr.op === "&&" && integer(a) === 0n) return 0n;
       if (expr.op === "||" && integer(a) !== 0n) return 1n;
+      if (expr.op === "!&" && integer(a) === 0n) return 1n;
+      if (expr.op === "!|" && integer(a) !== 0n) return 0n;
       const b = evaluate(expr.right, context);
       if (expr.op === "+" && typeof a === "string") return a + text(b);
       if (expr.op === "*" && typeof a === "string") return repeatString(a, integer(b));
       if (expr.op === "*" && typeof b === "string") return repeatString(b, integer(a));
       if (COMPARISONS.has(expr.op)) {
         if (typeof a !== typeof b) throw new EraError("Cannot compare strings and integers");
+        // Native Emuera's string <= and >= both use strict less-than.
+        if (typeof a === "string" && (expr.op === "<=" || expr.op === ">=")) return a < b ? 1n : 0n;
         const yes = expr.op === "==" ? a === b : expr.op === "!=" ? a !== b : expr.op === "<" ? a < b
           : expr.op === ">" ? a > b : expr.op === "<=" ? a <= b : a >= b;
         return yes ? 1n : 0n;

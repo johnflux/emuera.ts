@@ -65,24 +65,43 @@ export const INTEGER_LITERAL = /^(0[xX][0-9a-fA-F]+|0[bB][01]+|\d+)(?:([pPeE])([
 /**
  * Emuera's ISNUMERIC/TOINT parsing: a digit (or sign then digit), an integer literal
  * (0x/0b prefixes and p/e exponents included) and an optional ".digits" tail.
- * Strings with multibyte characters are never numeric. Returns undefined when not numeric.
+ * ISNUMERIC rejects signed/empty exponents; TOINT accepts signed exponents but
+ * reports an empty exponent as an error. Overflow is an error in either mode.
  */
-export function numericString(source: string): bigint | undefined {
+export function numericString(source: string, mode: "check" | "convert" = "check"): bigint | undefined {
   if (/[^\x00-\x7f]/.test(source)) return undefined;
-  const match = /^(?:0[xX]([0-9a-fA-F]*)(?:[pP]([0-9a-fA-F]*))?|0[bB]([01]*)(?:[pPeE]([01]*))?|([+-]?\d+)(?:[pPeE](\d*))?)(?:\.\d*)?$/.exec(source);
+  if (/^0[bB]\d*[2-9]/.test(source)) throw new EraError("Binary notation contains illegal characters");
+  if (/^0[xX]-/.test(source)) throw new EraError("Hexadecimal notation cannot contain a minus sign");
+  const match = /^(?:0[xX]([0-9a-fA-F]*)(?:[pP]([0-9a-fA-F]*))?|0[bB]([01]*)(?:[pPeE]([01]*))?|([+-]?\d+)(?:[pPeE]([+-]?\d*))?)(?:\.\d*)?$/.exec(source);
   if (!match) return undefined;
   const [, hex, hexExponent, binary, binaryExponent, decimal, decimalExponent] = match;
   const [digits, base, exponentDigits, exponentBase] = hex !== undefined ? [hex, 16, hexExponent, 2]
     : binary !== undefined ? [binary, 2, binaryExponent, /[eE]/.test(source) ? 10 : 2] : [decimal!, 10, decimalExponent, /[eE]/.test(source) ? 10 : 2];
-  const parse = (value: string | undefined, radix: number): bigint =>
-    !value || value === "+" || value === "-" ? 0n : radix === 10 ? BigInt(value) : BigInt((radix === 16 ? "0x" : "0b") + value);
+  if (!digits) return undefined;
+  if (exponentDigits !== undefined && !/^\d/.test(exponentDigits)) {
+    if (mode === "check") return undefined;
+    if (!/^[+-]\d+$/.test(exponentDigits)) throw new EraError(`"${source}" cannot be converted to an integer value`);
+  }
+  const minimum = -(1n << 63n), maximum = (1n << 63n) - 1n;
+  const overflow = (): never => { throw new EraError(`"${source}" is outside the 64-bit integer range`); };
+  const parse = (value: string | undefined, radix: number): bigint => {
+    if (value === undefined) return 0n;
+    const parsed = radix === 10 ? BigInt(value) : BigInt((radix === 16 ? "0x" : "0b") + value);
+    if (parsed < minimum || parsed > (radix === 10 ? maximum : (1n << 64n) - 1n)) overflow();
+    return BigInt.asIntN(64, parsed);
+  };
   let value = parse(digits, base);
   const exponent = parse(exponentDigits, base);
-  if (exponent > 0n) {
-    if (exponent > 63n) throw new EraError(`"${source}" is outside the 64-bit integer range`);
+  if (value === 0n) return 0n;
+  if (exponent < 0n) {
+    if (exponent < -63n) return 0n;
+    value /= BigInt(exponentBase) ** -exponent;
+  } else if (exponent > 0n) {
+    if (exponent > 63n) overflow();
     value *= BigInt(exponentBase) ** exponent;
   }
-  return BigInt.asIntN(64, value);
+  if (value < minimum || value > maximum) overflow();
+  return value;
 }
 export function integerLiteral(source: string): bigint {
   const match = INTEGER_LITERAL.exec(source);

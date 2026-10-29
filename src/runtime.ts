@@ -18,6 +18,7 @@ import { DECLINE, loadIntrinsics, type Intrinsic } from "./intrinsics.js";
 import { ASYNC, Jit, type CallAnalysis } from "./jit.js";
 import { readNativeSave, writeNativeSave, type NativeSave, type SavedContainers, type SaveMetadata } from "./save-format.js";
 import { fixHistoryHtml, SHARP_METHODS, supportedSharpCall, translateHistoryDate } from "./plugin-compat.js";
+import { regexCharacterClasses, regexGroupOrder, replaceRegex } from "./regex.js";
 
 export interface Style { color: string; background: string; alignment: "left" | "center" | "right"; fontStyle: number; font?: string }
 type Rect = [x: number, y: number, width: number, height: number];
@@ -516,6 +517,7 @@ export class Runtime {
     globals.define("SAVEDATA_TEXT", true, [1]);
     ["STR", "SAVESTR", "GLOBALS", "RESULTS", "WINDOW_TITLE", "GAMEBASE_TITLE", "GAMEBASE_INFO", "GAMEBASE_YEAR", "GAMEBASE_AUTHOR"].forEach((name) => globals.define(name, true, game.variableSizes.get(name) ?? [name === "STR" ? 20000 : 1000]));
     for (const name of ["GAMEBASE_VERSION", "GAMEBASE_CODE", "GAMEBASE_ALLOWVERSION", "GAMEBASE_DEFAULTCHARA", "GAMEBASE_NOITEM", "CHARANUM"]) globals.define(name);
+    globals.seed("GAMEBASE_DEFAULTCHARA", 0, -1n);
     const base = new Map([...(game.tables.get("GAMEBASE")?.values() ?? [])].map((row) => [row[0], row[1] ?? ""]));
     for (const [variable, csv] of [["GAMEBASE_TITLE", "タイトル"], ["GAMEBASE_INFO", "追加情報"], ["GAMEBASE_YEAR", "製作年"], ["GAMEBASE_AUTHOR", "作者"], ["WINDOW_TITLE", "ウィンドウタイトル"]])
       globals.seed(variable!, 0, base.get(csv!) ?? "");
@@ -1884,7 +1886,8 @@ export class Runtime {
             this.textbox = argText(args, name, 0);
             this.textboxChanged = true;
             return 1n;
-          case "ESCAPE": return argText(args, name, 0).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          case "ESCAPE": return argText(args, name, 0).replace(/[\t\n\f\r #$()*+.?[\^{|\\]/g, (c) =>
+            ({ "\t": "\\t", "\n": "\\n", "\f": "\\f", "\r": "\\r" })[c] ?? "\\" + c);
           case "ISNUMERIC": return numericString(argText(args, name, 0)) === undefined ? 0n : 1n;
           case "GROUPMATCH": return BigInt(args.slice(1).filter((value) => value === args[0]).length);
           case "TOLOWER": return argText(args, name, 0).toLowerCase();
@@ -1944,7 +1947,7 @@ export class Runtime {
             return result;
           }
           case "TOINT": {
-            return numericString(argText(args, name, 0)) ?? 0n;
+            return numericString(argText(args, name, 0), "convert") ?? 0n;
           }
           case "STRLENU": return BigInt([...argText(args, name, 0)].length);
           case "STRLENSU": return BigInt(argText(args, name, 0).length);
@@ -2314,7 +2317,7 @@ export class Runtime {
             }
             return BigInt(result.count);
           }
-          case "REPLACE": return argText(args, name, 0).replace(this.regex(argText(args, name, 1)), argText(args, name, 2));
+          case "REPLACE": return replaceRegex(argText(args, name, 0), this.regex(argText(args, name, 1)), argText(args, name, 2));
           case "STRFIND": case "STRFINDU": {
             const source = argText(args, name, 0), sought = argText(args, name, 1);
             let start = args[2] === undefined ? 0 : Number(argInt(args, name, 2));
@@ -2525,9 +2528,9 @@ export class Runtime {
   /** REGEXPMATCH: the match count, groups per match (group 0 included) and each match's groups in order. */
   private regexpMatch(source: string, pattern: string): { count: number; groups: number; values: string[] } {
     const regex = this.regex(pattern);
-    const groups = new RegExp(`(?:${regex.source})|`, regex.flags.replace("g", "")).exec("")!.length;
+    const order = regexGroupOrder(regex);
     const matches = [...source.matchAll(regex)];
-    return { count: matches.length, groups, values: matches.flatMap((match) => Array.from({ length: groups }, (_, i) => match[i] ?? "")) };
+    return { count: matches.length, groups: order.length, values: matches.flatMap((match) => order.map((index) => match[index] ?? "")) };
   }
   /** Compiles a .NET pattern; leading inline options like (?i) become JS flags, mid-pattern ones scope the rest. */
   private regex(pattern: string): RegExp {
@@ -2545,6 +2548,7 @@ export class Runtime {
       // .NET accepts escaped punctuation that JS rejects under the Unicode flag.
       source = source.replace(/\\(.)/g, (escape: string, character: string) =>
         /^[ ,#=!:%&@<>;"'`~]$/.test(character) ? character : escape);
+      source = regexCharacterClasses(source);
       try { cached = new RegExp(source, flags); }
       catch (error) {
         if (!(error instanceof SyntaxError)) throw error;
@@ -2635,14 +2639,16 @@ export class Runtime {
       if (c === '"') quoted = true;
       else if (c === "(") depth++;
       else if (c === ")") depth--;
-      else if (depth === 0 && (match = (this.fullWidthSpace ? /^(\+\+|--|'=|<<=|>>=|[+\-*/%&|^]?=)\s*/ : /^(\+\+|--|'=|<<=|>>=|[+\-*/%&|^]?=)[ \t]*/).exec(source.slice(at)))) break;
+      else if (depth === 0 && (match = (this.fullWidthSpace ? /^(\+\+|--|'=|==|<<=|>>=|[+\-*/%&|^]?=)\s*/ : /^(\+\+|--|'=|==|<<=|>>=|[+\-*/%&|^]?=)[ \t]*/).exec(source.slice(at)))) break;
     }
     if (!match) throw new EraError("Invalid assignment");
-    const target = source.slice(0, at).trim();
+    const operator = match[1]!;
+    let target = source.slice(0, at).trim();
+    if (/^(?:<<|>>|[+\-*/%&|^])=$/.test(operator)) target = target.replace(/,$/, "").trimEnd();
     if (splitArguments(target).length > 1) throw new EraError("Left side of assignment has an extra ','");
     const reference = this.parse(target);
     if (reference.kind !== "variable") throw new EraError("Invalid assignment target");
-    assignment = { reference, operator: match[1]!, value: source.slice(at + match[0].length) };
+    assignment = { reference, operator: operator === "==" ? "=" : operator, value: source.slice(at + match[0].length) };
     this.assignmentCache.set(source, assignment);
     return assignment;
   }
@@ -2759,7 +2765,9 @@ export class Runtime {
   private arguments(source: string): readonly string[] {
     let parts = this.argumentCache.get(source);
     if (!parts) {
-      parts = splitArguments(source);
+      const values = splitArguments(source);
+      if (values.length > 1 && values.at(-1) === "") values.pop();
+      parts = values;
       if (source.length <= 4096 && this.argumentCache.size < 16_384)
         this.argumentCache.set(source, parts);
     }
@@ -3081,7 +3089,9 @@ export class Runtime {
           }
           case "CASE": case "CASEELSE": next = this.blockEnd(code, pc) + 1; break;
           case "FOR": case "REPEAT": {
-            const parts = op === "FOR" ? this.arguments(args) : ["COUNT", "0", args];
+            const values = this.arguments(args);
+            if (op === "REPEAT" && values.length !== 1) throw new EraError("REPEAT expects a count");
+            const parts = op === "FOR" ? values : ["COUNT", "0", values[0]!];
             if (parts.length < 3 || parts.length > 4) throw new EraError("FOR expects variable, start, end[, step]");
             let state = loopStates.get(pc);
             if (!state) {
@@ -3479,7 +3489,12 @@ export class Runtime {
           case "BREAK": case "CONTINUE": {
             const loop = loops.filter((loop) => loop.start < pc && loop.end > pc).sort((a, b) => b.start - a.start)[0];
             if (!loop) throw new EraError(`${op} outside a loop`);
-            if (op === "BREAK") { next = loop.end + 1; loopStates.delete(loop.start); }
+            if (op === "BREAK") {
+              const state = loopStates.get(loop.start);
+              if (state) this.assign(frame, state.variable, BigInt.asIntN(64, integer(evaluate(state.variable, frame.context)) + state.step));
+              next = loop.end + 1;
+              loopStates.delete(loop.start);
+            }
             else next = loop.end;
             break;
           }
@@ -4091,6 +4106,7 @@ export class Runtime {
       pc = next;
       if (single) { single.next = next; return undefined; }
     }
+    if (!single && !this.finished && !frame.returnType) this.globals.set("RESULT", [], 0n, frame.context);
   }
   private blockEnd(code: Instruction[], start: number): number {
     let current = start;

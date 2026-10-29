@@ -3,7 +3,7 @@ import { closeSync, existsSync, openSync, readdirSync, readFileSync, readSync } 
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { characterField, EraError, EVENT_FUNCTIONS, isCharacterNumberField, key, allowsFullWidthSpace, stripComment, splitArguments, type Diagnostic, type Line, type Routine } from "./model.js";
-import { CONFIG_ITEMS } from "./config-items.js";
+import { CONFIG_ITEMS, configSetting } from "./config-items.js";
 
 /** Browser-presentation ERB layered over eraToho The World without editing its files (see docs/hotpatches.md). */
 export const HOTPATCH_ROOT = fileURLToPath(new URL("../hotpatch/", import.meta.url));
@@ -147,18 +147,17 @@ const ordinalIgnoreCase = (a: string, b: string): number => {
   const x = a.toUpperCase(), y = b.toUpperCase();
   return x < y ? -1 : x > y ? 1 : 0;
 };
-/**
- * Emuera's load order (Config.getFiles with ファイル名順にソート): each directory's subdirectories first, then its
- * files, both ordered case-insensitively by code unit. Event functions run, and duplicates resolve, in this order.
- */
-export async function filesUnder(root: string): Promise<string[]> {
+/** Deterministic discovery; script loading uses files before subdirectories and honors SearchSubdirectory. */
+export async function filesUnder(root: string, options: { recursive?: boolean; directoriesFirst?: boolean } = {}): Promise<string[]> {
   const entries = await readdir(root, { withFileTypes: true });
   const names = (directory: boolean): string[] =>
     entries.filter((entry) => directory ? entry.isDirectory() : entry.isFile()).map((entry) => entry.name).sort(ordinalIgnoreCase);
-  const result: string[] = [];
-  for (const name of names(true)) result.push(...await filesUnder(path.join(root, name)));
-  for (const name of names(false)) result.push(path.join(root, name));
-  return result;
+  const files = names(false).map((name) => path.join(root, name));
+  const nested: string[] = [];
+  if (options.recursive !== false) {
+    for (const name of names(true)) nested.push(...await filesUnder(path.join(root, name), options));
+  }
+  return options.directoriesFirst === false ? [...files, ...nested] : [...nested, ...files];
 }
 export async function readText(file: string): Promise<string> {
   return decodeText(await readFile(file));
@@ -181,7 +180,7 @@ function decodeText(buffer: Buffer): string {
 }
 function* csvRecords(source: string, file: string): Generator<{ row: string[]; line: number }> {
   // Strip each physical line's comments before multiline blocks are joined.
-  const cleaned = source.split(/\r?\n/).map((raw, line) => {
+  const cleaned = source.split(/\r\n|[\r\n]/).map((raw, line) => {
     let quoted = false;
     for (let i = 0; i < raw.length; i++) {
       if (raw[i] === '"') {
@@ -216,7 +215,7 @@ export function emptyGame(root = ""): Game {
   return { root, routines: new Map(), headers: [], tables: new Map(), names: new Map(), erdNames: new Map(), sprites: new Map(), diagnostics: [], scriptFiles: 0, variableSizes: new Map(), macros: new Map(), characters: new Map(), renames: new Map(), money: { label: "\u00a5", first: true }, config: new Map(), replacements: new Map(), containers: { SAVE: containerNames(), GLOBAL: containerNames(), STATIC: containerNames() }, resourceBase: "/resources/" };
 }
 function* logicalLines(source: string, file: string): Generator<Line> {
-  const rows = source.replace(/^\uFEFF/, "").split(/\r?\n/);
+  const rows = source.replace(/^\uFEFF/, "").split(/\r\n|[\r\n]/);
   let opening: number | undefined;
   let start: number | undefined;
   let parts: string[] = [];
@@ -360,7 +359,7 @@ export async function loadGame(root = GAME_ROOT, options: { debug?: boolean } = 
   const fixedConfig = ["_fixed.config", "fixed.config"].map((name) => path.join(csvRoot, name)).find(existsSync);
   for (const configFile of [defaultConfig, path.join(root, "emuera.config"), fixedConfig]) {
     if (!configFile || !existsSync(configFile)) continue;
-    for (const raw of (await readText(configFile)).split(/\r?\n/)) {
+    for (const raw of (await readText(configFile)).split(/\r\n|[\r\n]/)) {
       const row = raw.trim();
       const separator = row.indexOf(":");
       if (separator > 0 && !row.startsWith(";")) {
@@ -376,7 +375,10 @@ export async function loadGame(root = GAME_ROOT, options: { debug?: boolean } = 
       if (row[1]) game.renames.set(row[1], row[0] ?? "");
     }
   }
-  const erbFiles = await filesUnder(gameDirectory(root, "ERB"));
+  const erbFiles = await filesUnder(gameDirectory(root, "ERB"), {
+    directoriesFirst: false,
+    recursive: /^(YES|TRUE|1)$/i.test(configSetting(game.config, "SearchSubdirectory") ?? ""),
+  });
   for (const file of erbFiles.filter((file) => /\.erd$/i.test(file))) {
     const name = key(path.basename(file).slice(0, -4));
     if (game.names.has(name)) throw new EraError(`Duplicate ERD name table: ${name}`, { file, line: 0 });

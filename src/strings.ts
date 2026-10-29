@@ -21,7 +21,7 @@ function cp932DoubleByte(): Set<string> {
 export function stringWidth(value: string): number {
   const wide = cp932DoubleByte();
   let width = 0;
-  for (const c of value) width += wide.has(c) ? 2 : 1;
+  for (const c of value) width += wide.has(c) ? 2 : c.length;
   return width;
 }
 

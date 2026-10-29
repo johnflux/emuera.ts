@@ -189,8 +189,8 @@ const H = {
   ne(a: Value, b: Value): bigint { if (typeof a !== typeof b) throw new EraError("Cannot compare strings and integers"); return a !== b ? 1n : 0n; },
   lt(a: Value, b: Value): bigint { if (typeof a !== typeof b) throw new EraError("Cannot compare strings and integers"); return a < b ? 1n : 0n; },
   gt(a: Value, b: Value): bigint { if (typeof a !== typeof b) throw new EraError("Cannot compare strings and integers"); return a > b ? 1n : 0n; },
-  le(a: Value, b: Value): bigint { if (typeof a !== typeof b) throw new EraError("Cannot compare strings and integers"); return a <= b ? 1n : 0n; },
-  ge(a: Value, b: Value): bigint { if (typeof a !== typeof b) throw new EraError("Cannot compare strings and integers"); return a >= b ? 1n : 0n; },
+  le(a: Value, b: Value): bigint { if (typeof a !== typeof b) throw new EraError("Cannot compare strings and integers"); return (typeof a === "string" ? a < b : a <= integer(b)) ? 1n : 0n; },
+  ge(a: Value, b: Value): bigint { if (typeof a !== typeof b) throw new EraError("Cannot compare strings and integers"); return (typeof a === "string" ? a < b : a >= integer(b)) ? 1n : 0n; },
   /** A binary operator over two evaluated operands, as `evaluate` computes it (CASE IS tests). */
   bin(op: string, a: Value, b: Value): Value {
     if (op === "&&") return integer(a) === 0n ? 0n : H.and2(a, b);
@@ -256,6 +256,8 @@ class Generator {
         const a = this.expr(e.left), b = this.expr(e.right);
         if (e.op === "&&") return `(H.int(${a}) === 0n ? 0n : H.truth(${b}))`;
         if (e.op === "||") return `(H.int(${a}) !== 0n ? 1n : H.truth(${b}))`;
+        if (e.op === "!&") return `(H.int(${a}) === 0n ? 1n : H.not(${b}))`;
+        if (e.op === "!|") return `(H.int(${a}) !== 0n ? 0n : H.not(${b}))`;
         const helper = BINARY[e.op];
         return helper ? `H.${helper}(${a}, ${b})` : `H.bin(${JSON.stringify(e.op)}, ${a}, ${b})`;
       }
@@ -349,7 +351,9 @@ class Generator {
         return `${body} ${jump(branch + 1)}`;
       }
       case "FOR": case "REPEAT": {
-        const parts = op === "FOR" ? this.arguments(args) : ["COUNT", "0", args];
+        const values = this.arguments(args);
+        if (op === "REPEAT" && values.length !== 1) throw new Unsupported();
+        const parts = op === "FOR" ? values : ["COUNT", "0", values[0]!];
         if (parts.length < 3 || parts.length > 4) throw new Unsupported();
         const variable = this.parse(parts[0]!);
         if (variable.kind !== "variable") throw new Unsupported();
@@ -374,7 +378,12 @@ class Generator {
         const loop = loops.filter((l) => l.start < k && l.end > k).sort((a, b) => b.start - a.start)[0];
         if (!loop) throw new Unsupported();
         if (op === "CONTINUE") return `${p} ${jump(loop.end)}`;
-        return `${p} ${this.loopState(loop.start) ? `${state(loop.start)} = false; ` : ""}${jump(loop.end + 1)}`;
+        if (!this.loopState(loop.start)) return `${p} ${jump(loop.end + 1)}`;
+        const opener = code[loop.start]!;
+        const variable = this.parse(opener.op === "FOR" ? this.arguments(opener.args)[0]! : "COUNT");
+        if (variable.kind !== "variable") throw new Unsupported();
+        return `${p} ${this.write(variable, `BigInt.asIntN(64, H.int(${this.read(variable)}) + s${loop.start})`)} ` +
+          `${state(loop.start)} = false; ${jump(loop.end + 1)}`;
       }
       case "RESTART": {
         if (args) throw new Unsupported();
@@ -542,7 +551,7 @@ class Generator {
       loopStates.length ? `let ${loopStates.join(", ")};` : "",
       `try { for (;;) switch (pc) {`,
       ...cases,
-      `case ${code.length}: return undefined;`,
+      `case ${code.length}: if (!R.finished && !F.returnType) H.ret(R, C, [0n]); return undefined;`,
       `default: throw new Error("Invalid compiled pc " + pc);`,
       `} } catch (e) {`,
       `if (e instanceof H.EraError) { const line = L[pc]; if (!e.source) e.source = line; else if (e.source !== line && e.trace.length < 30) e.trace.push(line); }`,
