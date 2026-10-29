@@ -421,6 +421,9 @@ export class Runtime {
   private maxShopItem: number;
   private printCPerLine: number;
   private outputBytes = 0;
+  private outputEvents = 0;
+  private action = "start";
+  private prefetching = false;
   /** ボタンの途中で行を折りかえさない: a line wraps between buttons, never inside one (unless it starts the line). */
   private readonly buttonWrap: boolean;
   private autoSave: boolean;
@@ -670,6 +673,7 @@ export class Runtime {
   }
   start(entry = "SYSTEM_TITLE"): Snapshot {
     if (this.iterator) throw new EraError("Runtime has already started");
+    this.action = `start @${entry}`;
     this.iterator = this.run(entry);
     return this.advance();
   }
@@ -1235,8 +1239,10 @@ export class Runtime {
     const pending = this.pending;
     if (this.ahead || !pending || pending.kind !== "wait" || pending.timeout !== undefined || pending.blocking) return false;
     this.staged.stage();
+    this.prefetching = true;
     try { this.ahead = { snapshot: this.input("") }; }
     catch (error) { this.ahead = { error }; }
+    finally { this.prefetching = false; }
     return true;
   }
   /** Whether a click-to-continue has been run ahead and is waiting for the player. */
@@ -1266,6 +1272,7 @@ export class Runtime {
     }
     const accepted = this.pending.kind === "integer" ? BigInt(value.trim()).toString() : value;
     if (this.pending.buttonValues && !this.pending.buttonValues.includes(accepted)) throw new EraError("Choose one of the displayed button values");
+    this.action = `${this.prefetching ? "prefetch" : "input"} (${this.pending.kind})`;
     this.messageSkip = false;
     this.textbox = "";
     if (this.pending.kind !== "wait") { this.buttonLines = []; this.lineButtons = []; }
@@ -1278,6 +1285,8 @@ export class Runtime {
     if (this.ahead) throw new EraError("Runtime is not waiting for timed input");
     if (!this.pending?.timeout || !this.timed) throw new EraError("Runtime is not waiting for timed input");
     this.outputBytes = 0;
+    this.outputEvents = 0;
+    this.action = `timeout (${this.pending.kind})`;
     const { value, message, countdown } = this.timed;
     // The countdown line is replaced by the timeout message; otherwise a nonempty message is printed.
     if (countdown) {
@@ -1293,7 +1302,10 @@ export class Runtime {
     useMacros(this.game.macros);
     if (!this.iterator || this.finished) throw new EraError("Runtime is not running");
     this.steps = 0;
-    if (resetOutputBytes) this.outputBytes = 0;
+    if (resetOutputBytes) {
+      this.outputBytes = 0;
+      this.outputEvents = 0;
+    }
     const output: Output[] = [];
     try {
       while (true) {
@@ -1329,12 +1341,26 @@ export class Runtime {
       }
     } catch (error) {
       if (!(error instanceof EraError)) throw error;
+      this.captureError(error);
       output.push(...this.deferred);
       this.deferred = [];
       this.finished = true;
       this.iterator.return(undefined);
       return this.withDebug({ status: "error", output, input: null, error: error.diagnostic(), title: this.windowTitle(), target: this.currentTarget() });
     }
+  }
+  private captureError(error: EraError): void {
+    if (error.context) return;
+    const source = this.currentSource;
+    error.context = {
+      game: path.basename(this.game.root), gameVersion: this.gameStamp().gameVersion,
+      debug: !!this.game.debug, jit: !!this.jit, action: this.action,
+      ...(source && "text" in source && typeof source.text === "string" ? { instruction: source.text.slice(0, 500) } : {}),
+      routines: this.doing.slice(-16).map((routine) => `@${routine.label ?? routine.name} (${routine.file}:${routine.line})`),
+      instructions: this.steps, instructionLimit: this.maxSteps,
+      outputCharacters: this.outputBytes, outputLimit: 2_000_000, outputEvents: this.outputEvents,
+      deferredEvents: this.deferred.length, lastLoadedSlot: this.lastLoad.slot.toString(),
+    };
   }
   private currentTarget(): number {
     return Number(this.globals.get("TARGET", [], this.context(this.globals)));
@@ -2398,6 +2424,9 @@ export class Runtime {
       const value = result.value ?? (frame.returnType === "string" ? "" : frame.returnType ? 0n : undefined);
       if (value === undefined) throw new EraError(`Expression function ${name} did not return a value`);
       return value;
+    } catch (error) {
+      if (error instanceof EraError) this.captureError(error);
+      throw error;
     } finally {
       generator?.return(undefined);
       if (pushed) this.doing.pop();
@@ -2664,6 +2693,7 @@ export class Runtime {
     return { output };
   }
   private accountOutput(output: Output): void {
+    this.outputEvents++;
     this.outputBytes += JSON.stringify(output).length;
     if (this.outputBytes > 2_000_000) throw new EraError("Output limit exceeded between inputs", this.currentSource);
   }
@@ -2812,6 +2842,10 @@ export class Runtime {
       this.doing.push(routine);
       let result: Value | undefined;
       try { result = entry.run(this, frame) as Value | undefined; }
+      catch (error) {
+        if (error instanceof EraError) this.captureError(error);
+        throw error;
+      }
       finally { this.doing.pop(); }
       if (info.returnType && result === undefined) return frame.returnType === "string" ? "" : 0n;
       return result;
@@ -2831,6 +2865,10 @@ export class Runtime {
       this.doing.push(routine);
       let result: Value | undefined;
       try { result = yield* this.runFrame(frame); }
+      catch (error) {
+        if (error instanceof EraError) this.captureError(error);
+        throw error;
+      }
       finally { this.doing.pop(); }
       if (info.returnType && result === undefined) return frame.returnType === "string" ? "" : 0n;
       return result;
@@ -3121,7 +3159,7 @@ export class Runtime {
             if (!BEGIN_STATES.has(state)) throw new EraError(`${op}のキーワード"${args.trim()}"は未定義です`);
             this.pendingBegin = state;
             this.style = { color: this.display.foreground, background: this.display.background, alignment: "left", fontStyle: 0 };
-            // Like RETURN without touching RESULT; the system loop switches state once its call returns.
+            // End this routine without touching RESULT; the system loop switches state once its call returns.
             return;
           }
           case "DOTRAIN": {
@@ -3469,7 +3507,7 @@ export class Runtime {
           case "RETURN": case "RETURNFORM": {
             const source = op === "RETURNFORM" ? this.formatted(args, frame) : args;
             if (source.trim()) this.arguments(source).map(ev).forEach((value, i) => this.globals.set("RESULT", [literal(BigInt(i))], value, frame.context));
-            else if (op === "RETURNFORM") this.globals.set("RESULT", [], 0n, frame.context);
+            else this.globals.set("RESULT", [], 0n, frame.context);
             return;
           }
           case "VARSIZE": {

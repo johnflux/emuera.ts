@@ -4,9 +4,65 @@ import { mkdtemp, mkdir, writeFile, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { once } from "node:events";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { createApp } from "../src/server.js";
 import { discoverGames, emptyGame, gameDirectory, indexScript, loadGame, readText } from "../src/loader.js";
 import { EraError } from "../src/model.js";
+
+test("HTTP crash reports carry execution context and development breadcrumbs exclude input values", async () => {
+  const script = `
+    import { once } from "node:events";
+    import { createApp } from ${JSON.stringify(new URL("../src/server.ts", import.meta.url).href)};
+    import { emptyGame, indexScript } from ${JSON.stringify(new URL("../src/loader.ts", import.meta.url).href)};
+    const game = emptyGame("/fixtures/crash-report");
+    indexScript(game, "@SYSTEM_TITLE\\nWAIT\\nTINPUT 100, 0\\nINPUTS\\nTHROW fixture crash", "crash.ERB");
+    const app = createApp(game, process.argv[1] === "true");
+    app.listen(0, "127.0.0.1");
+    await once(app, "listening");
+    try {
+      const base = "http://127.0.0.1:" + app.address().port;
+      const post = async (route, data) => {
+        const response = await fetch(base + route, {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data)
+        });
+        if (!response.ok) throw new Error(await response.text());
+        return response.json();
+      };
+      let state = await post("/api/start", { mode: "game" });
+      await post("/api/prefetch", { session: state.session });
+      state = await post("/api/input", { session: state.session, value: "" });
+      state = await post("/api/timeout", { session: state.session });
+      state = await post("/api/input", { session: state.session, value: "private-player-input" });
+      console.log(JSON.stringify(state));
+    } finally { app.closeAllConnections(); app.close(); }
+  `;
+  for (const development of [false, true]) {
+    const { stdout, stderr } = await promisify(execFile)(process.execPath, ["--import", "tsx", "--input-type=module", "--eval", script, String(development)]);
+    const result = JSON.parse(stdout);
+    assert.equal(result.status, "error");
+    assert.equal(result.error.context.action, "input (string)");
+    assert.equal(result.error.context.game, "crash-report");
+    assert.equal(result.error.context.server.game, "game");
+    assert.equal(result.error.context.server.session, result.session);
+    assert.equal(result.error.context.server.step, result.step);
+    assert.equal(result.error.context.server.action, "input");
+    assert.equal(JSON.stringify(result.error).includes("private-player-input"), false);
+    const breadcrumbs = stderr.split("\n").filter((line) => line.startsWith("[era execution] "))
+      .map((line) => JSON.parse(line.slice("[era execution] ".length)));
+    assert.equal(breadcrumbs.length, development ? 5 : 0);
+    if (development) {
+      assert.deepEqual(breadcrumbs.map((entry) => entry.action), ["start", "prefetch", "input (wait)", "timeout (integer)", "input (string)"]);
+      assert.deepEqual(breadcrumbs.map((entry) => entry.step), [0, 1, 1, 2, 3]);
+      for (const entry of breadcrumbs) {
+        assert.equal(entry.session, result.session);
+        assert.equal(entry.game, "game");
+        assert.ok(entry.pid > 0 && entry.heapUsedMiB > 0 && entry.heapTotalMiB > 0 && entry.rssMiB > 0);
+      }
+    }
+    assert.equal(stderr.includes("private-player-input"), false);
+  }
+});
 
 test("lowercase and mixed-case folders work through discovery, loading and resource serving", async () => {
   const games = await mkdtemp(path.join(tmpdir(), "era-folder-case-"));

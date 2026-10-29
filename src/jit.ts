@@ -390,7 +390,7 @@ class Generator {
       // Computed or optional labels: the interpreter runs the routine (see LOOP_STATE_OPS).
       case "GOTOFORM": case "TRYGOTO": case "TRYGOTOFORM": throw new Unsupported();
       case "RETURN": {
-        if (!args) return `${p} return undefined;`;
+        if (!args) return `${p} H.ret(R, C, [0n]); return undefined;`;
         let values: string[];
         try { values = this.arguments(args).map((part) => this.expr(this.parse(part))); } catch { return this.single(k); }
         return `${p} H.ret(R, C, [${values.join(", ")}]); return undefined;`;

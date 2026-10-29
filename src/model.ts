@@ -11,16 +11,34 @@ export interface Routine extends Source {
   lines: Line[];
   directives: Line[];
 }
-export interface Diagnostic extends Source { message: string; trace?: string[] }
+export interface ExecutionContext {
+  game: string;
+  gameVersion: string;
+  server?: { game: string; session: string; step: number; action: string };
+  debug: boolean;
+  jit: boolean;
+  action: string;
+  instruction?: string;
+  routines: string[];
+  instructions: number;
+  instructionLimit: number;
+  outputCharacters: number;
+  outputLimit: number;
+  outputEvents: number;
+  deferredEvents: number;
+  lastLoadedSlot: string;
+}
+export interface Diagnostic extends Source { message: string; trace?: string[]; context?: ExecutionContext }
 export class EraError extends Error {
   /** Calling lines, innermost caller first, recorded as the error unwinds. */
   trace: Source[] = [];
+  context?: ExecutionContext;
   constructor(message: string, public source?: Source) {
     super(message);
     this.name = "EraError";
   }
   diagnostic(): Diagnostic {
-    return { file: this.source?.file ?? "<runtime>", line: this.source?.line ?? 0, message: this.message, ...(this.trace.length ? { trace: this.trace.map((source) => `${source.file}:${source.line}`) } : {}) };
+    return { file: this.source?.file ?? "<runtime>", line: this.source?.line ?? 0, message: this.message, ...(this.trace.length ? { trace: this.trace.map((source) => `${source.file}:${source.line}`) } : {}), ...(this.context ? { context: this.context } : {}) };
   }
 }
 const keyCache = new Map<string, string>();

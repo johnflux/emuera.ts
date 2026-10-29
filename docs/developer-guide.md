@@ -37,6 +37,19 @@ selection is not yet supported end to end. Native binary saves can be loaded;
 the bundled slot-0 regression reaches the game's `EVENTLOAD` and gameplay input.
 Unsupported operations stop with their source filename and line.
 
+Runtime errors also include a **Copy debug report** button. Reports contain the game folder/version,
+debug/JIT settings, triggering action and input kind (not the submitted value), current instruction
+(truncated to 500 characters), up to 16 active routines, instruction/output budget counters,
+deferred-output count, and last loaded save slot. HTTP reports also identify the registered game,
+session, and response step. Output sizes count serialized characters, not
+UTF-8 bytes. The context is captured before routine unwinding, including errors inside expression
+functions and compiled calls.
+In development mode, the server synchronously writes an `[era execution]` breadcrumb before
+start, input, timeout, and prefetch requests. It includes the PID, game/session/step, action,
+debug setting, and heap/RSS measurements, but no submitted text or save contents. These
+breadcrumbs can survive a fatal Node out-of-memory crash that cannot produce an ERB error report;
+they identify the request being executed, not its final failing instruction.
+
 **eraToho Reverse:** the installed `GAMES/eratohoreverse` is tested through its
 title, Normal-mode character creation, character-template and game saving, trainer selection,
 the shop, and several initial training turns. ARG/ARGS arrays grow to fit each routine's declared
@@ -692,7 +705,9 @@ declarations and the expression evaluator. No single routine dominates.
   `SUMCARRAY`); value-filling and ranged `VARSET`; `__INT_MAX__`/`__INT_MIN__`.
 - String instructions (`STRLEN*`, `STRLENS*`, `SUBSTRING*`, `STRFIND*`,
   `STRCOUNT`) store into `RESULT`/`RESULTS`; `TOFULL`/`TOHALF`.
-- `RETURNFORM` formats its argument, then evaluates the resulting comma-separated
+- Bare `RETURN` sets `RESULT:0` to zero (leaving other result elements unchanged),
+  rather than preserving a previous call's return value. This also applies to JIT execution.
+  `RETURNFORM` formats its argument, then evaluates the resulting comma-separated
   integer expressions into `RESULT` before returning. `BARSTR(value, max, length)`
   returns the same clamped bar as the `BARSTR` statement writes to `RESULTS`.
   `SAVENOS [destination]` writes the configured save-slot count (default 20)

@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { randomUUID } from "node:crypto";
 import { readdir, readFile, realpath, stat } from "node:fs/promises";
+import { writeSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { compatibility } from "./compatibility.js";
@@ -196,9 +197,18 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
     return entry;
   };
   const sessions = new Map<string, Session>();
+  function executionBreadcrumb(id: string, game: string, step: number, action: string, debug: boolean): void {
+    if (!development) return;
+    const { heapUsed, heapTotal, rss } = process.memoryUsage();
+    writeSync(2, `[era execution] ${JSON.stringify({ pid: process.pid, session: id, game, step, action, debug,
+      heapUsedMiB: Math.round(heapUsed / 1048576), heapTotalMiB: Math.round(heapTotal / 1048576), rssMiB: Math.round(rss / 1048576) })}\n`);
+  }
   /** Delivers a step's snapshot and records it so a reloaded page can replay the run (see /api/resume). */
-  function deliver(response: ServerResponse, id: string, session: Session | undefined, advance: Advance, snapshot: Snapshot, game: Game): void {
+  function deliver(response: ServerResponse, id: string, session: Session | undefined, advance: Advance, snapshot: Snapshot, game: Game, gameId = session?.game ?? path.basename(game.root)): void {
     const patched = patchTitleImage(game, snapshot);
+    if (patched.error?.context) patched.error.context.server = {
+      game: gameId, session: id, step: session ? session.step + 1 : 0, action: advance,
+    };
     if (session) {
       session.step++;
       if (patched.cbg) session.cbg = patched.cbg;
@@ -327,11 +337,12 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
             ...(display ? { display } : {}),
             ...(client ? { client } : {}),
           });
+          executionBreadcrumb(id, entry.id, 0, "start", debug);
           const snapshot = runtime.start();
           const session: Session | undefined = snapshot.status === "waiting"
             ? { runtime, used: now, mode: data.mode, game: entry.id, debug, history: [], bytes: 0, step: 0 } : undefined;
           if (session) sessions.set(id, session);
-          deliver(response, id, session, "start", snapshot, game);
+          deliver(response, id, session, "start", snapshot, game, entry.id);
         } catch (error) {
           if (!(error instanceof EraError)) throw error;
           json(response, { session: id, status: "error", output: [], input: null, error: error.diagnostic() });
@@ -356,6 +367,8 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
           if (display) session.runtime.setDisplay(display);
           if (client) session.runtime.setClient(client);
           const waiting = session.history.at(-1)?.snapshot.input?.kind === "wait";
+          const kind = session.history.at(-1)?.snapshot.input?.kind ?? "unknown";
+          executionBreadcrumb(data.session, session.game, session.step, `${timeout ? "timeout" : "input"} (${kind})`, session.debug);
           const snapshot = timeout ? session.runtime.timeout() : session.runtime.input(data.value as string);
           if (snapshot.status !== "waiting") sessions.delete(data.session);
           deliver(response, data.session, session, timeout ? "timeout" : waiting ? "continue" : "input", snapshot, session.runtime.game);
@@ -385,6 +398,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
         const client = clientState(data.client);
         const session = sessions.get(data.session);
         if (client && session) session.runtime.setClient(client);
+        if (session) executionBreadcrumb(data.session, session.game, session.step, "prefetch", session.debug);
         json(response, { prefetched: session?.runtime.prefetch() ?? false });
         return;
       }

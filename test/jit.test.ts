@@ -139,7 +139,13 @@ test("compiled routines produce the interpreter's output, results and errors", (
   assert.deepEqual(text(compiled), text(interpreted));
   assert.equal(compiled.status, interpreted.status);
   assert.equal(compiled.status, "error");
-  assert.deepEqual(compiled.error, interpreted.error);
+  const { context: compiledContext, ...compiledError } = compiled.error!;
+  const { context: interpretedContext, ...interpretedError } = interpreted.error!;
+  assert.deepEqual(compiledError, interpretedError);
+  assert.equal(compiledContext!.jit, true);
+  assert.equal(interpretedContext!.jit, false);
+  assert.deepEqual(compiledContext!.routines, interpretedContext!.routines);
+  assert.equal(compiledContext!.instruction, interpretedContext!.instruction);
   assert.ok(text(compiled).includes("caught"));
   const stats = (runtime as unknown as { jit: { compiledCount: number; errors: unknown[]; rejected: number } }).jit;
   assert.ok(stats.compiledCount >= 6, `compiled ${stats.compiledCount}`);

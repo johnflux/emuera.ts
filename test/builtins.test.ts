@@ -1074,7 +1074,7 @@ INPUT
 QUIT`, undefined, { jit });
       const snapshot = run.start();
       assert.equal(snapshot.status, "waiting", JSON.stringify(snapshot.error));
-      assert.deepEqual(texts(snapshot), ["first 42"]);
+      assert.deepEqual(texts(snapshot), ["first 0"]);
       assert.deepEqual(snapshot.output[0]!.style, {
         color: "#c0c0c0", background: "#000000", alignment: "left", fontStyle: 0,
       });

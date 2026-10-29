@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { readFile } from "node:fs/promises";
 import { compatibility } from "../src/compatibility.js";
 import { evaluate, parseExpression } from "../src/expression.js";
 import { csvRows, emptyGame, indexScript } from "../src/loader.js";
@@ -416,10 +417,73 @@ test("constants, unknown variables, bounds, bad declarations and directives fail
 test("budget stops infinite loops and global QUIT stops callers", () => {
   const infinite = runtime("@SYSTEM_TITLE\n$AGAIN\nGOTO AGAIN", "", 25).start();
   assert.match(infinite.error!.message, /Instruction limit/);
+  assert.equal(infinite.error!.context!.instructions, 26);
+  assert.equal(infinite.error!.context!.instructionLimit, 25);
   const quit = runtime("@SYSTEM_TITLE\nCALL STOP\nTHROW should not execute\n@STOP\nQUIT").start();
   assert.equal(quit.status, "halted");
   const recursive = runtime("@SYSTEM_TITLE\nCALL SYSTEM_TITLE").start();
   assert.match(recursive.error!.message, /Call depth limit/);
+  assert.equal(recursive.error!.context!.routines.length, 16);
+});
+test("bare RETURN resets RESULT:0 without clearing other results in interpreted and compiled calls", () => {
+  for (const jit of [false, true]) {
+    const game = emptyGame();
+    indexScript(game, `@SYSTEM_TITLE
+FOR LOCAL, 0, 10
+RESULT:0 = 7
+RESULT:1 = 42
+CALL EARLY
+PRINTFORML {RESULT:0},{RESULT:1}
+RESULT:0 = 8
+CALL DIRECT
+PRINTFORML {RESULT:0},{RESULT:1}
+NEXT
+RETURN
+@EARLY
+SIF 1
+RETURN
+RETURN 99
+@DIRECT
+RETURN`, "bare-return.ERB");
+    const result = new Runtime(game, 1000, { jit }).start();
+    assert.equal(result.status, "halted", JSON.stringify(result.error));
+    assert.equal(output(result), Array(20).fill("0,42").join("\n"));
+  }
+});
+test("pops-tw tutorial Okay redraws the shop once and then waits for a new choice", async () => {
+  const tutorial = await readFile(new URL("../GAMES/pops-tw/ERB/TRANSLATION/OMOGATARI/EZB/LoG_TUTORIAL.ERB", import.meta.url), "utf8");
+  for (const jit of [false, true]) {
+    const game = emptyGame();
+    indexScript(game, "#DIM SaveIsEZB = 1\n#DIM LoG_TutorialProgress", "tutorial.ERH", true);
+    indexScript(game, tutorial, "LoG_TUTORIAL.ERB");
+    indexScript(game, `@SYSTEM_TITLE
+CALL SHOW_SHOP
+INPUT
+PRINTFORML choice={RESULT}
+RETURN
+@SHOW_SHOP
+PRINTL shop screen
+CALL LoG_AdvanceTutorial(1)
+SIF RESULT
+RESTART
+@COLOR_LINE
+RETURN
+@PRINT_GP(ARGS, ARGS:1)
+RETURN`, "tutorial-shop.ERB");
+    const engine = new Runtime(game, 10_000, { jit });
+    const first = engine.start();
+    assert.equal(first.status, "waiting", JSON.stringify(first.error));
+    assert.equal(first.input!.kind, "string");
+    assert.ok(first.output.some((item) => item.type === "button" && item.value === "Okay"));
+    const afterOkay = engine.input("Okay");
+    assert.equal(afterOkay.status, "waiting", JSON.stringify(afterOkay.error));
+    assert.equal(afterOkay.input!.kind, "integer");
+    assert.equal(output(afterOkay).split("\n").filter((line) => line === "shop screen").length, 1);
+    assert.equal(afterOkay.output.some((item) => item.type === "button" && item.value === "Okay"), false);
+    const choice = engine.input("103");
+    assert.equal(choice.status, "halted", JSON.stringify(choice.error));
+    assert.match(output(choice), /choice=103/);
+  }
 });
 test("output limits include output buffered by expression functions", () => {
   for (const jit of [false, true]) {
@@ -438,7 +502,64 @@ RETURNF "done"`, "output-limit.ERB");
     assert.match(snapshot.error!.message, /Output limit exceeded between inputs/);
     assert.ok(snapshot.output.length > 0);
     assert.ok(JSON.stringify(snapshot.output).length < 2_100_000);
+    const report = snapshot.error!.context!;
+    assert.equal(report.jit, jit);
+    assert.equal(report.action, "start @SYSTEM_TITLE");
+    assert.ok(report.routines.at(-1)!.startsWith("@LOUD "));
+    assert.equal(report.routines.length, 2);
+    assert.equal(report.instruction!.length, 500);
+    assert.ok(report.instruction!.startsWith("PRINTFORML "));
+    assert.equal(report.outputLimit, 2_000_000);
+    assert.ok(report.outputCharacters > report.outputLimit);
+    assert.ok(report.outputCharacters < report.outputLimit + 2000);
+    assert.equal(report.outputEvents, report.deferredEvents + 1);
+    assert.equal(report.lastLoadedSlot, "-1");
   }
+});
+test("crash diagnostics preserve nested expression context and reset counters without recording input", () => {
+  for (const jit of [false, true]) {
+    const game = emptyGame("/fixtures/private-game");
+    game.debug = true;
+    indexScript(game, `@SYSTEM_TITLE
+PRINTL before input
+INPUTS
+CALL FAIL
+RETURN
+@FAIL
+PRINTL after input
+A = BAD()
+RETURN
+@BAD
+#FUNCTION
+RETURNF 1 / 0`, "diagnostics.ERB");
+    const engine = new Runtime(game, 1000, { jit });
+    const first = engine.start();
+    assert.equal(first.status, "waiting");
+    const snapshot = engine.input("private input not for diagnostics");
+    assert.equal(snapshot.status, "error");
+    const report = snapshot.error!.context!;
+    assert.equal(report.game, "private-game");
+    assert.equal(report.debug, true);
+    assert.equal(report.jit, jit);
+    assert.equal(report.action, "input (string)");
+    assert.equal(report.instruction, "RETURNF 1 / 0");
+    assert.deepEqual(report.routines.map((routine) => routine.split(" ")[0]), ["@SYSTEM_TITLE", "@FAIL", "@BAD"]);
+    assert.equal(report.instructionLimit, 1000);
+    assert.ok(report.instructions > 0 && report.instructions < 1000);
+    assert.equal(report.outputEvents, snapshot.output.length);
+    assert.equal(report.outputCharacters, snapshot.output.reduce((sum, item) => sum + JSON.stringify(item).length, 0));
+    assert.equal(output(snapshot).includes("before input"), false);
+    assert.equal(JSON.stringify(snapshot.error).includes("private input"), false);
+  }
+});
+test("crash diagnostics identify prefetch and timeout execution", () => {
+  const ahead = runtime("@SYSTEM_TITLE\nWAIT\nTHROW prefetched error");
+  assert.equal(ahead.start().status, "waiting");
+  assert.equal(ahead.prefetch(), true);
+  assert.equal(ahead.input("").error!.context!.action, "prefetch (wait)");
+  const timed = runtime("@SYSTEM_TITLE\nTINPUT 100, 0\nTHROW timed error");
+  assert.equal(timed.start().status, "waiting");
+  assert.equal(timed.timeout().error!.context!.action, "timeout (integer)");
 });
 test("string parameters default to empty strings and built-ins reject invalid arguments", () => {
   const result = runtime(`@SYSTEM_TITLE

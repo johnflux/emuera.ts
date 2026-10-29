@@ -4,6 +4,62 @@ import { test } from "node:test";
 import { runInNewContext } from "node:vm";
 import { parseFragment, type DefaultTreeAdapterMap } from "parse5";
 
+test("crash reports render as text and copy with explicit clipboard error feedback", async () => {
+  const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
+  const start = source.indexOf("  if (snapshot.error) {");
+  const end = source.indexOf('  } else message(snapshot.status', start);
+  assert.ok(start >= 0 && end > start);
+  for (const context of [undefined, {
+    game: "fixture", gameVersion: "7", debug: true, jit: false,
+    action: "input (string)", instruction: 'THROW <img src=x onerror="bad()">',
+    instructions: 10, instructionLimit: 1000, outputCharacters: 123, outputLimit: 2_000_000,
+    outputEvents: 2, deferredEvents: 1, lastLoadedSlot: "-1",
+    routines: ["@INNER (test.ERB:5)"],
+    server: { game: "registered", session: "session-id", step: 4, action: "input" },
+  }]) {
+    const lines: { textContent: string; classList: { add(value: string): void }; append(value: unknown): void }[] = [];
+    const messages: string[] = [];
+    let copied = "";
+    let fail = false;
+    let handler: (event: { stopPropagation(): void }) => Promise<void>;
+    const button = {
+      type: "", textContent: "",
+      addEventListener(_type: string, callback: typeof handler) { handler = callback; },
+    };
+    const scope = {
+      snapshot: { error: { file: "test.ERB", line: 8, message: "fixture crash", trace: ["caller.ERB:2"], context } },
+      currentLine: null as typeof lines[number] | null,
+      message: (value: string) => messages.push(value),
+      document: { createElement: () => button },
+      navigator: { clipboard: { async writeText(value: string) { if (fail) throw new Error("Permission denied"); copied = value; } } },
+      line() {
+        if (!scope.currentLine) {
+          scope.currentLine = { textContent: "", classList: { add() {} }, append() {} };
+          lines.push(scope.currentLine);
+        }
+        return scope.currentLine;
+      },
+    };
+    runInNewContext(`${source.slice(start, end)}\n}`, scope);
+    assert.equal(button.type, "button");
+    assert.match(lines[0]!.textContent, /ERROR test.ERB:8 - fixture crash\n  called from caller.ERB:2/);
+    if (context) {
+      assert.ok(lines[0]!.textContent.includes(context.instruction));
+      assert.match(lines[0]!.textContent, /Session: session-id \| Step: 4/);
+      assert.match(lines[0]!.textContent, /Output: 123 \/ 2000000 serialized characters/);
+      assert.match(lines[0]!.textContent, /active @INNER/);
+    }
+    let stopped = 0;
+    await handler!({ stopPropagation() { stopped++; } });
+    assert.equal(copied, lines[0]!.textContent);
+    assert.equal(messages.at(-1), "Debug report copied.");
+    fail = true;
+    await handler!({ stopPropagation() { stopped++; } });
+    assert.equal(messages.at(-1), "Could not copy debug report: Permission denied");
+    assert.equal(stopped, 2);
+  }
+});
+
 test("unmarked map rows protect scenery and separate labels from both translation methods", async () => {
   const source = await readFile(new URL("../web/translate.js", import.meta.url), "utf8");
   const start = source.indexOf("export function protectMapTranslation(");

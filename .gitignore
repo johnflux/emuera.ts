@@ -1,4 +1,5 @@
-GAMES
+GAMES/
+OTHER/
 node_modules/
 dist/
 release/

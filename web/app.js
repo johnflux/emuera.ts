@@ -1752,11 +1752,36 @@ async function renderSnapshot(snapshot, advanceScreen) {
   if (snapshot.step !== undefined) step = snapshot.step;
   rememberRun();
   if (snapshot.error) {
-    const { file, line: sourceLine, message: reason, trace = [] } = snapshot.error;
+    const { file, line: sourceLine, message: reason, trace = [], context } = snapshot.error;
     message(`Stopped at ${file}:${sourceLine}: ${reason}`, true);
     currentLine = null;
-    line().textContent = `ERROR ${file}:${sourceLine} - ${reason}${trace.map((caller) => `\n  called from ${caller}`).join("")}`;
+    const report = [
+      `ERROR ${file}:${sourceLine} - ${reason}`,
+      ...trace.map((caller) => `  called from ${caller}`),
+      ...(context ? [
+        `Game: ${context.game} | Version: ${context.gameVersion} | Debug: ${context.debug ? "on" : "off"} | JIT: ${context.jit ? "on" : "off"}`,
+        ...(context.server ? [`Server: ${context.server.game} | Session: ${context.server.session} | Step: ${context.server.step} | Action: ${context.server.action}`] : []),
+        `Action: ${context.action} | Last loaded save: ${context.lastLoadedSlot === "-1" ? "none" : context.lastLoadedSlot}`,
+        ...(context.instruction ? [`Instruction: ${context.instruction}`] : []),
+        `Instructions: ${context.instructions} / ${context.instructionLimit}`,
+        `Output: ${context.outputCharacters} / ${context.outputLimit} serialized characters (${context.outputEvents} events, ${context.deferredEvents} deferred)`,
+        ...context.routines.map((routine) => `  active ${routine}`),
+      ] : []),
+    ].join("\n");
+    line().textContent = report;
     currentLine.classList.add("missing");
+    currentLine = null;
+    const copy = document.createElement("button");
+    copy.type = "button";
+    copy.textContent = "Copy debug report";
+    copy.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      try {
+        await navigator.clipboard.writeText(report);
+        message("Debug report copied.");
+      } catch (error) { message(`Could not copy debug report: ${error.message}`, true); }
+    });
+    line().append(copy);
     currentLine = null;
   } else message(snapshot.status !== "waiting" ? "Execution finished."
     : input.kind === "wait" ? "Click or press Enter to continue."

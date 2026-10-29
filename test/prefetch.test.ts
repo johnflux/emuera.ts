@@ -43,7 +43,14 @@ function run(prefetch: boolean) {
 
 test("running ahead of click-to-continue waits gives the same results", () => {
   const plain = run(false), ahead = run(true);
-  assert.deepEqual(ahead.snapshots, plain.snapshots);
+  assert.equal(ahead.snapshots.at(-1)!.error!.context!.action, "prefetch (wait)");
+  assert.equal(plain.snapshots.at(-1)!.error!.context!.action, "input (wait)");
+  assert.deepEqual(ahead.snapshots.map((snapshot) => ({
+    ...snapshot,
+    error: snapshot.error ? { ...snapshot.error, context: {
+      ...snapshot.error.context, action: snapshot.error.context!.action.replace(/^prefetch /, "input "),
+    } } : snapshot.error,
+  })), plain.snapshots);
   assert.deepEqual(ahead.saves.list(), plain.saves.list());
   assert.deepEqual(ahead.store.load(), plain.store.load());
   assert.equal(plain.snapshots.at(-1)!.status, "error");
