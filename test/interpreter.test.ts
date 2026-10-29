@@ -421,6 +421,25 @@ test("budget stops infinite loops and global QUIT stops callers", () => {
   const recursive = runtime("@SYSTEM_TITLE\nCALL SYSTEM_TITLE").start();
   assert.match(recursive.error!.message, /Call depth limit/);
 });
+test("output limits include output buffered by expression functions", () => {
+  for (const jit of [false, true]) {
+    const game = emptyGame();
+    indexScript(game, `@SYSTEM_TITLE
+PRINTFORML %LOUD()%
+RETURN
+@LOUD
+#FUNCTIONS
+FOR LOCAL, 0, 3000
+PRINTFORML ${"x".repeat(1000)}
+NEXT
+RETURNF "done"`, "output-limit.ERB");
+    const snapshot = new Runtime(game, undefined, { jit }).start();
+    assert.equal(snapshot.status, "error");
+    assert.match(snapshot.error!.message, /Output limit exceeded between inputs/);
+    assert.ok(snapshot.output.length > 0);
+    assert.ok(JSON.stringify(snapshot.output).length < 2_100_000);
+  }
+});
 test("string parameters default to empty strings and built-ins reject invalid arguments", () => {
   const result = runtime(`@SYSTEM_TITLE
 CALL GREET

@@ -420,6 +420,7 @@ export class Runtime {
   private stainDefault: bigint[];
   private maxShopItem: number;
   private printCPerLine: number;
+  private outputBytes = 0;
   /** ボタンの途中で行を折りかえさない: a line wraps between buttons, never inside one (unless it starts the line). */
   private readonly buttonWrap: boolean;
   private autoSave: boolean;
@@ -620,7 +621,7 @@ export class Runtime {
     this.trainPhaseActive = false;
     this.ctrain = undefined;
     this.style = { color: this.display.foreground, background: this.display.background, alignment: "left", fontStyle: 0 };
-    this.deferred.push({ type: "clear", count: Number.MAX_SAFE_INTEGER });
+    this.deferOutput({ type: "clear", count: Number.MAX_SAFE_INTEGER });
   }
   /** Like Emuera EE's RemoveEM*Data: MAPs and DataTables named in VarExt*.csv are emptied, XmlDocuments are removed; other containers survive. */
   private clearContainers(scope: ContainerScope): void {
@@ -770,7 +771,7 @@ export class Runtime {
   private *temporary(message: string, removeEcho: boolean): Generator<Yield, void, string> {
     if (removeEcho && !this.temporaryLine) {
       this.dropLines(1);
-      this.deferred.push({ type: "clear", count: 1 });
+      this.deferOutput({ type: "clear", count: 1 });
     }
     const output = this.emit("text", message, true);
     this.temporaryLine = true;
@@ -1276,28 +1277,28 @@ export class Runtime {
   timeout(): Snapshot {
     if (this.ahead) throw new EraError("Runtime is not waiting for timed input");
     if (!this.pending?.timeout || !this.timed) throw new EraError("Runtime is not waiting for timed input");
+    this.outputBytes = 0;
     const { value, message, countdown } = this.timed;
     // The countdown line is replaced by the timeout message; otherwise a nonempty message is printed.
     if (countdown) {
       this.dropLines(1);
-      this.deferred.push({ type: "clear", count: 1 });
+      this.deferOutput({ type: "clear", count: 1 });
     }
     if (message) this.deferred.push((this.emit("text", message, true) as { output: Output }).output);
     this.pending = null;
     this.timed = undefined;
-    return this.advance(value);
+    return this.advance(value, false);
   }
-  private advance(input = ""): Snapshot {
+  private advance(input = "", resetOutputBytes = true): Snapshot {
     useMacros(this.game.macros);
     if (!this.iterator || this.finished) throw new EraError("Runtime is not running");
     this.steps = 0;
+    if (resetOutputBytes) this.outputBytes = 0;
     const output: Output[] = [];
-    let bytes = 0;
     try {
       while (true) {
         const next = this.iterator.next(input);
         input = "";
-        for (const item of this.deferred) bytes += JSON.stringify(item).length;
         output.push(...this.deferred);
         this.deferred = [];
         if (next.done) {
@@ -1324,8 +1325,6 @@ export class Runtime {
           return this.withDebug({ status: "waiting", output, input: this.pending, error: null, title: this.windowTitle(), target: this.currentTarget() });
         }
         if (next.value === SKIPPED) continue;
-        bytes += JSON.stringify(next.value.output).length;
-        if (bytes > 2_000_000) throw new EraError("Output limit exceeded between inputs", this.currentSource);
         output.push(next.value.output);
       }
     } catch (error) {
@@ -2254,7 +2253,7 @@ export class Runtime {
           case "STRFORM": return evaluate(parseFormat(argText(args, name, 0).split(/\r?\n/)[0]!), context);
           case "HTML_POPPRINTINGSTR": {
             const html = this.printingHtml;
-            if (html) this.deferred.push({ type: "clear", count: 1 });
+            if (html) this.deferOutput({ type: "clear", count: 1 });
             this.printingHtml = "";
             this.printedLine = "";
             return html;
@@ -2651,7 +2650,7 @@ export class Runtime {
     if (this.temporaryLine) {
       this.temporaryLine = false;
       this.dropLines(1);
-      this.deferred.push({ type: "clear", count: 1 });
+      this.deferOutput({ type: "clear", count: 1 });
     }
     this.lineCount += (value.match(/\n/g)?.length ?? 0) + (newline ? 1 : 0);
     this.lineOpen = newline ? false : value.includes("\n") ? !value.endsWith("\n") : this.lineOpen || value !== "";
@@ -2660,7 +2659,17 @@ export class Runtime {
     else if (value.includes("\n")) this.printingHtml = escapeHtml(value.slice(value.lastIndexOf("\n") + 1));
     this.recordPrinted(type, value, newline, options.style ?? this.style, !plain);
     const sprites = type === "html" ? this.htmlSprites(value) : undefined;
-    return { output: { type, text: value, newline, style: { ...(options.style ?? this.style) }, ...(plain ? { plain: true } : {}), ...(options.single ? { single: true } : {}), ...(options.cell ? { cell: true } : {}), ...(sprites ? { sprites } : {}) } };
+    const output: Output = { type, text: value, newline, style: { ...(options.style ?? this.style) }, ...(plain ? { plain: true } : {}), ...(options.single ? { single: true } : {}), ...(options.cell ? { cell: true } : {}), ...(sprites ? { sprites } : {}) };
+    this.accountOutput(output);
+    return { output };
+  }
+  private accountOutput(output: Output): void {
+    this.outputBytes += JSON.stringify(output).length;
+    if (this.outputBytes > 2_000_000) throw new EraError("Output limit exceeded between inputs", this.currentSource);
+  }
+  private deferOutput(output: Output): void {
+    this.accountOutput(output);
+    this.deferred.push(output);
   }
   private dropLines(count: number): void {
     this.lineCount = Math.max(0, this.lineCount - count);
@@ -3403,7 +3412,9 @@ export class Runtime {
             this.lineOpen = true;
             const value = String(ev(parts[1]!));
             this.lineButtons.push(value);
-            yield { output: { type: "button", text: label, value, style: { ...this.style } } };
+            const output: Output = { type: "button", text: label, value, style: { ...this.style } };
+            this.accountOutput(output);
+            yield { output };
             break;
           }
           case "DRAWLINE": yield this.emit("text", "-".repeat(this.columns), true); break;
@@ -3418,7 +3429,9 @@ export class Runtime {
             if (count <= 0) break;
             this.dropLines(count);
             if (count) { this.printingHtml = ""; this.printedLine = ""; this.lineButtons = []; this.temporaryLine = false; this.lineOpen = false; }
-            yield { output: { type: "clear", count } };
+            const output: Output = { type: "clear", count };
+            this.accountOutput(output);
+            yield { output };
             break;
           }
           case "WHILE": if (num(args) === 0n) next = target + 1; break;
