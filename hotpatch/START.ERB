@@ -180,13 +180,12 @@ DO
 	CLEARLINE LINECOUNT - nStart
 	HTML_PRINT "<era-open class='era-dialog era-setup'>"
 	HTML_PRINT "<div class='era-inventory-header'><div class='era-inventory-heading'><span class='era-inventory-title'>New game</span><button value='999' class='era-dialog-close' title='Back to title'>×</button></div></div>"
-	HTML_PRINT @"<div class='era-sheet-subpages era-start-tabs'><button value='700' class='era-sheet-subpage%(nTab == 0 ? " era-current" # "")%'>Character</button><button value='701' class='era-sheet-subpage%(nTab == 1 ? " era-current" # "")%'>World</button><button value='703' class='era-sheet-subpage%(nTab == 3 ? " era-current" # "")%'>Bonuses</button><button value='704' class='era-sheet-subpage%(nTab == 4 ? " era-current" # "")%'>Farming</button><button value='702' class='era-sheet-subpage%(nTab == 2 ? " era-current" # "")%'>Dialogue</button><button value='705' class='era-sheet-subpage%(nTab == 5 ? " era-current" # "")%'>Yandere</button></div>"
+	HTML_PRINT @"<div class='era-sheet-subpages era-start-tabs'><button value='700' class='era-sheet-subpage%(nTab == 0 ? " era-current" # "")%'>Player</button><button value='706' class='era-sheet-subpage%(nTab == 6 ? " era-current" # "")%'>Characters</button><button value='701' class='era-sheet-subpage%(nTab == 1 ? " era-current" # "")%'>World</button><button value='703' class='era-sheet-subpage%(nTab == 3 ? " era-current" # "")%'>Bonuses</button><button value='704' class='era-sheet-subpage%(nTab == 4 ? " era-current" # "")%'>Farming</button><button value='702' class='era-sheet-subpage%(nTab == 2 ? " era-current" # "")%'>Dialogue</button><button value='705' class='era-sheet-subpage%(nTab == 5 ? " era-current" # "")%'>Yandere</button></div>"
 	HTML_PRINT "<era-open class='era-inventory-body era-setup-body'>"
 	SELECTCASE nTab
 	CASE 0
-		HTML_PRINT @"<div class='era-setup-card'><span class='era-launch-eyebrow'>CHARACTER</span><div class='era-setup-name'>%HTML_ESCAPE(CALLNAME:MASTER)%</div><div class='era-sub'>%(FLAG:なりきり ? "Predefined character" # "Custom character")% · STA {MAX(MAXBASE:MASTER:体力 - 500, 0)} · ENE {MAXBASE:MASTER:気力} · TSP {MAXBASE:MASTER:TSP}</div><button value='10' class='era-chip-button'>Customize character</button><button value='11' class='era-chip-button'>Choose a predefined character</button></div>"
+		HTML_PRINT @"<div class='era-setup-card'><span class='era-launch-eyebrow'>PLAYER</span><div class='era-setup-name'>%HTML_ESCAPE(CALLNAME:MASTER)%</div><div class='era-sub'>%(FLAG:なりきり ? "Predefined character" # "Custom character")% · STA {MAX(MAXBASE:MASTER:体力 - 500, 0)} · ENE {MAXBASE:MASTER:気力} · TSP {MAXBASE:MASTER:TSP}</div><button value='10' class='era-chip-button'>Customize character</button><button value='11' class='era-chip-button'>Choose a predefined character</button></div>"
 		CALL HOTPATCH_SETUP_CLOTHING
-		HTML_PRINT "<div class='era-setup-card'><span class='era-launch-eyebrow'>CHARACTER BODIES</span><button value='26' class='era-chip-button'>Character body editor</button></div>"
 		SIF HAS_PENIS(MASTER)
 			CALL HOTPATCH_SETUP_PENIS
 	CASE 1
@@ -200,6 +199,8 @@ DO
 		CALL HOTPATCH_SETUP_FARMING
 	CASE 5
 		CALL HOTPATCH_SETUP_YANDERE
+	CASE 6
+		HTML_PRINT "<div class='era-setup-card'><span class='era-launch-eyebrow'>CHARACTER BODIES</span><button value='26' class='era-chip-button'>Character body editor</button></div>"
 	ENDSELECT
 	HTML_PRINT "<era-close>"
 	HTML_PRINT @"<div class='era-inventory-footer'><button value='999' class='era-chip-button'>Back to title</button><span class='era-tone-red'>%sError%</span><button value='100' class='era-launch-primary'>Start game</button></div>"
@@ -217,7 +218,7 @@ DO
 	CASE 999
 		ゲーム開始処理中 = 0
 		RETURN 0
-	CASE 700 TO 705
+	CASE 700 TO 706
 		nTab = nAction - 700
 	CASE 23
 		ANIMATERECOLOREDMAPS = ANIMATERECOLOREDMAPS ? 0 # 1000

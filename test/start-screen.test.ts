@@ -137,6 +137,13 @@ test("eraTW launch dialogs accept defaults, configure optionally and cancel safe
   assert.match(markup(runtime.input("2000")), /value='2000' class='era-setup-choice era-current'/);
   const characterOptions = markup(runtime.input("700"));
   assert.match(characterOptions, /Customize character/);
+  assert.match(characterOptions, /value='700' class='era-sheet-subpage era-current'>Player/);
+  assert.doesNotMatch(characterOptions, /CHARACTER BODIES|value='26'/);
+  const otherCharacters = markup(runtime.input("706"));
+  assert.match(otherCharacters, /value='706' class='era-sheet-subpage era-current'>Characters/);
+  assert.match(otherCharacters, /CHARACTER BODIES[\s\S]*value='26'/);
+  assert.doesNotMatch(otherCharacters, /Customize character|PENIS SETTINGS/);
+  markup(runtime.input("700"));
   for (const [type, description] of [
     [4, "firefly squid"],
     [5, "Have you forgotten to be considerate of others"],

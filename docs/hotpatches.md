@@ -70,7 +70,7 @@ heights. Descriptions can still wrap and increase a row's height when needed;
 scrolling remains available when the viewport cannot fit all rows. It
 cannot accidentally switch into saving over an existing game from the title.
 New Game initializes the standard custom character and Hakurei Shrine residence,
-then opens a larger, viewport-bounded setup dialog with Character, World, Bonuses,
+then opens a larger, viewport-bounded setup dialog with Player, Characters, World, Bonuses,
 Farming, Dialogue and Yandere tabs. Clothing, the six native penis-type choices
 (when applicable), residence presets, all starting
 bonuses with descriptions, bonus partners, farming contracts/difficulty,
@@ -78,6 +78,8 @@ confession mode, Lunatic Survival, dialogue variants and common yandere settings
 are selectable directly as compact list rows with selection markers, names and
 descriptions, with the current choices highlighted. Settings changes preserve
 the current tab's scroll position; switching tabs starts at the top.
+Player contains the player's customization, clothing and penis settings;
+Characters contains the body editor for other characters.
 Farming groups the no-contract option with landlord choices. Contract terms stay
 visible but disabled without a landlord. A reserved summary area explains daily
 field work, monthly harvest collection and rewards, updating with the chosen
