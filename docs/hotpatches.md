@@ -80,6 +80,79 @@ descriptions, with the current choices highlighted. Settings changes preserve
 the current tab's scroll position; switching tabs starts at the top.
 Player contains the player's customization, clothing and penis settings;
 Characters contains the body editor for other characters.
+Player has a portrait (or a neutral silhouette), inline name/nickname text fields and
+native stamina/energy steppers. Its Clothing, Body, Appearance & traits, Abilities and
+Experience sections edit native values directly, reusing customization eligibility,
+cycling and validation rules. Direct experience entry uses a focused
+prompt rather than the full customization menu. Name fields commit together on
+Enter, leaving the fields, or the next setup action, including Start Game.
+The browser replaces experience value buttons with inline numeric text fields
+(whole numbers 0–30), committing on Enter, blur, or the next setup action.
+The native direct-entry prompt remains available to non-browser clients.
+Name fields grow beyond 16ch with their contents. The predefined-character
+button sits beside the nickname, and the compact stats row keeps labels close
+to values. Player sub-tabs retain the same header spacing across sections.
+An identical name/nickname displays as an empty nickname with the name as its
+live placeholder; saving an empty nickname uses the current name.
+Predefined players have a Custom Character button that resets the player to
+custom defaults, restores the original character's availability, and retains
+the selected residence and other world settings.
+Setup cards have no inner padding. The footer contains Start Game; the header
+close button still returns to the title.
+Traits use compact text entries without hover recolouring. Native descriptions
+appear in a scrollable side panel on hover or focus (above the list on narrow
+screens), rather than covering the choices. The smaller-text panel is at most
+270px wide and fills the trait list's height without growing with its contents.
+The compact trait grid fits more columns on wide screens.
+The setup dialog expands to 1600px (within the viewport). Trait columns use
+2px gutters and a wider minimum cell so labels avoid unnecessary wrapping.
+Body groups sex, breast and butt sizes, race categories, and conditional penis
+settings as individual selectable rows rather than cycling controls.
+Body and Clothing sections have no card background.
+Their choice rows have no bottom divider and use 2px vertical padding, with
+tighter heading spacing and extra space below each section. Body precedes Clothing.
+Section bottom padding is 2px. Body options scroll independently, leaving the
+player header and sub-tabs visible; editing a Body choice preserves its scroll.
+Body opens by default. On desktop, all Body sections share a content-sized
+option-name column so descriptions align across sections. Clothing sizes its
+own name column to its contents.
+Age is selected in Body using the native Child, Adult, Middle Age and Elder
+categories, rather than cycling it in Appearance & traits.
+The tab is now named Traits. Figure, Cat Tongue and Animal Ears use individual
+choices in Body. Figure retains all seven native sizes, including Average,
+with a short, size-specific description for each. Shared Figure help retains
+the native Forbidden Knowledge restriction and insertion difficulty from size
+differences; the Inchling row also explains its native parameter effects and
+additional use.
+The None choices for Cat Tongue and Animal Ears have no help text; other ear
+choices use a short description, and Futanari uses "Has both genitals."
+Kitsune and Youko belong to Race and require New Game+ like the other
+race selections, including when invoked through legacy setup actions.
+Body has one Race selector and one New Game+ notice. Choosing a race replaces
+the other selectable racial traits; only selected races expose sub-options.
+While locked, the Race section shows only the unlock notice, with all race
+choices and sub-options hidden.
+The unlock notice is muted and aligned with the choice circles.
+Breast sizes are hidden for male players and have short size-specific
+descriptions. Butt sizes have labels only, without repetitive help text.
+All eight native butt-size states
+have visible names; the native cycle and saved values are unchanged.
+Race changes retain the native New Game+ restriction, explained in Body.
+The player header includes race, sex and age category (Adult for the normal state).
+Native sex cycling is Female, Male,
+Futanari; it does not offer a sexless player.
+Abilities and experience use tightly spaced numeric steppers with fixed
+two-character value cells and wider gaps between entries.
+Controls align vertically within each column regardless of label length.
+Numeric groups have fixed widths (19ch for abilities, 29ch for experience),
+with extra container space distributed between groups rather than within them.
+The portrait sprite keeps its natural aspect ratio. Name fields use subtle
+underlines, with the primary name styled as the heading instead of a Player label.
+Changing sections resets scroll;
+editing values in a section preserves it.
+Clothing starts with Default, following the native predefined-character outfit
+or men's/women's clothing rule. While Default is selected it follows gender
+changes; explicitly chosen outfits are preserved.
 Farming groups the no-contract option with landlord choices. Contract terms stay
 visible but disabled without a landlord. A reserved summary area explains daily
 field work, monthly harvest collection and rewards, updating with the chosen

@@ -39,7 +39,10 @@ test("eraTW launch dialogs accept defaults, configure optionally and cancel safe
   assert.match(markup(runtime.input("1000")), /Page 1 \/ 10/);
   assert.match(markup(runtime.input("0")), /era-save-empty/);
   assert.match(markup(runtime.input("999")), /era-launch-version/);
-  assert.match(markup(runtime.input("0")), /era-dialog era-setup/);
+  const initialSetup = markup(runtime.input("0"));
+  assert.match(initialSetup, /era-dialog era-setup/);
+  assert.match(initialSetup, /value='715' class='era-sheet-subpage era-current'>Body/);
+  assert.doesNotMatch(initialSetup, />Back to title<\/button>/);
   const world = markup(runtime.input("701"));
   assert.match(world, /Map details and room selection/);
   assert.match(world, /Animation: On/);
@@ -135,21 +138,100 @@ test("eraTW launch dialogs accept defaults, configure optionally and cancel safe
   assert.doesNotMatch(normalMode, /value='414[123]'/);
   assert.match(markup(runtime.input("2003")), /value='2003' class='era-setup-choice era-current'/);
   assert.match(markup(runtime.input("2000")), /value='2000' class='era-setup-choice era-current'/);
-  const characterOptions = markup(runtime.input("700"));
-  assert.match(characterOptions, /Customize character/);
+  markup(runtime.input("700"));
+  const characterOptions = markup(runtime.input("710"));
+  assert.match(characterOptions, /era-setup-player-face/);
+  assert.match(characterOptions, /Human · Male · Adult/);
+  assert.match(characterOptions, /value='715'[^>]*>Body/);
+  assert.ok(characterOptions.indexOf("value='715'") < characterOptions.indexOf("value='710'"));
+  assert.match(characterOptions, /era-setup-name-field'>Player<\/span><span>Nickname:<\/span>/);
+  assert.doesNotMatch(characterOptions, /PLAYER ·|Custom character|Predefined character/);
+  assert.doesNotMatch(characterOptions, /value='500[01]'/);
+  assert.doesNotMatch(characterOptions, /Customize character/);
+  assert.match(characterOptions, /value='1199' class='era-setup-choice era-current'[^>]*>.*Default.*Men's clothing/);
+  assert.ok(characterOptions.indexOf("value='1199'") < characterOptions.indexOf("value='1101'"),
+    "Default is the first clothing option");
   assert.match(characterOptions, /value='700' class='era-sheet-subpage era-current'>Player/);
   assert.doesNotMatch(characterOptions, /CHARACTER BODIES|value='26'/);
   const otherCharacters = markup(runtime.input("706"));
   assert.match(otherCharacters, /value='706' class='era-sheet-subpage era-current'>Characters/);
   assert.match(otherCharacters, /CHARACTER BODIES[\s\S]*value='26'/);
-  assert.doesNotMatch(otherCharacters, /Customize character|PENIS SETTINGS/);
+  assert.doesNotMatch(otherCharacters, /Customize character|Penis Size/);
   markup(runtime.input("700"));
+  const bodyOptions = markup(runtime.input("715"));
+  assert.match(bodyOptions, /era-setup-body-options/);
+  assert.match(bodyOptions, /value='100212' class='era-setup-choice era-current'/);
+  assert.match(bodyOptions, /value='100211'[^>]*>.*Female/);
+  assert.doesNotMatch(bodyOptions, /Breast Size/);
+  assert.match(bodyOptions, /Butt Size/);
+  assert.match(bodyOptions, /era-launch-eyebrow'>Animal Ears/);
+  assert.match(bodyOptions, /era-launch-eyebrow'>Cat Tongue/);
+  assert.match(bodyOptions, /value='105410'[^>]*>.*<span class='era-setup-choice-description'><\/span>/);
+  assert.match(bodyOptions, /value='114310'[^>]*>.*<span class='era-setup-choice-description'><\/span>/);
+  assert.match(bodyOptions, /value='100213'[^>]*>.*Has both genitals\./);
+  for (let value = 1; value <= 4; value++) {
+    assert.match(bodyOptions, new RegExp(`value='${114310 + value}'[^>]*>.*<span class='era-setup-choice-description'>Can go into heat; dislikes washing; prefers Doggy Style; matching Fortune boosts Favor/Trust\\.</span>`));
+  }
+  assert.match(bodyOptions, /era-launch-eyebrow'>Figure/);
+  assert.match(bodyOptions, /Very small or large bodies cannot use many commands without Forbidden Knowledge/);
+  assert.match(bodyOptions, /Large differences in body size make insertion harder/);
+  for (const [value, name, description] of [
+    [-5, "Inchling", "Tiny enough to fit in a hand. More Pain; less Desire from most commands, less C/V/A/B/M Pleasure and Lubrication. Can be used as an onahole."],
+    [-2, "Child-Sized", "A small frame, about the size of a child."],
+    [-1, "Petite", "Shorter and smaller-framed than average."],
+    [0, "Average", "An ordinary adult height and build."],
+    [1, "Tall", "Taller than average."],
+    [2, "Huge", "An unusually large frame, towering over most people."],
+    [5, "Giant", "A gigantic body, far beyond human proportions."],
+  ] as const) {
+    assert.match(bodyOptions, new RegExp(`value='${110010 + value}'[^>]*>.*${name}`));
+    const figureChoice = bodyOptions.match(new RegExp(`value='${110010 + value}'[^>]*>.*?</button>`))?.[0];
+    assert.ok(figureChoice?.includes(`<span class='era-setup-choice-description'>${description}</span>`));
+    assert.match(markup(runtime.input(String(110010 + value))),
+      new RegExp(`value='${110010 + value}' class='era-setup-choice era-current'`));
+  }
+  assert.doesNotMatch(bodyOptions, /Indicates the body size/);
+  markup(runtime.input("110010"));
+  assert.match(markup(runtime.input("105411")), /value='105411' class='era-setup-choice era-current'/);
+  markup(runtime.input("105410"));
+  assert.match(markup(runtime.input("114314")), /value='114314' class='era-setup-choice era-current'/);
+  markup(runtime.input("114310"));
+  assert.match(markup(runtime.input("130090")), /Human · Male · Adult/);
+  assert.match(markup(runtime.input("6090")), /Human · Male · Adult/);
+  assert.match(markup(runtime.input("6091")), /Human · Male · Adult/);
+  assert.doesNotMatch(bodyOptions, /value='130\d+'|value='11(?:64|66|9\d)\d+'/,
+    "locked races show neither race choices nor sub-options");
+  assert.equal((bodyOptions.match(/Unlocks in New Game\+/g) ?? []).length, 1);
+  assert.match(bodyOptions, /era-setup-description era-setup-locked'>Unlocks in New Game/);
+  assert.doesNotMatch(bodyOptions, /value='119112'/, "unselected races have no sub-options");
+  assert.doesNotMatch(bodyOptions, /Indicates the butt size/);
+  const blockedRace = markup(runtime.input("130191"));
+  assert.match(blockedRace, /Human · Male · Adult/);
+  const femaleBody = markup(runtime.input("100211"));
+  assert.match(femaleBody, /Human · Female · Adult/);
+  assert.match(femaleBody, /Flat chest; some breast actions unavailable/);
+  assert.match(femaleBody, /Average size/);
+  assert.doesNotMatch(femaleBody, /Penis Size/);
+  const restoredMale = markup(runtime.input("100212"));
+  assert.match(restoredMale, /Human · Male · Adult/);
+  assert.match(bodyOptions, /value='101710' class='era-setup-choice era-current'[^>]*>.*Adult/);
+  assert.match(bodyOptions, /value='101709'[^>]*>.*Child/);
+  assert.match(bodyOptions, /value='101711'[^>]*>.*Middle Age/);
+  assert.match(bodyOptions, /value='101712'[^>]*>.*Elder/);
+  for (const description of [
+    "Physically a child.", "Physically a young adult.",
+    "Physically middle-aged.", "Physically elderly.",
+  ]) assert.ok(bodyOptions.includes(description));
+  assert.doesNotMatch(bodyOptions, /Shows the physical age of the character/);
+  assert.doesNotMatch(characterOptions, /Penis Size/);
+  assert.match(bodyOptions, /era-launch-eyebrow'>Penis Size/);
+  assert.ok(bodyOptions.indexOf("era-launch-eyebrow'>Race") < bodyOptions.indexOf("era-launch-eyebrow'>Butt Size"));
   for (const [type, description] of [
     [4, "firefly squid"],
     [5, "Have you forgotten to be considerate of others"],
     [6, "A heart can only pump so much blood"],
   ] as const) {
-    assert.match(characterOptions, new RegExp(`value='${1200 + type}'[^<]*>.*?<span class='era-setup-choice-description'>[^<]*${description}`));
+    assert.match(bodyOptions, new RegExp(`value='${1200 + type}'[^<]*>.*?<span class='era-setup-choice-description'>[^<]*${description}`));
   }
   for (let type = 1; type <= 6; type++) {
     const character = markup(runtime.input(String(1200 + type)));
@@ -157,11 +239,63 @@ test("eraTW launch dialogs accept defaults, configure optionally and cancel safe
     assert.doesNotMatch(character, /era-setup-editor/, "type selection stays inside the setup dialog");
   }
   markup(runtime.input("1203"));
+  markup(runtime.input("710"));
   assert.match(markup(runtime.input("1104")), /value='1104' class='era-setup-choice era-current'/);
-  markup(runtime.input("1199"));
-  assert.match(markup(runtime.input("10")), /\[9999\] Finished/);
-  assert.match(markup(runtime.input("9999")), /Completely finished/);
-  assert.match(markup(runtime.input("0")), /Customize character/);
+  assert.match(markup(runtime.input("1199")), /value='1199' class='era-setup-choice era-current'/);
+  assert.match(markup(runtime.input("5000")), /enter a new name/);
+  assert.match(markup(runtime.input("")), /era-setup-player/);
+  assert.match(markup(runtime.input("5101")), /<span>STA<\/span>.*<span>1600<\/span>/);
+  markup(runtime.input("5100"));
+  const traits = markup(runtime.input("711"));
+  assert.match(traits, /value='711' class='era-sheet-subpage era-current'>Traits/);
+  assert.doesNotMatch(traits, /Cat Tongue|Animal Ears|Kitsune|Youko|Figure/);
+  assert.match(traits, /Select a trait/);
+  assert.match(traits, /era-setup-trait-help-text/);
+  assert.doesNotMatch(traits, /value='6191'|Unlocks in New Game/);
+  assert.doesNotMatch(traits, /value='6002'|value='6105'|value='6108'|Penis Size/);
+  assert.match(traits, /class='era-setup-trait[^']*' aria-disabled='[^']*' title='[^']+'/,
+    "native trait descriptions are available as tooltips");
+  assert.doesNotMatch(traits, /era-setup-choice-name/);
+  assert.doesNotMatch(traits, /era-setup-editor/);
+  markup(runtime.input("715"));
+  const futanariBody = markup(runtime.input("6002")); // Native default becomes women's clothing.
+  assert.match(futanariBody, /value='100213' class='era-setup-choice era-current'/);
+  markup(runtime.input("6105"));
+  assert.match(markup(runtime.input("6105")), /value='110510' class='era-setup-choice era-current'/);
+  assert.match(markup(runtime.input("710")), /Default.*Women's clothing/);
+  markup(runtime.input("711"));
+  markup(runtime.input("6002"));
+  markup(runtime.input("6002"));
+  const maleTraits = markup(runtime.input("715"));
+  assert.match(maleTraits, /value='100212' class='era-setup-choice era-current'/,
+    "native sex cycling returns to Male, never no sex");
+  const buttSizes = [];
+  for (let step = 0; step < 8; step++) {
+    const body = markup(runtime.input(String(110800 + step + 7)));
+    buttSizes.push(/value='1108\d+' class='era-setup-choice era-current'[^>]*><span class='era-setup-choice-name'>([^<]+)/.exec(body)?.[1]);
+  }
+  assert.equal(new Set(buttSizes).size, 8, "all eight native butt sizes have distinct labels");
+  assert.ok(buttSizes.every((size) => size && size !== "-"), "no unnamed butt sizes");
+  const middleAge = markup(runtime.input("101711"));
+  assert.match(middleAge, /Human · Male · Middle Age/);
+  assert.match(middleAge, /value='101711' class='era-setup-choice era-current'/);
+  markup(runtime.input("101710"));
+  const abilities = markup(runtime.input("712"));
+  const abilityIncrease = /value='(7\d{2}[13579])'[^>]*aria-disabled='false'/.exec(abilities)?.[1];
+  assert.ok(abilityIncrease, "eligible abilities have inline controls");
+  assert.doesNotMatch(markup(runtime.input(abilityIncrease)), /era-setup-editor/);
+  const experience = markup(runtime.input("713"));
+  const inlineExperience = markup(runtime.input("140009"));
+  assert.match(inlineExperience, /value='9000' title='Enter a value'>9<\/button>/);
+  assert.match(markup(runtime.input("140030")), /value='9000' title='Enter a value'>30<\/button>/);
+  assert.match(markup(runtime.input("140031")), /value='9000' title='Enter a value'>30<\/button>/,
+    "inline experience rejects values above 30");
+  markup(runtime.input("140000"));
+  const experienceAction = /value='(9\d{3})' title='Enter a value'/.exec(experience)?.[1];
+  assert.ok(experienceAction, "experience values support direct entry");
+  assert.match(markup(runtime.input(experienceAction)), /Enter a new value/);
+  assert.match(markup(runtime.input("0")), /era-setup-player/);
+  markup(runtime.input("710"));
   assert.match(markup(runtime.input("999")), /era-launch-version/);
   assert.deepEqual(saves.list(), [], "canceling setup must not create an autosave");
   assert.match(markup(runtime.input("0")), /Start game/);
@@ -190,9 +324,20 @@ test("eraTW launch dialogs accept defaults, configure optionally and cancel safe
   assert.match(markup(configured.input("11")), /Select a character to play as/);
   assert.match(markup(settle(configured, configured.input("26"))), /Raise it to 2000/);
   assert.match(markup(configured.input("0")), /Be a virgin/);
-  assert.match(markup(settle(configured, configured.input("0"))), /era-setup-name'>Yukari/);
+  assert.match(markup(settle(configured, configured.input("0"))), /era-setup-nickname-field'>Yukari/);
+  markup(configured.input("700"));
+  const predefinedPlayer = markup(configured.input("710"));
+  assert.match(predefinedPlayer, /era-setup-player-face'><img src='[^']+' height='112px'/);
+  assert.match(predefinedPlayer, /value='1199' class='era-setup-choice era-current'[^>]*>.*Default.*Yukari/);
+  assert.match(predefinedPlayer, /value='12'[^>]*>Custom Character/);
   const home = markup(configured.input("701"));
   assert.match(home, /value='2006' class='era-setup-choice era-current'/, "predefined characters retain their own home");
+  markup(configured.input("700"));
+  const customAgain = markup(configured.input("12"));
+  assert.match(customAgain, /era-setup-name-field'>Player/);
+  assert.match(customAgain, /Human · Male · Adult/);
+  assert.doesNotMatch(customAgain, /value='12'[^>]*>Custom Character/);
+  assert.match(customAgain, /Default.*Men's clothing/);
   assert.match(markup(configured.input("999")), /era-launch-version/);
 
   indexScript(game, `@TEST_INLINE_SETUP
@@ -226,4 +371,72 @@ QUIT`, "TEST_INLINE_SETUP.ERB");
   assert.equal(accepted.status, "halted", "inline choices do not leave questionnaire prompts at Start Game");
   const values = accepted.output.flatMap(item => "text" in item ? [item.text] : []).join("\n");
   assert.match(values, /combat=2;money=0;clothes=4;map=3;farm=2;tools=1;loan=\d+;expansion=2;confession=2;lust=1;shape=4/);
+
+  indexScript(game, `@TEST_PLAYER_SETUP
+CALL MAKE_TALENT_MAP
+CALL Name_Array_Set
+CALL ADDCHARA_INIT(0)
+CALL HOTPATCH_NEWGAME_PREPARE
+PRINTFORML player=%NAME:MASTER%;sta={MAXBASE:MASTER:体力};ene={MAXBASE:MASTER:気力};sex={TALENT:MASTER:性別};outfit={CFLAG:MASTER:基本服装セット}
+QUIT`, "TEST_PLAYER_SETUP.ERB");
+  const player = new Runtime(game, GAME_INSTRUCTION_LIMIT);
+  markup(player.start("TEST_PLAYER_SETUP"));
+  const nameInput = player.input("5002");
+  assert.equal(nameInput.input?.kind, "string");
+  assert.equal(player.input("Test Player").input?.kind, "string");
+  assert.match(markup(player.input("Test Nickname")), /era-setup-nickname-field'>Test Nickname/);
+  player.input("5002");
+  player.input("Renamed Player");
+  assert.match(markup(player.input("")), /era-setup-nickname-field'>Renamed Player/);
+  player.input("5002");
+  player.input("Test Player");
+  player.input("Test Nickname");
+  markup(player.input("5101"));
+  markup(player.input("5102"));
+  markup(player.input("711"));
+  markup(player.input("6002"));
+  markup(player.input("6002"));
+  assert.match(markup(player.input("710")), /Default.*Women's clothing/);
+  markup(player.input("1104"));
+  markup(player.input("711"));
+  markup(player.input("6002"));
+  const explicitClothes = markup(player.input("710"));
+  assert.match(explicitClothes, /value='1104' class='era-setup-choice era-current'/,
+    "an explicit outfit survives gender changes");
+  assert.doesNotMatch(explicitClothes, /value='1199' class='era-setup-choice era-current'/);
+  const playerAccepted = player.input("100");
+  assert.equal(playerAccepted.error, null);
+  assert.equal(playerAccepted.status, "halted");
+  assert.match(playerAccepted.output.flatMap(item => "text" in item ? [item.text] : []).join("\n"),
+    /player=Test Player;sta=2100;ene=1900;sex=2;outfit=4/);
+
+  indexScript(game, `@TEST_BODY_RACES
+CALL MAKE_TALENT_MAP
+CALL Name_Array_Set
+CALL ADDCHARA_INIT(0)
+FLAG:周回数 = 1
+CALL HOTPATCH_SETUP_INPUT(130191)
+CALL HOTPATCH_SETUP_INPUT(119112)
+CALL HOTPATCH_SETUP_INPUT(110814)
+CALL HOTPATCH_SETUP_BODY
+PRINTFORML human={TALENT:MASTER:人間};youkai={TALENT:MASTER:妖怪};butt={TALENT:MASTER:ヒップサイズ}
+CALL HOTPATCH_SETUP_INPUT(130090)
+PRINTFORML fox={TALENT:MASTER:90};youkai={TALENT:MASTER:妖怪}
+CALL HOTPATCH_SETUP_INPUT(130091)
+PRINTFORML spirit={TALENT:MASTER:91};fox={TALENT:MASTER:90}
+QUIT`, "TEST_BODY_RACES.ERB");
+  const races = new Runtime(game, GAME_INSTRUCTION_LIMIT).start("TEST_BODY_RACES");
+  assert.equal(races.error, null);
+  assert.equal(races.status, "halted");
+  assert.match(races.output.flatMap(item => "text" in item ? [item.text] : []).join("\n"),
+    /human=0;youkai=2;butt=4/);
+  const raceMarkup = races.output.flatMap(item => "text" in item ? [item.text] : []).join("\n");
+  assert.match(raceMarkup, /value='119112' class='era-setup-choice era-current'/);
+  assert.match(raceMarkup, /value='130191' class='era-setup-choice era-current'/);
+  assert.match(raceMarkup, /value='130090'/);
+  assert.match(raceMarkup, /value='130091'/);
+  assert.match(raceMarkup, /fox=1;youkai=0/);
+  assert.match(raceMarkup, /spirit=1;fox=0/);
+  assert.doesNotMatch(raceMarkup, /Unlocks in New Game\+/);
+  assert.doesNotMatch(raceMarkup, /value='119011'/, "human sub-options disappear after selecting Youkai");
 });

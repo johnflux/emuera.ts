@@ -20,19 +20,317 @@ IF sRegion != ""
 ENDIF
 RETURNF @"<button value='{nValue}' class='era-setup-choice%(nSelected ? " era-current" # "")%' aria-pressed='%(nSelected ? "true" # "false")%' aria-disabled='%(nEnabled ? "false" # "true")%'><span class='era-setup-choice-name'>%HTML_ESCAPE(sName)%</span><span class='era-setup-choice-description'>%sDescription%%sRegionLabel%</span></button>"
 
-@HOTPATCH_SETUP_CLOTHING
+@HOTPATCH_SETUP_CLOTHING(nDefaultClothes = 1)
 #DIM DYNAMIC nIndex
-HTML_PRINT "<era-open class='era-setup-card'>"
-HTML_PRINT "<span class='era-launch-eyebrow'>CLOTHING</span>"
+#DIM DYNAMIC nDefaultClothes
+#DIM DYNAMIC nDefaultSet
+nDefaultSet = FLAG:なりきり ? FLAG:なりきり + 100 # (TALENT:MASTER:性別 & 1 ? 2 # 1)
+HTML_PRINT "<era-open class='era-setup-card era-setup-plain'>"
+HTML_PRINT "<span class='era-launch-eyebrow'>Clothing</span>"
 HTML_PRINT "<era-open class='era-setup-grid'>"
+HTML_PRINT HOTPATCH_SETUP_CHOICE(1199, "Default", nDefaultClothes, MASTER_CLOTHES_NAME(nDefaultSet))
 FOR nIndex, 1, 11
 	SIF nIndex == 7
 		CONTINUE
-	HTML_PRINT HOTPATCH_SETUP_CHOICE(1100 + nIndex, MASTER_CLOTHES_NAME(nIndex), CFLAG:MASTER:基本服装セット == nIndex)
+	HTML_PRINT HOTPATCH_SETUP_CHOICE(1100 + nIndex, MASTER_CLOTHES_NAME(nIndex), !nDefaultClothes && CFLAG:MASTER:基本服装セット == nIndex)
 NEXT
-HTML_PRINT HOTPATCH_SETUP_CHOICE(1199, "Character default", CFLAG:MASTER:基本服装セット > 100)
 HTML_PRINT "<era-close>"
 HTML_PRINT "<era-close>"
+
+@HOTPATCH_SETUP_PLAYER(nPage, nDefaultClothes)
+#DIM DYNAMIC nPage
+#DIM DYNAMIC nDefaultClothes
+#DIM DYNAMIC nIndex
+#DIMS DYNAMIC sState
+#DIMS DYNAMIC sAge
+HTML_PRINT "<era-open class='era-setup-card era-setup-player'>"
+CALL HOTPATCH_FACE(MASTER, 112)
+IF STRFIND(RESULTS, "<img") >= 0
+	HTML_PRINT @"<div class='era-setup-player-face'>%RESULTS%</div>"
+ELSE
+	HTML_PRINT "<div class='era-setup-player-face era-setup-silhouette' title='Player portrait'></div>"
+ENDIF
+HTML_PRINT "<era-open class='era-setup-player-info'>"
+sState '= ""
+SIF FLAG:なりきり
+	sState '= "<button value='12' class='era-player-preset'>Custom Character</button>"
+HTML_PRINT @"<div class='era-setup-player-names'><span class='era-setup-name-field'>%HTML_ESCAPE(NAME:MASTER)%</span><span>Nickname:</span><span class='era-setup-nickname-field'>%HTML_ESCAPE(CALLNAME:MASTER)%</span><button value='11' class='era-player-preset'>Choose a predefined character</button>%sState%</div>"
+sState '= ""
+FOR nIndex, 0, 200
+	SIF !HOTPATCH_SETUP_IS_RACE(nIndex) || !TALENT:MASTER:nIndex
+		CONTINUE
+	sAge '= GET_TALENTNAME_TR(nIndex, TALENT:MASTER:nIndex, MASTER)
+	SIF sAge == ""
+		CONTINUE
+	SIF sState != ""
+		sState += ", "
+	sState += sAge
+NEXT
+SIF sState != ""
+	sState += " · "
+sAge '= GET_TALENTNAME_TR(GETNUM(TALENT, "年齢"), TALENT:MASTER:年齢, MASTER)
+SIF sAge == ""
+	sAge '= "Adult"
+HTML_PRINT @"<div class='era-setup-description'>%HTML_ESCAPE(sState)%%HTML_ESCAPE(HOTPATCH_SETUP_BODY_VALUE(2, TALENT:MASTER:性別))% · %HTML_ESCAPE(sAge)%</div>"
+HTML_PRINT "<era-open class='era-setup-player-stats'>"
+CALL HOTPATCH_SETUP_PLAYER_STEPPER(5100, "STA", MAX(MAXBASE:MASTER:体力 - 500, 0), MAXBASE:MASTER:体力 > 1000, MAXBASE:MASTER:体力 < 2500)
+CALL HOTPATCH_SETUP_PLAYER_STEPPER(5102, "ENE", MAXBASE:MASTER:気力, MAXBASE:MASTER:気力 > 1000, MAXBASE:MASTER:気力 < 2500)
+HTML_PRINT @"<div class='era-setup-setting'><span>TSP</span><span>{MAXBASE:MASTER:TSP}</span></div>"
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-close>"
+HTML_PRINT @"<div class='era-sheet-subpages era-player-tabs'><button value='715' class='era-sheet-subpage%(nPage == 4 ? " era-current" # "")%'>Body</button><button value='710' class='era-sheet-subpage%(nPage == 0 ? " era-current" # "")%'>Clothing</button><button value='711' class='era-sheet-subpage%(nPage == 1 ? " era-current" # "")%'>Traits</button><button value='712' class='era-sheet-subpage%(nPage == 2 ? " era-current" # "")%'>Abilities</button><button value='713' class='era-sheet-subpage%(nPage == 3 ? " era-current" # "")%'>Experience</button></div>"
+SELECTCASE nPage
+CASE 0
+	CALL HOTPATCH_SETUP_CLOTHING(nDefaultClothes)
+CASE 1
+	CALL HOTPATCH_SETUP_TRAITS
+CASE 2
+	HTML_PRINT "<era-open class='era-setup-grid era-setup-player-values era-setup-abilities'>"
+	FOR nIndex, 0, 59
+		SIF CUSTOM_選べない能力(nIndex, MASTER)
+			CONTINUE
+		CALL HOTPATCH_SETUP_PLAYER_STEPPER(7000 + nIndex * 2, ABL_TR(nIndex), ABL:MASTER:nIndex, ABL:MASTER:nIndex > 0, ABL:MASTER:nIndex < 2)
+	NEXT
+	HTML_PRINT "<era-close>"
+CASE 3
+	HTML_PRINT "<div class='era-setup-description'>Select a value to enter it directly (0-30).</div>"
+	HTML_PRINT "<era-open class='era-setup-grid era-setup-player-values'>"
+	FOR nIndex, 0, 110
+		SIF CUSTOM_選べない経験(nIndex, MASTER)
+			CONTINUE
+		CALL HOTPATCH_SETUP_PLAYER_STEPPER(8000 + nIndex * 2, EXP_TR(nIndex, "ExpSh"), EXP:MASTER:nIndex, EXP:MASTER:nIndex > 0, EXP:MASTER:nIndex < 30, 9000 + nIndex)
+	NEXT
+	HTML_PRINT "<era-close>"
+CASE 4
+	HTML_PRINT "<era-open class='era-setup-body-options'>"
+	CALL HOTPATCH_SETUP_BODY
+	SIF HAS_PENIS(MASTER)
+		CALL HOTPATCH_SETUP_PENIS
+	HTML_PRINT "<era-close>"
+ENDSELECT
+
+@HOTPATCH_SETUP_IS_RACE(nIndex)
+#FUNCTION
+#DIM DYNAMIC nIndex
+RETURNF GROUPMATCH(nIndex, 90, 91, 164, 166, 190, 191, 192, 193, 194, 195, 196, 197)
+
+@HOTPATCH_SETUP_BODY_VALUE(nIndex, nValue)
+#FUNCTIONS
+#DIM DYNAMIC nIndex
+#DIM DYNAMIC nValue
+#DIM DYNAMIC nMin
+#DIM DYNAMIC nMax
+nMin = 0
+nMax = 1
+SELECTCASE nIndex
+CASE 2
+	nMin = 1
+	nMax = 3
+CASE 17
+	nMin = -1
+	nMax = 2
+CASE 100
+	nMin = -5
+	nMax = 5
+CASE 105
+	nMin = -2
+	nMax = 2
+CASE 108
+	nMin = -3
+	nMax = 4
+CASE 143
+	nMax = 4
+CASE 164
+	nMax = IS_FEMALE(MASTER) ? 2 # 1
+CASE 190
+	nMax = 6
+CASE 191
+	nMax = 12
+CASE 193, 197
+	nMax = 3
+CASE 194
+	nMax = 4
+CASE 196
+	nMax = 5
+CASE 54, 90, 91, 166, 192, 195
+CASEELSE
+	RETURNF ""
+ENDSELECT
+SIF nValue < nMin || nValue > nMax
+	RETURNF ""
+SIF nIndex == 2 && nValue == 1
+	RETURNF "Female"
+SIF nIndex == 17 && nValue == 0
+	RETURNF "Adult"
+SIF nIndex == 100 && nValue == 0
+	RETURNF "Average"
+SIF nIndex == 105 && nValue == 0
+	RETURNF "Average Breasts"
+SIF GROUPMATCH(nIndex, 54, 143) && nValue == 0
+	RETURNF "None"
+SIF nIndex == 197 && !IS_FEMALE(MASTER) && GROUPMATCH(nValue, 1, 3)
+	RETURNF ""
+IF nIndex == 108
+	SELECTCASE nValue
+	CASE -3
+		RETURNF "Flat Butt"
+	CASE 3
+		RETURNF "Enormous Butt"
+	CASE 4
+		RETURNF "Colossal Butt"
+	ENDSELECT
+ENDIF
+SIF HOTPATCH_SETUP_IS_RACE(nIndex) && nValue == 0
+	RETURNF "None"
+RETURNF GET_TALENTNAME_TR(nIndex, nValue, MASTER)
+
+@HOTPATCH_SETUP_BODY
+#DIM DYNAMIC nIndex
+#DIM DYNAMIC nValue
+#DIMS DYNAMIC sName
+#DIMS DYNAMIC sDescription
+FOR nIndex, 0, 200
+	SIF nIndex == 108
+		CALL HOTPATCH_SETUP_RACE
+	SIF !GROUPMATCH(nIndex, 2, 17, 54, 100, 105, 108, 143)
+		CONTINUE
+	SIF nIndex == 105 && !IS_FEMALE(MASTER)
+		CONTINUE
+	HTML_PRINT "<era-open class='era-setup-card era-setup-plain'>"
+	HTML_PRINT @"<span class='era-launch-eyebrow'>%HTML_ESCAPE(TALENT_TR(nIndex))%</span>"
+	SIF nIndex == 100
+		HTML_PRINT "<div class='era-setup-description'>Very small or large bodies cannot use many commands without Forbidden Knowledge. Large differences in body size make insertion harder.</div>"
+	HTML_PRINT "<era-open class='era-setup-grid'>"
+	FOR nValue, -5, 13
+		sName '= HOTPATCH_SETUP_BODY_VALUE(nIndex, nValue)
+		SIF sName == ""
+			CONTINUE
+		sDescription '= TALENT_INFO(nIndex, nValue)
+		IF nIndex == 108
+			sDescription '= ""
+		ELSEIF nIndex == 2 && nValue == 3
+			sDescription '= "Has both genitals."
+		ELSEIF nIndex == 54 && nValue == 0
+			sDescription '= ""
+		ELSEIF nIndex == 143
+			sDescription '= nValue == 0 ? "" # "Can go into heat; dislikes washing; prefers Doggy Style; matching Fortune boosts Favor/Trust."
+		ELSEIF nIndex == 17
+			SELECTCASE nValue
+			CASE -1
+				sDescription '= "Physically a child."
+			CASE 0
+				sDescription '= "Physically a young adult."
+			CASE 1
+				sDescription '= "Physically middle-aged."
+			CASE 2
+				sDescription '= "Physically elderly."
+			ENDSELECT
+		ELSEIF nIndex == 100
+			SELECTCASE nValue
+			CASE -5
+				sDescription '= "Tiny enough to fit in a hand. More Pain; less Desire from most commands, less C/V/A/B/M Pleasure and Lubrication. Can be used as an onahole."
+			CASE -2
+				sDescription '= "A small frame, about the size of a child."
+			CASE -1
+				sDescription '= "Shorter and smaller-framed than average."
+			CASE 0
+				sDescription '= "An ordinary adult height and build."
+			CASE 1
+				sDescription '= "Taller than average."
+			CASE 2
+				sDescription '= "An unusually large frame, towering over most people."
+			CASE 5
+				sDescription '= "A gigantic body, far beyond human proportions."
+			ENDSELECT
+		ELSEIF nIndex == 105
+			SELECTCASE nValue
+			CASE -2
+				sDescription '= "Flat chest; some breast actions unavailable."
+			CASE -1
+				sDescription '= "Small breasts; some breast actions limited."
+			CASE 0
+				sDescription '= "Average size."
+			CASE 1
+				sDescription '= "Large breasts; bonuses to breast actions and lactation."
+			CASE 2
+				sDescription '= "Very large breasts; bonuses to breast actions and lactation."
+			ENDSELECT
+		ENDIF
+		HTML_PRINT HOTPATCH_SETUP_CHOICE(100000 + nIndex * 100 + nValue + 10, sName, TALENT:MASTER:nIndex == nValue, sDescription, !CUSTOM_選べない素質(nIndex, MASTER))
+	NEXT
+	HTML_PRINT "<era-close>"
+	HTML_PRINT "<era-close>"
+NEXT
+
+@HOTPATCH_SETUP_RACE
+#DIM DYNAMIC nIndex
+#DIM DYNAMIC nValue
+#DIM DYNAMIC nVariants
+#DIMS DYNAMIC sName
+HTML_PRINT "<era-open class='era-setup-card era-setup-plain'>"
+HTML_PRINT "<span class='era-launch-eyebrow'>Race</span>"
+IF !FLAG:周回数
+	HTML_PRINT "<div class='era-setup-description era-setup-locked'>Unlocks in New Game+.</div>"
+	HTML_PRINT "<era-close>"
+	RETURN
+ENDIF
+HTML_PRINT "<era-open class='era-setup-grid'>"
+FOR nIndex, 0, 200
+	SIF !HOTPATCH_SETUP_IS_RACE(nIndex)
+		CONTINUE
+	HTML_PRINT HOTPATCH_SETUP_CHOICE(130000 + nIndex, TALENT_TR(nIndex), TALENT:MASTER:nIndex != 0, "", !CUSTOM_選べない素質(nIndex, MASTER))
+	SIF !TALENT:MASTER:nIndex
+		CONTINUE
+	nVariants = 0
+	FOR nValue, 1, 13
+		SIF HOTPATCH_SETUP_BODY_VALUE(nIndex, nValue) != ""
+			nVariants ++
+	NEXT
+	SIF nVariants < 2
+		CONTINUE
+	HTML_PRINT "<era-open class='era-setup-race-variants'>"
+	FOR nValue, 1, 13
+		sName '= HOTPATCH_SETUP_BODY_VALUE(nIndex, nValue)
+		SIF sName == ""
+			CONTINUE
+		HTML_PRINT HOTPATCH_SETUP_CHOICE(100000 + nIndex * 100 + nValue + 10, sName, TALENT:MASTER:nIndex == nValue, TALENT_INFO(nIndex, nValue), !CUSTOM_選べない素質(nIndex, MASTER))
+	NEXT
+	HTML_PRINT "<era-close>"
+NEXT
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-close>"
+
+@HOTPATCH_SETUP_TRAITS
+#DIM DYNAMIC nIndex
+#DIMS DYNAMIC sState
+HTML_PRINT "<div class='era-setup-description'>Select a trait to toggle it or cycle through its values.</div>"
+HTML_PRINT "<era-open class='era-setup-traits-layout'>"
+HTML_PRINT "<era-open class='era-setup-grid era-setup-player-traits'>"
+FOR nIndex, 0, 200
+	SIF TALENTNAME:nIndex == "" || CUSTOM_選べない素質(nIndex, MASTER) == 1
+		CONTINUE
+	SIF GROUPMATCH(nIndex, 2, 17, 54, 100, 105, 108, 143) || HOTPATCH_SETUP_IS_RACE(nIndex)
+		CONTINUE
+	sState '= GET_TALENTNAME_TR(nIndex, TALENT:MASTER:nIndex, MASTER)
+	HTML_PRINT @"<button value='{6000 + nIndex}' class='era-setup-trait%(TALENT:MASTER:nIndex ? " era-current" # "")%' aria-disabled='%(CUSTOM_選べない素質(nIndex, MASTER) ? "true" # "false")%' title='%HTML_ESCAPE(TALENT_INFO(nIndex, TALENT:MASTER:nIndex))%'>%HTML_ESCAPE(TALENT_TR(nIndex))% [%(sState != "" ? HTML_ESCAPE(sState) # "-")%]</button>"
+NEXT
+HTML_PRINT "<era-close>"
+HTML_PRINT "<div class='era-setup-trait-help'><div class='era-launch-eyebrow'>TRAIT DETAILS</div><div class='era-setup-trait-help-text'>Hover or focus a trait to read its description.</div></div>"
+HTML_PRINT "<era-close>"
+
+@HOTPATCH_SETUP_PLAYER_STEPPER(nAction, sName, nValue, nDecrease, nIncrease, nDirect = 0)
+#DIM DYNAMIC nAction
+#DIMS DYNAMIC sName
+#DIM DYNAMIC nValue
+#DIM DYNAMIC nDecrease
+#DIM DYNAMIC nIncrease
+#DIM DYNAMIC nDirect
+#DIMS DYNAMIC sValue
+sValue '= @"<span>{nValue}</span>"
+SIF nDirect
+	sValue '= @"<button value='{nDirect}' title='Enter a value'>{nValue}</button>"
+HTML_PRINT @"<div class='era-setup-setting'><span>%HTML_ESCAPE(sName)%</span><span class='era-setup-stepper'><button value='{nAction}' class='era-setup-step' aria-disabled='%(nDecrease ? "false" # "true")%' title='Decrease'>-</button>%sValue%<button value='{nAction + 1}' class='era-setup-step' aria-disabled='%(nIncrease ? "false" # "true")%' title='Increase'>+</button></span></div>"
 
 @HOTPATCH_SETUP_BONUS_VALUE(nIndex)
 #FUNCTIONS
@@ -76,8 +374,8 @@ sNames:5 '= "Bumpy"
 sDescriptions:5 '= "Putting that inside someone will just hurt, y'know? Is this just self-satisfaction? Have you forgotten to be considerate of others?"
 sNames:6 '= "Huge"
 sDescriptions:6 '= "Do you think bigger is always better? A heart can only pump so much blood - if it gets too big it'll get soft. Besides, it's not the size that counts, it's the compatibility. If your sizes are incompatible it'll just hurt."
-HTML_PRINT "<era-open class='era-setup-card'>"
-HTML_PRINT "<span class='era-launch-eyebrow'>PENIS SETTINGS</span>"
+HTML_PRINT "<era-open class='era-setup-card era-setup-plain'>"
+HTML_PRINT "<span class='era-launch-eyebrow'>Penis Size</span>"
 HTML_PRINT "<era-open class='era-setup-grid'>"
 FOR nIndex, 1, 7
 	HTML_PRINT HOTPATCH_SETUP_CHOICE(1200 + nIndex, sNames:nIndex, TALENT:MASTER:形状 == nIndex, sDescriptions:nIndex)
@@ -337,6 +635,50 @@ HTML_PRINT @"<div class='era-setup-setting'><span>%HTML_ESCAPE(sName)%</span><sp
 #DIM DYNAMIC nChoice
 #DIM DYNAMIC nSkip
 SELECTCASE nAction
+CASE 140000 TO 150930
+	nIndex = (nAction - 140000) / 100
+	nChoice = (nAction - 140000) % 100
+	IF nIndex > 109 || nChoice > 30 || CUSTOM_選べない経験(nIndex, MASTER)
+		RETURN 0
+	ENDIF
+	EXP:MASTER:nIndex = nChoice
+	CALL CHARA_VALIDATE(MASTER)
+CASE 130000 TO 130199
+	nIndex = nAction - 130000
+	IF !FLAG:周回数 || !HOTPATCH_SETUP_IS_RACE(nIndex) || CUSTOM_選べない素質(nIndex, MASTER)
+		RETURN 0
+	ENDIF
+	FOR nChoice, 0, 200
+		SIF HOTPATCH_SETUP_IS_RACE(nChoice)
+			TALENT:MASTER:nChoice = 0
+	NEXT
+	TALENT:MASTER:nIndex = nIndex == 197 && !IS_FEMALE(MASTER) ? 2 # 1
+	CALL CHARA_VALIDATE(MASTER)
+CASE 100000 TO 119999
+	nIndex = (nAction - 100000) / 100
+	nChoice = (nAction - 100000) % 100 - 10
+	IF CUSTOM_選べない素質(nIndex, MASTER) || HOTPATCH_SETUP_BODY_VALUE(nIndex, nChoice) == ""
+		RETURN 0
+	ENDIF
+	SIF HOTPATCH_SETUP_IS_RACE(nIndex) && (!FLAG:周回数 || !TALENT:MASTER:nIndex || nChoice == 0)
+		RETURN 0
+	TALENT:MASTER:nIndex = nChoice
+	CALL CHARA_VALIDATE(MASTER)
+CASE 5100 TO 5103
+	CALL CUSTOM_BASE(MASTER, nAction - 5100)
+CASE 6000 TO 6199
+	SIF HOTPATCH_SETUP_IS_RACE(nAction - 6000) && !FLAG:周回数
+		RETURN 0
+	CALL CUSTOM_TALENT(nAction - 6000, MASTER)
+	CALL CHARA_VALIDATE(MASTER)
+CASE 7000 TO 7117
+	CALL CUSTOM_ABL(200 + nAction - 7000, MASTER)
+CASE 8000 TO 8219
+	nIndex = (nAction - 8000) / 2
+	SIF CUSTOM_選べない経験(nIndex, MASTER)
+		RETURN 0
+	EXP:MASTER:nIndex = LIMIT(EXP:MASTER:nIndex + (nAction % 2 ? 1 # -1), 0, 30)
+	CALL CHARA_VALIDATE(MASTER)
 CASE 1000 TO 1011
 	nIndex = nAction - 1000
 	IF nIndex == 1

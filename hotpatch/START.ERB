@@ -164,6 +164,8 @@ ANIMATERECOLOREDMAPS = 1000
 @NEWGAME_OPTION
 #DIM DYNAMIC nStart
 #DIM DYNAMIC nTab
+#DIM DYNAMIC nPlayerPage = 4
+#DIM DYNAMIC nDefaultClothes = 1
 #DIM DYNAMIC nAction
 #DIMS DYNAMIC sError
 IF !ゲーム開始処理中
@@ -172,11 +174,14 @@ IF !ゲーム開始処理中
 ENDIF
 SETBIT FLAG:1000, 1
 SETBIT FLAG:1000, 2
+CALL CHARA_VALIDATE(MASTER)
 SIF !TALENT:MASTER:形状 && HAS_PENIS(MASTER)
 	TALENT:MASTER:形状 = 3
 CALL MASTER_CLOTHES_INIT
 nStart = LINECOUNT
 DO
+	SIF nDefaultClothes
+		CALL MASTER_CLOTHES_INIT
 	CLEARLINE LINECOUNT - nStart
 	HTML_PRINT "<era-open class='era-dialog era-setup'>"
 	HTML_PRINT "<div class='era-inventory-header'><div class='era-inventory-heading'><span class='era-inventory-title'>New game</span><button value='999' class='era-dialog-close' title='Back to title'>×</button></div></div>"
@@ -184,10 +189,7 @@ DO
 	HTML_PRINT "<era-open class='era-inventory-body era-setup-body'>"
 	SELECTCASE nTab
 	CASE 0
-		HTML_PRINT @"<div class='era-setup-card'><span class='era-launch-eyebrow'>PLAYER</span><div class='era-setup-name'>%HTML_ESCAPE(CALLNAME:MASTER)%</div><div class='era-sub'>%(FLAG:なりきり ? "Predefined character" # "Custom character")% · STA {MAX(MAXBASE:MASTER:体力 - 500, 0)} · ENE {MAXBASE:MASTER:気力} · TSP {MAXBASE:MASTER:TSP}</div><button value='10' class='era-chip-button'>Customize character</button><button value='11' class='era-chip-button'>Choose a predefined character</button></div>"
-		CALL HOTPATCH_SETUP_CLOTHING
-		SIF HAS_PENIS(MASTER)
-			CALL HOTPATCH_SETUP_PENIS
+		CALL HOTPATCH_SETUP_PLAYER(nPlayerPage, nDefaultClothes)
 	CASE 1
 		CALL HOTPATCH_SETUP_WORLD
 		HTML_PRINT @"<div class='era-setup-card'><span class='era-launch-eyebrow'>MAP DISPLAY</span><button value='23' class='era-chip-button'>Animation: %(ANIMATERECOLOREDMAPS ? "On" # "Off")%</button><div class='era-setup-description'>You can also change this in game options later.</div></div>"
@@ -203,11 +205,15 @@ DO
 		HTML_PRINT "<div class='era-setup-card'><span class='era-launch-eyebrow'>CHARACTER BODIES</span><button value='26' class='era-chip-button'>Character body editor</button></div>"
 	ENDSELECT
 	HTML_PRINT "<era-close>"
-	HTML_PRINT @"<div class='era-inventory-footer'><button value='999' class='era-chip-button'>Back to title</button><span class='era-tone-red'>%sError%</span><button value='100' class='era-launch-primary'>Start game</button></div>"
+	HTML_PRINT @"<div class='era-inventory-footer'><span class='era-tone-red'>%sError%</span><button value='100' class='era-launch-primary'>Start game</button></div>"
 	HTML_PRINT "<era-close>"
 	INPUT
 	nAction = RESULT
 	sError '= ""
+	SIF nAction == 1199
+		nDefaultClothes = 1
+	SIF GROUPMATCH(nAction, 1101, 1102, 1103, 1104, 1105, 1106, 1108, 1109, 1110)
+		nDefaultClothes = 0
 	CALL HOTPATCH_SETUP_INPUT(nAction)
 	SIF RESULT
 		CONTINUE
@@ -220,20 +226,56 @@ DO
 		RETURN 0
 	CASE 700 TO 706
 		nTab = nAction - 700
+	CASE 710 TO 713
+		nPlayerPage = nAction - 710
+	CASE 715
+		nPlayerPage = 4
+	CASE 714
+		CONTINUE
+	CASE 12
+		SIF !FLAG:なりきり
+			CONTINUE
+		CFLAG:(FLAG:なりきり):出禁 = 0
+		FLAG:なりきり = 0
+		ADDCHARA 0
+		COPYCHARA CHARANUM - 1, MASTER
+		DELCHARA CHARANUM - 1
+		CALL ADDCHARA_INIT(MASTER, 1)
+		CALL NEWGAME_MAKE
+		CALL HOTPATCH_SETUP_HOME(MAIN_MAP)
+		nDefaultClothes = 1
+		CALL MASTER_CLOTHES_INIT
+		TALENT:MASTER:形状 = 3
+	CASE 5002
+		INPUTS
+		SIF RESULTS != ""
+			NAME:MASTER '= RESULTS
+		INPUTS
+		IF RESULTS != ""
+			CALLNAME:MASTER '= RESULTS
+		ELSE
+			CALLNAME:MASTER '= NAME:MASTER
+		ENDIF
 	CASE 23
 		ANIMATERECOLOREDMAPS = ANIMATERECOLOREDMAPS ? 0 # 1000
-	CASE 10, 11, 20, 26, 31, 32
+	CASE 10, 11, 20, 26, 31, 32, 5000, 5001, 9000 TO 9109
 		CLEARLINE LINECOUNT - nStart
 		HTML_PRINT "<era-open class='era-dialog era-setup era-setup-editor'>"
 		HTML_PRINT "<div class='era-inventory-header'><span class='era-inventory-title'>Game settings</span><div class='era-sub'>Finish editing to return to new-game setup.</div></div>"
 		HTML_PRINT "<era-open class='era-inventory-body'>"
 		SELECTCASE nAction
+		CASE 5000, 5001
+			CALL CUSTOM_NAME(MASTER, nAction - 5000)
+		CASE 9000 TO 9109
+			CALL CUSTOM_EXP(nAction - 9000, MASTER)
+			CALL CHARA_VALIDATE(MASTER)
 		CASE 10
 			CALL CUSTOM_TERMINAL(MASTER)
 		CASE 11
 			CALL NEWGAME_MAKE_NARIKIRI
 			IF RESULT
 				FLAG:ゲームモード = 1
+				nDefaultClothes = 1
 				CALL MASTER_CLOTHES_INIT
 				CALL HOTPATCH_CHARACTER_HOME
 			ENDIF

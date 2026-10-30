@@ -408,6 +408,18 @@ function describe(element, description) {
     if (busy || !element.closest(".screen.is-active, .cbg-layer") || element.matches(".is-stale")) return;
     if (element.closest(".era-occupant-list") && element.querySelector(".sprite")) return;
     hideTooltip();
+    if (element.matches(".era-setup-trait")) {
+      const help = element.closest(".era-setup-traits-layout")?.querySelector(".era-setup-trait-help-text");
+      if (help) {
+        help.dataset.description = description;
+        const lines = (description || "No description available.").split("\n");
+        const translated = () => lines.map((line) => translation.text(line, () => {
+          if (help.isConnected && help.dataset.description === description) help.textContent = translated();
+        })).join("\n");
+        help.textContent = translated();
+        return;
+      }
+    }
     tooltipTarget = element;
     const id = description.trim();
     const picture = tooltipSettings?.custom && tooltipSettings.image && /^[+-]?\d+$/.test(id)
@@ -445,7 +457,7 @@ function describe(element, description) {
   }
   element.addEventListener("mouseenter", () => {
     clearTimeout(tooltipDelay);
-    if (tooltipSettings?.delay > 0) tooltipDelay = setTimeout(show, tooltipSettings.delay);
+    if (tooltipSettings?.delay > 0 && !element.matches(".era-setup-trait")) tooltipDelay = setTimeout(show, tooltipSettings.delay);
     else show();
   });
   element.addEventListener("focus", show);
@@ -502,12 +514,81 @@ document.addEventListener("input", (event) => {
  * Hotpatch extension: era-dialog boxes use the top layer while their screen is active, without changing line counts.
  * Escape or a click outside the panel presses its .era-dialog-close button.
  */
+function syncPlayerNames(dialog) {
+  for (const [selector, label] of [[".era-setup-name-field", "Player name"], [".era-setup-nickname-field", "Player nickname"]]) {
+    const host = dialog.querySelector(selector);
+    if (!host || host.querySelector("input")) continue;
+    const field = document.createElement("input");
+    field.type = "text";
+    field.className = "era-player-name-input";
+    if (selector === ".era-setup-name-field") field.classList.add("era-player-primary-name");
+    field.setAttribute("aria-label", label);
+    field.value = host.textContent;
+    if (selector === ".era-setup-nickname-field") {
+      const name = dialog.querySelector(".era-setup-name-field input");
+      field.placeholder = name.value;
+      if (field.value === name.value) field.value = "";
+      name.addEventListener("input", () => { field.placeholder = name.value || name.defaultValue; });
+    }
+    field.defaultValue = field.value;
+    field.autocomplete = "off";
+    const resize = () => {
+      const length = Math.max(16, Array.from(field.value).length + 2);
+      field.style.width = `calc(${length}ch + ${field.classList.contains("era-player-primary-name") ? length * .08 : 0}em + 4px)`;
+    };
+    field.addEventListener("input", resize);
+    resize();
+    host.replaceChildren(field);
+    field.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" || event.isComposing) return;
+      event.preventDefault();
+      event.stopPropagation();
+      void submit("714");
+    });
+    field.addEventListener("blur", (event) => {
+      if (event.relatedTarget?.closest("button.choice, .era-player-name-input, .era-player-exp-input")) return;
+      if (field.value !== field.defaultValue) void submit("714");
+    });
+  }
+}
+function syncPlayerExperience(dialog) {
+  for (const button of dialog.querySelectorAll(".era-setup-player-values .era-setup-stepper button:not(.era-setup-step)")) {
+    const action = Number(button.dataset.value);
+    if (action < 9000 || action > 9109) continue;
+    const field = document.createElement("input");
+    field.type = "text";
+    field.inputMode = "numeric";
+    field.pattern = "(?:[0-9]|[12][0-9]|30)";
+    field.required = true;
+    field.className = "era-player-exp-input";
+    field.dataset.experience = String(action - 9000);
+    field.setAttribute("aria-label", `${button.closest(".era-setup-setting").firstElementChild.textContent} value`);
+    field.title = "Enter a whole number from 0 to 30";
+    field.value = field.defaultValue = button.textContent;
+    button.replaceWith(field);
+    field.addEventListener("focus", () => field.select());
+    field.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" || event.isComposing) return;
+      event.preventDefault();
+      event.stopPropagation();
+      void submit("714");
+    });
+    field.addEventListener("blur", (event) => {
+      if (event.relatedTarget?.closest("button.choice, .era-player-name-input, .era-player-exp-input")) return;
+      if (field.value !== field.defaultValue) void submit("714");
+    });
+  }
+}
 function syncDialogs() {
   if (!terminal.querySelector(".screen.is-active .era-inventory")) inventoryQuery = "";
   for (const dialog of terminal.querySelectorAll(".era-dialog")) {
     if (!dialog.popover) dialog.popover = "manual";
     const open = !!dialog.closest(".screen.is-active");
     if (open && dialog.classList.contains("era-inventory")) syncInventory(dialog);
+    if (open) {
+      syncPlayerNames(dialog);
+      syncPlayerExperience(dialog);
+    }
     if (open === dialog.matches(":popover-open")) continue;
     if (open) dialog.showPopover();
     else dialog.hidePopover();
@@ -1427,13 +1508,13 @@ async function renderHtml(markup, parent, sprites) {
     applyClasses(element, node);
     if (element.matches(".era-occupant-label, .era-guard-toggle, .era-setup-choice"))
       element.setAttribute("aria-pressed", String(node.getAttribute("aria-pressed") === "true"));
-    if (element.matches(".era-setup-choice"))
+    if (element.matches(".era-setup-choice, .era-setup-step, .era-setup-trait"))
       element.setAttribute("aria-disabled", String(node.getAttribute("aria-disabled") === "true"));
     // Hotpatch extension: data-room links a non-button element to the map's room buttons with that value.
     const room = node.getAttribute("data-room");
     if (room !== null && /^-?\d+$/.test(room)) element.dataset.room = room;
     const title = node.getAttribute("title");
-    if (title && !element.dataset.tooltip) describe(element, title);
+    if ((title || element.matches(".era-setup-trait")) && !element.dataset.tooltip) describe(element, title ?? "");
     destination.append(element);
     if (node.tagName !== "IMG" && node.tagName !== "METER") for (const child of node.childNodes) await copy(child, node.tagName === "SHAPE" ? destination : element.subareaContent ?? element, scale);
   }
@@ -1454,12 +1535,18 @@ async function renderSteps(steps, fresh = false, keepFocus = false, toBottom = f
   const clickingThrough = input?.kind === "wait";
   const setup = terminal.querySelector(".screen.is-active .era-setup:not(.era-setup-editor)");
   const setupTab = setup?.querySelector(".era-start-tabs .era-current")?.dataset.value;
+  const playerTab = setup?.querySelector(".era-player-tabs .era-current")?.dataset.value;
   const setupScroll = setup?.querySelector(".era-setup-body")?.scrollTop;
+  const bodyOptionsScroll = setup?.querySelector(".era-setup-body-options")?.scrollTop;
   const restoreSetupScroll = () => {
     if (fresh || setupTab === undefined || setupScroll === undefined) return;
     const next = terminal.querySelector(".screen.is-active .era-setup:not(.era-setup-editor)");
-    if (next?.querySelector(".era-start-tabs .era-current")?.dataset.value === setupTab)
+    if (next?.querySelector(".era-start-tabs .era-current")?.dataset.value === setupTab
+      && next?.querySelector(".era-player-tabs .era-current")?.dataset.value === playerTab) {
       next.querySelector(".era-setup-body").scrollTop = setupScroll;
+      const bodyOptions = next.querySelector(".era-setup-body-options");
+      if (bodyOptions && bodyOptionsScroll !== undefined) bodyOptions.scrollTop = bodyOptionsScroll;
+    }
   };
   const scrollTop = terminal.scrollTop;
   const followBottom = toBottom || terminal.scrollHeight - terminal.clientHeight - scrollTop < 2;
@@ -2036,8 +2123,19 @@ async function submit(value, selectedChoice = null) {
   // Input made while an animation frame is loading is sent once that frame is shown.
   if (expiring) { queuedSubmit = { value, choice: selectedChoice?.dataset.value }; return; }
   if (busy || !input || input.blocking) return;
+  const experienceFields = [...terminal.querySelectorAll(".screen.is-active .era-player-exp-input")];
+  if (experienceFields.some((field) => !field.reportValidity())) return;
+  const experienceEdits = experienceFields.filter((field) => field.value !== field.defaultValue)
+    .map((field) => String(140000 + Number(field.dataset.experience) * 100 + Number(field.value)));
   hideTooltip();
   busy = true;
+  const nameFields = [...terminal.querySelectorAll(".screen.is-active .era-player-name-input")];
+  const names = nameFields.some((field) => field.value !== field.defaultValue) ? nameFields.map((field) => field.value) : null;
+  const nameFocus = document.activeElement?.matches(".era-player-name-input, .era-player-exp-input") ? {
+    label: document.activeElement.getAttribute("aria-label"),
+    start: document.activeElement.selectionStart,
+    end: document.activeElement.selectionEnd,
+  } : null;
   const waiting = input.kind === "wait";
   // Typed input that matches a visible choice highlights that choice too.
   const pending = selectedChoice ?? (value === "" ? null : [...terminal.querySelectorAll(".screen.is-active button.choice")]
@@ -2047,6 +2145,18 @@ async function submit(value, selectedChoice = null) {
   beginActivity();
   updateControls();
   try {
+    for (const edit of experienceEdits) {
+      const edited = await api("/api/input", { session, step, value: edit, columns: terminalColumns(), display: displaySettings(), client: clientState() });
+      await render(edited, false, false, true);
+      if (edited.error || edited.status !== "waiting") throw new Error(edited.error?.message ?? "Experience update did not return to setup");
+    }
+    if (names) {
+      for (const edit of ["5002", ...names]) {
+        const edited = await api("/api/input", { session, step, value: edit, columns: terminalColumns(), display: displaySettings(), client: clientState() });
+        await render(edited, false, false, true);
+        if (edited.error || edited.status !== "waiting") throw new Error(edited.error?.message ?? "Player name update did not return to setup");
+      }
+    }
     const snapshot = await api("/api/input", { session, step, value, columns: terminalColumns(), display: displaySettings(), client: clientState() });
     activityResponded();
     selectedChoice?.classList.add("is-selected");
@@ -2059,7 +2169,11 @@ async function submit(value, selectedChoice = null) {
     pending?.classList.remove("is-pending");
     endActivity();
     updateControls();
-    if (input) command.focus({ preventScroll: true });
+    const nameField = nameFocus && terminal.querySelector(`.screen.is-active input[aria-label="${nameFocus.label}"]`);
+    if (nameField) {
+      nameField.focus({ preventScroll: true });
+      nameField.setSelectionRange(nameFocus.start, nameFocus.end);
+    } else if (input) command.focus({ preventScroll: true });
     if (skipRequested) void continueSkipping();
     runQueuedContinue();
   }
