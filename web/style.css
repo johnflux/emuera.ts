@@ -495,6 +495,7 @@ main:has(.screen.is-active .era-launch) { padding: 0; background: #000; }
 .era-setup-farm-heading { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 16px; }
 .era-setup-farm-heading .era-setup-description { margin-left: auto; text-align: right; }
 .era-setup-player { display: flex; align-items: flex-start; gap: 18px; }
+.era-setup-card.era-setup-player { border: 1px solid #294656; border-radius: 5px; background: #10212b; }
 .era-setup-player > .line:has(.era-setup-player-face) { flex: none; }
 .era-setup-player-info { flex: 1; min-width: 0; margin: auto 0; }
 .era-setup-body:has(> .era-setup-player) { display: flex; flex-direction: column; }
@@ -528,12 +529,8 @@ main:has(.screen.is-active .era-launch) { padding: 0; background: #000; }
 .era-setup-player-values > .era-marker { grid-column: 1 / -1; }
 .era-setup-player-values .era-setup-setting { display: grid; grid-template-columns: minmax(0, 1fr) max-content; padding: 3px 0; gap: 8px; }
 .era-setup-player-values .era-setup-setting > span:first-child { white-space: nowrap; }
-.era-setup-player-values .era-setup-stepper { gap: 0; }
-.era-setup-player-values .era-setup-stepper > span { min-width: 2ch; text-align: center; }
-.era-player-exp-input { box-sizing: content-box; width: 2ch; min-width: 2ch; padding: 1px 0; border: 0; border-bottom: 1px dotted #365a6c; border-radius: 0; background: transparent; color: inherit; font: inherit; font-variant-numeric: tabular-nums; text-align: center; }
-.era-player-exp-input:focus { outline: 1px solid #69c9b5; }
-.era-setup .era-setup-player-values .line .era-setup-stepper button.choice { min-width: 1.5ch; margin: 0; padding: 1px 2px; }
-.era-setup .era-setup-player-values .line .era-setup-stepper button.choice:not(.era-setup-step) { box-sizing: content-box; width: 2ch; min-width: 2ch; padding: 1px 0; font-variant-numeric: tabular-nums; }
+.era-setup-number-input { box-sizing: content-box; min-width: 2ch; padding: 1px 0; border: 0; border-bottom: 1px dotted transparent; border-radius: 0; background: transparent; color: inherit; font: inherit; font-variant-numeric: tabular-nums; text-align: right; }
+.era-setup-number-input:focus { outline: none; border-bottom-color: #69c9b5; }
 .era-setup-traits-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 270px); align-items: stretch; gap: 8px; }
 .era-setup-traits-layout > .line { min-width: 0; }
 .era-setup-traits-layout > .line:has(.era-setup-trait-help) { position: relative; min-height: 140px; }
@@ -549,9 +546,9 @@ main:has(.screen.is-active .era-launch) { padding: 0; background: #000; }
 }
 .era-setup-setting { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 2px 0; border: 0; }
 .era-setup-percent { display: grid; grid-template-columns: minmax(0, 32ch) max-content; width: min(100% - 8px, 48ch); margin-left: 8px; }
-.era-setup-stepper { display: inline-flex; flex: none; align-items: center; gap: 8px; }
-.era-setup-stepper > span { min-width: 4ch; text-align: center; }
-.era-setup .line .era-setup-stepper button.choice { margin: 0; min-width: 32px; }
+.era-setup-stepper { display: inline-flex; flex: none; align-items: center; gap: 0; }
+.era-setup-stepper > span { min-width: 2ch; text-align: right; }
+.era-setup .line .era-setup-stepper button.choice { margin: 0; padding: 1px 2px; min-width: 1.5ch; border: 0; background: transparent; }
 .era-setup-card { margin-bottom: 8px; padding: 0 0 2px; border: 0; border-radius: 0; background: transparent; white-space: normal; }
 .era-setup .era-launch-eyebrow { margin-bottom: 2px; }
 .era-setup-card.era-setup-plain { background: transparent; border: 0; padding: 0 0 2px; }

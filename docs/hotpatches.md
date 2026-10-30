@@ -86,8 +86,11 @@ Experience sections edit native values directly, reusing customization eligibili
 cycling and validation rules. Direct experience entry uses a focused
 prompt rather than the full customization menu. Name fields commit together on
 Enter, leaving the fields, or the next setup action, including Start Game.
-The browser replaces experience value buttons with inline numeric text fields
-(whole numbers 0–30), committing on Enter, blur, or the next setup action.
+STA, ENE, abilities, experience and Yandere percentages share a numeric control:
+minus/plus buttons without tooltips and a right-aligned, directly editable value.
+Browser fields select on focus and commit on Enter, blur, or the next setup
+action, validating each setting's native range (experience remains 0–30).
+STA displays its native 500-point offset; its buttons and ENE still step by 100.
 The native direct-entry prompt remains available to non-browser clients.
 Name fields grow beyond 16ch with their contents. The predefined-character
 button sits beside the nickname, and the compact stats row keeps labels close

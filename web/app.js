@@ -546,25 +546,37 @@ function syncPlayerNames(dialog) {
       void submit("714");
     });
     field.addEventListener("blur", (event) => {
-      if (event.relatedTarget?.closest("button.choice, .era-player-name-input, .era-player-exp-input")) return;
+      if (event.relatedTarget?.closest("button.choice, .era-player-name-input, .era-setup-number-input")) return;
       if (field.value !== field.defaultValue) void submit("714");
     });
   }
 }
-function syncPlayerExperience(dialog) {
-  for (const button of dialog.querySelectorAll(".era-setup-player-values .era-setup-stepper button:not(.era-setup-step)")) {
-    const action = Number(button.dataset.value);
-    if (action < 9000 || action > 9109) continue;
+function syncSetupNumbers(dialog) {
+  for (const button of dialog.querySelectorAll("button.era-setup-number")) {
+    const control = Number(button.dataset.value) - 9500;
+    const min = control === 0 ? 500 : control === 1 ? 1000 : 0;
+    const max = control === 0 ? 2000 : control === 1 ? 2500 : control < 200 ? 2 : control < 400 ? 30 : 100;
     const field = document.createElement("input");
     field.type = "text";
     field.inputMode = "numeric";
-    field.pattern = "(?:[0-9]|[12][0-9]|30)";
+    field.pattern = "[0-9]+";
     field.required = true;
-    field.className = "era-player-exp-input";
-    field.dataset.experience = String(action - 9000);
+    field.className = "era-setup-number-input";
+    field.dataset.control = String(control);
     field.setAttribute("aria-label", `${button.closest(".era-setup-setting").firstElementChild.textContent} value`);
-    field.title = "Enter a whole number from 0 to 30";
     field.value = field.defaultValue = button.textContent;
+    field.style.width = `${String(max).length}ch`;
+    const validate = () => {
+      const valid = /^[0-9]+$/.test(field.value) && Number(field.value) >= min && Number(field.value) <= max;
+      field.setCustomValidity(valid ? "" : `Enter a whole number from ${min} to ${max}.`);
+      const buttons = field.parentElement.querySelectorAll(".era-setup-step");
+      for (const [index, stepButton] of [...buttons].entries()) {
+        const disabled = !valid || (index === 0 ? Number(field.value) <= min : Number(field.value) >= max);
+        stepButton.setAttribute("aria-disabled", String(disabled));
+        stepButton.disabled = disabled || busy;
+      }
+    };
+    field.addEventListener("input", validate);
     button.replaceWith(field);
     field.addEventListener("focus", () => field.select());
     field.addEventListener("keydown", (event) => {
@@ -574,7 +586,7 @@ function syncPlayerExperience(dialog) {
       void submit("714");
     });
     field.addEventListener("blur", (event) => {
-      if (event.relatedTarget?.closest("button.choice, .era-player-name-input, .era-player-exp-input")) return;
+      if (event.relatedTarget?.closest("button.choice, .era-player-name-input, .era-setup-number-input")) return;
       if (field.value !== field.defaultValue) void submit("714");
     });
   }
@@ -587,7 +599,7 @@ function syncDialogs() {
     if (open && dialog.classList.contains("era-inventory")) syncInventory(dialog);
     if (open) {
       syncPlayerNames(dialog);
-      syncPlayerExperience(dialog);
+      syncSetupNumbers(dialog);
     }
     if (open === dialog.matches(":popover-open")) continue;
     if (open) dialog.showPopover();
@@ -2123,15 +2135,15 @@ async function submit(value, selectedChoice = null) {
   // Input made while an animation frame is loading is sent once that frame is shown.
   if (expiring) { queuedSubmit = { value, choice: selectedChoice?.dataset.value }; return; }
   if (busy || !input || input.blocking) return;
-  const experienceFields = [...terminal.querySelectorAll(".screen.is-active .era-player-exp-input")];
-  if (experienceFields.some((field) => !field.reportValidity())) return;
-  const experienceEdits = experienceFields.filter((field) => field.value !== field.defaultValue)
-    .map((field) => String(140000 + Number(field.dataset.experience) * 100 + Number(field.value)));
+  const numberFields = [...terminal.querySelectorAll(".screen.is-active .era-setup-number-input")];
+  if (numberFields.some((field) => !field.reportValidity())) return;
+  const numberEdits = numberFields.filter((field) => field.value !== field.defaultValue)
+    .map((field) => String(160000 + Number(field.dataset.control) * 10000 + Number(field.value)));
   hideTooltip();
   busy = true;
   const nameFields = [...terminal.querySelectorAll(".screen.is-active .era-player-name-input")];
   const names = nameFields.some((field) => field.value !== field.defaultValue) ? nameFields.map((field) => field.value) : null;
-  const nameFocus = document.activeElement?.matches(".era-player-name-input, .era-player-exp-input") ? {
+  const nameFocus = document.activeElement?.matches(".era-player-name-input, .era-setup-number-input") ? {
     label: document.activeElement.getAttribute("aria-label"),
     start: document.activeElement.selectionStart,
     end: document.activeElement.selectionEnd,
@@ -2145,10 +2157,10 @@ async function submit(value, selectedChoice = null) {
   beginActivity();
   updateControls();
   try {
-    for (const edit of experienceEdits) {
+    for (const edit of numberEdits) {
       const edited = await api("/api/input", { session, step, value: edit, columns: terminalColumns(), display: displaySettings(), client: clientState() });
       await render(edited, false, false, true);
-      if (edited.error || edited.status !== "waiting") throw new Error(edited.error?.message ?? "Experience update did not return to setup");
+      if (edited.error || edited.status !== "waiting") throw new Error(edited.error?.message ?? "Number update did not return to setup");
     }
     if (names) {
       for (const edit of ["5002", ...names]) {

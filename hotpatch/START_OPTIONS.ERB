@@ -99,7 +99,7 @@ CASE 3
 	FOR nIndex, 0, 110
 		SIF CUSTOM_選べない経験(nIndex, MASTER)
 			CONTINUE
-		CALL HOTPATCH_SETUP_PLAYER_STEPPER(8000 + nIndex * 2, EXP_TR(nIndex, "ExpSh"), EXP:MASTER:nIndex, EXP:MASTER:nIndex > 0, EXP:MASTER:nIndex < 30, 9000 + nIndex)
+		CALL HOTPATCH_SETUP_PLAYER_STEPPER(8000 + nIndex * 2, EXP_TR(nIndex, "ExpSh"), EXP:MASTER:nIndex, EXP:MASTER:nIndex > 0, EXP:MASTER:nIndex < 30)
 	NEXT
 	HTML_PRINT "<era-close>"
 CASE 4
@@ -319,18 +319,50 @@ HTML_PRINT "<era-close>"
 HTML_PRINT "<div class='era-setup-trait-help'><div class='era-launch-eyebrow'>Trait Details</div><div class='era-setup-trait-help-text'>Hover or focus a trait to read its description.</div></div>"
 HTML_PRINT "<era-close>"
 
-@HOTPATCH_SETUP_PLAYER_STEPPER(nAction, sName, nValue, nDecrease, nIncrease, nDirect = 0)
+@HOTPATCH_SETUP_PLAYER_STEPPER(nAction, sName, nValue, nDecrease, nIncrease)
 #DIM DYNAMIC nAction
 #DIMS DYNAMIC sName
 #DIM DYNAMIC nValue
 #DIM DYNAMIC nDecrease
 #DIM DYNAMIC nIncrease
-#DIM DYNAMIC nDirect
-#DIMS DYNAMIC sValue
-sValue '= @"<span>{nValue}</span>"
-SIF nDirect
-	sValue '= @"<button value='{nDirect}' title='Enter a value'>{nValue}</button>"
-HTML_PRINT @"<div class='era-setup-setting'><span>%HTML_ESCAPE(sName)%</span><span class='era-setup-stepper'><button value='{nAction}' class='era-setup-step' aria-disabled='%(nDecrease ? "false" # "true")%' title='Decrease'>-</button>%sValue%<button value='{nAction + 1}' class='era-setup-step' aria-disabled='%(nIncrease ? "false" # "true")%' title='Increase'>+</button></span></div>"
+#DIM DYNAMIC nControl
+IF nAction < 7000
+	nControl = (nAction - 5100) / 2
+ELSEIF nAction < 8000
+	nControl = 100 + (nAction - 7000) / 2
+ELSE
+	nControl = 200 + (nAction - 8000) / 2
+ENDIF
+CALL HOTPATCH_SETUP_NUMBER(nControl, nAction, sName, nValue, nDecrease, nIncrease)
+
+@HOTPATCH_SETUP_NUMBER(nControl, nAction, sName, nValue, nDecrease, nIncrease, sSuffix = "", sClass = "")
+#DIM DYNAMIC nControl
+#DIM DYNAMIC nAction
+#DIMS DYNAMIC sName
+#DIM DYNAMIC nValue
+#DIM DYNAMIC nDecrease
+#DIM DYNAMIC nIncrease
+#DIMS DYNAMIC sSuffix
+#DIMS DYNAMIC sClass
+HTML_PRINT @"<div class='era-setup-setting %sClass%'><span>%HTML_ESCAPE(sName)%</span><span class='era-setup-stepper'><button value='{nAction}' class='era-setup-step' aria-disabled='%(nDecrease ? "false" # "true")%' aria-label='Decrease %HTML_ESCAPE(sName)%'>-</button><button value='{9500 + nControl}' class='era-setup-number' aria-label='%HTML_ESCAPE(sName)% value'>{nValue}</button>%sSuffix%<button value='{nAction + 1}' class='era-setup-step' aria-disabled='%(nIncrease ? "false" # "true")%' aria-label='Increase %HTML_ESCAPE(sName)%'>+</button></span></div>"
+
+@HOTPATCH_SETUP_NUMBER_LIMIT(nControl, nMaximum = 0)
+#FUNCTION
+#DIM DYNAMIC nControl
+#DIM DYNAMIC nMaximum
+SELECTCASE nControl
+CASE 0
+	RETURNF nMaximum ? 2000 # 500
+CASE 1
+	RETURNF nMaximum ? 2500 # 1000
+CASE 100 TO 158
+	RETURNF nMaximum ? 2 # 0
+CASE 200 TO 309
+	RETURNF nMaximum ? 30 # 0
+CASE 400 TO 411
+	RETURNF nMaximum ? 100 # 0
+ENDSELECT
+RETURNF -1
 
 @HOTPATCH_SETUP_BONUS_VALUE(nIndex)
 #FUNCTIONS
@@ -634,7 +666,7 @@ HTML_PRINT "<era-close>"
 #DIM DYNAMIC nValue
 #DIMS DYNAMIC sName
 #DIM DYNAMIC nPercent
-HTML_PRINT @"<div class='era-setup-setting era-setup-percent'><span>%HTML_ESCAPE(sName)%</span><span class='era-setup-stepper'><button value='{nValue}' title='Decrease by 1 percentage point'>-</button><span>{nPercent}&#37;</span><button value='{nValue + 1}' title='Increase by 1 percentage point'>+</button></span></div>"
+CALL HOTPATCH_SETUP_NUMBER(nValue < 4300 ? 400 + (nValue - 4200) / 2 # 403 + (nValue - 4300) / 2, nValue, sName, nPercent, nPercent > 0, nPercent < 100, "&#37;", "era-setup-percent")
 
 @HOTPATCH_SETUP_INPUT(nAction)
 #DIM DYNAMIC nAction
@@ -642,6 +674,36 @@ HTML_PRINT @"<div class='era-setup-setting era-setup-percent'><span>%HTML_ESCAPE
 #DIM DYNAMIC nChoice
 #DIM DYNAMIC nSkip
 SELECTCASE nAction
+CASE 160000 TO 4279999
+	nIndex = (nAction - 160000) / 10000
+	nChoice = (nAction - 160000) % 10000
+	SIF HOTPATCH_SETUP_NUMBER_LIMIT(nIndex) < 0 || nChoice < HOTPATCH_SETUP_NUMBER_LIMIT(nIndex) || nChoice > HOTPATCH_SETUP_NUMBER_LIMIT(nIndex, 1)
+		RETURN 0
+	SELECTCASE nIndex
+	CASE 0
+		MAXBASE:MASTER:体力 = nChoice + 500
+		BASE:MASTER:体力 = MAXBASE:MASTER:体力
+	CASE 1
+		MAXBASE:MASTER:気力 = nChoice
+		BASE:MASTER:気力 = nChoice
+	CASE 100 TO 158
+		SIF CUSTOM_選べない能力(nIndex - 100, MASTER)
+			RETURN 0
+		ABL:MASTER:(nIndex - 100) = nChoice
+	CASE 200 TO 309
+		SIF CUSTOM_選べない経験(nIndex - 200, MASTER)
+			RETURN 0
+		EXP:MASTER:(nIndex - 200) = nChoice
+	CASE 400
+		FLAG:YANDERE_EVOLVE_CHANCE = nChoice
+	CASE 401
+		FLAG:YANDERE_SKIP_CHANCE = nChoice
+	CASE 402
+		FLAG:YANDERE_TIER_2_CHANCE_BONUS = nChoice
+	CASE 403 TO 411
+		YANDERE_CHANCE:(nIndex - 403) = nChoice
+	ENDSELECT
+	CALL CHARA_VALIDATE(MASTER)
 CASE 140000 TO 150930
 	nIndex = (nAction - 140000) / 100
 	nChoice = (nAction - 140000) % 100

@@ -128,7 +128,11 @@ test("eraTW launch dialogs accept defaults, configure optionally and cancel safe
   for (const heading of ["Yandere Settings", "Triggers", "Event Frequency"]) {
     assert.ok(yandere.includes(`class='era-launch-eyebrow'>${heading}</span>`));
   }
-  assert.match(markup(runtime.input("4201")), /<span>6&#37;<\/span>/);
+  assert.match(markup(runtime.input("4201")), /value='9900'[^>]*>6<\/button>&#37;/);
+  assert.match(markup(runtime.input("4160027")), /value='9900'[^>]*>27<\/button>/);
+  assert.match(markup(runtime.input("4160101")), /value='9900'[^>]*>27<\/button>/,
+    "direct percentage edits reject values above 100");
+  assert.match(markup(runtime.input("4190037")), /value='9903'[^>]*>37<\/button>/);
   markup(runtime.input("4211"));
   markup(runtime.input("701"));
   const restricted = markup(runtime.input("4131"));
@@ -259,8 +263,14 @@ test("eraTW launch dialogs accept defaults, configure optionally and cancel safe
   assert.match(markup(runtime.input("1199")), /value='1199' class='era-setup-choice era-current'/);
   assert.match(markup(runtime.input("5000")), /enter a new name/);
   assert.match(markup(runtime.input("")), /era-setup-player/);
-  assert.match(markup(runtime.input("5101")), /<span>STA<\/span>.*<span>1600<\/span>/);
+  assert.match(markup(runtime.input("5101")), /<span>STA<\/span>.*value='9500'[^>]*>1600<\/button>/);
   markup(runtime.input("5100"));
+  assert.match(markup(runtime.input("161734")), /value='9500'[^>]*>1734<\/button>/);
+  assert.match(markup(runtime.input("160499")), /value='9500'[^>]*>1734<\/button>/,
+    "direct STA edits enforce the displayed minimum");
+  markup(runtime.input("161500"));
+  assert.match(markup(runtime.input("172234")), /value='9501'[^>]*>2234<\/button>/);
+  markup(runtime.input("172000"));
   const traits = markup(runtime.input("711"));
   assert.match(traits, /value='711' class='era-sheet-subpage era-current'>Traits/);
   assert.doesNotMatch(traits, /Cat Tongue|Animal Ears|Kitsune|Youko|Figure/);
@@ -298,17 +308,26 @@ test("eraTW launch dialogs accept defaults, configure optionally and cancel safe
   const abilities = markup(runtime.input("712"));
   const abilityIncrease = /value='(7\d{2}[13579])'[^>]*aria-disabled='false'/.exec(abilities)?.[1];
   assert.ok(abilityIncrease, "eligible abilities have inline controls");
+  const abilityIndex = Math.floor((Number(abilityIncrease) - 7000) / 2);
+  assert.match(markup(runtime.input(String(160000 + (100 + abilityIndex) * 10000 + 2))),
+    new RegExp(`value='${9600 + abilityIndex}'[^>]*>2</button>`));
+  assert.match(markup(runtime.input(String(160000 + (100 + abilityIndex) * 10000 + 3))),
+    new RegExp(`value='${9600 + abilityIndex}'[^>]*>2</button>`),
+    "direct ability edits reject values above 2");
   assert.doesNotMatch(markup(runtime.input(abilityIncrease)), /era-setup-editor/);
   const experience = markup(runtime.input("713"));
   const inlineExperience = markup(runtime.input("140009"));
-  assert.match(inlineExperience, /value='9000' title='Enter a value'>9<\/button>/);
-  assert.match(markup(runtime.input("140030")), /value='9000' title='Enter a value'>30<\/button>/);
-  assert.match(markup(runtime.input("140031")), /value='9000' title='Enter a value'>30<\/button>/,
+  assert.doesNotMatch(inlineExperience, /title='(?:Decrease|Increase|Enter a value)/);
+  assert.match(markup(runtime.input("2160012")), /value='9700'[^>]*>12<\/button>/);
+  assert.match(markup(runtime.input("2160031")), /value='9700'[^>]*>12<\/button>/);
+  assert.match(inlineExperience, /value='9700'[^>]*>9<\/button>/);
+  assert.match(markup(runtime.input("140030")), /value='9700'[^>]*>30<\/button>/);
+  assert.match(markup(runtime.input("140031")), /value='9700'[^>]*>30<\/button>/,
     "inline experience rejects values above 30");
   markup(runtime.input("140000"));
-  const experienceAction = /value='(9\d{3})' title='Enter a value'/.exec(experience)?.[1];
+  const experienceAction = /value='(9\d{3})' class='era-setup-number'/.exec(experience)?.[1];
   assert.ok(experienceAction, "experience values support direct entry");
-  assert.match(markup(runtime.input(experienceAction)), /Enter a new value/);
+  assert.match(markup(runtime.input(experienceAction)), /Enter a whole number/);
   assert.match(markup(runtime.input("0")), /era-setup-player/);
   markup(runtime.input("710"));
   assert.match(markup(runtime.input("999")), /era-launch-version/);
