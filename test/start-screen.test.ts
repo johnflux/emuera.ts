@@ -44,6 +44,13 @@ test("eraTW launch dialogs accept defaults, configure optionally and cancel safe
   assert.match(initialSetup, /value='715' class='era-sheet-subpage era-current'>Body/);
   assert.doesNotMatch(initialSetup, />Back to title<\/button>/);
   const world = markup(runtime.input("701"));
+  assert.match(world, /era-setup-world/);
+  assert.match(world, /era-setup-indent'><button value='23'/);
+  assert.match(world, /era-setup-indent'><button value='20'/);
+  assert.doesNotMatch(world, /You can also change this in game options later/);
+  for (const heading of ["Home", "Romance Mode", "Pregnancy Restrictions", "Lunatic Survival", "Map Display"]) {
+    assert.ok(world.includes(`class='era-launch-eyebrow'>${heading}</span>`));
+  }
   assert.match(world, /Map details and room selection/);
   assert.match(world, /Animation: On/);
   assert.match(world, /value='4130' class='era-setup-choice era-current'/);
@@ -51,6 +58,7 @@ test("eraTW launch dialogs accept defaults, configure optionally and cancel safe
   assert.match(markup(runtime.input("23")), /Animation: Off/);
   assert.match(markup(runtime.input("23")), /Animation: On/);
   const dialogue = markup(runtime.input("702"));
+  assert.match(dialogue, /era-setup-dialogue/);
   assert.match(dialogue, /Alternative dialogue selection/);
   assert.doesNotMatch(dialogue, /Configure dialogue/);
   assert.match(dialogue, /&#10;/, "dialogue descriptions render line breaks");
@@ -64,7 +72,7 @@ test("eraTW launch dialogs accept defaults, configure optionally and cancel safe
   assert.match(bonuses, /value='1000' class='era-setup-choice era-current'/);
   assert.doesNotMatch(bonuses, /Starting bonuses/);
   assert.match(markup(runtime.input("1008")), /value='1008' class='era-setup-choice era-current'/);
-  assert.match(markup(runtime.input("1001")), /BONUS CHARACTER/);
+  assert.match(markup(runtime.input("1001")), /Bonus Character/);
   assert.match(markup(runtime.input("10001")), /value='10001' class='era-setup-choice era-current'/);
   markup(runtime.input("1000"));
   const farming = markup(runtime.input("704"));
@@ -84,13 +92,13 @@ test("eraTW launch dialogs accept defaults, configure optionally and cancel safe
   assert.match(contract, /No interest; buy your own tools/);
   assert.match(contract, /Strict landlord\. <strong>0\.42%<\/strong> monthly interest; tools lent with monthly fees/);
   assert.match(contract, /Tyrannical landlord\. <strong>5\.0%<\/strong> monthly interest; tools lent with higher monthly fees/);
-  assert.match(contract, /CONTRACT TERMS[\s\S]*Normal Peasant[\s\S]*FARMING CONTRACT[\s\S]*No farming contract[\s\S]*value='3\d{4}'/,
+  assert.match(contract, /Contract Terms[\s\S]*Normal Peasant[\s\S]*Farming Contract[\s\S]*No farming contract[\s\S]*value='3\d{4}'/,
     "contract terms are separate from the list containing no contract and landlords");
   assert.match(markup(runtime.input("3103")), /value='3103' class='era-setup-choice era-current'/);
   const noContract = markup(runtime.input("3000"));
   assert.match(noContract, /value='3000' class='era-setup-choice era-current'/);
   assert.doesNotMatch(noContract, /era-setup-landlord-face/);
-  assert.match(noContract, /CONTRACT TERMS[\s\S]*Normal Peasant/,
+  assert.match(noContract, /Contract Terms[\s\S]*Normal Peasant/,
     "contract terms remain visible without a farming contract");
   for (const action of [3101, 3102, 3103]) {
     assert.match(noContract, new RegExp(`value='${action}'[^>]*aria-disabled='true'`));
@@ -114,7 +122,12 @@ test("eraTW launch dialogs accept defaults, configure optionally and cancel safe
   assert.doesNotMatch(visitingFarm, /Work the rented plot from <strong>Mushroom Colony<\/strong>/,
     "outside the home region, the description uses the same travel-map replacement as field work");
   markup(runtime.input("3000"));
-  assert.match(markup(runtime.input("705")), /Subtype change chance/);
+  const yandere = markup(runtime.input("705"));
+  assert.match(yandere, /Subtype change chance/);
+  assert.match(yandere, /era-setup-setting era-setup-percent/);
+  for (const heading of ["Yandere Settings", "Triggers", "Event Frequency"]) {
+    assert.ok(yandere.includes(`class='era-launch-eyebrow'>${heading}</span>`));
+  }
   assert.match(markup(runtime.input("4201")), /<span>6&#37;<\/span>/);
   markup(runtime.input("4211"));
   markup(runtime.input("701"));
@@ -136,7 +149,9 @@ test("eraTW launch dialogs accept defaults, configure optionally and cancel safe
   const normalMode = markup(runtime.input("4130"));
   assert.match(normalMode, /value='4130' class='era-setup-choice era-current'/);
   assert.doesNotMatch(normalMode, /value='414[123]'/);
-  assert.match(markup(runtime.input("2003")), /value='2003' class='era-setup-choice era-current'/);
+  const mansionWorld = markup(runtime.input("2003"));
+  assert.match(mansionWorld, /value='2003' class='era-setup-choice era-current'/);
+  assert.match(mansionWorld, /era-setup-help-row'>.*value='4120'.*character behaviour\. <button value='32'/);
   assert.match(markup(runtime.input("2000")), /value='2000' class='era-setup-choice era-current'/);
   markup(runtime.input("700"));
   const characterOptions = markup(runtime.input("710"));
@@ -152,10 +167,10 @@ test("eraTW launch dialogs accept defaults, configure optionally and cancel safe
   assert.ok(characterOptions.indexOf("value='1199'") < characterOptions.indexOf("value='1101'"),
     "Default is the first clothing option");
   assert.match(characterOptions, /value='700' class='era-sheet-subpage era-current'>Player/);
-  assert.doesNotMatch(characterOptions, /CHARACTER BODIES|value='26'/);
+  assert.doesNotMatch(characterOptions, /Character Bodies|value='26'/);
   const otherCharacters = markup(runtime.input("706"));
   assert.match(otherCharacters, /value='706' class='era-sheet-subpage era-current'>Characters/);
-  assert.match(otherCharacters, /CHARACTER BODIES[\s\S]*value='26'/);
+  assert.match(otherCharacters, /Character Bodies[\s\S]*value='26'/);
   assert.doesNotMatch(otherCharacters, /Customize character|Penis Size/);
   markup(runtime.input("700"));
   const bodyOptions = markup(runtime.input("715"));

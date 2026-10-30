@@ -191,8 +191,10 @@ DO
 	CASE 0
 		CALL HOTPATCH_SETUP_PLAYER(nPlayerPage, nDefaultClothes)
 	CASE 1
+		HTML_PRINT "<era-open class='era-setup-world'>"
 		CALL HOTPATCH_SETUP_WORLD
-		HTML_PRINT @"<div class='era-setup-card'><span class='era-launch-eyebrow'>MAP DISPLAY</span><button value='23' class='era-chip-button'>Animation: %(ANIMATERECOLOREDMAPS ? "On" # "Off")%</button><div class='era-setup-description'>You can also change this in game options later.</div></div>"
+		HTML_PRINT @"<div class='era-setup-card'><span class='era-launch-eyebrow'>Map Display</span><div class='era-setup-indent'><button value='23' class='era-chip-button'>Animation: %(ANIMATERECOLOREDMAPS ? "On" # "Off")%</button></div></div>"
+		HTML_PRINT "<era-close>"
 	CASE 2
 		CALL HOTPATCH_SETUP_DIALOGUE
 	CASE 3
@@ -202,7 +204,7 @@ DO
 	CASE 5
 		CALL HOTPATCH_SETUP_YANDERE
 	CASE 6
-		HTML_PRINT "<div class='era-setup-card'><span class='era-launch-eyebrow'>CHARACTER BODIES</span><button value='26' class='era-chip-button'>Character body editor</button></div>"
+		HTML_PRINT "<div class='era-setup-card'><span class='era-launch-eyebrow'>Character Bodies</span><button value='26' class='era-chip-button'>Character body editor</button></div>"
 	ENDSELECT
 	HTML_PRINT "<era-close>"
 	HTML_PRINT @"<div class='era-inventory-footer'><span class='era-tone-red'>%sError%</span><button value='100' class='era-launch-primary'>Start game</button></div>"

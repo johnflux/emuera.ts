@@ -99,6 +99,18 @@ custom defaults, restores the original character's availability, and retains
 the selected residence and other world settings.
 Setup cards have no inner padding. The footer contains Start Game; the header
 close button still returns to the title.
+All setup tabs use title-case headings, transparent borderless sections, compact
+choice rows without horizontal dividers, and consistent choice indentation.
+Desktop choice lists size their label column to its contents (capped for long
+labels) and keep the same description gap as Body. Yandere percentage controls
+stay beside their labels rather than stretching across the dialog.
+The player portrait has no border.
+World shares one label column across sections so help text and radio labels
+align. Home details, supporting Lunatic Survival text and Map Display controls
+are indented to the radio circles; Detailed rules follows the survival help
+inline. Dialogue also shares a label column across characters so all help
+text aligns. Non-choice content spans the shared grid rather than occupying
+an individual radio or label column.
 Traits use compact text entries without hover recolouring. Native descriptions
 appear in a scrollable side panel on hover or focus (above the list on narrow
 screens), rather than covering the choices. The smaller-text panel is at most

@@ -316,7 +316,7 @@ FOR nIndex, 0, 200
 	HTML_PRINT @"<button value='{6000 + nIndex}' class='era-setup-trait%(TALENT:MASTER:nIndex ? " era-current" # "")%' aria-disabled='%(CUSTOM_選べない素質(nIndex, MASTER) ? "true" # "false")%' title='%HTML_ESCAPE(TALENT_INFO(nIndex, TALENT:MASTER:nIndex))%'>%HTML_ESCAPE(TALENT_TR(nIndex))% [%(sState != "" ? HTML_ESCAPE(sState) # "-")%]</button>"
 NEXT
 HTML_PRINT "<era-close>"
-HTML_PRINT "<div class='era-setup-trait-help'><div class='era-launch-eyebrow'>TRAIT DETAILS</div><div class='era-setup-trait-help-text'>Hover or focus a trait to read its description.</div></div>"
+HTML_PRINT "<div class='era-setup-trait-help'><div class='era-launch-eyebrow'>Trait Details</div><div class='era-setup-trait-help-text'>Hover or focus a trait to read its description.</div></div>"
 HTML_PRINT "<era-close>"
 
 @HOTPATCH_SETUP_PLAYER_STEPPER(nAction, sName, nValue, nDecrease, nIncrease, nDirect = 0)
@@ -412,6 +412,7 @@ sNames:10 '= "Beautiful"
 sDescriptions:10 '= "Favor bonus when meeting characters and easier special judgment checks."
 sNames:11 '= "None"
 sDescriptions:11 '= "No starting bonus."
+HTML_PRINT "<era-open class='era-setup-card'>"
 HTML_PRINT "<div class='era-setup-description'>Select one new game bonus.</div>"
 HTML_PRINT "<era-open class='era-setup-grid'>"
 FOR nIndex, 0, 12
@@ -423,9 +424,10 @@ FOR nIndex, 0, 12
 	HTML_PRINT HOTPATCH_SETUP_CHOICE(1000 + nIndex, sNames:nIndex, nSelected, sDescriptions:nIndex)
 NEXT
 HTML_PRINT "<era-close>"
+HTML_PRINT "<era-close>"
 IF ISNUMERIC(ニューゲーム特典)
 	HTML_PRINT "<era-open class='era-setup-card'>"
-	HTML_PRINT "<span class='era-launch-eyebrow'>BONUS CHARACTER</span>"
+	HTML_PRINT "<span class='era-launch-eyebrow'>Bonus Character</span>"
 	HTML_PRINT "<era-open class='era-setup-grid'>"
 	FOR nIndex, 1, CHARANUM
 		SIF !IS_NAMED(nIndex) || nIndex == FLAG:なりきり
@@ -439,7 +441,7 @@ ENDIF
 @HOTPATCH_SETUP_WORLD
 #DIM DYNAMIC nIndex
 HTML_PRINT "<era-open class='era-setup-card'>"
-HTML_PRINT @"<span class='era-launch-eyebrow'>HOME</span><div class='era-setup-name'>%HTML_ESCAPE(GET_MAPNAME(MAIN_MAP))%</div><div class='era-setup-description'>%HTML_ESCAPE(STR_TR(デフォルト初期位置 + (MAIN_MAP ? 8000 # 0)))%</div>"
+HTML_PRINT @"<span class='era-launch-eyebrow'>Home</span><div class='era-setup-indent'><div class='era-setup-name'>%HTML_ESCAPE(GET_MAPNAME(MAIN_MAP))%</div><div class='era-setup-description'>%HTML_ESCAPE(STR_TR(デフォルト初期位置 + (MAIN_MAP ? 8000 # 0)))%</div></div>"
 HTML_PRINT "<era-open class='era-setup-grid'>"
 FOR nIndex, 0, 11
 	SIF !GET_EXISTMAP(nIndex)
@@ -447,17 +449,17 @@ FOR nIndex, 0, 11
 	HTML_PRINT HOTPATCH_SETUP_CHOICE(2000 + nIndex, GET_MAPNAME(nIndex), MAIN_MAP == nIndex)
 NEXT
 HTML_PRINT "<era-close>"
-HTML_PRINT "<button value='20' class='era-chip-button'>Map details and room selection</button>"
+HTML_PRINT "<div class='era-setup-indent'><button value='20' class='era-chip-button'>Map details and room selection</button></div>"
 HTML_PRINT "<era-close>"
 HTML_PRINT "<era-open class='era-setup-card'>"
-HTML_PRINT "<span class='era-launch-eyebrow'>ROMANCE MODE</span>"
+HTML_PRINT "<span class='era-launch-eyebrow'>Romance Mode</span>"
 HTML_PRINT "<era-open class='era-setup-grid'>"
 HTML_PRINT HOTPATCH_SETUP_CHOICE(4130, "Normal", !FLAG:甲斐性無, "You can confess and initiate romance. No extra assertiveness from other characters.")
 HTML_PRINT HOTPATCH_SETUP_CHOICE(4131, "Let others take the lead", FLAG:甲斐性無 && !FLAG:LUSTMODE, "You cannot confess, and some intimate actions are restricted. Other characters become more assertive.")
 HTML_PRINT HOTPATCH_SETUP_CHOICE(4132, "Play hard to get (Lust mode)", FLAG:甲斐性無 && FLAG:LUSTMODE, "You can still confess and use all actions. Other characters become more assertive, including attempts to pin you down.")
 HTML_PRINT "<era-close>"
 IF FLAG:甲斐性無
-	HTML_PRINT "<span class='era-launch-eyebrow'>OTHER CHARACTERS' ASSERTIVENESS</span>"
+	HTML_PRINT "<span class='era-launch-eyebrow'>Other Characters' Assertiveness</span>"
 	HTML_PRINT "<era-open class='era-setup-grid'>"
 	HTML_PRINT HOTPATCH_SETUP_CHOICE(4141, "Slightly increased", FLAG:甲斐性無 == 1, "A little pushier than normal.")
 	HTML_PRINT HOTPATCH_SETUP_CHOICE(4142, "Greatly increased", FLAG:甲斐性無 == 2, "A lot pushier than normal.")
@@ -466,16 +468,19 @@ IF FLAG:甲斐性無
 ENDIF
 HTML_PRINT "<era-close>"
 HTML_PRINT "<era-open class='era-setup-card'>"
-HTML_PRINT "<span class='era-launch-eyebrow'>PREGNANCY RESTRICTIONS</span>"
+HTML_PRINT "<span class='era-launch-eyebrow'>Pregnancy Restrictions</span>"
+HTML_PRINT "<era-open class='era-setup-grid'>"
 HTML_PRINT HOTPATCH_SETUP_CHOICE(4110, "Allow sex throughout pregnancy", FLAG:STABLEBYPASS, "Off by default: sex is only allowed during the stable (middle) stage of pregnancy. Turn on to also allow it during the early and late stages.")
 HTML_PRINT "<era-close>"
+HTML_PRINT "<era-close>"
 HTML_PRINT "<era-open class='era-setup-card'>"
-HTML_PRINT "<span class='era-launch-eyebrow'>LUNATIC SURVIVAL</span>"
+HTML_PRINT "<span class='era-launch-eyebrow'>Lunatic Survival</span>"
 IF MAIN_MAP == 3 && IS_MASTER(0)
-	HTML_PRINT HOTPATCH_SETUP_CHOICE(4120, "Lunatic Survival", QUEST_FLAG(LSScarletAlias, QLSScarletActive), "Scarlet Devil Mansion survival mode. Restricts movement, waking times and character behaviour.")
-	HTML_PRINT "<button value='32' class='era-chip-button'>Detailed rules</button>"
+	HTML_PRINT "<era-open class='era-setup-grid'>"
+	HTML_PRINT @"<div class='era-setup-help-row'>%HOTPATCH_SETUP_CHOICE(4120, "Lunatic Survival", QUEST_FLAG(LSScarletAlias, QLSScarletActive))%<div class='era-setup-choice-description'>Scarlet Devil Mansion survival mode. Restricts movement, waking times and character behaviour. <button value='32' class='era-chip-button'>Detailed rules</button></div></div>"
+	HTML_PRINT "<era-close>"
 ELSE
-	HTML_PRINT "<div class='era-setup-description'>Requires Scarlet Devil Mansion and a custom character.</div>"
+	HTML_PRINT "<div class='era-setup-description era-setup-indent'>Requires Scarlet Devil Mansion and a custom character.</div>"
 ENDIF
 HTML_PRINT "<era-close>"
 
@@ -522,7 +527,7 @@ IF FLAG:地主
 	ENDIF
 ENDIF
 HTML_PRINT "<era-open class='era-setup-card'>"
-HTML_PRINT "<span class='era-launch-eyebrow'>CONTRACT TERMS</span>"
+HTML_PRINT "<span class='era-launch-eyebrow'>Contract Terms</span>"
 HTML_PRINT "<era-open class='era-setup-farm-summary'>"
 IF FLAG:地主
 	nFarmPlace = INT_NOUMIN(FLAG:地主, "場所ID")
@@ -544,7 +549,7 @@ HTML_PRINT HOTPATCH_SETUP_CHOICE(3103, "Extreme Peasant", FLAG:農民難易度 =
 HTML_PRINT "<era-close>"
 HTML_PRINT "<era-close>"
 HTML_PRINT "<era-open class='era-setup-card'>"
-HTML_PRINT @"<div class='era-setup-farm-heading'><span class='era-launch-eyebrow'>FARMING CONTRACT</span><span class='era-setup-description'>Your home region: <strong>%HTML_ESCAPE(GET_MAPNAME(MAIN_MAP))%</strong></span></div>"
+HTML_PRINT @"<div class='era-setup-farm-heading'><span class='era-launch-eyebrow'>Farming Contract</span><span class='era-setup-description'>Your home region: <strong>%HTML_ESCAPE(GET_MAPNAME(MAIN_MAP))%</strong></span></div>"
 HTML_PRINT "<era-open class='era-setup-grid'>"
 HTML_PRINT HOTPATCH_SETUP_CHOICE(3000, "No farming contract", !FLAG:地主)
 FOR nIndex, 1, CHARANUM
@@ -559,11 +564,12 @@ HTML_PRINT "<era-close>"
 #DIM DYNAMIC nIndex
 #DIM DYNAMIC nChoice
 HTML_PRINT "<div class='era-setup-description'>Alternative dialogue selection. Can also be changed later in character update settings.</div>"
+HTML_PRINT "<era-open class='era-setup-dialogue'>"
 FOR nIndex, 1, CHARANUM
 	SIF CFLAG:nIndex:口上実装状況 <= 1 || nIndex == FLAG:なりきり || NO:nIndex != nIndex
 		CONTINUE
 	HTML_PRINT "<era-open class='era-setup-card'>"
-	HTML_PRINT @"<div class='era-setup-name'>%HTML_ESCAPE(CALLNAME:nIndex)%</div>"
+	HTML_PRINT @"<span class='era-launch-eyebrow'>%HTML_ESCAPE(CALLNAME:nIndex)%</span>"
 	HTML_PRINT "<era-open class='era-setup-grid'>"
 	FOR nChoice, 0, 4
 		CALL HOTPATCH_SETUP_DIALOGUE_INFO(nIndex, nChoice)
@@ -574,6 +580,7 @@ FOR nIndex, 1, CHARANUM
 	HTML_PRINT "<era-close>"
 	HTML_PRINT "<era-close>"
 NEXT
+HTML_PRINT "<era-close>"
 
 @HOTPATCH_SETUP_DIALOGUE_INFO(nIndex, nChoice)
 #DIM DYNAMIC nIndex
@@ -591,7 +598,7 @@ RETURN RESULT
 @HOTPATCH_SETUP_YANDERE
 CALL YANDERE_DEFAULTS_INIT
 HTML_PRINT "<era-open class='era-setup-card'>"
-HTML_PRINT "<span class='era-launch-eyebrow'>YANDERE SETTINGS</span><button value='31' class='era-chip-button'>Character potential</button>"
+HTML_PRINT "<span class='era-launch-eyebrow'>Yandere Settings</span><button value='31' class='era-chip-button'>Character potential</button>"
 CALL HOTPATCH_SETUP_PERCENT(4200, "Subtype change chance", FLAG:YANDERE_EVOLVE_CHANCE)
 CALL HOTPATCH_SETUP_PERCENT(4202, "Subtype skip chance", FLAG:YANDERE_SKIP_CHANCE)
 CALL HOTPATCH_SETUP_PERCENT(4204, "Tier 2 bonus chance", FLAG:YANDERE_TIER_2_CHANCE_BONUS)
@@ -599,13 +606,13 @@ HTML_PRINT HOTPATCH_SETUP_CHOICE(4210, "Random subtype progression", FLAG:YANDER
 HTML_PRINT "<button value='4211' class='era-chip-button'>Restore yandere defaults</button>"
 HTML_PRINT "<era-close>"
 HTML_PRINT "<era-open class='era-setup-card'>"
-HTML_PRINT "<span class='era-launch-eyebrow'>TRIGGERS</span>"
+HTML_PRINT "<span class='era-launch-eyebrow'>Triggers</span>"
 FOR LOCAL, 0, 9
 	CALL HOTPATCH_SETUP_PERCENT(4300 + LOCAL * 2, FALL_NAME(LOCAL), YANDERE_CHANCE:LOCAL)
 NEXT
 HTML_PRINT "<era-close>"
 HTML_PRINT "<era-open class='era-setup-card'>"
-HTML_PRINT "<span class='era-launch-eyebrow'>EVENT FREQUENCY</span>"
+HTML_PRINT "<span class='era-launch-eyebrow'>Event Frequency</span>"
 HTML_PRINT "<era-open class='era-setup-grid'>"
 FOR LOCAL, 1, 7
 	SELECTCASE LOCAL
@@ -627,7 +634,7 @@ HTML_PRINT "<era-close>"
 #DIM DYNAMIC nValue
 #DIMS DYNAMIC sName
 #DIM DYNAMIC nPercent
-HTML_PRINT @"<div class='era-setup-setting'><span>%HTML_ESCAPE(sName)%</span><span class='era-setup-stepper'><button value='{nValue}' title='Decrease by 1 percentage point'>-</button><span>{nPercent}&#37;</span><button value='{nValue + 1}' title='Increase by 1 percentage point'>+</button></span></div>"
+HTML_PRINT @"<div class='era-setup-setting era-setup-percent'><span>%HTML_ESCAPE(sName)%</span><span class='era-setup-stepper'><button value='{nValue}' title='Decrease by 1 percentage point'>-</button><span>{nPercent}&#37;</span><button value='{nValue + 1}' title='Increase by 1 percentage point'>+</button></span></div>"
 
 @HOTPATCH_SETUP_INPUT(nAction)
 #DIM DYNAMIC nAction
