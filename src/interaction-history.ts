@@ -34,10 +34,23 @@ export interface CharacterHistory {
 }
 interface Host {
   read(name: string, indices?: Value[]): Value;
+  write(name: string, indices: Value[], value: Value): void;
   label(command: number): string;
   count(): number;
 }
-interface Scope { capture: boolean; character: HistoryCharacter | null; completes?: string }
+interface Scope {
+  capture: boolean;
+  character: HistoryCharacter | null;
+  completes?: string;
+  penetration?: { index: bigint; flags: bigint[] };
+  reset?: bigint;
+}
+// Unused eraTW CFLAG slots within its existing 10,000-element saved array.
+// Boolean pending aftereffects, not ejaculation or first-time-loss markers.
+const PENETRATION_V = 7395n;
+const PENETRATION_A = 7396n;
+const PENETRATION_M = 7397n;
+const PENETRATION_FLAGS = [PENETRATION_V, PENETRATION_A, PENETRATION_M];
 const COMMANDS = new Set([300, 301, 303]);
 const LIMIT = 20;
 const TEXT_LIMIT = 16_000;
@@ -146,6 +159,28 @@ export class TwInteractionHistory {
     } };
     return this.active.event.id;
   }
+  private penetrationFlags(index: bigint): bigint[] {
+    if (this.host.read("FLAG", [70n]) !== 1n || this.host.read("ADD_TEMPTOUCHMODE") !== 0n) return [];
+    const flags = new Set<bigint>();
+    // SOURCE_EXP runs only after SOURCE_CHECK accepts the action. Its current
+    // touch graph includes every recipient, unlike TARGET or command numbers.
+    for (let touch = 0n; touch < BigInt(this.host.read("ADD_MAXTOUCH")); touch++) {
+      if (this.host.read("ADD_TOUCH_ACTIVE", [touch]) === 0n) break;
+      if (this.host.read("ADD_TOUCH_HISTORY", [touch]) !== 0n) continue;
+      const actor = this.host.read("ADD_TOUCH_ACTOR", [touch]);
+      const target = this.host.read("ADD_TOUCH_TARGET", [touch]);
+      const actorPart = this.host.read("ADD_TOUCH_ACTOR_PART", [touch]);
+      const targetPart = this.host.read("ADD_TOUCH_TARGET_PART", [touch]);
+      // SET_P = 1; contacts may be stored in either direction.
+      const part = target === index && actorPart === 1n ? targetPart
+        : actor === index && targetPart === 1n ? actorPart : 0n;
+      // SET_V = 6, SET_A = 7, SET_M = 4. Fingers/kisses are not penetration.
+      if (part === 6n) flags.add(PENETRATION_V);
+      else if (part === 7n) flags.add(PENETRATION_A);
+      else if (part === 4n) flags.add(PENETRATION_M);
+    }
+    return [...flags];
+  }
   private timeResumeNotices(index: bigint): string[] {
     const notices: string[] = [];
     // eraTW CSV field IDs; read pending reactions before TRANSLATION/BUGFIX.ERB's
@@ -167,7 +202,8 @@ export class TwInteractionHistory {
       || BigInt(this.host.read("EXP", [index, 14n])) >= 100n;
     const oralFamiliar = familiar || BigInt(this.host.read("EXP", [index, 25n])) > 0n;
     // CFLAG 286-290 = 2: unperceived ejaculation, pending a reaction at each location.
-    if (this.host.read("CFLAG", [index, 286n]) === 2n) { // 286: vaginal.
+    if (this.host.read("CFLAG", [index, PENETRATION_V]) !== 0n
+      || this.host.read("CFLAG", [index, 286n]) === 2n) { // 286: vaginal ejaculation.
       // Recent first-time loss takes precedence over familiarity.
       if (virginity === 1n)
         notices.push("feels sudden pain and discomfort inside her vagina, unsure what has happened.");
@@ -180,7 +216,8 @@ export class TwInteractionHistory {
       else
         notices.push("feels sudden discomfort inside her vagina, unable to tell what is wrong.");
     }
-    if (this.host.read("CFLAG", [index, 287n]) === 2n) { // 287: anal.
+    if (this.host.read("CFLAG", [index, PENETRATION_A]) !== 0n
+      || this.host.read("CFLAG", [index, 287n]) === 2n) { // 287: anal ejaculation.
       // EXP 2: conscious anal experience allows recognition of the sensation.
       if (BigInt(this.host.read("EXP", [index, 2n])) > 0n)
         notices.push("feels the sudden unexpected discomfort in her bottom similar to having anal intercourse.");
@@ -190,7 +227,13 @@ export class TwInteractionHistory {
       else
         notices.push("feels sudden discomfort inside her bottom, unsure what is causing it.");
     }
-    if (this.host.read("CFLAG", [index, 288n]) === 2n) { // 288: mouth.
+    if (this.host.read("CFLAG", [index, PENETRATION_M]) !== 0n) {
+      if (BigInt(this.host.read("EXP", [index, 25n])) > 0n)
+        notices.push("feels sudden soreness inside her mouth, similar to the aftermath of oral sex.");
+      else
+        notices.push("feels sudden soreness inside her mouth, unsure what is causing it.");
+    }
+    if (this.host.read("CFLAG", [index, 288n]) === 2n) { // 288: mouth ejaculation, not penetration.
       if (oralFamiliar)
         notices.push("notices the sudden unexpected taste of semen in her mouth.");
       else
@@ -257,6 +300,9 @@ export class TwInteractionHistory {
         || name === "COM_KOJO_CALL" || !!previous?.capture,
       character: previous?.character ?? null,
       ...(completes ? { completes } : {}),
+      ...(name === "SOURCE_EXP" && typeof args[0] === "bigint"
+        ? { penetration: { index: args[0], flags: this.penetrationFlags(args[0]) } } : {}),
+      ...(name === "TIMESTOP_RESET" && typeof args[0] === "bigint" ? { reset: args[0] } : {}),
     };
     // These routines identify a character's scene, not necessarily the literal speaker of every line.
     if (this.active && typeof owner === "bigint") {
@@ -270,7 +316,14 @@ export class TwInteractionHistory {
     // RESETDATA/LOADDATA may have discarded the old routine stack.
     if (this.scopes.at(-1) === scope) this.scopes.pop();
     if (!success) this.active = undefined;
-    else if (scope.completes === this.active?.event.id) this.finish();
+    else {
+      if (scope.penetration)
+        for (const flag of scope.penetration.flags)
+          this.host.write("CFLAG", [scope.penetration.index, flag], 1n);
+      if (scope.reset !== undefined)
+        for (const flag of PENETRATION_FLAGS) this.host.write("CFLAG", [scope.reset, flag], 0n);
+      if (scope.completes === this.active?.event.id) this.finish();
+    }
   }
   output(type: string, value: string, newline: boolean, color: string): void {
     if (!this.active || !this.scopes.at(-1)?.capture || (type !== "text" && type !== "html")) return;

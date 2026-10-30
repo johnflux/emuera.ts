@@ -198,13 +198,199 @@ test("main screen hotpatch opens and closes its panel boxes in balance", {
     const html = screen.join("");
     assert.equal((html.match(/value='805'/g) ?? []).length, 1, "inventory has exactly one entry point");
     assert.match(html, /era-player-actions'><button value='805' class='era-player-control era-inventory-button'/, "inventory is on the player card");
-    assert.match(html, /era-guard-toggle[^']*' aria-pressed='(?:true|false)'/, "the guard exposes its toggle state");
+    assert.match(html, /era-settings'>.*value='-9200' class='era-toggle[^']*' aria-pressed='(?:true|false)'/, "the guard is a settings toggle in Go & Manage");
+    assert.doesNotMatch(html, /era-player-toggles|era-guard-toggle/);
   }
   assert.ok(screens[1]!.some((text) => /era-stopped'[^>]*value='999'|value='999'[^>]*era-stopped/.test(text)), "time stop switches to Resume Time");
   step("805");
   assert.ok(markup.some((text) => text.includes("era-dialog era-inventory")), "805 opens the inventory from the main screen");
   step("999");
   assert.ok(markup.some((text) => text.includes("era-player-actions")), "closing inventory returns to the player panel");
+});
+
+test("action filters and command categories share vaginal, anal, SM and service colors", {
+  skip: !existsSync(GAME_ROOT),
+}, async () => {
+  const game = await loadGame();
+  await applyHotpatches(game);
+  for (const on of [0, 1]) {
+    const stub = emptyGame(game.root);
+    indexScript(stub, `@SYSTEM_TITLE
+ADDCHARA 0
+ADDCHARA 1
+MASTER = 0
+TARGET = 1
+CFLAG:1:うふふ = 1
+CFLAG:1:Ｖアンフィルタ = ${on}
+CFLAG:1:Ａアンフィルタ = ${on}
+CFLAG:1:ＳＭアンフィルタ = ${on}
+CFLAG:1:奉仕アンフィルタ = ${on}
+CFLAG:1:RevServiceFilter = ${on}
+CALL HOTPATCH_FILTERS(63)
+PRINTFORML Kinds: %HOTPATCH_ACTION_KIND(3)%,%HOTPATCH_ACTION_KIND(5)%,%HOTPATCH_ACTION_KIND(100)%,%HOTPATCH_ACTION_KIND(81)%
+QUIT`, "<filter-colors-test>");
+    game.routines.set("SYSTEM_TITLE", stub.routines.get("SYSTEM_TITLE")!);
+    const snapshot = new Runtime(game, GAME_INSTRUCTION_LIMIT).start();
+    assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
+    const html = snapshot.output.flatMap((item) => item.type === "html" ? [item.text] : []).join("");
+    for (const [id, kind] of [[831, "vaginal"], [832, "anal"], [836, "sm"], [835, "service"], [-9120, "service"]]) {
+      assert.match(html, new RegExp(`value='${id}' class='era-toggle era-kind-${kind}${on ? " era-on" : ""}'`));
+    }
+    assert.ok(snapshot.output.some((item) => item.type === "text" && item.text === "Kinds: vaginal,anal,sm,service"));
+  }
+});
+
+test("player special effects and gauges use compact HTML without changing gauge initialization", {
+  skip: !existsSync(GAME_ROOT),
+}, async () => {
+  const game = await loadGame();
+  await applyHotpatches(game);
+  for (const [phase, mode, change, milk] of [[0, 0, 0, 0], [2, 0, 0, 1], [3, 5, 1, 0], [2, 4, 0, 1]] as const) {
+    const stub = emptyGame(game.root);
+    indexScript(stub, `@SYSTEM_TITLE
+ADDCHARA 0
+ADDCHARA 1
+ADDCHARA 2
+MASTER = 0
+TARGET = 1
+ASSI = 2
+CFLAG:0:現在位置 = 9
+TALENT:0:2 = 2
+TALENT:1:2 = 2
+TALENT:0:絶倫 = 1
+BASE:0:精力 = -5
+BASE:1:精力 = -10
+BASE:0:射精 = 2500
+MAXBASE:0:射精 = 7500
+MAXBASE:1:射精 = 0
+MAXBASE:2:射精 = 0
+TFLAG:102 = ${phase}
+TFLAG:EjacChange = ${change}
+TCVAR:0:射精我慢 = ${mode}
+TCVAR:0:イきそう = ${Number(mode === 4)}
+TALENT:1:母乳体質 = ${milk}
+TALENT:1:淫乳 = 1
+CALL HOTPATCH_PLAYER_SPECIAL
+TCVAR:0:祝福 = 1
+TCVAR:0:LARGE_LOADS = 2
+TFLAG:幸運補正 = -1
+FLAG:自室施錠 = 1
+CALL HOTPATCH_PLAYER_SPECIAL
+CALL HOTPATCH_PLAYER_GAUGES
+PRINTFORML State: {BASE:0:精力},{BASE:1:精力},{MAXBASE:0:射精},{MAXBASE:1:射精},{MAXBASE:2:射精}
+QUIT
+@IS_WISEMAN
+#FUNCTION
+RETURNF 0`, "<special-test>");
+    for (const [name, routines] of stub.routines) game.routines.set(name, routines);
+    const snapshot = new Runtime(game, GAME_INSTRUCTION_LIMIT).start();
+    assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
+    const html = snapshot.output.flatMap((item) => item.type === "html" ? [item.text] : []).join("");
+    assert.equal((html.match(/era-player-effects/g) ?? []).length, 1, "empty Special is omitted");
+    for (const effect of ["Blessing", "Extreme Loads", "Misfortune", "Door Locked"]) assert.ok(html.includes(effect));
+    assert.equal(html.includes("era-special-gauges"), phase !== 0);
+    if (phase) {
+      assert.match(html, /meter value='2500' max='(?:5000|7500)'/);
+      assert.match(html, /value='5000' class='era-release-mode/);
+      assert.match(html, /value='5001' class='era-release-mode/);
+      assert.ok(html.includes(mode === 5 ? "Quick" : mode === 4 ? "Endure 4" : "Normal"));
+      assert.equal(html.includes("Imminent"), mode === 4);
+      assert.equal(html.includes("era-milk"), milk === 1);
+    }
+    assert.ok(snapshot.output.some((item) => item.type === "text"
+      && item.text === `State: 0,0,${change ? 7500 : 5000},10000,10000`));
+  }
+});
+
+test("management settings expose guard state and explain character-specific posture and moan options", {
+  skip: !existsSync(GAME_ROOT),
+}, async () => {
+  const game = await loadGame();
+  await applyHotpatches(game);
+  for (const mode of [0, 1, 2]) {
+    const stub = emptyGame(game.root);
+    indexScript(stub, `@SYSTEM_TITLE
+ADDCHARA 0
+ADDCHARA 1
+MASTER = 0
+TARGET = 1
+FLAG:70 = 1
+FLAG:押し倒し = ${mode % 2}
+CFLAG:1:オート喘ぎ = ${mode}
+CFLAG:1:STANDING_TOGGLE = ${mode % 2}
+CALL HOTPATCH_SETTINGS
+QUIT`, "<settings-test>");
+    game.routines.set("SYSTEM_TITLE", stub.routines.get("SYSTEM_TITLE")!);
+    const snapshot = new Runtime(game, GAME_INSTRUCTION_LIMIT).start();
+    assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
+    const html = snapshot.output.flatMap((item) => item.type === "html" ? [item.text] : []).join("");
+    assert.match(html, new RegExp(`value='-9200' class='era-toggle${mode % 2 ? " era-on" : ""}' aria-pressed='${Boolean(mode % 2)}'`));
+    assert.match(html, /title='Standing: Prefer standing versions/);
+    assert.match(html, /title='Auto-moan: [^']+Cycles this character through No, Yes and Yes \(Ahegao\)/);
+    assert.match(html, /Automatic Condom/);
+  }
+});
+
+test("pilfer commands remain usable during frozen-time mischief sessions", {
+  skip: !existsSync(GAME_ROOT),
+}, async () => {
+  const game = await loadGame();
+  await applyHotpatches(game);
+  for (const [command, frozen, session, expected] of [
+    [821, 1, 0, true], [821, 1, 1, true], [821, 0, 0, true], [821, 0, 1, false],
+    [825, 1, 0, true], [825, 1, 1, true], [825, 0, 0, true], [825, 0, 1, false],
+  ] as const) {
+    const stub = emptyGame(game.root);
+    indexScript(stub, `@SYSTEM_TITLE
+ADDCHARA 0
+ADDCHARA 1
+MASTER = 0
+TARGET = 1
+TARGET:1 = 1
+FLAG:70 = ${frozen}
+CFLAG:1:イタズラ = !FLAG:70
+CFLAG:1:うふふ = ${session}
+CFLAG:1:現在位置 = 9
+CFLAG:0:現在位置 = 9
+EQUIP:0 = 1
+EQUIP:1:下半身下着２ = 1
+TFLAG:パンツ収奪 = 1
+RESULT = ${command}
+CALL USERCOM
+PRINTFORML Collected: {EQUIP:1:下半身下着２ == 0}
+QUIT
+@脱衣処理(C_ID, TYPE, OP)
+#DIM C_ID
+#DIMS TYPE
+#DIMS OP
+CALL PANTS_GET(C_ID)
+@PANTS_GET(ARG, ARGS)
+EQUIP:ARG:下半身下着２ = 0
+@GET_INT(ARG, ARGS, ARG:1, ARGS:1)
+#FUNCTION
+RETURNF 1
+@KOJO_CHECK(CHARA, ARGS, ARGS:1, ARG, ARG:1)
+#DIM CHARA
+RETURN 0
+@PANTS_ALREADY_COLLECTED(ARG)
+#FUNCTION
+RETURNF 1
+@PANTSNAME(ARG, ARG:1)
+#FUNCTIONS
+RETURNF "panties"`, "<pilfer-test>");
+    for (const [name, routines] of stub.routines) game.routines.set(name, routines);
+    const runtime = new Runtime(game, GAME_INSTRUCTION_LIMIT);
+    let snapshot = runtime.start();
+    const text: string[] = [];
+    for (let guard = 0; ; guard++) {
+      assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
+      text.push(...snapshot.output.flatMap((item) => "text" in item ? [item.text] : []));
+      if (snapshot.input?.kind !== "wait") break;
+      assert.ok(guard < 10, "pilfer completes without an input loop");
+      snapshot = runtime.input("");
+    }
+    assert.ok(text.includes(`Collected: ${Number(expected)}`), `${command}, frozen=${frozen}, session=${session}: ${text.join("\n")}`);
+  }
 });
 
 test("character info and player panels share body-size labels and highlights", {
@@ -329,7 +515,7 @@ test("room lineup renders every portrait and preserves target selection", {
       "the lineup replaces the redundant Change Partner menu button");
     const count = scenario === "11" ? 24 : scenario === "4" ? 6 : ["3", "5"].includes(scenario) ? 2 : ["1", "6", "9"].includes(scenario) ? 0 : 1;
     assert.equal((html.match(/<era-open class='era-portrait'>/g) ?? []).length, count, scenario);
-    assert.equal((html.match(/aria-pressed='true'/g) ?? []).length, count ? 1 : 0, scenario);
+    assert.equal((html.match(/class='era-occupant-label' aria-pressed='true'/g) ?? []).length, count ? 1 : 0, scenario);
     assert.equal((html.match(/<era-open/g) ?? []).length, (html.match(/<era-close>/g) ?? []).length, scenario);
     assert.doesNotMatch(html, /era-main-occupants/, "occupants are inside the room card");
     assert.doesNotMatch(html, /era-selected/, "selection uses only the existing sprite highlight, not an occupant highlight");
@@ -422,10 +608,10 @@ test("character More opens the selected person's sheet while See more still open
   }
   snapshot = runtime.input("-9200");
   settle();
-  const first = html().match(/era-guard-toggle[^']*' aria-pressed='(true|false)'/)![1];
+  const first = html().match(/value='-9200' class='era-toggle[^']*' aria-pressed='(true|false)'/)![1];
   snapshot = runtime.input("-9200");
   settle();
-  const second = html().match(/era-guard-toggle[^']*' aria-pressed='(true|false)'/)![1];
+  const second = html().match(/value='-9200' class='era-toggle[^']*' aria-pressed='(true|false)'/)![1];
   assert.notEqual(first, second, "guard still toggles through the game's command");
 });
 

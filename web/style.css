@@ -389,12 +389,25 @@ a { color: #8ddaff; }
 .era-main .era-player .line button.choice.era-player-control:enabled:is(:hover, :focus-visible) { border-color: #5da8bf; background: #193744; color: #e2f5ff; }
 .era-main .era-player .line button.choice.era-player-control:focus-visible { outline: 2px solid #7ccce3; outline-offset: 3px; }
 .era-control-arrow { margin-left: auto; color: #71b8cd; font-size: 1.3em; line-height: .8; }
-.era-main .era-player .line button.choice.era-guard-toggle { gap: 10px; }
-.era-guard-toggle::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #647783; }
-.era-control-state { margin-left: auto; color: #8299a6; font-size: .8em; }
-.era-main .era-player .line button.choice.era-guard-toggle.era-on { border-color: #38796e; background: #14332d99; color: #c1e6db; }
-.era-guard-toggle.era-on::before { background: #7cd7b5; box-shadow: 0 0 6px #7cd7b533; }
-.era-guard-toggle.era-on .era-control-state { color: #7cd7b5; }
+.era-player-effects { display: flex; flex-wrap: wrap; gap: 4px 8px; margin-top: 10px; font-size: .8em; line-height: 1.4; }
+.era-player-effects > .era-status-label { font-size: .85em; letter-spacing: .06em; text-transform: uppercase; }
+.era-player-effects > div { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+.era-player-effects .era-status { padding: 1px 7px; border-radius: 4px; background: #8cbedc0d; }
+.era-player-effects .era-status + .era-status::before { content: none; }
+.era-special-gauges { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; font-size: .8em; }
+.era-special-gauge { padding: 8px 10px; border: 1px solid #87bbd318; border-radius: 6px; background: #8cbedc08; }
+.era-special-gauges .era-bar { grid-template-columns: 4ch minmax(0, 1fr) auto; gap: 8px; }
+.era-special-gauges .era-bar-max { color: #758b99; font-size: .85em; }
+.era-special-gauges .era-meter { height: 5px; background: #1c3038; }
+.era-cum .era-meter > span { background: #89c9d6; }
+.era-milk .era-meter > span { background: #d3b9df; }
+.era-gauge-caption { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 8px; margin-top: 4px; color: #8099a9; font-size: .9em; }
+.era-main .line button.choice.era-release-mode { padding: 1px 7px; border: 1px solid #43647766; border-radius: 999px; background: #18324066; color: #a4c6d6; font-size: .9em; }
+.era-main .line button.choice.era-release-mode .interactive-label { text-decoration: none; }
+.era-main .line button.choice.era-release-quick { color: #96ceae; }
+.era-main .line button.choice.era-release-endure { color: #dfbd88; }
+.era-gauge-imminent { margin-top: 4px; color: #ff9ac8; font-size: .9em; }
+.era-gauge-imminent.era-critical { color: #ff6666; }
 .era-inventory:popover-open { width: min(1100px, calc(100vw - 32px)); height: min(820px, calc(100dvh - 32px)); }
 .era-inventory-header { padding: 16px 20px 12px; border-bottom: 1px solid #245066; background: linear-gradient(135deg, #102735, #0b141d); white-space: normal; }
 .era-inventory-heading, .era-inventory-tools, .era-inventory-footer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
@@ -421,8 +434,9 @@ a { color: #8ddaff; }
 .era-bar.era-debuffed .era-bar-value { color: #ff0; }
 .era-empty { color: #777; font-style: italic; }
 .era-stats .era-section-title { display: none; }
-.era-stats .era-palam-grid { grid-template-columns: repeat(auto-fill, minmax(36ch, 1fr)); }
-.era-stats .era-palam-item { grid-template-columns: 6ch 4ch minmax(5ch, 1fr) 11ch 5ch; }
+.era-stats .era-palam-grid { grid-template-columns: minmax(0, 1fr); }
+/* Values and gem gains take only their content width; the meter uses the remaining room. */
+.era-stats .era-palam-item { min-width: 0; grid-template-columns: 6ch 4ch minmax(0, 1fr) max-content max-content; column-gap: .5ch; padding: 0; }
 /* Clock and faces sit in the flow (Emuera pictures overflow their line). */
 :is(.era-clock, .era-face) .sprite { height: auto; vertical-align: middle; }
 :is(.era-clock, .era-face) .sprite-clip { position: relative; display: block; }
@@ -461,7 +475,6 @@ a { color: #8ddaff; }
 .era-player-status { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 0; margin-top: 6px; }
 .era-status-label { margin-right: 1ch; color: #8a949c; }
 .era-status + .era-status::before { content: "·"; margin: 0 .8ch; color: #5a646c; }
-.era-player-toggles { margin: 10px 0 14px; }
 .era-strong { font-weight: bold; }
 .screen.is-active .line button.choice:is(.era-chip-button, .era-toggle, .era-star):enabled:is(:hover, :focus-visible) { border-color: #8ddaff; }
 /* The room is a row of full portraits, not a tab rail. Crowds scroll without shrinking the sprites. */
@@ -550,8 +563,9 @@ a { color: #8ddaff; }
 .era-character-info .era-info-body[hidden] { display: flex !important; visibility: hidden; pointer-events: none; }
 .era-interaction-history[hidden] { display: none !important; }
 .era-character-info > .era-info-body, .era-character-info > .line:has(.era-interaction-history) { grid-row: 2; grid-column: 1; }
-.era-character-info > .line:has(.era-interaction-history) { position: relative; min-height: 0; contain: size; overflow: hidden; }
-.era-character-info .era-interaction-history { position: absolute; inset: 0; margin-top: 0; border-radius: 0 5px 5px 5px; min-height: 0; overflow: auto; }
+/* The history overlay must not intercept clicks on Character Info while hidden. */
+.era-character-info > .line:has(.era-interaction-history) { position: relative; min-height: 0; contain: size; overflow: hidden; pointer-events: none; }
+.era-character-info .era-interaction-history { position: absolute; inset: 0; margin-top: 0; border-radius: 0 5px 5px 5px; min-height: 0; overflow: auto; pointer-events: auto; }
 .era-character-info .era-history-body { max-height: none; overflow: visible; }
 .era-history-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px; }
 .era-history-toolbar button { font: inherit; color: #b7dbea; background: #16394b; border: 1px solid #3c9bb7; border-radius: 4px; padding: 5px 10px; cursor: pointer; }
@@ -583,8 +597,9 @@ a { color: #8ddaff; }
 .era-info-body .era-look { margin-top: 14px; font-size: .9em; }
 .era-info-body.era-info-with-preview { padding-top: 6px; padding-bottom: 6px; }
 .era-info-with-preview .era-look { margin-top: 0; }
-.era-history-preview-space { position: relative; flex: 1 1 0; min-height: 0; margin-top: 1lh; }
-.era-history-preview { position: absolute; inset: 0; display: block; width: 100%; height: 100%; box-sizing: border-box; overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; padding: 0; border: 0; background: transparent; color: #a7bbc8; text-align: left; font: inherit; font-size: .8em; line-height: 1.25; cursor: pointer; }
+.era-history-preview-space { position: relative; flex: 1 1 0; min-height: 0; margin-top: 4px; }
+.era-history-preview { position: absolute; inset: auto 0 0; display: block; width: 100%; height: 100%; height: calc(round(down, max(0px, 100% - 8px), 1lh) + 8px); box-sizing: border-box; overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; padding: 4px; border: 0; border-radius: 4px; background: rgba(140, 190, 220, .05); color: #a7bbc8; text-align: left; font: inherit; font-size: .8em; line-height: 1.25; cursor: pointer; }
+.era-history-preview-viewport { position: absolute; inset: 4px; overflow: hidden; }
 .era-history-preview-content { position: absolute; bottom: 0; left: 0; width: 100%; }
 .era-history-preview:focus-visible { outline: 1px solid #5da8bf; outline-offset: 1px; }
 .era-interaction-history { margin-top: 8px; border: 1px solid #24526b; border-radius: 5px; background: #05111bd9; font-size: .85em; }
@@ -654,6 +669,10 @@ a { color: #8ddaff; }
 .era-main .era-kind-chores .print-cell { border-color: #397756; background: linear-gradient(#102b23, #0a1c17); }
 .era-main .era-kind-petting .print-cell { border-color: #70415b; background: linear-gradient(#2b1d2b, #1d1420); }
 .era-main .era-kind-dialogue .print-cell { border-color: #3c6189; background: linear-gradient(#162b40, #0d1d30); }
+.era-main .era-kind-vaginal .print-cell { border-color: #955271; background: linear-gradient(#351e2c, #23141f); }
+.era-main .era-kind-anal .print-cell { border-color: #947052; background: linear-gradient(#33291f, #241c16); }
+.era-main .era-kind-sm .print-cell { border-color: #a44f52; background: linear-gradient(#381c21, #251316); }
+.era-main .era-kind-service .print-cell { border-color: #998447; background: linear-gradient(#332e18, #232011); }
 .era-main .line button.choice:is(.era-toggle, .era-chip-button, .era-star) { border-radius: 4px; padding: 2px 10px; }
 .era-main-menu .era-actions-group .print-cell { display: block; flex: 1 1 100%; }
 .era-main-menu .era-actions-group .print-cell:nth-child(-n+2) { flex-basis: calc(50% - 9px); }
@@ -671,6 +690,14 @@ a { color: #8ddaff; }
 .line button.choice.era-toggle.era-kind-petting.era-on { border-color: #c0609a; background: #3a1c30; color: #ffd0ec; }
 .line button.choice.era-toggle.era-kind-chores.era-on { border-color: #4fa064; background: #1c3424; color: #d0ffd8; }
 .line button.choice.era-toggle.era-kind-dialogue.era-on { border-color: #5a86c8; background: #1c2a44; color: #d6e6ff; }
+.line button.choice.era-toggle.era-kind-vaginal { border-color: #955271; color: #cc89aa; }
+.line button.choice.era-toggle.era-kind-anal { border-color: #947052; color: #c5a180; }
+.line button.choice.era-toggle.era-kind-sm { border-color: #a44f52; color: #d27f84; }
+.line button.choice.era-toggle.era-kind-service { border-color: #998447; color: #c8b56e; }
+.line button.choice.era-toggle.era-kind-vaginal.era-on { border-color: #e48bb8; background: #432238; color: #ffd1e7; }
+.line button.choice.era-toggle.era-kind-anal.era-on { border-color: #cda47d; background: #3b2c20; color: #f0d2b2; }
+.line button.choice.era-toggle.era-kind-sm.era-on { border-color: #e87980; background: #442026; color: #ffc1c5; }
+.line button.choice.era-toggle.era-kind-service.era-on { border-color: #d6ba62; background: #3d351a; color: #ffeba3; }
 /* The look text (clothes and what is happening) under the target's meters: no image toggles, no spacer lines. */
 .era-look { margin-top: 8px; }
 /* The room's chatter (others' talk, the radio, room descriptions) under the place title; gone when there is none. */

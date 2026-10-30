@@ -163,20 +163,23 @@ export function setupCharacterHistory(parent, history, loadAll) {
       tab.addEventListener(type, (event) => event.stopPropagation());
     tab.addEventListener("click", () => select(name));
   }
-  const latest = history.entries[0];
-  if (latest) {
-    const runs = latest.lines.flatMap((line) => [
-      ...compactRuns(line.runs ?? [{ text: line.text }], latest), { text: "\n" },
-    ]);
+  if (history.entries.length) {
+    const runs = [...history.entries].reverse().flatMap((entry) => entry.lines.flatMap((line) => {
+      const compact = compactRuns(line.runs ?? [{ text: line.text }], entry);
+      return compact.length ? [...compact, { text: "\n" }] : [];
+    }));
     const content = runs.map((run) => run.text).join("").trimEnd();
     const start = content.split("\n").slice(0, -10).reduce((length, line) => length + line.length + 1, 0);
     const preview = document.createElement("button");
     preview.type = "button";
     preview.className = "era-history-preview";
-    preview.setAttribute("aria-label", "View recent interaction in Interaction History");
+    preview.setAttribute("aria-label", "View recent interactions in Interaction History");
     const previewText = document.createElement("span");
     previewText.className = "era-history-preview-content";
-    preview.append(previewText);
+    const viewport = document.createElement("span");
+    viewport.className = "era-history-preview-viewport";
+    viewport.append(previewText);
+    preview.append(viewport);
     let offset = 0;
     for (const run of runs) {
       const value = run.text.slice(Math.max(0, start - offset), Math.max(0, content.length - offset));

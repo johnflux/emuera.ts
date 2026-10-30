@@ -201,9 +201,9 @@ HTML_PRINT @"<div class='era-card-title'>%HTML_ESCAPE(CALLNAME:MASTER)%<span cla
 HTML_PRINT HOTPATCH_PLAYER_KIND()
 CALL HOTPATCH_BASE(MASTER)
 CALL HOTPATCH_PLAYER_STATUS
-CALL SHOW_EQUIP_SP
+CALL HOTPATCH_PLAYER_SPECIAL
 CALL SHOW_EQUIP_3
-CALL INFO_GAUGEGROUP
+CALL HOTPATCH_PLAYER_GAUGES
 SIF !GETBIT (FLAG:USERCOMフィルタ, 4)
 	HTML_PRINT "<div class='era-player-actions'><button value='805' class='era-player-control era-inventory-button' title='Item list, quantities, categories and search'>Inventory<span class='era-control-arrow'>›</span></button></div>"
 HTML_PRINT "<era-close>"
@@ -795,8 +795,8 @@ CALL QOL_AUTOMATIC_HTML_LINEBREAK(HTML_POPPRINTINGSTR(),MAXWIDTH() - nClockChara
 ;-------------------------------------------------------------------------------
 ; Your own state as a plain "Status" line under your meters (not chips, so it doesn't read as buttons): arousal
 ; (INFO_SHOW_BOKKI), hunger and bath (HUNGER, BATHED, in their colours), sleepiness and sleep resistance (from
-; QOL_INFO_SITUATION) and your body stains (STAIN_INFO, which replaces the Body Stains [801] command); then the
-; Pushdown Guard toggle (-9200, QOL_EXTRA_COMMAND_BUTTONS). Have a Meal and Relax in the Bath are in Go & Manage.
+; QOL_INFO_SITUATION) and your body stains (STAIN_INFO, which replaces the Body Stains [801] command).
+; Pushdown Guard, Have a Meal and Relax in the Bath are in Go & Manage.
 ;-------------------------------------------------------------------------------
 @HOTPATCH_PLAYER_STATUS
 #DIMS DYNAMIC sHtml
@@ -849,9 +849,7 @@ IF CFLAG:MASTER:眠気覚まし
 	sHtml += HOTPATCH_STATUS_ITEM("Sleep resistance: " + sText, GETDEFCOLOR(), "Keeps sleepiness away for a while")
 ENDIF
 sHtml += HOTPATCH_STAINS(MASTER)
-sHtml '= @"<div class='era-player-status'><span class='era-status-label'>Status:</span>%sHtml%</div><div class='era-player-toggles'>"
-sHtml += @"<button value='-9200' class='era-player-control era-guard-toggle%(FLAG:押し倒し ? " era-on" # "")%' aria-pressed='%(FLAG:押し倒し ? "true" # "false")%' title='Pushdown Guard: %(FLAG:押し倒し ? "on" # "off")%&#10;When on, someone only pushes you down if they are stronger than you (fighting ability and build, with shyness, seduction and forwardness); otherwise they just hug you.&#10;When off, anyone in the mood can push you down.'>Pushdown Guard<span class='era-control-state'>%(FLAG:押し倒し ? "On" # "Off")%</span></button>"
-HTML_PRINT sHtml + "</div>"
+HTML_PRINT @"<div class='era-player-status'><span class='era-status-label'>Status:</span>%sHtml%</div>"
 
 ; INFO_CHARA_STAIN as status entries, one per stained body part ("Hands: Semen, Love Juice"). A part's own fluid
 ; (love juice on the vagina, the penis on itself, the anus on itself), which washing leaves, isn't listed.

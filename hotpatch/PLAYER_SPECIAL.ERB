@@ -1,0 +1,102 @@
+; Main-screen versions of SHOW_EQUIP_SP and INFO_GAUGEGROUP.
+; Keep the original conditions and gauge initialization; only the presentation changes.
+@HOTPATCH_PLAYER_SPECIAL
+#DIMS DYNAMIC sHtml
+SIF IS_WISEMAN()
+	sHtml += HOTPATCH_STATUS_ITEM("Sage Mode", C_WHITE)
+SIF TFLAG:仙香玉兎
+	sHtml += HOTPATCH_STATUS_ITEM("Lunar Incense", (TFLAG:仙香玉兎 >= 120 ? C_PINK # C_D_PINK))
+SIF TCVAR:MASTER:国士無双の薬
+	sHtml += HOTPATCH_STATUS_ITEM(@"Peerless Patriot's Elixir x{TCVAR:MASTER:国士無双の薬}", GETDEFCOLOR())
+SIF TFLAG:ポイズンボディ
+	sHtml += HOTPATCH_STATUS_ITEM("Poison Body", C_D_PINK)
+SIF CFLAG:MASTER:現在位置 == TFLAG:GG設置位置
+	sHtml += HOTPATCH_STATUS_ITEM("Gassing Garden Spot", C_PINK)
+SIF FLAG:自室施錠
+	sHtml += HOTPATCH_STATUS_ITEM("Door Locked", C_RED)
+IF TFLAG:幸運補正 > 0
+	sHtml += HOTPATCH_STATUS_ITEM("Fortune", GETDEFCOLOR())
+ELSEIF TFLAG:幸運補正 < 0
+	sHtml += HOTPATCH_STATUS_ITEM("Misfortune", GETDEFCOLOR())
+ENDIF
+SIF TFLAG:FORTUNE_REVERSED
+	sHtml += HOTPATCH_STATUS_ITEM("Fortune Reversed", GETDEFCOLOR())
+SIF TFLAG:SEASON_STONE_USES_REMAINING
+	sHtml += HOTPATCH_STATUS_ITEM(SEASON_NAME(GatheringSeason) + " Stone", GETDEFCOLOR())
+SIF TFLAG:ANYWHERE_DOOR_USES_REMAINING
+	sHtml += HOTPATCH_STATUS_ITEM(@"Anywhere Door ({TFLAG:ANYWHERE_DOOR_USES_REMAINING})", GETDEFCOLOR())
+SIF TCVAR:MASTER:祝福
+	sHtml += HOTPATCH_STATUS_ITEM("Blessing", GETDEFCOLOR())
+SIF TCVAR:MASTER:エンチャント
+	sHtml += HOTPATCH_STATUS_ITEM("Power Up", GETDEFCOLOR())
+SIF TCVAR:MASTER:加護
+	sHtml += HOTPATCH_STATUS_ITEM("Divine Protection", GETDEFCOLOR())
+SIF TCVAR:MASTER:豊穣
+	sHtml += HOTPATCH_STATUS_ITEM("Good Harvest", GETDEFCOLOR())
+SIF TEQUIP:MASTER:SWIMMING
+	sHtml += HOTPATCH_STATUS_ITEM("Swimming", GETDEFCOLOR())
+SIF TCVAR:MASTER:LIMITLESS_ACTIVE
+	sHtml += HOTPATCH_STATUS_ITEM("Limitless", GETDEFCOLOR())
+SIF TCVAR:MASTER:PURIFICATION_DRUG_ACTIVE
+	sHtml += HOTPATCH_STATUS_ITEM("Purified", GETDEFCOLOR())
+IF TCVAR:MASTER:LARGE_LOADS == 2
+	sHtml += HOTPATCH_STATUS_ITEM("Extreme Loads", GETDEFCOLOR())
+ELSEIF TCVAR:MASTER:LARGE_LOADS == 1
+	sHtml += HOTPATCH_STATUS_ITEM("Large Loads", GETDEFCOLOR())
+ENDIF
+SIF TCVAR:MASTER:SENSITIVITY_NUMBED
+	sHtml += HOTPATCH_STATUS_ITEM("Numb", GETDEFCOLOR())
+SIF TCVAR:MASTER:PERPETUAL_ERECTION
+	sHtml += HOTPATCH_STATUS_ITEM("Perpetual Erection", GETDEFCOLOR())
+SIF TCVAR:MASTER:INFINITE_VIG
+	sHtml += HOTPATCH_STATUS_ITEM("Infinite Vigor", GETDEFCOLOR())
+SIF STRLENS(sHtml)
+	HTML_PRINT @"<div class='era-player-effects'><span class='era-status-label'>Special</span><div>%sHtml%</div></div>"
+
+@HOTPATCH_PLAYER_GAUGES
+; INFO_GAUGEGROUP also repairs vigor and initializes maxima, even when gauges are hidden.
+BASE:MASTER:精力 = MAX(0, BASE:MASTER:精力)
+BASE:精力 = MAX(0, BASE:精力)
+SIF !MAXBASE:2
+	MAXBASE:2 = 10000
+IF ASSI > 0
+	SIF !MAXBASE:ASSI:2
+		MAXBASE:ASSI:2 = 10000
+ENDIF
+IF TFLAG:EjacChange <= 0
+	MAXBASE:MASTER:2 = TALENT:MASTER:絶倫 ? 5000 # 10000
+ENDIF
+SIF !GROUPMATCH(TFLAG:102, 2, 3)
+	RETURN
+HTML_PRINT "<era-open class='era-special-gauges'>"
+CALL HOTPATCH_SAMEN_GAUGE(MASTER)
+CALL HOTPATCH_SAMEN_GAUGE(TARGET)
+IF TALENT:TARGET:母乳体質
+	MAXBASE:3 = TALENT:TARGET:淫乳 ? 5000 # 10000
+	HTML_PRINT HOTPATCH_BAR("Milk", BASE:TARGET:3, MAXBASE:TARGET:3, "era-milk", "Milk (" + HOTPATCH_ATTRIBUTE(HTML_ESCAPE(CALLNAME:TARGET)) + ")", 1)
+ENDIF
+HTML_PRINT "<era-close>"
+
+@HOTPATCH_SAMEN_GAUGE(nChara)
+#DIM DYNAMIC nChara
+#DIMS DYNAMIC sMode
+#DIMS DYNAMIC sClass
+SIF !HAS_PENIS(nChara)
+	RETURN
+sClass '= "era-release-endure"
+sMode '= "Endure"
+SELECTCASE TCVAR:nChara:射精我慢
+	CASE 0
+		sMode '= "Normal"
+		sClass '= "era-release-normal"
+	CASE 5
+		sMode '= "Quick"
+		sClass '= "era-release-quick"
+ENDSELECT
+HTML_PRINT "<era-open class='era-special-gauge'>"
+HTML_PRINT HOTPATCH_BAR("Cum", BASE:nChara:2, MAXBASE:nChara:2, "era-cum", "Ejaculation (" + HOTPATCH_ATTRIBUTE(HTML_ESCAPE(CALLNAME:nChara)) + ")", 1)
+HTML_PRINT @"<div class='era-gauge-caption'><span>%HTML_ESCAPE(CALLNAME:nChara)%</span><button value='{5000 + nChara}' class='era-release-mode %sClass%' title='Ejaculation control: %sMode%%(INRANGE(TCVAR:nChara:射精我慢, 1, 4) ? @" (level {TCVAR:nChara:射精我慢})" # "")%. Click to change.'>%sMode%%(INRANGE(TCVAR:nChara:射精我慢, 1, 4) ? @" {TCVAR:nChara:射精我慢}" # "")%</button></div>"
+IF TCVAR:nChara:イきそう
+	HTML_PRINT @"<div class='era-gauge-imminent%(BASE:MASTER:射精 > EJAC_ENDURANCE_LIMIT ? " era-critical" # "")%'>Imminent</div>"
+ENDIF
+HTML_PRINT "<era-close>"

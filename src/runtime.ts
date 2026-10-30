@@ -483,6 +483,7 @@ export class Runtime {
     if (game.routines.has("HOTPATCH_TARGET_DATAGROUP") && game.routines.has("KOJO_MESSAGE_SEND") && game.routines.has("TRAINNAME_TR")) {
       this.interactionHistory = new TwInteractionHistory(this.saves, {
         read: (name, indices = []) => this.globals.get(name, indices.map(literal), this.context(this.globals)),
+        write: (name, indices, value) => this.globals.set(name, indices.map(literal), value, this.context(this.globals)),
         label: (command) => text(this.expressionFunction("TRAINNAME_TR", [BigInt(command)])),
         count: () => this.globals.characterCount(),
       });

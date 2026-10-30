@@ -368,11 +368,13 @@ The selected character's card has adjacent **Character Info** and
 **Interaction History** tabs. The history tab shows recent interactions and an
 right-aligned **more...** button opens a read-only dialog containing the character's
 entire saved timeline (loaded on demand, without advancing the game).
-Character Info also shows up to ten recent lines from the latest interaction
-beneath clothing, with one line of spacing above. The preview fills only remaining
+Character Info also shows up to ten recent lines across recent interactions
+beneath clothing, with a subtle lighter background, 4px padding and a 4px gap above.
+The preview fills only remaining
 panel space and clips overflow without contributing to the card's height.
 The preview is bottom-aligned: the newest line stays visible and older text
-is clipped at the top.
+is clipped at the top. Its height rounds down to complete rendered lines where
+CSS `round()` is supported, including when text wraps or the panel is resized.
 The history tab scrolls within the same panel dimensions.
 History opens at the bottom and scrolls to the newest text when refreshed.
 Collapsed entries use closely spaced headings without divider lines.
@@ -387,6 +389,20 @@ each affected character, including characters in other rooms, before
 `TIMESTOP_RESET` clears the pending flags. These include missing underwear,
 unexplained pleasure (with the game's intensity threshold), virginity loss or
 restored-virginity loss, and the five ejaculation-related aftereffect markers.
+General V/A/M penetration during frozen time is tracked separately in existing
+per-character CFLAG slots 7395/7396/7397 (0 = absent, 1 = pending). These slots
+are unused in the bundled eraTW scripts/CSV and fit the existing 10,000-element
+array: no native save layout, version or dimensions change, and no sidecar is
+needed for these flags. Standard eraTW loads the values without using them.
+The adapter records confirmed penis-to-V/A/M contacts, in either touch-map
+direction, when successful action processing reaches `SOURCE_EXP(character)`;
+temporary previews and failed actions do not set them. This covers individual
+and group recipients without depending on the selected target or virginity.
+`TIMESTOP_RESET(character)` consumes all three flags after successful cleanup,
+whether time resumes manually, through depletion, or for an off-screen character.
+V/A markers share the existing discomfort branches with ejaculation markers;
+oral penetration produces soreness, never an invented semen-taste reaction.
+No new first-time-loss marker is introduced.
 Multiple pending markers form one event per character. These events have `source: "state"`
 and a neutral `reaction` action. Their English text describes perceived symptoms,
 not the hidden cause or inferred virginity loss.

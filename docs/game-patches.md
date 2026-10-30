@@ -13,6 +13,7 @@ of this document. Re-apply it after updating or reinstalling the game.
 |---|---------|-------|-------|
 | 1 | "Ego alert! Biten has Relation towards herself!" on every load | Typo in Biten's CSV: her affinity for Ubame uses Biten's number | `CSV/Chara/Chara153 美天.csv`, `ERB/TRANSLATION/Addition/Add_Relation.ERB` |
 | 2 | Play A Game: after picking a game, "Add a wager?" answers every choice with "Invalid input" and never lets you continue | Off-by-one in the bet-choice check (`RESULT < LOCAL-1`) | `ERB/TRANSLATION/Addition/Custom_Commands/Add_CUSTOM_COM0 Play Game.ERB` |
+| 3 | Pilfer Panties [821] and Take Panties [825] silently do nothing after starting mischief while time is frozen | Their handlers reject the session flag that frozen-time mischief sets, although the menu still offers both actions | `ERB/コマンド関連/USERCOM.ERB` |
 
 ## 1. Biten's self-relation ("Ego alert!")
 
@@ -84,11 +85,42 @@ asks "Add a wager?" and lists `[0] - No wager`. Entering `0` prints
 
 Accept `RESULT < LOCAL`, so every listed bet, and only those, can be chosen.
 
+## 3. Pilfer commands stop working during frozen-time mischief
+
+`@COM350` ("Start Mischief", including "With All") sets `CFLAG:target:うふふ`,
+the same session flag used during ordinary sessions. The frozen-time command menu
+continues to offer Pilfer Panties [821] and Take Panties [825], but `@USERCOM`
+requires `!CFLAG:うふふ` for both. The result is a silent no-op, not a command-number
+collision with Push Down [350].
+
+Allow the session flag when `FLAG:70` (time stopped) is set. Keep all other
+eligibility checks and continue rejecting these actions during ordinary sessions.
+Regression coverage in `test/hotpatch.test.ts` exercises both handlers with and
+without frozen-time sessions.
+
 ## Patch
 
 Apply from inside `GAMES/anon-tw-anon-tw_eng-modding` with `git apply -p1` or
 `patch -p1`. The files are UTF-8 with LF line endings. `Chara153 美天.csv`
 starts with a BOM, which the patch leaves untouched.
+
+For the pilfer-command fix, apply this additional patch:
+
+```diff
+--- a/ERB/コマンド関連/USERCOM.ERB
++++ b/ERB/コマンド関連/USERCOM.ERB
+@@ -171,2 +171,3 @@
+ ELSEIF RESULT == 821 && EQUIP:0 && EQUIP:TARGET:下半身下着２
+-	SIF TARGET && CFLAG:TARGET:291 == 0 && (FLAG:70 || CFLAG:イタズラ || UNDRESS_DEBUG) && !CFLAG:うふふ ;custom code
++	;Frozen-time mischief also sets the session flag; it must not block a displayed pilfer command.
++	SIF TARGET && CFLAG:TARGET:291 == 0 && (FLAG:70 || CFLAG:イタズラ || UNDRESS_DEBUG) && (FLAG:70 || !CFLAG:うふふ) ;custom code
+@@ -209,2 +210,2 @@
+ ELSEIF RESULT == 825 && TFLAG:パンツ収奪
+-	IF TARGET && (FLAG:70 || CFLAG:イタズラ || UNDRESS_DEBUG) && !CFLAG:うふふ ;custom code
++	IF TARGET && (FLAG:70 || CFLAG:イタズラ || UNDRESS_DEBUG) && (FLAG:70 || !CFLAG:うふふ) ;custom code
+```
+
+The earlier fixes:
 
 ```diff
 diff -ru a/CSV/Chara/Chara153 美天.csv b/CSV/Chara/Chara153 美天.csv

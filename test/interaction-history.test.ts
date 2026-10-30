@@ -14,6 +14,7 @@ import { coloredHtml, plainHtml } from "../src/html.js";
 
 function fixture(enabled = true) {
   const game = emptyGame();
+  game.variableSizes.set("CFLAG", [10000]);
   game.names.set("CFLAG", new Map([["現在位置", 0], ["好感度", 2], ["信頼度", 4]]));
   indexScript(game, `@SYSTEM_TITLE
 ADDVOIDCHARA
@@ -171,6 +172,131 @@ test("HTML history colors inherit and restore across nested tags without retaini
 });
 
 for (const jit of [false, true]) {
+  test(`penetration flags survive native saves and are consumed once (JIT ${jit})`, () => {
+    const game = fixture(), stub = emptyGame(), saves = new MemorySaveStore();
+    indexScript(game, `#DIM CONST ADD_MAXTOUCH = 6
+#DIM ADD_TEMPTOUCHMODE
+#DIM ADD_TOUCH_ACTIVE, 6
+#DIM ADD_TOUCH_HISTORY, 6
+#DIM ADD_TOUCH_ACTOR, 6
+#DIM ADD_TOUCH_TARGET, 6
+#DIM ADD_TOUCH_ACTOR_PART, 6
+#DIM ADD_TOUCH_TARGET_PART, 6`, "touch-state.ERH", true);
+    indexScript(stub, `@COM400
+FLAG:70 = 1
+; V and M use the forward map; A uses the reverse map. Actor zero is valid.
+ADD_TOUCH_ACTIVE = 1, 1, 1, 1, 1
+ADD_TOUCH_HISTORY = 0, 0, 0, 1, 0
+ADD_TOUCH_ACTOR = 0, 2, 0, 0, 0
+ADD_TOUCH_TARGET = 2, 0, 2, 1, 1
+ADD_TOUCH_ACTOR_PART = 1, 7, 1, 1, 3
+ADD_TOUCH_TARGET_PART = 6, 1, 4, 6, 6
+CALL SOURCE_EXP(1)
+CALL SOURCE_EXP(2)
+@SOURCE_EXP(ARG)
+RETURN
+@COM301
+CALL TIMESTOP_RESET(2)
+CALL TIMESTOP_RESET(2)
+@COM303
+FLAG:70 = 0
+CALL TIMESTOP_RESET(2)
+CALL TIMESTOP_RESET(2)`, "penetration.ERB");
+    for (const [name, routines] of stub.routines) game.routines.set(name, routines);
+    const runtime = new Runtime(game, undefined, { saves, jit });
+    check(runtime.start());
+    check(runtime.input("400"));
+    check(runtime.input("0"));
+    const bytes = saves.read("save00.sav");
+    assert.ok(Buffer.isBuffer(bytes));
+    const native = readNativeSave(bytes);
+    for (const flag of ["7395", "7396", "7397"]) {
+      assert.equal(native.characters[2]!.CFLAG?.[flag], "1");
+      assert.equal(native.characters[1]!.CFLAG?.[flag], undefined, "historical contacts and fingers do not set flags");
+    }
+    assert.equal(native.characters[2]!.CFLAG?.["287"], undefined, "penetration does not invent ejaculation");
+    assert.equal(native.characters[2]!.EX?.["71"], undefined, "no new first-time-loss marker");
+    for (const command of ["301", "303"]) {
+      // Only the native save is carried over: pending state must not need history JSON.
+      const restored = new MemorySaveStore();
+      restored.write("save00.sav", bytes);
+      const loaded = new Runtime(game, undefined, { saves: restored, jit });
+      check(loaded.start());
+      check(loaded.input("1"));
+      check(loaded.input(command));
+      const result = history(loaded.input("2"));
+      assert.equal(result.entries.length, 1, "manual/depletion cleanup emits one reaction, even with repeated resets");
+      const text = result.entries[0]!.lines[0]!.text;
+      assert.match(text, /discomfort inside her vagina/);
+      assert.match(text, /discomfort inside her bottom/);
+      assert.match(text, /soreness inside her mouth/);
+      assert.doesNotMatch(text, /semen|virgin|time.stop/i);
+      check(loaded.input("9"));
+      const cleaned = restored.read("save01.sav");
+      assert.ok(Buffer.isBuffer(cleaned));
+      for (const flag of ["7395", "7396", "7397"])
+        assert.equal(readNativeSave(cleaned).characters[2]!.CFLAG?.[flag], undefined, "cleanup clears saved pending flags");
+    }
+  });
+
+  test(`penetration tracking excludes normal time, previews and cancelled actions (JIT ${jit})`, () => {
+    for (const [frozen, temporary, cancelled] of [[0, 0, 0], [1, 1, 0], [1, 0, 1]]) {
+      const game = fixture(), stub = emptyGame(), saves = new MemorySaveStore();
+      indexScript(game, `#DIM CONST ADD_MAXTOUCH = 1
+#DIM ADD_TEMPTOUCHMODE
+#DIM ADD_TOUCH_ACTIVE, 1
+#DIM ADD_TOUCH_HISTORY, 1
+#DIM ADD_TOUCH_ACTOR, 1
+#DIM ADD_TOUCH_TARGET, 1
+#DIM ADD_TOUCH_ACTOR_PART, 1
+#DIM ADD_TOUCH_TARGET_PART, 1`, "excluded-touch-state.ERH", true);
+      indexScript(stub, `@COM400
+FLAG:70 = ${frozen}
+ADD_TEMPTOUCHMODE = ${temporary}
+ADD_TOUCH_ACTIVE = 1
+ADD_TOUCH_TARGET = 2
+ADD_TOUCH_ACTOR_PART = 1
+ADD_TOUCH_TARGET_PART = 7
+; SOURCE_CHECK returns before SOURCE_EXP for cancelled actions.
+SIF !${cancelled}
+  CALL SOURCE_EXP(2)
+@SOURCE_EXP(ARG)
+RETURN`, "excluded-penetration.ERB");
+      for (const [name, routines] of stub.routines) game.routines.set(name, routines);
+      const runtime = new Runtime(game, undefined, { saves, jit });
+      check(runtime.start());
+      check(runtime.input("400"));
+      check(runtime.input("0"));
+      const bytes = saves.read("save00.sav");
+      assert.ok(Buffer.isBuffer(bytes));
+      assert.equal(readNativeSave(bytes).characters[2]!.CFLAG?.["7396"], undefined);
+    }
+  });
+
+  test(`penetration and ejaculation share V/A notices but keep oral symptoms distinct (JIT ${jit})`, () => {
+    const game = fixture(), stub = emptyGame();
+    indexScript(stub, `@COM400
+CFLAG:2:7395 = 1
+CFLAG:2:7396 = 1
+CFLAG:2:7397 = 1
+CFLAG:2:286 = 2
+CFLAG:2:287 = 2
+CFLAG:2:288 = 2
+EXP:2:1 = 1
+EXP:2:2 = 1
+EXP:2:25 = 1
+CALL TIMESTOP_RESET(2)`, "combined-aftereffects.ERB");
+    game.routines.set("COM400", stub.routines.get("COM400")!);
+    const runtime = new Runtime(game, undefined, { saves: new MemorySaveStore(), jit });
+    check(runtime.start());
+    check(runtime.input("400"));
+    const text = history(runtime.input("2")).entries[0]!.lines[0]!.text;
+    assert.equal(text.match(/discomfort inside her vagina/g)?.length, 1);
+    assert.equal(text.match(/discomfort in her bottom/g)?.length, 1);
+    assert.match(text, /aftermath of oral sex/);
+    assert.match(text, /taste of semen/);
+  });
+
   test(`reaction recognition follows character knowledge and experience (JIT ${jit})`, () => {
     for (const [ignorant, experience, oral, recognizes, oralRecognizes] of [
       [1, 0, 0, false, false],
@@ -206,14 +332,14 @@ CALL TIMESTOP_RESET(2)`, "recognition.ERB");
   test(`internal reactions use explicit knowledge and virginity branches (JIT ${jit})`, () => {
     for (const [ignorant, aware, unaware, general, virginity, talent, expected] of [
       [0, 0, 0, 0, 0, 0, "feels sudden discomfort inside her vagina, unable to tell what is wrong."],
-      [1, 0, 10, 100, 0, 0, "again feels a sudden discomfort inside her vagina, still unsure what is causing it."],
-      [1, 0, 1, 0, 0, -1, "again feels a sudden discomfort inside her vagina, still unsure what is causing it."],
-      [1, 0, 1, 0, 1, -1, "feels sudden discomfort inside her vagina, unsure what has happened."],
-      [1, 1, 10, 0, 0, 0, "feels sudden discomfort inside her vagina similar to having sexual intercourse."],
-      [1, 1, 0, 0, 0, 0, "feels sudden discomfort inside her vagina similar to having sexual intercourse."],
-      [0, 1, 0, 0, 1, 0, "feels sudden discomfort inside her vagina, unsure what has happened."],
-      [0, 1, 0, 0, 0, -1, "feels sudden discomfort inside her vagina, unsure what has happened."],
-      [0, 1, 0, 0, 2, 0, "feels sudden discomfort inside her vagina similar to having sexual intercourse."],
+      [1, 0, 10, 100, 0, 0, "again feels a sudden discomfort inside her vagina."],
+      [1, 0, 1, 0, 0, -1, "again feels a sudden discomfort inside her vagina."],
+      [1, 0, 1, 0, 1, -1, "feels sudden pain and discomfort inside her vagina, unsure what has happened."],
+      [1, 1, 10, 0, 0, 0, "feels sudden discomfort inside her vagina, similar to having sexual intercourse."],
+      [1, 1, 0, 0, 0, 0, "feels sudden discomfort inside her vagina, similar to having sexual intercourse."],
+      [0, 1, 0, 0, 1, 0, "feels sudden pain and discomfort inside her vagina, unsure what has happened."],
+      [0, 1, 0, 0, 0, -1, "feels sudden discomfort inside her vagina, unable to tell what is wrong."],
+      [0, 1, 0, 0, 2, 0, "feels sudden discomfort inside her vagina, similar to having sexual intercourse."],
     ] as const) {
       const game = fixture(), stub = emptyGame();
       indexScript(stub, `@COM400
@@ -259,7 +385,7 @@ CALL TIMESTOP_RESET(2)`, "anal-recognition.ERB");
       runtime.input("400");
       const text = history(runtime.input("2")).entries[0]!.lines[0]!.text;
       assert.equal(text.includes("feels the sudden unexpected discomfort in her bottom similar to having anal intercourse."), expected);
-      assert.equal(text.includes("unsure what is causing it"), !expected);
+      assert.equal(text.includes("unsure what is causing it"), aware === 0 && unaware === 0);
       assert.equal(text.includes("again feels a sudden discomfort inside her bottom"), aware === 0 && unaware > 0);
       assert.doesNotMatch(text, /pending|time.stop|time.resum/i);
     }
@@ -748,6 +874,58 @@ test("HTTP delivery and resume expose the selected character history and serve t
     assert.equal(module.status, 200);
     assert.match(await module.text(), /export function renderCharacterHistory/);
   } finally { app.closeAllConnections(); await new Promise<void>((resolve) => app.close(() => resolve())); }
+});
+
+test("real eraTW contacts set separate saved penetration flags for group recipients", {
+  skip: !existsSync(GAME_ROOT),
+}, async () => {
+  const game = await loadGame();
+  await applyHotpatches(game);
+  assert.deepEqual(game.variableSizes.get("CFLAG"), [10000]);
+  const stub = emptyGame();
+  indexScript(stub, `@SYSTEM_TITLE
+ADDCHARA 0
+ADDCHARA 1
+ADDCHARA 2
+MASTER = 0
+TARGET = 2
+FLAG:70 = 1
+CALL ADD_TOUCH_SET(0, 1, 1, 6, 0)
+CALL ADD_TOUCH_SET(0, 2, 1, 7, 0)
+CALL ADD_TOUCH_SET(2, 0, 4, 1, 0)
+CALL SOURCE_EXP(1)
+CALL SOURCE_EXP(2)
+SAVEDATA 0, "pending"
+CALL TIMESTOP_RESET(1)
+CALL TIMESTOP_RESET(2)
+CALL TIMESTOP_RESET(1)
+CALL TIMESTOP_RESET(2)
+SAVEDATA 1, "consumed"
+HTML_PRINT "<div class='era-interaction-history'></div>"
+INPUT`, "real-penetration-state.ERB");
+  game.routines.set("SYSTEM_TITLE", stub.routines.get("SYSTEM_TITLE")!);
+  for (const jit of [false, true]) {
+    const saves = new MemorySaveStore();
+    const runtime = new Runtime(game, GAME_INSTRUCTION_LIMIT, { saves, jit });
+    const snapshot = check(runtime.start());
+    const pending = saves.read("save00.sav"), cleaned = saves.read("save01.sav");
+    assert.ok(Buffer.isBuffer(pending) && Buffer.isBuffer(cleaned));
+    const before = readNativeSave(pending), after = readNativeSave(cleaned);
+    assert.equal(before.characters[1]!.CFLAG?.["7395"], "1");
+    assert.equal(before.characters[1]!.CFLAG?.["7396"], undefined);
+    assert.equal(before.characters[2]!.CFLAG?.["7395"], undefined);
+    assert.equal(before.characters[2]!.CFLAG?.["7396"], "1");
+    assert.equal(before.characters[2]!.CFLAG?.["7397"], "1");
+    for (const person of [1, 2])
+      for (const flag of ["7395", "7396", "7397"])
+        assert.equal(after.characters[person]!.CFLAG?.[flag], undefined);
+    const result = history(snapshot);
+    assert.equal(result.entries.length, 1);
+    assert.match(result.entries[0]!.lines[0]!.text, /discomfort inside her bottom/);
+    assert.match(result.entries[0]!.lines[0]!.text, /soreness inside her mouth/);
+    assert.doesNotMatch(result.entries[0]!.lines[0]!.text, /vagina|semen|time.stop/i);
+    assert.equal(saves.list().filter((file) => file.startsWith("era-history-event-")).length, 2);
+  }
 });
 
 test("Ruukoto's actual first-meeting dialogue is retained without choosing a conversation command", {

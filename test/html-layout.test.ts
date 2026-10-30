@@ -199,18 +199,23 @@ test("character history renders literal text and local controls without game inp
   card.append(info);
   card.append(historyPanel);
   let requests = 0;
+  const olderPreview = `${"Older padding.\n".repeat(10)}Oldest line.\nOlder interaction.`;
   setup(historyPanel, { ...history, entries: [{ ...history.entries[0], lines: [{
     character: "alice", text: "Earlier line.\nRecent line.\nLatest line.",
     runs: [{ text: "Earlier line.\n", color: "red" }, { text: "Recent line.\nLatest line.", color: "green" }],
+  }] }, { ...history.entries[0], lines: [{ character: "alice", text: "\n---\n" }] },
+  { ...history.entries[0], lines: [{
+    character: "alice", text: olderPreview, runs: [{ text: olderPreview, color: "blue" }],
   }] }] }, async () => { requests++; return history; });
   assert.equal(historyPanel.hidden, true);
   assert.equal(info.hidden, false);
   const localEvent = { stopPropagation() {}, preventDefault() {} };
   const preview = info.querySelector(".era-history-preview")!;
   const previewText = preview.querySelector(".era-history-preview-content")!;
-  assert.equal(previewText.children.map((node) => node.textContent).join(""), "Earlier line.\nRecent line.\nLatest line.");
-  assert.equal(previewText.children[0]!.style.color, "red");
-  assert.equal(previewText.children[1]!.style.color, "green");
+  assert.equal(previewText.children.map((node) => node.textContent).join(""), `${"Older padding.\n".repeat(5)}Oldest line.\nOlder interaction.\nEarlier line.\nRecent line.\nLatest line.`);
+  assert.equal(previewText.children[0]!.style.color, "blue");
+  assert.equal(previewText.children[2]!.style.color, "red");
+  assert.equal(previewText.children[3]!.style.color, "green");
   assert.ok(info.className.includes("era-info-with-preview"));
   preview.listeners.get("click")!(localEvent);
   assert.equal(historyPanel.hidden, false);

@@ -559,11 +559,19 @@ ELSEIF STRLENS(TRAINNAME_TR(nCom))
 ENDIF
 RETURN nKojo
 
-; Which filter toggle shows a command (QUICKFILTER's rules), so both share a tint: petting, housekeeping
-; ("chores") or the character's own dialogue topics; "" for the rest.
+; Match QUICKFILTER's categories so filter chips and their actions share a tint.
+; For overlapping tags, location takes priority, then SM, service and everyday categories.
 @HOTPATCH_ACTION_KIND(nCommand)
 #FUNCTIONS
 #DIM DYNAMIC nCommand
+SIF IS_COM_VAGINA(nCommand)
+	RETURNF "vaginal"
+SIF IS_COM_ANAL(nCommand)
+	RETURNF "anal"
+SIF IS_COM_SM(nCommand)
+	RETURNF "sm"
+SIF IS_COM_HOUSI(nCommand) || IS_COM_REVSERVICE(nCommand)
+	RETURNF "service"
 SIF IS_COM_SEKUHARA(nCommand) && TARGET
 	RETURNF "petting"
 SIF IS_COM_KAJI(nCommand)
@@ -600,17 +608,17 @@ ELSE
 ENDIF
 IF (TARGET != MASTER && FREE_USE_ACTIVE()) || CFLAG:うふふ || CFLAG:MASTER:イタズラ == 2
 	SIF GETBIT(nFilters, 0)
-		sHtml += HOTPATCH_TOGGLE("V", 831, CFLAG:TARGET:Ｖアンフィルタ)
+		sHtml += HOTPATCH_TOGGLE("V", 831, CFLAG:TARGET:Ｖアンフィルタ, "vaginal", "Show vaginal actions (pink)")
 	SIF GETBIT(nFilters, 1)
-		sHtml += HOTPATCH_TOGGLE("A", 832, CFLAG:TARGET:Ａアンフィルタ)
+		sHtml += HOTPATCH_TOGGLE("A", 832, CFLAG:TARGET:Ａアンフィルタ, "anal", "Show anal actions (light brown)")
 	SIF GETBIT(nFilters, 2)
 		sHtml += HOTPATCH_TOGGLE("Rev Sex", -9121, CFLAG:TARGET:RevSexFilter)
 	SIF GETBIT(nFilters, 3)
-		sHtml += HOTPATCH_TOGGLE("SM", 836, CFLAG:TARGET:ＳＭアンフィルタ)
+		sHtml += HOTPATCH_TOGGLE("SM", 836, CFLAG:TARGET:ＳＭアンフィルタ, "sm", "Show SM actions (red)")
 	SIF GETBIT(nFilters, 4)
-		sHtml += HOTPATCH_TOGGLE("Service", 835, CFLAG:TARGET:奉仕アンフィルタ)
+		sHtml += HOTPATCH_TOGGLE("Service", 835, CFLAG:TARGET:奉仕アンフィルタ, "service", "Show service actions (yellow)")
 	SIF GETBIT(nFilters, 5)
-		sHtml += HOTPATCH_TOGGLE("Rev Service", -9120, CFLAG:TARGET:RevServiceFilter)
+		sHtml += HOTPATCH_TOGGLE("Rev Service", -9120, CFLAG:TARGET:RevServiceFilter, "service", "Show reverse service actions (yellow)")
 ENDIF
 SIF GETBIT(nFilters, 6)
 	sHtml += HOTPATCH_TOGGLE("Petting", 837, CFLAG:TARGET:セクハラアンフィルタ, "petting", "Show touching actions she may not welcome (pink)")
@@ -673,18 +681,19 @@ SIF STRLENS(sKind)
 	sClass '= " era-kind-" + sKind
 SIF STRLENS(sTitle)
 	sTitle '= @" title='%sLabel%: %sTitle%'"
-RETURNF @"<button value='{nValue}' class='era-toggle%sClass%%(nOn ? " era-on" # "")%'%sTitle%>%sLabel%</button>"
+RETURNF @"<button value='{nValue}' class='era-toggle%sClass%%(nOn ? " era-on" # "")%' aria-pressed='%(nOn ? "true" # "false")%'%sTitle%>%sLabel%</button>"
 
 ;-------------------------------------------------------------------------------
 ; QOL_EXTRA_COMMAND_BUTTONS as toggle chips, each only when it can matter: the sex settings (condom, moaning,
 ; standing) once something sexual can happen: a session, mischief, free use or stopped time. The original shows them
-; whenever the target is not you, alone included. Pushdown Guard is on your card (MAIN_SCREEN.ERB).
+; whenever the target is not you, alone included. Pushdown Guard is always available here.
 ;-------------------------------------------------------------------------------
 @HOTPATCH_SETTINGS
 #DIMS DYNAMIC sHtml
 #DIMS DYNAMIC sMoan
 sHtml '= "<button value='809' class='era-chip-button'>Config</button>"
 sHtml += "<button value='-9201' class='era-chip-button'>Auto Items</button>"
+sHtml += HOTPATCH_TOGGLE("Pushdown Guard", -9200, FLAG:押し倒し, "", "When on, someone only pushes you down if they are stronger than you (fighting ability and build, with shyness, seduction and forwardness); otherwise they just hug you. When off, anyone in the mood can push you down.")
 IF TARGET > 0 && TARGET != MASTER && (CFLAG:MASTER:うふふ || CFLAG:TARGET:うふふ || CFLAG:MASTER:イタズラ || CFLAG:TARGET:イタズラ || FLAG:70 || FREE_USE_ACTIVE())
 	sHtml += HOTPATCH_TOGGLE("Automatic Condom", 838, FLAG:自動ゴム)
 	SELECTCASE CFLAG:オート喘ぎ
@@ -697,7 +706,7 @@ IF TARGET > 0 && TARGET != MASTER && (CFLAG:MASTER:うふふ || CFLAG:TARGET:う
 		CASEELSE
 			sMoan '= "Invalid Option"
 	ENDSELECT
-	sHtml += HOTPATCH_TOGGLE(sMoan, 4000, CFLAG:オート喘ぎ)
-	sHtml += HOTPATCH_TOGGLE("Standing", -9122, CFLAG:STANDING_TOGGLE)
+	sHtml += HOTPATCH_TOGGLE(sMoan, 4000, CFLAG:オート喘ぎ, "", "Cycles this character through No, Yes and Yes (Ahegao). Adds automatic moans during intimate actions when no scripted dialogue is provided; Ahegao enables more expressive variations.")
+	sHtml += HOTPATCH_TOGGLE("Standing", -9122, CFLAG:STANDING_TOGGLE, "", "Prefer standing versions of supported intimate positions with this character. When off, use normal positions where the location allows; standing may still be required elsewhere. Does not apply during sleep sessions.")
 ENDIF
 HTML_PRINT @"<div class='era-toggles era-settings'>%sHtml%</div>"
