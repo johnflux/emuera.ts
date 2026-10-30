@@ -18,7 +18,7 @@ export interface Interaction {
   previous: Record<string, string | null>;
   source: "script" | "state";
   target: string;
-  action: { id: number | "encounter" | "greeting" | "play-game" | "time-resumed" | "reaction"; label: string };
+  action: { id: number | "encounter" | "greeting" | "play-game" | "reaction"; label: string };
   participants: HistoryCharacter[];
   before: InteractionContext;
   after: InteractionContext;
@@ -41,22 +41,6 @@ interface Scope { capture: boolean; character: HistoryCharacter | null; complete
 const COMMANDS = new Set([300, 301, 303]);
 const LIMIT = 20;
 const TEXT_LIMIT = 16_000;
-const REACTION_WORDING = [
-  ["experiences intense unexplained pleasure as time resumes.", "experiences a sudden, intense wave of unexplained pleasure."],
-  ["experiences unexplained pleasure as time resumes.", "experiences a sudden feeling of unexplained pleasure."],
-  ["has lost her virginity while time was stopped.", "winces from a sudden pain between her legs."],
-  ["has lost her restored virginity while time was stopped.", "winces from a sudden pain between her legs."],
-  ["has a pending time-stop aftereffect: vaginal ejaculation.", "feels sudden discomfort inside her vagina."],
-  ["has a pending time-stop aftereffect: anal ejaculation.", "feels sudden discomfort inside her bottom."],
-  ["has a pending time-stop aftereffect: oral ejaculation.", "suddenly finds something unexpected in her mouth."],
-  ["has a pending time-stop aftereffect: semen on face.", "notices something unexpected on her face."],
-  ["has a pending time-stop aftereffect: semen on hand.", "notices something unexpected on her hand."],
-  ["'s underwear is missing when time resumes.", " notices that her underwear is suddenly missing."],
-] as const;
-function reactionWording(value: string): string {
-  for (const [before, after] of REACTION_WORDING) value = value.replaceAll(before, after);
-  return value;
-}
 const uuid = (value: unknown): value is string => typeof value === "string" && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(value);
 const digest = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
 const eventFile = (id: string) => `era-history-event-${id}.json`;
@@ -78,7 +62,7 @@ function interaction(value: unknown): value is Interaction {
   return uuid(value.id) && (value.parent === null || uuid(value.parent)) && (value.source === "script" || value.source === "state")
     && isRecord(value.action) && (typeof value.action.id === "number" && COMMANDS.has(value.action.id)
       || value.action.id === "encounter" || value.action.id === "greeting" || value.action.id === "play-game"
-      || value.action.id === "time-resumed" || value.action.id === "reaction") && typeof value.action.label === "string"
+      || value.action.id === "reaction") && typeof value.action.label === "string"
     && Array.isArray(value.participants) && value.participants.every(character) && uuid(value.target)
     && value.participants.some((person) => person.id === value.target) && context(value.before) && context(value.after)
     && isRecord(previous) && value.participants.every((person) => previous[person.id] === null || uuid(previous[person.id]))
@@ -164,20 +148,65 @@ export class TwInteractionHistory {
   }
   private timeResumeNotices(index: bigint): string[] {
     const notices: string[] = [];
+    // eraTW CSV field IDs; read pending reactions before TRANSLATION/BUGFIX.ERB's
+    // TIMESTOP_RESET clears them. Hidden causes must not enter the character's log.
+    // EX 50-54: unaware C/V/A/B/M orgasm counters, used for reaction intensity.
     const pleasure = [50n, 51n, 52n, 53n, 54n].reduce((sum, field) =>
       sum + BigInt(this.host.read("EX", [index, field])), 0n);
-    if (pleasure > 30n) notices.push(REACTION_WORDING[0][1]);
-    else if (pleasure > 0n) notices.push(REACTION_WORDING[1][1]);
+    if (pleasure > 30n) notices.push("experiences a sudden, intense wave of unexplained sexual pleasure.");
+    else if (pleasure > 0n) notices.push("experiences a sudden feeling of unexplained sexual pleasure.");
+    // CFLAG 291: no underwear; 295 = 2: she has not yet noticed it missing.
     if (this.host.read("CFLAG", [index, 291n]) === 1n && this.host.read("CFLAG", [index, 295n]) === 2n)
       notices.push("notices that her underwear is suddenly missing.");
+    // EX 70: pending virginity loss (1) or restored-virginity loss (2).
     const virginity = this.host.read("EX", [index, 70n]);
-    if (virginity !== 0n) notices.push(REACTION_WORDING[2][1]);
-    for (const [field, description] of [
-      [286n, "Vaginal ejaculation"], [287n, "Anal ejaculation"], [288n, "Oral ejaculation"],
-      [289n, "Semen on face"], [290n, "Semen on hand"],
-    ] as const) {
-      if (this.host.read("CFLAG", [index, field]) === 2n)
-        notices.push(reactionWording(`has a pending time-stop aftereffect: ${description.toLowerCase()}.`));
+    if (virginity !== 0n) notices.push("winces from a sudden pain between her legs.");
+    // Substance recognition: TALENT 27 = sexual ignorance; EXP 14 = semen experience.
+    // Match eraTW's knowledge rule; EXP 25 (oral experience) also allows oral recognition.
+    const familiar = this.host.read("TALENT", [index, 27n]) === 0n
+      || BigInt(this.host.read("EXP", [index, 14n])) >= 100n;
+    const oralFamiliar = familiar || BigInt(this.host.read("EXP", [index, 25n])) > 0n;
+    // CFLAG 286-290 = 2: unperceived ejaculation, pending a reaction at each location.
+    if (this.host.read("CFLAG", [index, 286n]) === 2n) { // 286: vaginal.
+      // Recent first-time loss takes precedence over familiarity.
+      if (virginity === 1n)
+        notices.push("feels sudden pain and discomfort inside her vagina, unsure what has happened.");
+      // EXP 1: conscious vaginal experience; TALENT 0 = -1: unaware non-virgin.
+      else if (this.host.read("TALENT", [index, 0n]) !== -1n && BigInt(this.host.read("EXP", [index, 1n])) > 0n)
+        notices.push("feels sudden discomfort inside her vagina, similar to having sexual intercourse.");
+      // EXP 61: unaware vaginal experience suggests recurrence, not knowledge of its cause.
+      else if (BigInt(this.host.read("EXP", [index, 61n])) > 0n)
+        notices.push("again feels a sudden discomfort inside her vagina.");
+      else
+        notices.push("feels sudden discomfort inside her vagina, unable to tell what is wrong.");
+    }
+    if (this.host.read("CFLAG", [index, 287n]) === 2n) { // 287: anal.
+      // EXP 2: conscious anal experience allows recognition of the sensation.
+      if (BigInt(this.host.read("EXP", [index, 2n])) > 0n)
+        notices.push("feels the sudden unexpected discomfort in her bottom similar to having anal intercourse.");
+      // EXP 62: unaware anal experience suggests recurrence without recognizing the cause.
+      else if (BigInt(this.host.read("EXP", [index, 62n])) > 0n)
+        notices.push("again feels a sudden discomfort inside her bottom");
+      else
+        notices.push("feels sudden discomfort inside her bottom, unsure what is causing it.");
+    }
+    if (this.host.read("CFLAG", [index, 288n]) === 2n) { // 288: mouth.
+      if (oralFamiliar)
+        notices.push("notices the sudden unexpected taste of semen in her mouth.");
+      else
+        notices.push("suddenly finds something unexpected in her mouth, unsure what it is.");
+    }
+    if (this.host.read("CFLAG", [index, 289n]) === 2n) { // 289: face.
+      if (familiar)
+        notices.push("notices the sudden unexplained presence of semen on her face.");
+      else
+        notices.push("notices something unexpected on her face, unsure what it is.");
+    }
+    if (this.host.read("CFLAG", [index, 290n]) === 2n) { // 290: hand.
+      if (familiar)
+        notices.push("notices the sudden unexplained presence of semen on her hand.");
+      else
+        notices.push("notices something unexpected on her hand, unsure what it is.");
     }
     return notices;
   }
@@ -345,11 +374,7 @@ export class TwInteractionHistory {
         throw new EraError(`Invalid interaction history event: ${eventFile(id)}`);
       if (!data.event.participants.some((item) => item.id === selected.id))
         throw new EraError(`Interaction history index does not match character: ${id}`);
-      const event = data.event;
-      entries.push(event.action.id === "time-resumed" ? {
-        ...event, action: { id: "reaction", label: "Reaction" },
-        lines: event.lines.map((line) => ({ character: line.character, text: reactionWording(line.text) })),
-      } : event);
+      entries.push(data.event);
       id = data.event.previous[selected.id]!;
     }
     return { character: selected, entries, notice: this.notice, limit: Number.isFinite(limit) ? limit : entries.length };

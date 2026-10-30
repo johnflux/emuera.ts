@@ -171,15 +171,110 @@ test("HTML history colors inherit and restore across nested tags without retaini
 });
 
 for (const jit of [false, true]) {
+  test(`reaction recognition follows character knowledge and experience (JIT ${jit})`, () => {
+    for (const [ignorant, experience, oral, recognizes, oralRecognizes] of [
+      [1, 0, 0, false, false],
+      [1, 99, 0, false, false],
+      [1, 100, 0, true, true],
+      [0, 0, 0, true, true],
+      [1, 0, 1, false, true],
+    ] as const) {
+      const game = fixture(), stub = emptyGame();
+      indexScript(stub, `@COM400
+TALENT:2:27 = ${ignorant}
+EXP:2:14 = ${experience}
+EXP:2:25 = ${oral}
+FOR LOCAL, 288, 291
+  CFLAG:2:LOCAL = 2
+NEXT
+CALL TIMESTOP_RESET(2)`, "recognition.ERB");
+      game.routines.set("COM400", stub.routines.get("COM400")!);
+      const runtime = new Runtime(game, undefined, { saves: new MemorySaveStore(), jit });
+      runtime.start();
+      runtime.input("400");
+      const event = history(runtime.input("2")).entries[0]!;
+      const text = event.lines[0]!.text;
+      assert.equal(text.includes("notices the sudden unexpected taste of semen in her mouth."), oralRecognizes);
+      assert.equal(text.includes("notices the sudden unexplained presence of semen on her face."), recognizes);
+      assert.equal(text.includes("notices the sudden unexplained presence of semen on her hand."), recognizes);
+      assert.doesNotMatch(JSON.stringify(event), /time.stop|time.resum/i);
+      runtime.input("0");
+      assert.equal(history(runtime.input("1")).entries[0]!.lines[0]!.text, text, "recognition is recorded at event time");
+    }
+  });
+
+  test(`internal reactions use explicit knowledge and virginity branches (JIT ${jit})`, () => {
+    for (const [ignorant, aware, unaware, general, virginity, talent, expected] of [
+      [0, 0, 0, 0, 0, 0, "feels sudden discomfort inside her vagina, unable to tell what is wrong."],
+      [1, 0, 10, 100, 0, 0, "again feels a sudden discomfort inside her vagina, still unsure what is causing it."],
+      [1, 0, 1, 0, 0, -1, "again feels a sudden discomfort inside her vagina, still unsure what is causing it."],
+      [1, 0, 1, 0, 1, -1, "feels sudden discomfort inside her vagina, unsure what has happened."],
+      [1, 1, 10, 0, 0, 0, "feels sudden discomfort inside her vagina similar to having sexual intercourse."],
+      [1, 1, 0, 0, 0, 0, "feels sudden discomfort inside her vagina similar to having sexual intercourse."],
+      [0, 1, 0, 0, 1, 0, "feels sudden discomfort inside her vagina, unsure what has happened."],
+      [0, 1, 0, 0, 0, -1, "feels sudden discomfort inside her vagina, unsure what has happened."],
+      [0, 1, 0, 0, 2, 0, "feels sudden discomfort inside her vagina similar to having sexual intercourse."],
+    ] as const) {
+      const game = fixture(), stub = emptyGame();
+      indexScript(stub, `@COM400
+TALENT:2:27 = ${ignorant}
+TALENT:2:0 = ${talent}
+EXP:2:1 = ${aware}
+EXP:2:61 = ${unaware}
+EXP:2:14 = ${general}
+EX:2:70 = ${virginity}
+CFLAG:2:286 = 2
+CFLAG:2:287 = 2
+CALL TIMESTOP_RESET(2)`, "internal-reactions.ERB");
+      game.routines.set("COM400", stub.routines.get("COM400")!);
+      const runtime = new Runtime(game, undefined, { saves: new MemorySaveStore(), jit });
+      runtime.start();
+      runtime.input("400");
+      const text = history(runtime.input("2")).entries[0]!.lines[0]!.text;
+      assert.ok(text.includes(expected));
+      assert.equal(text.includes("again feels"), expected.startsWith("again feels"));
+      assert.ok(text.includes("feels sudden discomfort inside her bottom, unsure what is causing it."));
+      assert.doesNotMatch(text, /pending|time.stop|time.resum/i);
+    }
+  });
+
+  test(`anal recognition requires aware anal experience (JIT ${jit})`, () => {
+    for (const [aware, unaware, general, expected] of [
+      [0, 0, 100, false],
+      [0, 1, 0, false],
+      [0, 10, 100, false],
+      [1, 0, 0, true],
+      [1, 10, 0, true],
+    ] as const) {
+      const game = fixture(), stub = emptyGame();
+      indexScript(stub, `@COM400
+EXP:2:2 = ${aware}
+EXP:2:62 = ${unaware}
+EXP:2:14 = ${general}
+CFLAG:2:287 = 2
+CALL TIMESTOP_RESET(2)`, "anal-recognition.ERB");
+      game.routines.set("COM400", stub.routines.get("COM400")!);
+      const runtime = new Runtime(game, undefined, { saves: new MemorySaveStore(), jit });
+      runtime.start();
+      runtime.input("400");
+      const text = history(runtime.input("2")).entries[0]!.lines[0]!.text;
+      assert.equal(text.includes("feels the sudden unexpected discomfort in her bottom similar to having anal intercourse."), expected);
+      assert.equal(text.includes("unsure what is causing it"), !expected);
+      assert.equal(text.includes("again feels a sudden discomfort inside her bottom"), aware === 0 && unaware > 0);
+      assert.doesNotMatch(text, /pending|time.stop|time.resum/i);
+    }
+  });
+
   test(`all pending time-resume aftereffects are logged in English (JIT ${jit})`, () => {
     for (const [strength, virginity, expected] of [
-      [31, 1, ["intense wave of unexplained pleasure", "sudden pain between her legs"]],
-      [1, 2, ["sudden feeling of unexplained pleasure", "sudden pain between her legs"]],
+      [31, 1, ["intense wave of unexplained sexual pleasure", "sudden pain between her legs"]],
+      [1, 2, ["sudden feeling of unexplained sexual pleasure", "sudden pain between her legs"]],
     ] as const) {
       const game = fixture(), stub = emptyGame(), saves = new MemorySaveStore();
       indexScript(stub, `@COM400
 EX:2:50 = ${strength}
 EX:2:70 = ${virginity}
+TALENT:2:27 = 1
 FOR LOCAL, 286, 291
   CFLAG:2:LOCAL = 2
 NEXT
@@ -217,12 +312,6 @@ CALL TIMESTOP_RESET(2)`, "aftereffects.ERB");
     assert.equal(event.before.locationName, "Garden", "use the affected character's room, not the player's");
     assert.equal(event.after.locationName, "Garden");
     assert.equal(event.lines[0]!.text, "Bob notices that her underwear is suddenly missing.");
-    const file = `era-history-event-${event.id}.json`;
-    const legacy = JSON.parse(String(saves.read(file)));
-    legacy.event.action = { id: "time-resumed", label: "Time resumes" };
-    legacy.event.lines[0].text = "Bob's underwear is missing when time resumes.";
-    saves.write(file, JSON.stringify(legacy));
-    assert.deepEqual(history(runtime.input("2")).entries, result.entries, "legacy entries are sanitized on read");
     runtime.input("0");
     assert.deepEqual(history(runtime.input("1")).entries, result.entries);
     assert.equal(history(runtime.input("16")).entries.length, 1, "no missing-underwear event if underwear is not missing");

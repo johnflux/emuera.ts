@@ -389,10 +389,20 @@ unexplained pleasure (with the game's intensity threshold), virginity loss or
 restored-virginity loss, and the five ejaculation-related aftereffect markers.
 Multiple pending markers form one event per character. These events have `source: "state"`
 and a neutral `reaction` action. Their English text describes perceived symptoms,
-not the hidden cause or inferred virginity loss. Legacy time-resume entries are
-normalized on read for both recent and full history; immutable originals remain
-on disk. This is not a general character-knowledge filter for arbitrary script text.
-and use that character's location. They summarize the game state rather than
+not the hidden cause or inferred virginity loss.
+Recognition of unexpected substances follows eraTW's knowledge rule (not marked
+ignorant, or at least 100 semen-experience points); previous oral experience also
+allows oral recognition. Vaginal and anal recognition instead require conscious
+experience (`EXP:character:1 > 0` and `EXP:character:2 > 0`, respectively);
+general knowledge and unaware experience do not establish recognition of the cause.
+Unaware-only vaginal/anal experience (`EXP:character:61` / `62`) instead produces
+recurring unexplained-discomfort wording. First-time vaginal loss still takes
+precedence; unaware non-virgin status prevents the conscious-recognition wording.
+Wording stays non-graphic and is fixed at event time, not recomputed from later
+experience. Older summaries stay conservative because
+their original knowledge state was not captured.
+This is not a general character-knowledge filter for arbitrary script text.
+Events use that character's location. They summarize the game state rather than
 inventing an off-screen dialogue transcript. “Unusual Sense of Liberation” is
 a printed scene heading, not a persistent trait.
 Meetings are captured through `AFFAIR_DISCLOSURE`, `SYOTAIMEN`, `FirstMeetToday`,
