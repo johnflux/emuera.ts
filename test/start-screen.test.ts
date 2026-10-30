@@ -43,6 +43,8 @@ test("eraTW launch dialogs accept defaults, configure optionally and cancel safe
   const world = markup(runtime.input("701"));
   assert.match(world, /Map details and room selection/);
   assert.match(world, /Animation: On/);
+  assert.match(world, /value='4130' class='era-setup-choice era-current'/);
+  assert.doesNotMatch(world, /value='414[123]'/, "normal mode has no extra assertiveness setting");
   assert.match(markup(runtime.input("23")), /Animation: Off/);
   assert.match(markup(runtime.input("23")), /Animation: On/);
   const dialogue = markup(runtime.input("702"));
@@ -65,15 +67,72 @@ test("eraTW launch dialogs accept defaults, configure optionally and cancel safe
   const farming = markup(runtime.input("704"));
   const landlordAction = /value='(3\d{4})' class='era-setup-choice/.exec(farming)?.[1];
   assert.ok(landlordAction, "landlords are available inline");
-  assert.match(markup(runtime.input(landlordAction)), /Initial loan/);
+  const contract = markup(runtime.input(landlordAction));
+  assert.match(contract, /Initial loan/);
+  assert.match(contract, /era-setup-landlord-face'><img src='[^']+' height='74px'/,
+    "the selected landlord has a native face portrait");
+  assert.match(contract, /Landlord: [^\n]+Initial loan:[\s\S]*You will grow/,
+    "landlord and loan details precede the farming description");
+  assert.match(contract, /You will grow <strong>[^<]+<\/strong> for .+\. Work the rented plot from <strong>Shrine Approach<\/strong> in <strong>Hakurei Shrine<\/strong> using the field-work action each day\./);
+  assert.match(contract, /era-setup-farm-heading'>.*Your home region: <strong>Hakurei Shrine<\/strong>/);
+  assert.match(contract, /<strong>Hakurei Shrine<\/strong> \(Home region\)/);
+  assert.doesNotMatch(contract, /<strong>Forest Of Magic<\/strong> \(Home region\)/);
+  assert.match(contract, /value='3101'[^>]*aria-disabled='false'/);
+  assert.match(contract, /No interest; buy your own tools/);
+  assert.match(contract, /Strict landlord\. <strong>0\.42%<\/strong> monthly interest; tools lent with monthly fees/);
+  assert.match(contract, /Tyrannical landlord\. <strong>5\.0%<\/strong> monthly interest; tools lent with higher monthly fees/);
+  assert.match(contract, /CONTRACT TERMS[\s\S]*Normal Peasant[\s\S]*FARMING CONTRACT[\s\S]*No farming contract[\s\S]*value='3\d{4}'/,
+    "contract terms are separate from the list containing no contract and landlords");
   assert.match(markup(runtime.input("3103")), /value='3103' class='era-setup-choice era-current'/);
-  assert.match(markup(runtime.input("3000")), /value='3000' class='era-setup-choice era-current'/);
+  const noContract = markup(runtime.input("3000"));
+  assert.match(noContract, /value='3000' class='era-setup-choice era-current'/);
+  assert.doesNotMatch(noContract, /era-setup-landlord-face/);
+  assert.match(noContract, /CONTRACT TERMS[\s\S]*Normal Peasant/,
+    "contract terms remain visible without a farming contract");
+  for (const action of [3101, 3102, 3103]) {
+    assert.match(noContract, new RegExp(`value='${action}'[^>]*aria-disabled='true'`));
+  }
+  assert.match(noContract, /landlord collects the harvest each month/);
+  assert.match(markup(runtime.input("3102")), /value='3102'[^>]*aria-disabled='true'/,
+    "disabled terms cannot be selected through direct input either");
+  markup(runtime.input("701"));
+  markup(runtime.input("2005"));
+  const forestFarm = markup(runtime.input("704"));
+  assert.match(forestFarm, /Your home region: <strong>Forest of Magic<\/strong>/);
+  assert.match(forestFarm, /<strong>Forest Of Magic<\/strong> \(Home region\)/);
+  assert.doesNotMatch(forestFarm, /<strong>Hakurei Shrine<\/strong> \(Home region\)/);
+  const marisaFarm = markup(runtime.input("30011"));
+  assert.match(marisaFarm, /Strict landlord\. <strong>0\.50%<\/strong> monthly interest/);
+  assert.match(marisaFarm, /Tyrannical landlord\. <strong>6\.0%<\/strong> monthly interest/);
+  assert.match(marisaFarm, /Work the rented plot from <strong>Mushroom Colony<\/strong> in <strong>Forest Of Magic<\/strong>/);
+  markup(runtime.input("701"));
+  markup(runtime.input("2000"));
+  const visitingFarm = markup(runtime.input("704"));
+  assert.doesNotMatch(visitingFarm, /Work the rented plot from <strong>Mushroom Colony<\/strong>/,
+    "outside the home region, the description uses the same travel-map replacement as field work");
+  markup(runtime.input("3000"));
   assert.match(markup(runtime.input("705")), /Subtype change chance/);
   assert.match(markup(runtime.input("4201")), /<span>6&#37;<\/span>/);
   markup(runtime.input("4211"));
   markup(runtime.input("701"));
-  assert.match(markup(runtime.input("4106")), /value='4106' class='era-setup-choice era-current'/);
-  markup(runtime.input("4100"));
+  const restricted = markup(runtime.input("4131"));
+  assert.match(restricted, /You cannot confess/);
+  assert.match(restricted, /value='4141' class='era-setup-choice era-current'/);
+  for (let level = 1; level <= 3; level++) {
+    assert.match(markup(runtime.input(String(4140 + level))),
+      new RegExp(`value='${4140 + level}' class='era-setup-choice era-current'`));
+  }
+  const lustMode = markup(runtime.input("4132"));
+  assert.match(lustMode, /value='4132' class='era-setup-choice era-current'/);
+  assert.match(lustMode, /value='4143' class='era-setup-choice era-current'/,
+    "switching mode preserves assertiveness");
+  assert.match(lustMode, /You can still confess and use all actions/);
+  assert.match(markup(runtime.input("4131")), /value='4143' class='era-setup-choice era-current'/);
+  assert.match(markup(runtime.input("4110")), /value='4110' class='era-setup-choice era-current'/);
+  markup(runtime.input("4110"));
+  const normalMode = markup(runtime.input("4130"));
+  assert.match(normalMode, /value='4130' class='era-setup-choice era-current'/);
+  assert.doesNotMatch(normalMode, /value='414[123]'/);
   assert.match(markup(runtime.input("2003")), /value='2003' class='era-setup-choice era-current'/);
   assert.match(markup(runtime.input("2000")), /value='2000' class='era-setup-choice era-current'/);
   const characterOptions = markup(runtime.input("700"));
@@ -150,7 +209,8 @@ QUIT`, "TEST_INLINE_SETUP.ERB");
   markup(inline.input("1204"));
   markup(inline.input("701"));
   markup(inline.input("2003"));
-  markup(inline.input("4105"));
+  markup(inline.input("4132"));
+  markup(inline.input("4142"));
   markup(inline.input("704"));
   markup(inline.input(landlordAction));
   markup(inline.input("3102"));

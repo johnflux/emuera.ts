@@ -275,6 +275,7 @@ function updateControls() {
   terminal.querySelectorAll("button.choice").forEach((button) => {
     const value = input?.kind === "integer" && /^-?\d+$/.test(button.dataset.value) ? BigInt(button.dataset.value).toString() : button.dataset.value;
     button.disabled = !button.closest(".screen.is-active") || button.classList.contains("is-stale") || (busy && !expiring) || !input || input.kind === "wait" || !!input.blocking
+      || button.getAttribute("aria-disabled") === "true"
       || !!input.buttonValues && !input.buttonValues.includes(value);
   });
 }
@@ -1426,6 +1427,8 @@ async function renderHtml(markup, parent, sprites) {
     applyClasses(element, node);
     if (element.matches(".era-occupant-label, .era-guard-toggle, .era-setup-choice"))
       element.setAttribute("aria-pressed", String(node.getAttribute("aria-pressed") === "true"));
+    if (element.matches(".era-setup-choice"))
+      element.setAttribute("aria-disabled", String(node.getAttribute("aria-disabled") === "true"));
     // Hotpatch extension: data-room links a non-button element to the map's room buttons with that value.
     const room = node.getAttribute("data-room");
     if (room !== null && /^-?\d+$/.test(room)) element.dataset.room = room;

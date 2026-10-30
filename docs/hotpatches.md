@@ -78,6 +78,31 @@ confession mode, Lunatic Survival, dialogue variants and common yandere settings
 are selectable directly as compact list rows with selection markers, names and
 descriptions, with the current choices highlighted. Settings changes preserve
 the current tab's scroll position; switching tabs starts at the top.
+Farming groups the no-contract option with landlord choices. Contract terms stay
+visible but disabled without a landlord. A reserved summary area explains daily
+field work, monthly harvest collection and rewards, updating with the chosen
+landlord's crop, location and starting loan.
+The selected landlord's native face portrait floats beside the summary, with
+landlord and loan details above the farming description.
+The description names the field-work command's actual map location (including
+travel-map replacements outside the home region), not the flavour name of the
+plot. The landlord list shows the player's home region and bolds matching farm
+regions with a Home region label, updating when the residence changes.
+The Your home region indicator is right-aligned in the contract list heading;
+crop, work location and region are bold in the selected contract description.
+Emphasized setup details also use brighter text and a slight stroke reinforcement
+so they remain distinct with the bundled regular-only font.
+Farming difficulty descriptions show monthly interest rates: Hardcore divides
+the native rate by 12; Extreme uses the native rate directly. Rates display to
+two significant figures in bold, with no emphasis on the shared monthly period.
+The underlying debt calculations are unchanged.
+Normal requires buying tools; the harder modes lend
+tools with monthly fees.
+Romance settings separate the mode (normal, restricted player actions, or
+unrestricted Lust mode) from other characters' increased assertiveness.
+Assertiveness appears only for the two enhanced modes and is preserved when
+switching between them. Returning to normal clears the increase.
+The pregnancy-stage restriction is a separate, default-off override.
 Map display animation defaults to on. Dialogue descriptions convert literal
 `<br>` to line breaks, leaving other markup escaped as plain text.
 Bonuses are still applied exactly once by the native bonus routine on Start Game; farming uses the

@@ -1,11 +1,24 @@
 ; Inline startup controls use native settings and defer their effects to Start Game.
-@HOTPATCH_SETUP_CHOICE(nValue, sName, nSelected, sDescription = "")
+@HOTPATCH_SETUP_CHOICE(nValue, sName, nSelected, sDescription = "", nEnabled = 1, sRegion = "", nHomeRegion = 0, sEmphasis = "")
 #FUNCTIONS
 #DIM DYNAMIC nValue
 #DIMS DYNAMIC sName
 #DIM DYNAMIC nSelected
 #DIMS DYNAMIC sDescription
-RETURNF @"<button value='{nValue}' class='era-setup-choice%(nSelected ? " era-current" # "")%' aria-pressed='%(nSelected ? "true" # "false")%'><span class='era-setup-choice-name'>%HTML_ESCAPE(sName)%</span><span class='era-setup-choice-description'>%REPLACE(HTML_ESCAPE(sDescription), "&lt;br&gt;", "&#10;")%</span></button>"
+#DIM DYNAMIC nEnabled
+#DIMS DYNAMIC sRegion
+#DIM DYNAMIC nHomeRegion
+#DIMS DYNAMIC sEmphasis
+#DIMS DYNAMIC sRegionLabel
+sDescription '= REPLACE(HTML_ESCAPE(sDescription), "&lt;br&gt;", "&#10;")
+SIF sEmphasis != ""
+	sDescription '= REPLACE(sDescription, HTML_ESCAPE(sEmphasis), "<strong>" + HTML_ESCAPE(sEmphasis) + "</strong>")
+IF sRegion != ""
+	sRegionLabel '= " · " + HTML_ESCAPE(sRegion)
+	SIF nHomeRegion
+		sRegionLabel '= " · <strong>" + HTML_ESCAPE(sRegion) + "</strong> (Home region)"
+ENDIF
+RETURNF @"<button value='{nValue}' class='era-setup-choice%(nSelected ? " era-current" # "")%' aria-pressed='%(nSelected ? "true" # "false")%' aria-disabled='%(nEnabled ? "false" # "true")%'><span class='era-setup-choice-name'>%HTML_ESCAPE(sName)%</span><span class='era-setup-choice-description'>%sDescription%%sRegionLabel%</span></button>"
 
 @HOTPATCH_SETUP_CLOTHING
 #DIM DYNAMIC nIndex
@@ -139,15 +152,24 @@ HTML_PRINT "<era-close>"
 HTML_PRINT "<button value='20' class='era-chip-button'>Map details and room selection</button>"
 HTML_PRINT "<era-close>"
 HTML_PRINT "<era-open class='era-setup-card'>"
-HTML_PRINT "<span class='era-launch-eyebrow'>CONFESSION SETTINGS</span>"
+HTML_PRINT "<span class='era-launch-eyebrow'>ROMANCE MODE</span>"
 HTML_PRINT "<era-open class='era-setup-grid'>"
-HTML_PRINT HOTPATCH_SETUP_CHOICE(4100, "Normal", !FLAG:甲斐性無, "You can confess. Normal character behaviour.")
-FOR nIndex, 1, 4
-	HTML_PRINT HOTPATCH_SETUP_CHOICE(4100 + nIndex, "Cannot confess", FLAG:甲斐性無 == nIndex && !FLAG:LUSTMODE, @"Character pushiness: {nIndex} / 3. Some player actions are unavailable.")
-	HTML_PRINT HOTPATCH_SETUP_CHOICE(4103 + nIndex, "Hard to catch", FLAG:甲斐性無 == nIndex && FLAG:LUSTMODE, @"Character pushiness: {nIndex} / 3. No player action restrictions.")
-NEXT
+HTML_PRINT HOTPATCH_SETUP_CHOICE(4130, "Normal", !FLAG:甲斐性無, "You can confess and initiate romance. No extra assertiveness from other characters.")
+HTML_PRINT HOTPATCH_SETUP_CHOICE(4131, "Let others take the lead", FLAG:甲斐性無 && !FLAG:LUSTMODE, "You cannot confess, and some intimate actions are restricted. Other characters become more assertive.")
+HTML_PRINT HOTPATCH_SETUP_CHOICE(4132, "Play hard to get (Lust mode)", FLAG:甲斐性無 && FLAG:LUSTMODE, "You can still confess and use all actions. Other characters become more assertive, including attempts to pin you down.")
 HTML_PRINT "<era-close>"
-HTML_PRINT HOTPATCH_SETUP_CHOICE(4110, "Ignore stable period restrictions", FLAG:STABLEBYPASS, "Allow sex outside the stable period of pregnancy.")
+IF FLAG:甲斐性無
+	HTML_PRINT "<span class='era-launch-eyebrow'>OTHER CHARACTERS' ASSERTIVENESS</span>"
+	HTML_PRINT "<era-open class='era-setup-grid'>"
+	HTML_PRINT HOTPATCH_SETUP_CHOICE(4141, "Slightly increased", FLAG:甲斐性無 == 1, "A little pushier than normal.")
+	HTML_PRINT HOTPATCH_SETUP_CHOICE(4142, "Greatly increased", FLAG:甲斐性無 == 2, "A lot pushier than normal.")
+	HTML_PRINT HOTPATCH_SETUP_CHOICE(4143, "Extreme", FLAG:甲斐性無 == 3, "Highest setting, with increased risk of forced sexual encounters.")
+	HTML_PRINT "<era-close>"
+ENDIF
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-open class='era-setup-card'>"
+HTML_PRINT "<span class='era-launch-eyebrow'>PREGNANCY RESTRICTIONS</span>"
+HTML_PRINT HOTPATCH_SETUP_CHOICE(4110, "Allow sex throughout pregnancy", FLAG:STABLEBYPASS, "Off by default: sex is only allowed during the stable (middle) stage of pregnancy. Turn on to also allow it during the early and late stages.")
 HTML_PRINT "<era-close>"
 HTML_PRINT "<era-open class='era-setup-card'>"
 HTML_PRINT "<span class='era-launch-eyebrow'>LUNATIC SURVIVAL</span>"
@@ -186,24 +208,53 @@ SIF MAIN_MAP != 3
 
 @HOTPATCH_SETUP_FARMING
 #DIM DYNAMIC nIndex
-HTML_PRINT "<era-open class='era-setup-card'>"
-HTML_PRINT "<span class='era-launch-eyebrow'>FARMING</span>"
-HTML_PRINT HOTPATCH_SETUP_CHOICE(3000, "No farming contract", !FLAG:地主)
+#DIM DYNAMIC nFarmPlace
+#DIM DYNAMIC nMonthlyHundredths
+#DIMS DYNAMIC sInterest
+#DIMS DYNAMIC sHardcoreInterest
 IF FLAG:地主
+	sInterest '= TOSTR(INT_NOUMIN(FLAG:地主, "金利")) + "% "
+	SIF INT_NOUMIN(FLAG:地主, "金利") < 10
+		sInterest '= TOSTR(INT_NOUMIN(FLAG:地主, "金利")) + ".0% "
+	nMonthlyHundredths = (INT_NOUMIN(FLAG:地主, "金利") * 100 + 6) / 12
+	sHardcoreInterest '= TOSTR(nMonthlyHundredths / 100) + "." + TOSTR(nMonthlyHundredths % 100, "00") + "% "
+	IF INT_NOUMIN(FLAG:地主, "金利") >= 12
+		nMonthlyHundredths = (INT_NOUMIN(FLAG:地主, "金利") * 10 + 6) / 12
+		sHardcoreInterest '= TOSTR(nMonthlyHundredths / 10) + "." + TOSTR(nMonthlyHundredths % 10) + "% "
+	ENDIF
+ENDIF
+HTML_PRINT "<era-open class='era-setup-card'>"
+HTML_PRINT "<span class='era-launch-eyebrow'>CONTRACT TERMS</span>"
+HTML_PRINT "<era-open class='era-setup-farm-summary'>"
+IF FLAG:地主
+	nFarmPlace = INT_NOUMIN(FLAG:地主, "場所ID")
+	SIF GET_MAPID(nFarmPlace) != MAIN_MAP
+		nFarmPlace = GET_MAP_REPLACEMENT(nFarmPlace)
+	CALL HOTPATCH_FACE(FLAG:地主, 74)
+	HTML_PRINT @"<div class='era-info-face era-setup-landlord-face'>%RESULTS%</div>"
 	HTML_PRINT @"<div class='era-setup-description'>Landlord: %HTML_ESCAPE(CALLNAME:(FLAG:地主))% · Initial loan: %HTML_ESCAPE(金額表示(FLAG:地主貸付金))%</div>"
-	HTML_PRINT "<era-open class='era-setup-grid'>"
-	HTML_PRINT HOTPATCH_SETUP_CHOICE(3101, "Normal Peasant", FLAG:農民難易度 == 1, "Kind landlord. No loan interest; gardening tools are not included.")
-	HTML_PRINT HOTPATCH_SETUP_CHOICE(3102, "Hardcore Peasant", FLAG:農民難易度 == 2, "Strict landlord. Loan interest applies; gardening tools are included.")
-	HTML_PRINT HOTPATCH_SETUP_CHOICE(3103, "Extreme Peasant", FLAG:農民難易度 == 3, "Tyrannical landlord. Loan interest applies; gardening tools are included.")
-	HTML_PRINT "<era-close>"
+	HTML_PRINT @"<div class='era-setup-description'>You will grow <strong>%HTML_ESCAPE(CROP_NAME_TR(STR_NOUMIN(FLAG:地主, "作物")))%</strong> for %HTML_ESCAPE(CALLNAME:(FLAG:地主))%. Work the rented plot from <strong>%HTML_ESCAPE(NAME_FROM_PLACE(nFarmPlace))%</strong> in <strong>%HTML_ESCAPE(FARM_LOCATION_TR(STR_NOUMIN(FLAG:地主, "畑のマップ")))%</strong> using the field-work action each day. Your landlord collects the harvest each month. Good harvests can earn money and Trust; poor harvests can reduce Trust.</div>"
+ELSE
+	HTML_PRINT "<div class='era-setup-description'>Farming means tending a rented field daily. Your landlord collects the harvest each month. Good harvests can earn money and Trust; poor harvests can reduce Trust. Select a landlord below to choose contract terms.</div>"
+	HTML_PRINT "<div class='era-setup-description'>No farming obligations or starting loan without a contract.</div>"
 ENDIF
 HTML_PRINT "<era-close>"
 HTML_PRINT "<era-open class='era-setup-grid'>"
+HTML_PRINT HOTPATCH_SETUP_CHOICE(3101, "Normal Peasant", FLAG:農民難易度 == 1, "Kind landlord. No interest; buy your own tools.", FLAG:地主 != 0)
+HTML_PRINT HOTPATCH_SETUP_CHOICE(3102, "Hardcore Peasant", FLAG:農民難易度 == 2, "Strict landlord. " + sHardcoreInterest + "monthly interest; tools lent with monthly fees.", FLAG:地主 != 0, "", 0, REPLACE(sHardcoreInterest, " ", ""))
+HTML_PRINT HOTPATCH_SETUP_CHOICE(3103, "Extreme Peasant", FLAG:農民難易度 == 3, "Tyrannical landlord. " + sInterest + "monthly interest; tools lent with higher monthly fees.", FLAG:地主 != 0, "", 0, REPLACE(sInterest, " ", ""))
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-open class='era-setup-card'>"
+HTML_PRINT @"<div class='era-setup-farm-heading'><span class='era-launch-eyebrow'>FARMING CONTRACT</span><span class='era-setup-description'>Your home region: <strong>%HTML_ESCAPE(GET_MAPNAME(MAIN_MAP))%</strong></span></div>"
+HTML_PRINT "<era-open class='era-setup-grid'>"
+HTML_PRINT HOTPATCH_SETUP_CHOICE(3000, "No farming contract", !FLAG:地主)
 FOR nIndex, 1, CHARANUM
 	SIF nIndex == FLAG:なりきり || !STRLENS(STR_NOUMIN(nIndex, "説明"))
 		CONTINUE
-	HTML_PRINT HOTPATCH_SETUP_CHOICE(30000 + nIndex, CALLNAME:nIndex, FLAG:地主 == nIndex, FARMING_DESCRIPTION_TR(STR_NOUMIN(nIndex, "説明")) + " · " + CROP_NAME_TR(STR_NOUMIN(nIndex, "作物")) + " · " + FARM_LOCATION_TR(STR_NOUMIN(nIndex, "畑のマップ")))
+	HTML_PRINT HOTPATCH_SETUP_CHOICE(30000 + nIndex, CALLNAME:nIndex, FLAG:地主 == nIndex, FARMING_DESCRIPTION_TR(STR_NOUMIN(nIndex, "説明")) + " · " + CROP_NAME_TR(STR_NOUMIN(nIndex, "作物")), 1, FARM_LOCATION_TR(STR_NOUMIN(nIndex, "畑のマップ")), INT_NOUMIN(nIndex, "マップID") == MAIN_MAP)
 NEXT
+HTML_PRINT "<era-close>"
 HTML_PRINT "<era-close>"
 
 @HOTPATCH_SETUP_DIALOGUE
@@ -326,12 +377,15 @@ CASE 3101 TO 3103
 		RETURN 0
 	FLAG:農民難易度 = nAction - 3100
 	FLAG:畑拡張 = FLAG:農民難易度
-CASE 4100 TO 4106
-	nIndex = nAction - 4100
-	FLAG:甲斐性無 = nIndex > 3 ? nIndex - 3 # nIndex
-	FLAG:LUSTMODE = nIndex > 3
+CASE 4130 TO 4132
+	FLAG:甲斐性無 = nAction == 4130 ? 0 # MAX(FLAG:甲斐性無, 1)
+	FLAG:LUSTMODE = nAction == 4132
 	SETBIT FLAG:1000, 3
 	SETBIT FLAG:1000, 4
+CASE 4141 TO 4143
+	SIF !FLAG:甲斐性無
+		RETURN 0
+	FLAG:甲斐性無 = nAction - 4140
 CASE 4110
 	FLAG:STABLEBYPASS = !FLAG:STABLEBYPASS
 CASE 4120

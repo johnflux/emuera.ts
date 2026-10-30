@@ -488,6 +488,12 @@ main:has(.screen.is-active .era-launch) { padding: 0; background: #000; }
 .era-setup-choice-name { font-weight: bold; }
 .era-setup-choice-description { color: #99adba; font-size: .85em; line-height: 1.4; white-space: pre-line; }
 .era-setup-choice-description:empty { display: none; }
+.era-setup :is(.era-setup-description, .era-setup-choice-description) strong { color: #e0edf3; -webkit-text-stroke: .25px currentColor; }
+.era-setup .line button.choice.era-setup-choice[aria-disabled="true"] { opacity: .45; }
+.era-setup-farm-summary { display: flow-root; min-height: 7em; }
+.era-setup-farm-summary > .line:has(.era-setup-landlord-face) { float: left; margin: 0 14px 8px 0; }
+.era-setup-farm-heading { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 16px; }
+.era-setup-farm-heading .era-setup-description { margin-left: auto; text-align: right; }
 .era-setup-setting { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid #ffffff0a; }
 .era-setup-stepper { display: inline-flex; flex: none; align-items: center; gap: 8px; }
 .era-setup-stepper > span { min-width: 4ch; text-align: center; }
