@@ -1,0 +1,171 @@
+@HOTPATCH_SETUP_CHARACTER_BODIES(nLastAction = 0)
+#DIM DYNAMIC nLastAction
+#DIMS DYNAMIC sChoices, 22
+#DIM DYNAMIC nIndex
+sChoices:1 '= "Individual Settings"
+sChoices:2 '= "Everyone Is A Virgin"
+sChoices:3 '= "Due To Their Long Lives, The Girls Should All Have Some Experience"
+sChoices:4 '= "Characters Should Be Virgins Unless They've Had Kids/Husbands"
+sChoices:5 '= "Everyone Is A Slut"
+sChoices:6 '= "Everyone Is A Loli"
+sChoices:7 '= "Everyone Is An Inchling With Animal Ears"
+sChoices:8 '= "Everyone Is A Futanari"
+sChoices:9 '= "Everyone Is A Slut Virgin"
+sChoices:10 '= "Everyone Is Clueless"
+sChoices:11 '= "Everyone Lactates"
+sChoices:12 '= "Everyone Has Huge Breasts"
+sChoices:13 '= "Everyone Has an Average Butt"
+sChoices:14 '= "Everyone Has a Huge Butt"
+sChoices:15 '= "Everyone Has a Mystifying Butt"
+sChoices:16 '= "Everyone Has a Very Weak Will"
+sChoices:17 '= "Everyone Is A Yandere"
+sChoices:18 '= "Pregnancy type options"
+sChoices:19 '= "Go to random options menu mk.1"
+sChoices:20 '= "Go to random options menu mk.2"
+sChoices:21 '= "Everyone Is Reset To Default"
+HTML_PRINT "<span class='era-launch-eyebrow'>Character Bodies</span>"
+IF INRANGE(nLastAction, 1, 21)
+	IF GROUPMATCH(nLastAction, 1, 18, 19, 20)
+		HTML_PRINT @"<div class='era-setup-description' role='status'>Returned from: %HTML_ESCAPE(sChoices:nLastAction)%.</div>"
+	ELSE
+		HTML_PRINT @"<div class='era-setup-description era-body-confirmation' role='status'>Applied: %HTML_ESCAPE(sChoices:nLastAction)%.</div>"
+	ENDIF
+ENDIF
+FOR nIndex, 1, 22
+	HTML_PRINT @"<div><button value='{45000 + nIndex}' class='era-setup-character-action'>%HTML_ESCAPE(sChoices:nIndex)%</button></div>"
+NEXT
+
+@HOTPATCH_SETUP_CHARACTER_BODY_ACTION(nAction)
+#DIM DYNAMIC nAction
+#DIM DYNAMIC nIndex
+SELECTCASE nAction
+CASE 1
+	CALL SET_VIRGINITY_MOD
+CASE 18
+	CALL PREGNANCY_TYPE_OPTIONS
+CASE 19
+	CALL CCREATE_RANDOMIZE()
+CASE 20
+	CALL CCREATE_RANDOMIZE2()
+CASEELSE
+	FOR nIndex, 1, CHARANUM
+		SELECTCASE nAction
+		CASE 2
+			CALL SET_VIRGIN(nIndex)
+		CASE 3
+			TALENT:nIndex:処女 = 0
+			SIF TALENT:nIndex:性別嗜好 == 1
+				TALENT:nIndex:性別嗜好 = 0
+			EXP:nIndex:Ｖ経験 = MAX(EXP:nIndex:Ｖ経験, 50)
+			ABL:nIndex:Ｖ感覚 = MAX(ABL:nIndex:Ｖ感覚, 2)
+			ABL:nIndex:腰 = MAX(ABL:nIndex:腰, 2)
+			EXP:nIndex:Ｖ性交経験 = MAX(EXP:nIndex:Ｖ経験, 50)
+			EXP:nIndex:Ｖ拡張経験 = MAX(EXP:nIndex:Ｖ拡張経験, 3)
+			EXP:nIndex:精液経験 = MAX(EXP:nIndex:精液経験, 10)
+		CASE 4
+			SIF !GROUPMATCH(nIndex, 33, 90, 98, 99, 112)
+				CALL SET_VIRGIN(nIndex)
+		CASE 5
+			CALL SET_YARIMAN(nIndex)
+		CASE 6
+			CALL SET_LOLI(nIndex)
+		CASE 7
+			TALENT:nIndex:体型 = -5
+			TALENT:nIndex:143 = 1
+		CASE 8
+			CALLF FUTAME(nIndex)
+		CASE 9
+			TALENT:nIndex:処女 = 1
+			SIF TALENT:nIndex:性別嗜好 == 1
+				TALENT:nIndex:性別嗜好 = 0
+			EXP:nIndex:Ｖ経験 = 0
+			ABL:nIndex:Ｖ感覚 = 0
+			ABL:nIndex:欲望 = 3
+			EXP:nIndex:Ｖ性交経験 = 0
+			EXP:nIndex:Ｖ拡張経験 = 0
+			EXP:nIndex:精液経験 = 0
+			TALENT:nIndex:ヤリマン = 1
+			TALENT:nIndex:貞操 = -1
+		CASE 10
+			CALL SET_VIRGIN(nIndex)
+			TALENT:nIndex:無知 = 1
+		CASE 11
+			SIF !IS_MALE(nIndex)
+				TALENT:nIndex:母乳体質 = 2
+		CASE 12
+			SIF !IS_MALE(nIndex)
+				TALENT:nIndex:バストサイズ = 2
+		CASE 13
+			TALENT:nIndex:ヒップサイズ = 0
+		CASE 14
+			TALENT:nIndex:ヒップサイズ = 2
+		CASE 15
+			TALENT:nIndex:ヒップサイズ = 4
+		CASE 16
+			TALENT:nIndex:催眠耐性 = -2
+		CASE 17
+			CALL SET_YANDERE_SUBTYPE(nIndex)
+		CASE 21
+			CALL RESET_CHARA(nIndex)
+		ENDSELECT
+	NEXT
+ENDSELECT
+
+@HOTPATCH_SETUP_PREDEFINED
+#DIM DYNAMIC nIndex
+#DIM DYNAMIC nChoice
+#DIM DYNAMIC nStart
+#DIM DYNAMIC nRace
+#DIMS DYNAMIC sRace
+#DIMS DYNAMIC sFace
+#DIMS DYNAMIC sSex
+#DIMS DYNAMIC sSize
+#DIMS DYNAMIC sBars
+nStart = LINECOUNT
+HTML_PRINT "<era-open class='era-dialog era-setup era-setup-predefined'>"
+HTML_PRINT "<div class='era-inventory-header'><div class='era-inventory-heading'><span class='era-inventory-title'>Choose a predefined character</span><button value='999' class='era-dialog-close' title='Cancel'>×</button></div><div class='era-predefined-filter'></div><div class='era-predefined-count'></div></div>"
+HTML_PRINT "<era-open class='era-inventory-body era-predefined-list'>"
+FOR nIndex, 1, CHARANUM
+	SIF !IS_NAMED(nIndex)
+		CONTINUE
+	CALL HOTPATCH_FACE(nIndex, 48)
+	sFace '= RESULTS
+	sRace '= ""
+	FOR nRace, 0, 200
+		SIF !HOTPATCH_SETUP_IS_RACE(nRace) || !TALENT:nIndex:nRace
+			CONTINUE
+		SIF sRace != ""
+			sRace += ", "
+		sRace += GET_TALENTNAME_TR(nRace, TALENT:nIndex:nRace, nIndex)
+	NEXT
+	sSex '= GET_TALENTNAME_TR(2, TALENT:nIndex:性別, nIndex)
+	SIF sSex == ""
+		sSex '= "Female"
+	sSize '= GET_TALENTNAME_TR(100, TALENT:nIndex:体型, nIndex)
+	SIF sSize == ""
+		sSize '= "Adult"
+	sBars '= HOTPATCH_BAR("Sta", BASE:nIndex:体力 - 500, MAXBASE:nIndex:体力 - 500, "era-sta", "Stamina")
+	sBars += HOTPATCH_BAR("Ene", BASE:nIndex:気力, MAXBASE:nIndex:気力, "era-ene", "Energy")
+	HTML_PRINT @"<button value='{nIndex}' class='era-predefined-character'><span class='era-predefined-face'>%sFace%</span><span class='era-predefined-info'><span class='era-predefined-name'>%HTML_ESCAPE(NAME:nIndex)%</span><span class='era-predefined-summary'>%HTML_ESCAPE(sSex)% · %HTML_ESCAPE(sRace)% · %HTML_ESCAPE(sSize)%</span><span class='era-bars era-predefined-bars'>%sBars%</span></span></button>"
+NEXT
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-close>"
+DO
+	INPUT
+	nChoice = RESULT
+	SIF nChoice == 999
+		RETURN 0
+	SIF nChoice > 0 && nChoice < CHARANUM && IS_NAMED(nChoice)
+		BREAK
+LOOP 1
+CLEARLINE LINECOUNT - nStart
+HTML_PRINT "<era-open class='era-dialog era-setup era-setup-editor'>"
+HTML_PRINT "<div class='era-inventory-header'><span class='era-inventory-title'>Choose a predefined character</span></div>"
+HTML_PRINT "<era-open class='era-inventory-body'>"
+SIF FLAG:なりきり
+	CFLAG:(FLAG:なりきり):出禁 = 0
+CALL NEWGAME_MAKE_NARIKIRI(nChoice)
+nChoice = RESULT
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-close>"
+RETURN nChoice

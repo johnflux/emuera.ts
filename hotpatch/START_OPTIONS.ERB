@@ -76,7 +76,7 @@ FOR nIndex, 0, 200
 NEXT
 SIF sState != ""
 	sState += " · "
-sAge '= GET_TALENTNAME_TR(GETNUM(TALENT, "年齢"), TALENT:MASTER:年齢, MASTER)
+sAge '= HOTPATCH_SETUP_BODY_VALUE(100, TALENT:MASTER:体型)
 SIF sAge == ""
 	sAge '= "Adult"
 HTML_PRINT @"<div class='era-setup-description'>%HTML_ESCAPE(sState)%%HTML_ESCAPE(HOTPATCH_SETUP_BODY_VALUE(2, TALENT:MASTER:性別))% · %HTML_ESCAPE(sAge)%</div>"
@@ -179,7 +179,7 @@ SIF nIndex == 2 && nValue == 1
 SIF nIndex == 17 && nValue == 0
 	RETURNF "Adult"
 SIF nIndex == 100 && nValue == 0
-	RETURNF "Average"
+	RETURNF "Adult"
 SIF nIndex == 105 && nValue == 0
 	RETURNF "Average Breasts"
 SIF GROUPMATCH(nIndex, 54, 143) && nValue == 0
@@ -231,16 +231,7 @@ FOR nIndex, 0, 200
 		ELSEIF nIndex == 143
 			sDescription '= nValue == 0 ? "" # "Can go into heat; dislikes washing; prefers Doggy Style; matching Fortune boosts Favor/Trust."
 		ELSEIF nIndex == 17
-			SELECTCASE nValue
-			CASE -1
-				sDescription '= "Physically a child."
-			CASE 0
-				sDescription '= "Physically a young adult."
-			CASE 1
-				sDescription '= "Physically middle-aged."
-			CASE 2
-				sDescription '= "Physically elderly."
-			ENDSELECT
+			sDescription '= ""
 		ELSEIF nIndex == 100
 			SELECTCASE nValue
 			CASE -5

@@ -536,6 +536,31 @@ document.addEventListener("input", (event) => {
  * Hotpatch extension: era-dialog boxes use the top layer while their screen is active, without changing line counts.
  * Escape or a click outside the panel presses its .era-dialog-close button.
  */
+function syncPredefinedCharacters(dialog) {
+  const host = dialog.querySelector(".era-predefined-filter");
+  if (!host || host.querySelector("input")) return;
+  const field = document.createElement("input");
+  field.type = "search";
+  field.className = "era-inventory-search";
+  field.placeholder = "Search characters...";
+  field.setAttribute("aria-label", "Search predefined characters");
+  host.append(field);
+  const filter = () => {
+    const query = field.value.trim().toLowerCase();
+    const items = [...dialog.querySelectorAll(".era-predefined-character")];
+    let visible = 0;
+    for (const item of items) {
+      const matches = item.textContent.toLowerCase().includes(query);
+      item.closest(".line").hidden = !matches;
+      if (matches) visible++;
+    }
+    const count = dialog.querySelector(".era-predefined-count");
+    count.setAttribute("role", "status");
+    count.textContent = query ? `${visible} of ${items.length} characters` : `${items.length} characters`;
+  };
+  field.addEventListener("input", filter);
+  filter();
+}
 function syncPlayerNames(dialog) {
   for (const [selector, label] of [[".era-setup-name-field", "Player name"], [".era-setup-nickname-field", "Player nickname"]]) {
     const host = dialog.querySelector(selector);
@@ -620,6 +645,7 @@ function syncDialogs() {
     const open = !!dialog.closest(".screen.is-active");
     if (open && dialog.classList.contains("era-inventory")) syncInventory(dialog);
     if (open) {
+      syncPredefinedCharacters(dialog);
       syncPlayerNames(dialog);
       syncSetupNumbers(dialog);
     }

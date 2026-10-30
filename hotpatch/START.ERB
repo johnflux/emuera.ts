@@ -21,7 +21,7 @@ DO
 	[IF_DEBUG]
 	HTML_PRINT "<div class='era-launch-debug'><button value='99'>Dev Quicktest</button><button value='3'>Quicktest settings</button></div>"
 	[ENDIF]
-	HTML_PRINT @"<div class='era-launch-footer'>%HTML_ESCAPE(GAMEBASE_YEAR)% · AnonTW build forked from PedyTW<span class='era-tone-red'>%sError%</span></div>"
+	HTML_PRINT @"<div class='era-launch-footer'>%HTML_ESCAPE(GAMEBASE_YEAR)% · AnonTW build forked from PedyTW, GUI-ified<span class='era-tone-red'>%sError%</span></div>"
 	HTML_PRINT "<era-close>"
 	INPUT
 	sError '= ""
@@ -167,6 +167,7 @@ ANIMATERECOLOREDMAPS = 1000
 #DIM DYNAMIC nPlayerPage = 4
 #DIM DYNAMIC nDefaultClothes = 1
 #DIM DYNAMIC nAction
+#DIM DYNAMIC nLastBodyAction
 #DIMS DYNAMIC sError
 IF !ゲーム開始処理中
 	CALL HOTPATCH_ORIGINAL_NEWGAME_OPTION
@@ -204,7 +205,7 @@ DO
 	CASE 5
 		CALL HOTPATCH_SETUP_YANDERE
 	CASE 6
-		HTML_PRINT "<div class='era-setup-card'><span class='era-launch-eyebrow'>Character Bodies</span><button value='26' class='era-chip-button'>Character body editor</button></div>"
+		CALL HOTPATCH_SETUP_CHARACTER_BODIES(nLastBodyAction)
 	ENDSELECT
 	HTML_PRINT "<era-close>"
 	HTML_PRINT @"<div class='era-inventory-footer'><span class='era-tone-red'>%sError%</span><button value='100' class='era-launch-primary'>Start game</button></div>"
@@ -270,7 +271,27 @@ DO
 				sError '= "Number outside the allowed range."
 			ENDIF
 		ENDIF
-	CASE 10, 11, 20, 26, 31, 32, 5000, 5001, 9000 TO 9109
+	CASE 11
+		CLEARLINE LINECOUNT - nStart
+		CALL HOTPATCH_SETUP_PREDEFINED
+		IF RESULT
+			FLAG:ゲームモード = 1
+			nDefaultClothes = 1
+			CALL MASTER_CLOTHES_INIT
+			CALL HOTPATCH_CHARACTER_HOME
+		ENDIF
+	CASE 26
+		nTab = 6
+	CASE 45001 TO 45021
+		CLEARLINE LINECOUNT - nStart
+		HTML_PRINT "<era-open class='era-dialog era-setup era-setup-editor'>"
+		HTML_PRINT "<div class='era-inventory-header'><span class='era-inventory-title'>Character Bodies</span></div>"
+		HTML_PRINT "<era-open class='era-inventory-body'>"
+		CALL HOTPATCH_SETUP_CHARACTER_BODY_ACTION(nAction - 45000)
+		nLastBodyAction = nAction - 45000
+		HTML_PRINT "<era-close>"
+		HTML_PRINT "<era-close>"
+	CASE 10, 20, 31, 32, 5000, 5001, 9000 TO 9109
 		CLEARLINE LINECOUNT - nStart
 		HTML_PRINT "<era-open class='era-dialog era-setup era-setup-editor'>"
 		HTML_PRINT "<div class='era-inventory-header'><span class='era-inventory-title'>Game settings</span><div class='era-sub'>Finish editing to return to new-game setup.</div></div>"
@@ -283,21 +304,11 @@ DO
 			CALL CHARA_VALIDATE(MASTER)
 		CASE 10
 			CALL CUSTOM_TERMINAL(MASTER)
-		CASE 11
-			CALL NEWGAME_MAKE_NARIKIRI
-			IF RESULT
-				FLAG:ゲームモード = 1
-				nDefaultClothes = 1
-				CALL MASTER_CLOTHES_INIT
-				CALL HOTPATCH_CHARACTER_HOME
-			ENDIF
 		CASE 20
 			; The original home picker owns its initialization and all move-in side effects.
 			CALL HOTPATCH_ORIGINAL_SET_MAINHOME
 			SIF MAIN_MAP != 3
 				CALL SET_QUEST_FLAG(LSScarletAlias, QLSScarletActive, 0)
-		CASE 26
-			CALL BODY_SET
 		CASE 31
 			CALL YANDERE_SET_MENU
 		CASE 32

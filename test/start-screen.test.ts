@@ -26,6 +26,36 @@ test("eraTW launch dialogs accept defaults, configure optionally and cancel safe
 }, async () => {
   const game = await loadGame();
   await applyHotpatches(game);
+  indexScript(game, `@TEST_FIXED_RESOURCE_BARS
+HTML_PRINT HOTPATCH_BAR("Sta", 800, 1600, "era-sta", "Stamina", 1)
+HTML_PRINT HOTPATCH_BAR("Ene", 2400, 2800, "era-ene", "Energy", 1)
+HTML_PRINT HOTPATCH_BAR("Drnk", 20, 80, "era-drnk", "Drunkenness")
+HTML_PRINT HOTPATCH_BAR("Vig", 600, 800, "era-vig", "Vigor")
+HTML_PRINT HOTPATCH_BAR("Comp", 1200, 1500, "era-composure", "Composure")
+INPUT
+QUIT`, "TEST_FIXED_RESOURCE_BARS.ERB");
+  const barMarkup = markup(new Runtime(game, GAME_INSTRUCTION_LIMIT).start("TEST_FIXED_RESOURCE_BARS"));
+  assert.match(barMarkup, /value='1600' max='2000'/);
+  assert.match(barMarkup, /value='800' max='2000'/);
+  assert.match(barMarkup, /era-bar-overflow.*value='800' max='2000'.*value='400' max='2000'/);
+  assert.match(barMarkup, /value='20' max='80'/, "other resource bars keep their native scale");
+  assert.match(barMarkup, /value='800' max='1000'.*value='600' max='1000'/);
+  assert.match(barMarkup, /era-bar-overflow.*value='500' max='1000'.*value='200' max='1000'/);
+  indexScript(game, `@TEST_BODY_BULK_FEEDBACK
+CALL MAKE_TALENT_MAP
+CALL Name_Array_Set
+CALL ADDCHARA_INIT(0)
+CALL ADDCHARA_INIT(1)
+TALENT:1:無知 = 0
+CALL HOTPATCH_SETUP_CHARACTER_BODY_ACTION(10)
+PRINTFORML clueless={TALENT:1:無知};virgin={TALENT:1:処女}
+CALL HOTPATCH_SETUP_CHARACTER_BODY_ACTION(15)
+PRINTFORML butt={TALENT:1:ヒップサイズ}
+INPUT
+QUIT`, "TEST_BODY_BULK_FEEDBACK.ERB");
+  const bulkValues = markup(new Runtime(game, GAME_INSTRUCTION_LIMIT).start("TEST_BODY_BULK_FEEDBACK"));
+  assert.match(bulkValues, /clueless=1;virgin=1/);
+  assert.match(bulkValues, /butt=4/);
   const saves = new MemorySaveStore();
   const runtime = new Runtime(game, GAME_INSTRUCTION_LIMIT, { columns: 180, saves });
   const title = runtime.start();
@@ -174,7 +204,12 @@ test("eraTW launch dialogs accept defaults, configure optionally and cancel safe
   assert.doesNotMatch(characterOptions, /Character Bodies|value='26'/);
   const otherCharacters = markup(runtime.input("706"));
   assert.match(otherCharacters, /value='706' class='era-sheet-subpage era-current'>Characters/);
-  assert.match(otherCharacters, /Character Bodies[\s\S]*value='26'/);
+  assert.match(otherCharacters, /Character Bodies[\s\S]*value='45001'[^>]*>Individual Settings/);
+  assert.doesNotMatch(otherCharacters, /Idividual|\[0\] Finished|value='26'/);
+  assert.match(markup(runtime.input("45013")), /Character Bodies[\s\S]*Individual Settings/,
+    "bulk body settings return directly to the Characters tab");
+  assert.equal((otherCharacters.match(/class='era-setup-character-action'/g) ?? []).length, 21);
+  assert.match(markup(runtime.input("45010")), /Applied: Everyone Is Clueless\./);
   assert.doesNotMatch(otherCharacters, /Customize character|Penis Size/);
   markup(runtime.input("700"));
   const bodyOptions = markup(runtime.input("715"));
@@ -198,7 +233,7 @@ test("eraTW launch dialogs accept defaults, configure optionally and cancel safe
     [-5, "Inchling", "Tiny enough to fit in a hand. More Pain; less Desire from most commands, less C/V/A/B/M Pleasure and Lubrication. Can be used as an onahole."],
     [-2, "Child-Sized", "A small frame, about the size of a child."],
     [-1, "Petite", "Shorter and smaller-framed than average."],
-    [0, "Average", "An ordinary adult height and build."],
+    [0, "Adult", "An ordinary adult height and build."],
     [1, "Tall", "Taller than average."],
     [2, "Huge", "An unusually large frame, towering over most people."],
     [5, "Giant", "A gigantic body, far beyond human proportions."],
@@ -237,10 +272,10 @@ test("eraTW launch dialogs accept defaults, configure optionally and cancel safe
   assert.match(bodyOptions, /value='101709'[^>]*>.*Child/);
   assert.match(bodyOptions, /value='101711'[^>]*>.*Middle Age/);
   assert.match(bodyOptions, /value='101712'[^>]*>.*Elder/);
-  for (const description of [
-    "Physically a child.", "Physically a young adult.",
-    "Physically middle-aged.", "Physically elderly.",
-  ]) assert.ok(bodyOptions.includes(description));
+  for (const action of [101709, 101710, 101711, 101712]) {
+    assert.match(bodyOptions, new RegExp(`value='${action}'[^>]*>.*<span class='era-setup-choice-description'></span>`));
+  }
+  assert.doesNotMatch(bodyOptions, /Physically /);
   assert.doesNotMatch(bodyOptions, /Shows the physical age of the character/);
   assert.doesNotMatch(characterOptions, /Penis Size/);
   assert.match(bodyOptions, /era-launch-eyebrow'>Penis Size/);
@@ -302,7 +337,7 @@ test("eraTW launch dialogs accept defaults, configure optionally and cancel safe
   assert.equal(new Set(buttSizes).size, 8, "all eight native butt sizes have distinct labels");
   assert.ok(buttSizes.every((size) => size && size !== "-"), "no unnamed butt sizes");
   const middleAge = markup(runtime.input("101711"));
-  assert.match(middleAge, /Human · Male · Middle Age/);
+  assert.match(middleAge, /Human · Male · Adult/);
   assert.match(middleAge, /value='101711' class='era-setup-choice era-current'/);
   markup(runtime.input("101710"));
   const abilities = markup(runtime.input("712"));
@@ -364,7 +399,18 @@ test("eraTW launch dialogs accept defaults, configure optionally and cancel safe
   const configured = new Runtime(game, GAME_INSTRUCTION_LIMIT, { columns: 180 });
   configured.start();
   configured.input("0");
-  assert.match(markup(configured.input("11")), /Select a character to play as/);
+  assert.match(markup(configured.input("11")), /era-setup-predefined/);
+  assert.match(markup(configured.input("999")), /era-setup-player/);
+  const predefinedList = markup(configured.input("11"));
+  assert.match(predefinedList, /era-setup-predefined/);
+  assert.match(predefinedList, /era-predefined-filter/);
+  assert.match(predefinedList, /era-predefined-face/);
+  assert.match(predefinedList, /Female · Youkai · /);
+  assert.doesNotMatch(predefinedList, / · Adult · /);
+  assert.doesNotMatch(predefinedList, / · TSP |Yukari · Youkai/);
+  assert.match(predefinedList, /era-bars era-predefined-bars/);
+  assert.ok((predefinedList.match(/class='era-predefined-character'/g) ?? []).length > 100);
+  assert.doesNotMatch(predefinedList, /Applicable for|Next page/);
   assert.match(markup(settle(configured, configured.input("26"))), /Raise it to 2000/);
   assert.match(markup(configured.input("0")), /Be a virgin/);
   assert.match(markup(settle(configured, configured.input("0"))), /era-setup-nickname-field'>Yukari/);

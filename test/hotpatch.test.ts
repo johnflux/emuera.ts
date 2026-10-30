@@ -422,9 +422,14 @@ WAIT`, "<info-size-test>");
     const html = snapshot.output.flatMap((item) => item.type === "html" ? [item.text] : []).join("");
     const sizes = [...html.matchAll(/<span class='era-size(?: era-unusual)?'[^>]*>[^<]+<\/span>/g)].map((match) => match[0]);
     assert.equal(sizes.length, 2, "player and target both show body size");
-    assert.equal(sizes[0], sizes[1], "both panels use identical size markup");
+    assert.equal(sizes[0]!.includes("era-unusual"), size !== 0);
     assert.equal(sizes[1]!.includes("era-unusual"), size !== 0);
-    if (!size) assert.match(sizes[1]!, />Normal size</);
+    assert.match(sizes[0]!, /title='Body size; a mallet can change it'/, "only player size has the mallet tooltip");
+    assert.doesNotMatch(sizes[1]!, /title=/, "character info size has no tooltip");
+    if (!size) {
+      assert.match(sizes[0]!, />Adult</);
+      assert.match(sizes[1]!, />Adult</);
+    }
     assert.match(html, /class='era-race'[^>]*>[^<]+<\/span><span class='era-sep'> · <\/span>/);
     assert.match(html, /<div class='era-character-kind'><span class='era-race'[^>]*>[^<]+<\/span><span class='era-sep'> · <\/span><span class='era-size(?: era-unusual)?'[^>]*>[^<]+<\/span><\/div>/,
       "race and size share one HTML output row");

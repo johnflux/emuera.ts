@@ -594,6 +594,17 @@ main:has(.screen.is-active .era-launch) { padding: 0; background: #000; }
 .era-setup-description.era-setup-indent { margin-left: 8px; }
 .era-dialog:is(.era-setup, .era-load) .line .era-inventory-footer .era-chip-button { padding: 5px 12px; border-radius: 4px; }
 .era-setup-editor .era-inventory-body { white-space: normal; }
+.era-setup .line button.choice.era-setup-character-action { display: block; margin: 0; padding: 2px 8px; border: 0; background: transparent; color: #99adba; text-align: left; }
+.era-setup-description.era-body-confirmation { color: #69c9b5; }
+.era-setup .line button.choice.era-predefined-character { display: flex; align-items: center; gap: 12px; width: 100%; margin: 0; padding: 2px 8px; border: 0; background: transparent; color: #99adba; text-align: left; white-space: normal; }
+.era-setup .line button.choice.era-predefined-character:enabled:hover { background: #8ddaff0c; }
+.era-predefined-face { display: grid; place-items: center; flex: 0 0 48px; height: 48px; overflow: hidden; }
+.era-predefined-face .sprite { height: 48px; }
+.era-predefined-info { display: flex; flex-direction: column; min-width: 0; }
+.era-predefined-name { color: #d7e5ed; }
+.era-predefined-summary, .era-predefined-count { font-size: .85em; color: #99adba; }
+.era-predefined-bars { display: flex; flex-wrap: wrap; gap: 0 16px; margin: 0; font-size: .85em; }
+.era-predefined-bars .era-bar { width: 25ch; grid-template-columns: 3ch minmax(0, 1fr) 5ch; }
 .era-save-list > .line { min-width: 0; white-space: normal; }
 .line button.choice.era-save-slot, .era-save-slot { display: flex; align-items: center; gap: 12px; width: 100%; margin: 0 0 4px; padding: 7px 10px; border: 1px solid #294656; border-radius: 4px; background: #10212b; color: #bdced8; text-align: left; white-space: normal; overflow-wrap: anywhere; }
 .era-load .era-save-list .line .era-save-slot { min-height: calc(1lh + 8px); margin-bottom: 2px; padding: 3px 10px; }
@@ -816,6 +827,12 @@ main:has(.screen.is-active .era-launch) { padding: 0; background: #000; }
 .era-bars { margin: 4px 0; }
 .era-bar { display: grid; grid-template-columns: 5ch minmax(6ch, 1fr) 6ch; column-gap: 1ch; align-items: center; }
 .era-bar .era-meter { width: 100%; height: .6em; background: #1c2228; }
+.era-bar-tracks { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.era-bar-track { display: block; position: relative; height: .6em; background: repeating-linear-gradient(135deg, #48515a 0 1px, #20282e 1px 4px); }
+.era-bar .era-bar-track .era-meter { display: block; position: absolute; inset: 0; height: 100%; background: transparent; }
+.era-bar-capacity { position: absolute; inset: 0; }
+.era-bar .era-bar-capacity .era-meter > span { background: #1c2228; }
+.era-bar-overflow { height: .2em; background: transparent; }
 .era-bar-label { color: #8a949c; }
 .era-bar-value { text-align: right; }
 .era-sta .era-meter > span { background: #40c060; }
@@ -853,10 +870,10 @@ main:has(.screen.is-active .era-launch) { padding: 0; background: #000; }
 .era-main .era-kind-chores .print-cell { border-color: #397756; background: linear-gradient(#102b23, #0a1c17); }
 .era-main .era-kind-petting .print-cell { border-color: #70415b; background: linear-gradient(#2b1d2b, #1d1420); }
 .era-main .era-kind-dialogue .print-cell { border-color: #3c6189; background: linear-gradient(#162b40, #0d1d30); }
-.era-main .era-kind-vaginal .print-cell { border-color: #955271; background: linear-gradient(#351e2c, #23141f); }
+.era-main .era-kind-vaginal .print-cell { border-color: #e9a1c5; background: linear-gradient(#432c3c, #30202c); }
 .era-main .era-kind-anal .print-cell { border-color: #947052; background: linear-gradient(#33291f, #241c16); }
 .era-main .era-kind-sm .print-cell { border-color: #a44f52; background: linear-gradient(#381c21, #251316); }
-.era-main .era-kind-service .print-cell { border-color: #998447; background: linear-gradient(#332e18, #232011); }
+.era-main .era-kind-service .print-cell { border-color: #eee18d; background: linear-gradient(#36351f, #252518); }
 .era-main .line button.choice:is(.era-toggle, .era-chip-button, .era-star) { border-radius: 4px; padding: 2px 10px; }
 .era-main-menu .era-actions-group .print-cell { display: block; flex: 1 1 100%; }
 .era-main-menu .era-actions-group .print-cell:nth-child(-n+2) { flex-basis: calc(50% - 9px); }
@@ -874,14 +891,14 @@ main:has(.screen.is-active .era-launch) { padding: 0; background: #000; }
 .line button.choice.era-toggle.era-kind-petting.era-on { border-color: #c0609a; background: #3a1c30; color: #ffd0ec; }
 .line button.choice.era-toggle.era-kind-chores.era-on { border-color: #4fa064; background: #1c3424; color: #d0ffd8; }
 .line button.choice.era-toggle.era-kind-dialogue.era-on { border-color: #5a86c8; background: #1c2a44; color: #d6e6ff; }
-.line button.choice.era-toggle.era-kind-vaginal { border-color: #955271; color: #cc89aa; }
+.line button.choice.era-toggle.era-kind-vaginal { border-color: #e9a1c5; color: #f5bddd; }
 .line button.choice.era-toggle.era-kind-anal { border-color: #947052; color: #c5a180; }
 .line button.choice.era-toggle.era-kind-sm { border-color: #a44f52; color: #d27f84; }
-.line button.choice.era-toggle.era-kind-service { border-color: #998447; color: #c8b56e; }
-.line button.choice.era-toggle.era-kind-vaginal.era-on { border-color: #e48bb8; background: #432238; color: #ffd1e7; }
+.line button.choice.era-toggle.era-kind-service { border-color: #eee18d; color: #fff3a6; }
+.line button.choice.era-toggle.era-kind-vaginal.era-on { border-color: #ffb8dc; background: #ffd6eb; color: #54253e; }
 .line button.choice.era-toggle.era-kind-anal.era-on { border-color: #cda47d; background: #3b2c20; color: #f0d2b2; }
 .line button.choice.era-toggle.era-kind-sm.era-on { border-color: #e87980; background: #442026; color: #ffc1c5; }
-.line button.choice.era-toggle.era-kind-service.era-on { border-color: #d6ba62; background: #3d351a; color: #ffeba3; }
+.line button.choice.era-toggle.era-kind-service.era-on { border-color: #fff09a; background: #fff6b8; color: #45421b; }
 /* The look text (clothes and what is happening) under the target's meters: no image toggles, no spacer lines. */
 .era-look { margin-top: 8px; }
 /* The room's chatter (others' talk, the radio, room descriptions) under the place title; gone when there is none. */

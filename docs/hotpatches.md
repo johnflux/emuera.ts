@@ -29,10 +29,12 @@ The eraTW main-screen character card uses adjoining Character Info and Interacti
 History tabs; history can expand into a read-only dialog showing the full timeline.
 Serve Alcohol (332) is omitted when the inventory has no selectable alcohol,
 using the same valid-drink list and `IS_ALC` rule as the game's alcohol menu.
-Action filters and matching actions share category tints: vaginal pink, anal
-light brown, SM red, service/reverse service yellow, petting muted pink,
+Action filters and matching actions share category tints: vaginal light pink, anal
+light brown, SM red, service/reverse service light yellow, petting muted pink,
 housekeeping green and dialogue blue. Overlapping command tags prefer vaginal
 or anal, then SM, then service, before the everyday categories.
+Enabled vaginal and service toggles use pastel fills with dark text to keep them
+distinct from the brown and red toggles, including while time is stopped.
 The stats panel keeps its existing width: meter tracks flex around the actual
 numeric values and projected gem gains rather than reserving fixed-width slots.
 
@@ -109,6 +111,23 @@ live placeholder; saving an empty nickname uses the current name.
 Predefined players have a Custom Character button that resets the player to
 custom defaults, restores the original character's availability, and retains
 the selected residence and other world settings.
+Characters embeds the body editor's main menu directly, correcting Individual
+Settings and omitting the native Finished entry. Bulk choices apply immediately;
+individual, pregnancy and randomization submenus retain their native editors.
+After a bulk action, a visible confirmation names the applied operation.
+These are immediate actions rather than on/off toggles; the confirmation
+records the last operation, not a persistent selected preset.
+The predefined-character picker is a scrollable, unpaged portrait list with
+one name, sex, race, figure and STA/ENE bars (no age or TSP). A browser-generated search field
+filters the list locally. Cancel returns to setup without changing the player;
+selection retains native character-copy and follow-up customization behavior.
+Shared STA/ENE bars use a fixed 2000-point scale, with unavailable capacity
+greyed out. Capacity above 2000 appears on a second thin bar; that overflow
+bar uses another 2000-point scale, expanding only for capacity beyond 4000.
+Numeric values and low-resource warnings still use the character's actual
+current and maximum values. Vigor and Composure use the same capacity and overflow treatment on a
+1000-point scale. Composure retains its low-state warning and LimitBreak label.
+Other resource bars retain their native scales.
 Setup cards have no inner padding. The footer contains Start Game; the header
 close button still returns to the title.
 All setup tabs use title-case headings, transparent borderless sections, compact
@@ -141,9 +160,10 @@ Body opens by default. On desktop, all Body sections share a content-sized
 option-name column so descriptions align across sections. Clothing sizes its
 own name column to its contents.
 Age is selected in Body using the native Child, Adult, Middle Age and Elder
-categories, rather than cycling it in Appearance & traits.
+categories, rather than cycling it in Appearance & traits. Age choices show
+labels only, without descriptions.
 The tab is now named Traits. Figure, Cat Tongue and Animal Ears use individual
-choices in Body. Figure retains all seven native sizes, including Average,
+choices in Body. Figure retains all seven native sizes, with its normal size labeled Adult,
 with a short, size-specific description for each. Shared Figure help retains
 the native Forbidden Knowledge restriction and insertion difficulty from size
 differences; the Inchling row also explains its native parameter effects and
@@ -162,7 +182,7 @@ descriptions. Butt sizes have labels only, without repetitive help text.
 All eight native butt-size states
 have visible names; the native cycle and saved values are unchanged.
 Race changes retain the native New Game+ restriction, explained in Body.
-The player header includes race, sex and age category (Adult for the normal state).
+The player header includes race, sex and figure (Adult for the normal size).
 Native sex cycling is Female, Male,
 Futanari; it does not offer a sexless player.
 Abilities and experience use tightly spaced numeric steppers with fixed
@@ -325,7 +345,8 @@ portrait and the existing character facts, meters and clothing; below 760px it
 sits under the scene. The **Character Info** heading is not a nonfunctional tab.
 The portrait and summary use a top-aligned two-column header. Body size appears
 beside the selected character's race, using the same labels and unusual-size
-highlight as the player panel. Favor/Trust and
+highlight as the player panel. An unlabeled size is shown as "Adult"; only the
+player panel's size has the mallet tooltip. Favor/Trust and
 Children/Fertility form paired rows, with the meters and clothing below.
 When no relationship, Hate Mark or mood tags, sleep or anger states need the
 space, the existing `nameArray[NO][na_Title]` title appears as a short blurb.
