@@ -12,6 +12,8 @@ hotpatch only changes presentation.
   same name, including every overload or event variant of it.
 - New helper functions must be named `HOTPATCH_*`. Any other name that the game
   does not define is an error, so a typo cannot silently create a dead function.
+- Replaced routines remain callable as `HOTPATCH_ORIGINAL_<NAME>`, allowing a
+  presentation wrapper to reuse the game's editors and initialization logic.
 - Files are loaded in sorted path order. The server logs each replaced function
   at startup (`Hotpatched @…`).
 - Use `#DIM DYNAMIC` / `#DIMS DYNAMIC` for locals. Plain `#DIM` locals are
@@ -33,6 +35,40 @@ housekeeping green and dialogue blue. Overlapping command tags prefer vaginal
 or anal, then SM, then service, before the everyday categories.
 The stats panel keeps its existing width: meter tracks flex around the actual
 numeric values and projected gem gains rather than reserving fixed-width slots.
+
+The eraTW launch screen retains the original TW title artwork with responsive
+sizing and no image filters or glow, alongside matching in-game panels. Setup fits
+its content rather than reserving a full-height dialog; editors and save lists
+remain scrollable within the viewport.
+The title's New Game and Load Game controls use the supplied WebP artwork in
+[`web/title/`](../web/title/), retaining text labels for accessible button names.
+New Game sits to the left, with Load Game beneath it offset to the right.
+The supplied hover images are preloaded as pseudo-element backgrounds and used
+for both pointer hover and keyboard focus. Each has a separate proportional
+offset/scale in CSS to align its lettering with the original despite different
+crop sizes; button hit areas and layout do not change between states.
+The artwork fills a borderless, black, full-window title screen, with version information at the
+top-right and New Game / Load Game stacked underneath; the redundant text title
+is omitted. Version and footer text are anchored outside the central composition;
+artwork and buttons scale together against both viewport dimensions as browser
+zoom changes. Only the active title screen suppresses overflow.
+Interpreter header and text input are hidden only while this title
+screen is active; dialogs and gameplay retain their normal controls.
+Load Game opens a wider, content-sized slot picker (including autosave), with
+compact full-width rows to avoid wrapping and fit a page without scrolling on
+desktop. Empty and occupied slots have matching padding, margins and single-line
+heights. Descriptions can still wrap and increase a row's height when needed;
+scrolling remains available when the viewport cannot fit all rows. It
+cannot accidentally switch into saving over an existing game from the title.
+New Game initializes the standard custom character and Hakurei Shrine residence,
+then opens a Character / World / Dialogue setup dialog. Start Game accepts these
+defaults; the original character, residence, bonus and world-option editors
+remain available on demand inside a dialog. Dialogue selection is optional,
+and still uses the game's own reset/update routines. It can also be changed
+later through the game's character update settings. No save layout or variable
+reservations are changed. Other games keep their own start flows.
+Setup is prepared before `BEGIN FIRST`, so Cancel does not run first-start
+events or create an autosave; `NEWGAME` completes initialization after acceptance.
 
 ## HTML extensions
 

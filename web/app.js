@@ -1047,7 +1047,7 @@ async function pictureCopy(picture) {
  * Emuera draws an image from the top of its line (offset by ypos) without changing the line's height; scripts print
  * blank lines to make room. So the holder only takes the image's width and the picture overflows downwards.
  */
-async function image(source, token, suppliedSprite, scale = imageScale(), suppliedHover) {
+async function image(source, token, suppliedSprite, scale = imageScale(), suppliedHover, responsive = false) {
   const holder = document.createElement("span");
   holder.className = "sprite";
   const name = source.getAttribute("src");
@@ -1099,13 +1099,21 @@ async function image(source, token, suppliedSprite, scale = imageScale(), suppli
       layer.style.top = `${-sprite.y * targetHeight / height}px`;
       clip.append(layer);
     }
+    if (responsive) {
+      Object.assign(clip.style, { display: "block", position: "relative", top: "0", width: "100%", height: "100%" });
+      Object.assign(img.style, {
+        width: `${naturalWidth / width * 100}%`, height: `${naturalHeight / height * 100}%`,
+        left: `${-sprite.x / width * 100}%`, top: `${-sprite.y / height * 100}%`,
+      });
+    }
     return { clip, layers, targetWidth, delays: sprite.frames?.map((frame) => frame.delay) ?? [] };
   };
   const draw = async () => {
     try {
       const [main, over] = await Promise.all([clipFor(name, suppliedSprite), hover ? clipFor(hover, suppliedHover) : undefined]);
       if (!main || token !== generation) return;
-      holder.style.width = `${main.targetWidth}px`;
+      holder.style.width = responsive ? "100%" : `${main.targetWidth}px`;
+      if (responsive) holder.style.height = "100%";
       holder.append(main.clip);
       animate(name, holder, main.layers, main.delays, token);
       if (over) {
@@ -1705,10 +1713,15 @@ async function renderSnapshot(snapshot, advanceScreen) {
       target.dataset.logicalLines = String(output.lines);
       target.dataset.lineHeight = String(lineHeight);
       target.style.height = `${output.lines * lineHeight}px`;
+      const launchArtwork = !!target.closest(".era-launch-art");
+      if (launchArtwork) {
+        target.style.height = "auto";
+        target.style.aspectRatio = `${output.sprite.width} / ${output.sprite.height}`;
+      }
       const source = document.createElement("span");
       source.setAttribute("src", "TW title");
       source.setAttribute("height", `${output.lines * lineHeight}px`);
-      target.append(await image(source, generation, output.sprite, 1));
+      target.append(await image(source, generation, output.sprite, 1, undefined, launchArtwork));
       currentLine = null;
       continue;
     }

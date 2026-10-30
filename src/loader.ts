@@ -382,7 +382,11 @@ export async function applyHotpatches(game: Game, dir = HOTPATCH_ROOT): Promise<
     const label = routines[0]!.label ?? name;
     if (!game.routines.has(name) && !/^HOTPATCH_/i.test(name))
       throw new EraError(`Hotpatch replaces @${label}, which the game does not define (patch helpers are named HOTPATCH_*)`, routines[0]!);
-    if (game.routines.has(name)) replaced.push(label);
+    if (game.routines.has(name)) {
+      replaced.push(label);
+      const original = `HOTPATCH_ORIGINAL_${name}`;
+      if (!game.routines.has(original)) game.routines.set(original, game.routines.get(name)!);
+    }
     game.routines.set(name, routines);
   }
   return replaced;

@@ -23,6 +23,10 @@ test("hotpatches replace game routines and may add HOTPATCH_ helpers", async () 
   indexScript(game, "@SYSTEM_TITLE\nCALL SHOW\nQUIT\n@SHOW\nPRINTL original", "GAME.ERB");
   await withPatchDir({ "A.ERB": "@SHOW\nCALL HOTPATCH_HELPER\n@HOTPATCH_HELPER\nPRINTL patched" }, async (dir) => {
     assert.deepEqual(await applyHotpatches(game, dir), ["SHOW"]);
+    assert.equal(game.routines.get("HOTPATCH_ORIGINAL_SHOW")![0]!.lines[0]!.text, "PRINTL original");
+    const original = game.routines.get("HOTPATCH_ORIGINAL_SHOW");
+    await applyHotpatches(game, dir);
+    assert.equal(game.routines.get("HOTPATCH_ORIGINAL_SHOW"), original);
   });
   const output = new Runtime(game).start().output.map((item) => ("text" in item ? item.text : "")).join("");
   assert.equal(output, "patched");
@@ -182,8 +186,8 @@ test("main screen hotpatch opens and closes its panel boxes in balance", {
       snapshot = snapshot.input.timeout ? runtime.timeout() : runtime.input("");
     }
   };
-  // New game as Yukari with default settings, then the first main screen, Time Stop and Resume Time.
-  for (const value of ["0", "1", "26", "0", "0", "0", "0", "100"]) step(value);
+  // Accept the default character, then the first main screen, Time Stop and Resume Time.
+  for (const value of ["0", "100"]) step(value);
   const screens: string[][] = [];
   for (const value of ["100", "355", "999"]) {
     step(value);

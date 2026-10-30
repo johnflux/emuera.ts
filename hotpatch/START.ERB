@@ -1,0 +1,363 @@
+@SYSTEM_TITLE
+#DIM DYNAMIC nStart
+#DIMS DYNAMIC sError
+LOADGLOBAL
+SAVEGLOBAL
+CLEARMEMORY
+RESETBGCOLOR
+WINDOW_TITLE = %GAMEBASE_TITLE% %ATWVersionName()%
+CALL MAKE_TALENT_MAP
+nStart = LINECOUNT
+DO
+	CLEARLINE LINECOUNT - nStart
+	HTML_PRINT "<era-open class='era-launch'>"
+	HTML_PRINT @"<div class='era-launch-version'>%HTML_ESCAPE(ATWVersionName())%</div>"
+	HTML_PRINT "<era-open class='era-launch-art'>"
+	FOR LOCAL, 0, 35
+		HTML_PRINT "<p align='center'><img src='TW_title" + TOSTR(LOCAL, "000") + "'></p>"
+	NEXT
+	HTML_PRINT "<era-close>"
+	HTML_PRINT "<div class='era-launch-actions'><button value='0' class='era-launch-primary'>New game</button><button value='1' class='era-launch-load'>Load game</button></div>"
+	[IF_DEBUG]
+	HTML_PRINT "<div class='era-launch-debug'><button value='99'>Dev Quicktest</button><button value='3'>Quicktest settings</button></div>"
+	[ENDIF]
+	HTML_PRINT @"<div class='era-launch-footer'>%HTML_ESCAPE(GAMEBASE_YEAR)% · AnonTW build forked from PedyTW<span class='era-tone-red'>%sError%</span></div>"
+	HTML_PRINT "<era-close>"
+	INPUT
+	sError '= ""
+	SELECTCASE RESULT
+	CASE 0
+		RESETDATA
+		CALL Name_Array_Set
+		CALL ADDCHARA_INIT(0)
+		CALL HOTPATCH_NEWGAME_PREPARE
+		SIF RESULT
+			BEGIN FIRST
+	CASE 1
+		CALL LOAD_SAVE(0, 1)
+	[IF_DEBUG]
+	CASE 99
+		RESETDATA
+		DevTest = 1
+		CALL Name_Array_Set
+		CALL ADDCHARA_INIT(0)
+		BEGIN FIRST
+	CASE 3
+		CALL ADD_ALL_CHARACTERS
+		CALL Name_Array_Set
+		CALL MAKE_ALL_CLASS_LIST
+		CALL OPTION_MOD_QUICKTEST
+	[ENDIF]
+	CASEELSE
+		sError '= "Choose New game or Load game."
+	ENDSELECT
+LOOP 1
+
+; Prepare on the title side so Cancel returns before EVENTFIRST performs updates or autosaves.
+@HOTPATCH_NEWGAME_PREPARE
+ゲーム開始処理中 = 1
+SAVESTR:本体バージョン = %eraTW_Version%
+SAVESTR:ATW_SAVE_VER = %ATW_VERSION%
+CALL MAKE_ALL_CLASS_LIST
+CALL DEFAULT_OPTION
+CALL SET_CHARISMA("NEW")
+PBAND = 12
+DAY = 1
+DAY:2 = 1
+DAY:3 = 1
+VAR_FERMENT = ただの水
+IS_COLD_CROP_DAMAGE = 0
+IS_STORM_CROP_DAMAGE = 0
+IS_FLOOD_CROP_DAMAGE = 0
+CONTINUOUS_RAINFALL = 0
+CONTINUOUS_SNOWFALL = 0
+SNOW_COVERAGE = 0
+POSSIBLITY_AVALANCHE = 0
+WEATHER_TIMEZOME = 0
+YEAR_WEATHER_CONTROL = 0
+CALL WEATHER_FORECAST_1TERM
+CALL WEATHER_FORECAST_1DAY
+CALL ADD_ALL_CHARACTERS
+CALL ModImg_Set
+CALL NEWGAME_MAKE
+CALL SET_ALTERNATIVE_DEFAULTS
+FLAG:CHILD_SUPPORT_RELIEF = 1
+FLAG:MOB_PREGNANCY_TYPES = 1
+FLAG:TWINS_CHANCE = 10
+FLAG:TRIPLETS_CHANCE = 2
+FOR LOCAL, 1, CHARANUM
+	CALL KOJO_COUNT_CHECK(LOCAL)
+NEXT
+CALL DEFAULT_MAP_COLOR
+CALL MakeAchievementListTemp
+CALL HARDCORE_CONTENT_DEFAULT
+CALL SET_MAINHOME
+CALL NEWGAME_OPTION
+RETURN RESULT
+
+; EVENTFIRST retains its original update/event ordering after the setup is accepted.
+@NEWGAME
+IF !ゲーム開始処理中
+	CALL HOTPATCH_ORIGINAL_NEWGAME
+	RETURN RESULT
+ENDIF
+FOR LOCAL, 0, CHARANUM
+	CFLAG:LOCAL:現在位置 = CFLAG:LOCAL:初期位置
+	CALL SELECT_CLOTHES(LOCAL, "今日の衣装")
+	CALL CTRL_CLOTHES_SET(LOCAL, "現在衣装の変更_普段着")
+	CALL CLOTHES_SETTING_TRAIN(LOCAL)
+	CALL 下着確認リセット(LOCAL)
+	CVARSET BASE, GETNUM(BASE, "酒気"), 0
+NEXT
+TIME:3 = 420
+CALL SET_SLEEP(1, MASTER, 0)
+ゲーム開始処理中 = 0
+CALL INIT_STARTINGLV
+FLAG:BASE_RESET_DONE = 1
+CALL ADD_EXTENDED_TRAITS_SET_ALL()
+CALL INIT_QUESTS()
+CALL LS_SETUP(1)
+BREWING_KNOWN_DRINKS_CHECKED = 1
+BREWING_KNOWN_DRINKS:1 = 1
+RETURN 0
+
+; Keep the native initialization and optional editors, but do not require a questionnaire.
+@NEWGAME_MAKE
+IF DevTest
+	CALL HOTPATCH_ORIGINAL_NEWGAME_MAKE
+	RETURN
+ENDIF
+CALL NEWGAME_MAKE_INIT
+FLAG:ゲームモード = 0
+CALL CHARA_VALIDATE(MASTER)
+
+@SET_MAINHOME
+#DIM DYNAMIC nSkip
+IF ゲーム開始処理中 && !引っ越し
+	MAIN_MAP = 0
+	CALL ROOMSETTING_0
+	CALL DEFAULT_OWNER_0
+	nSkip = ISSKIP()
+	SKIPDISP 1
+	CALL MAP_DEFAULTRESIDENT(MAIN_MAP)
+	SKIPDISP nSkip
+	RETURN
+ENDIF
+CALL HOTPATCH_ORIGINAL_SET_MAINHOME
+
+@引っ越し初期位置設定
+IF ゲーム開始処理中 && !引っ越し
+	CALL デフォルト引っ越し
+	RETURN
+ENDIF
+CALL HOTPATCH_ORIGINAL_引っ越し初期位置設定
+
+@NEWGAME_DIALOGUE_SELECT(ARG)
+SIF ゲーム開始処理中
+	RETURN
+CALL HOTPATCH_DIALOGUE
+
+@DEFAULT_MAP_COLOR
+RECOLOREDMAPS = 1
+ANIMATERECOLOREDMAPS = 0
+
+@NEWGAME_OPTION
+#DIM DYNAMIC nStart
+#DIM DYNAMIC nTab
+#DIM DYNAMIC nAction
+#DIMS DYNAMIC sError
+IF !ゲーム開始処理中
+	CALL HOTPATCH_ORIGINAL_NEWGAME_OPTION
+	RETURN
+ENDIF
+SETBIT FLAG:1000, 1
+SETBIT FLAG:1000, 2
+SIF !TALENT:MASTER:形状 && HAS_PENIS(MASTER)
+	TALENT:MASTER:形状 = 3
+CALL MASTER_CLOTHES_INIT
+nStart = LINECOUNT
+DO
+	CLEARLINE LINECOUNT - nStart
+	HTML_PRINT "<era-open class='era-dialog era-setup'>"
+	HTML_PRINT "<div class='era-inventory-header'><div class='era-inventory-heading'><span class='era-inventory-title'>New game</span><button value='999' class='era-dialog-close' title='Back to title'>×</button></div></div>"
+	HTML_PRINT @"<div class='era-sheet-subpages era-start-tabs'><button value='700' class='era-sheet-subpage%(nTab == 0 ? " era-current" # "")%'>Character</button><button value='701' class='era-sheet-subpage%(nTab == 1 ? " era-current" # "")%'>World</button><button value='702' class='era-sheet-subpage%(nTab == 2 ? " era-current" # "")%'>Dialogue</button></div>"
+	HTML_PRINT "<era-open class='era-inventory-body era-setup-body'>"
+	SELECTCASE nTab
+	CASE 0
+		HTML_PRINT @"<div class='era-setup-card'><span class='era-launch-eyebrow'>CHARACTER</span><div class='era-setup-name'>%HTML_ESCAPE(CALLNAME:MASTER)%</div><div class='era-sub'>%(FLAG:なりきり ? "Predefined character" # "Custom character")% · STA {MAX(MAXBASE:MASTER:体力 - 500, 0)} · ENE {MAXBASE:MASTER:気力} · TSP {MAXBASE:MASTER:TSP}</div><button value='10' class='era-chip-button'>Customize character</button><button value='11' class='era-chip-button'>Choose a predefined character</button></div>"
+		HTML_PRINT @"<div class='era-setup-card'><span class='era-launch-eyebrow'>CLOTHING</span><div>%HTML_ESCAPE(MASTER_CLOTHES_NAME(CFLAG:MASTER:基本服装セット))%</div><button value='12' class='era-chip-button'>Change clothing</button></div>"
+	CASE 1
+		HTML_PRINT @"<div class='era-setup-card'><span class='era-launch-eyebrow'>HOME</span><div class='era-setup-name'>%HTML_ESCAPE(GET_MAPNAME(MAIN_MAP))%</div><div class='era-sub'>%HTML_ESCAPE(STR_TR(デフォルト初期位置 + (MAIN_MAP ? 8000 # 0)))%</div><button value='20' class='era-chip-button'>Choose residence</button></div>"
+		HTML_PRINT @"<div class='era-setup-card'><span class='era-launch-eyebrow'>NEW GAME BONUS</span><div class='era-setup-description'>%(ニューゲーム特典 == "" ? "Starting money: 50,000 yen" # NEWGAMEBONUS_TEXT())%</div><button value='21' class='era-chip-button'>Starting bonuses</button></div>"
+		HTML_PRINT "<div class='era-setup-card'><span class='era-launch-eyebrow'>OPTIONS</span><button value='24' class='era-chip-button'>Confession settings</button><button value='25' class='era-chip-button'>Farming</button><button value='26' class='era-chip-button'>Character bodies</button><button value='27' class='era-chip-button'>Yandere settings</button><button value='28' class='era-chip-button'>Lunatic Survival</button></div>"
+		SIF HAS_PENIS(MASTER)
+			HTML_PRINT "<div class='era-setup-card'><button value='29' class='era-chip-button'>Penis settings</button></div>"
+		HTML_PRINT @"<div class='era-setup-card'><span class='era-launch-eyebrow'>MAP DISPLAY</span><button value='23' class='era-chip-button'>Animation: %(ANIMATERECOLOREDMAPS ? "On" # "Off")%</button><div class='era-setup-description'>You can also change this in game options later.</div></div>"
+	CASE 2
+		HTML_PRINT "<div class='era-setup-card'><span class='era-launch-eyebrow'>CHARACTER DIALOGUE</span><div class='era-setup-description'>Alternative dialogue selection. Can also be changed later in character update settings.</div><button value='30' class='era-chip-button'>Configure dialogue</button></div>"
+	ENDSELECT
+	HTML_PRINT "<era-close>"
+	HTML_PRINT @"<div class='era-inventory-footer'><button value='999' class='era-chip-button'>Back to title</button><span class='era-tone-red'>%sError%</span><button value='100' class='era-launch-primary'>Start game</button></div>"
+	HTML_PRINT "<era-close>"
+	INPUT
+	nAction = RESULT
+	sError '= ""
+	SELECTCASE nAction
+	CASE 100
+		CALL HOTPATCH_START_APPLY
+		RETURN 1
+	CASE 999
+		ゲーム開始処理中 = 0
+		RETURN 0
+	CASE 700 TO 702
+		nTab = nAction - 700
+	CASE 23
+		ANIMATERECOLOREDMAPS = ANIMATERECOLOREDMAPS ? 0 # 1000
+	CASE 10, 11, 12, 20, 21, 24 TO 30
+		CLEARLINE LINECOUNT - nStart
+		HTML_PRINT "<era-open class='era-dialog era-setup era-setup-editor'>"
+		HTML_PRINT "<div class='era-inventory-header'><span class='era-inventory-title'>Game settings</span><div class='era-sub'>Finish editing to return to new-game setup.</div></div>"
+		HTML_PRINT "<era-open class='era-inventory-body'>"
+		SELECTCASE nAction
+		CASE 10
+			CALL CUSTOM_TERMINAL(MASTER)
+		CASE 11
+			CALL NEWGAME_MAKE_NARIKIRI
+			IF RESULT
+				FLAG:ゲームモード = 1
+				CALL MASTER_CLOTHES_INIT
+				CALL HOTPATCH_CHARACTER_HOME
+			ENDIF
+		CASE 12
+			CALL MASTER_CLOTHES
+		CASE 20
+			; The original home picker owns its initialization and all move-in side effects.
+			CALL HOTPATCH_ORIGINAL_SET_MAINHOME
+			SIF MAIN_MAP != 3
+				CALL SET_QUEST_FLAG(LSScarletAlias, QLSScarletActive, 0)
+		CASE 21
+			CALL NEWGAME_BONUS_SELECT
+		CASE 24
+			CALL KAISYONASI
+		CASE 25
+			CALL RESET_NOUMIN
+			CALL SET_NOUMIN
+		CASE 26
+			CALL BODY_SET
+		CASE 27
+			CALL CUSTOM_OPTION_RESULT_4
+		CASE 28
+			CALL LS_NEW_GAME_OPTION
+		CASE 29
+			SIF HAS_PENIS(MASTER)
+				CALL TINKO_DECIDE(MASTER)
+		CASE 30
+			gDialogueUpdateInit = 1
+			CALL HOTPATCH_ORIGINAL_NEWGAME_DIALOGUE_SELECT
+			gDialogueUpdateInit = 0
+		ENDSELECT
+		HTML_PRINT "<era-close>"
+		HTML_PRINT "<era-close>"
+	CASEELSE
+		sError '= "Choose an option or Start game."
+	ENDSELECT
+LOOP 1
+
+@HOTPATCH_START_APPLY
+CALL VIRGIN_SET_APPLY
+CALL SET_BODY_APPLY
+CALL NEWGAME_BONUS_APPLY
+CALL SET_APPLY_NOUMIN
+ITEM:安物食材 = 10
+
+@HOTPATCH_DIALOGUE
+HTML_PRINT "<era-open class='era-dialog era-setup era-setup-editor'>"
+HTML_PRINT "<div class='era-inventory-header'><span class='era-inventory-title'>Character dialogue</span></div>"
+HTML_PRINT "<era-open class='era-inventory-body'>"
+CALL HOTPATCH_ORIGINAL_NEWGAME_DIALOGUE_SELECT
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-close>"
+
+@HOTPATCH_CHARACTER_HOME
+#DIM DYNAMIC nSkip
+SIF !CFLAG:MASTER:自宅位置
+	RETURN
+MAIN_MAP = CFLAG:MASTER:自宅位置 / 100
+TRYCALLFORM ROOMSETTING_{MAIN_MAP}
+拠点_大家 = MASTER
+デフォルト初期位置 = CFLAG:MASTER:初期位置
+nSkip = ISSKIP()
+ゲーム開始処理中 = 0
+SKIPDISP 1
+CALL MAP_DEFAULTRESIDENT(MAIN_MAP)
+SKIPDISP nSkip
+ゲーム開始処理中 = 1
+SIF MAIN_MAP != 3
+	CALL SET_QUEST_FLAG(LSScarletAlias, QLSScarletActive, 0)
+
+@LOAD_SAVE(ARG, ARG:1 = 0)
+#DIM DYNAMIC nStart
+#DIM DYNAMIC nSlot
+#DIM DYNAMIC nCheck
+#DIM DYNAMIC nPage
+#DIM DYNAMIC nAction
+#DIMS DYNAMIC sError
+#DIMS DYNAMIC sLabel
+IF ARG != 0 || ARG:1 != 1
+	HTML_PRINT "<era-open class='era-dialog era-setup era-setup-editor'>"
+	HTML_PRINT "<div class='era-inventory-header'><div class='era-inventory-heading'><span class='era-inventory-title'>Save games</span><button value='999' class='era-dialog-close' title='Close'>×</button></div></div>"
+	HTML_PRINT "<era-open class='era-inventory-body'>"
+	CALL HOTPATCH_ORIGINAL_LOAD_SAVE(ARG, ARG:1)
+	HTML_PRINT "<era-close>"
+	HTML_PRINT "<era-close>"
+	RETURN
+ENDIF
+LOADGLOBAL
+nPage = LIMIT(GLOBAL:999, 0, 9)
+nStart = LINECOUNT
+DO
+	CLEARLINE LINECOUNT - nStart
+	HTML_PRINT "<era-open class='era-dialog era-load'>"
+	HTML_PRINT "<div class='era-inventory-header'><div class='era-inventory-heading'><span class='era-inventory-title'>Load game</span><button value='999' class='era-dialog-close' title='Close load game'>×</button></div></div>"
+	HTML_PRINT "<era-open class='era-inventory-body era-save-list'>"
+	FOR nSlot, nPage * 20, nPage * 20 + 20
+		CHKDATA nSlot
+		nCheck = RESULT
+		sLabel '= RESULTS
+		IF nCheck == 0
+			HTML_PRINT @"<button value='{nSlot}' class='era-save-slot'><span class='era-save-number'>Slot {nSlot}</span><span>%HTML_ESCAPE(sLabel)%</span><span class='era-save-resume'>Continue</span></button>"
+		ELSE
+			HTML_PRINT @"<div class='era-save-slot era-save-empty'><span class='era-save-number'>Slot {nSlot}</span><span>%(nCheck == 1 ? "Empty slot" # HTML_ESCAPE(sLabel))%</span></div>"
+		ENDIF
+	NEXT
+	CHKDATA 300
+	IF RESULT == 0
+		HTML_PRINT @"<button value='300' class='era-save-slot era-save-auto'><span class='era-save-number'>Autosave</span><span>%HTML_ESCAPE(RESULTS)%</span><span class='era-save-resume'>Continue</span></button>"
+	ENDIF
+	HTML_PRINT "<era-close>"
+	HTML_PRINT @"<div class='era-inventory-footer'><button value='1000' class='era-chip-button'>Previous</button><span>Page {nPage + 1} / 10</span><button value='1002' class='era-chip-button'>Next</button><span class='era-tone-red'>%HTML_ESCAPE(sError)%</span><button value='999' class='era-chip-button'>Cancel</button></div>"
+	HTML_PRINT "<era-close>"
+	INPUT
+	nAction = RESULT
+	sError '= ""
+	SELECTCASE nAction
+	CASE 999
+		RETURN
+	CASE 1000
+		nPage = (nPage + 9) % 10
+	CASE 1002
+		nPage = (nPage + 1) % 10
+	CASE 0 TO 199, 300
+		CHKDATA nAction
+		IF RESULT == 0
+			GLOBAL:998 = nAction
+			GLOBAL:999 = nPage
+			SAVEGLOBAL
+			LOADDATA nAction
+		ELSE
+			sError '= RESULT == 1 ? "Empty slot" # RESULTS
+		ENDIF
+	CASEELSE
+		sError '= "Choose an available save."
+	ENDSELECT
+LOOP 1

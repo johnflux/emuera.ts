@@ -330,6 +330,15 @@ test("HTTP UI, isolated sessions, real image bytes, sprite metadata, errors and 
     assert.match(await page.text(), /id="game"[^>]*>eraToho The World</);
     assert.match(page.headers.get("content-security-policy")!, /script-src 'self'/);
     assert.equal((await fetch(base + "/rooms/shrine.svg")).status, 404);
+    for (const name of ["new-game", "load-game", "new-game-hover", "load-game-hover"]) {
+      const asset = await fetch(base + `/title/${name}.webp`);
+      assert.equal(asset.status, 200);
+      assert.equal(asset.headers.get("content-type"), "image/webp");
+      const bytes = Buffer.from(await asset.arrayBuffer());
+      assert.equal(bytes.subarray(0, 4).toString(), "RIFF");
+      assert.equal(bytes.subarray(8, 12).toString(), "WEBP");
+    }
+    assert.equal((await fetch(base + "/title/unknown.webp")).status, 404);
     for (const season of ["spring", "summer", "autumn", "winter"]) {
       const decoration = await fetch(base + `/decoration/deco_corner_flower_${season}.png`);
       assert.equal(decoration.status, 200);
