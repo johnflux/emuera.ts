@@ -398,6 +398,7 @@ function visibleBox(element) {
   }
   return { left, top, right, bottom };
 }
+const setupHelpOwners = new WeakMap();
 function describe(element, description) {
   // Emuera.EM/EE show a literal "<br>" in tooltip text as a line break (and interpret no other markup there).
   description = description.replaceAll("<br>", "\n");
@@ -408,9 +409,11 @@ function describe(element, description) {
     if (busy || !element.closest(".screen.is-active, .cbg-layer") || element.matches(".is-stale")) return;
     if (element.closest(".era-occupant-list") && element.querySelector(".sprite")) return;
     hideTooltip();
-    if (element.matches(".era-setup-trait")) {
+    if (element.matches(".era-setup-trait, .era-setup-detail")) {
       const help = element.closest(".era-setup-traits-layout")?.querySelector(".era-setup-trait-help-text");
       if (help) {
+        if (help.dataset.defaultDescription === undefined) help.dataset.defaultDescription = help.textContent;
+        setupHelpOwners.set(help, element);
         help.dataset.description = description;
         const lines = (description || "No description available.").split("\n");
         const translated = () => lines.map((line) => translation.text(line, () => {
@@ -457,12 +460,31 @@ function describe(element, description) {
   }
   element.addEventListener("mouseenter", () => {
     clearTimeout(tooltipDelay);
-    if (tooltipSettings?.delay > 0 && !element.matches(".era-setup-trait")) tooltipDelay = setTimeout(show, tooltipSettings.delay);
+    if (tooltipSettings?.delay > 0 && !element.matches(".era-setup-trait, .era-setup-detail")) tooltipDelay = setTimeout(show, tooltipSettings.delay);
     else show();
   });
   element.addEventListener("focus", show);
+  if (element.matches(".era-setup-detail")) element.addEventListener("focusin", show);
+  function resetSetupHelp() {
+    if (!element.matches(".era-setup-trait, .era-setup-detail")) return;
+    const layout = element.closest(".era-setup-traits-layout");
+    const help = layout?.querySelector(".era-setup-trait-help-text");
+    if (!help || setupHelpOwners.get(help) !== element) return;
+    if (element.matches(":hover") || element.contains(document.activeElement)) return;
+    const active = [...layout.querySelectorAll(".era-setup-trait, .era-setup-detail")]
+      .find((item) => item.matches(":hover") || item.contains(document.activeElement));
+    if (active) {
+      active.dispatchEvent(new Event("mouseenter"));
+      return;
+    }
+    setupHelpOwners.delete(help);
+    delete help.dataset.description;
+    help.textContent = help.dataset.defaultDescription;
+  }
+  element.addEventListener("focusout", () => queueMicrotask(resetSetupHelp));
   element.addEventListener("mouseleave", () => {
     clearTimeout(tooltipDelay);
+    resetSetupHelp();
     if (tooltipTarget === element && document.activeElement !== element) hideTooltip();
   });
   element.addEventListener("blur", () => { if (tooltipTarget === element) hideTooltip(); });

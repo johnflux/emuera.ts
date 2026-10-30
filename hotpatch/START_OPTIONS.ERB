@@ -1,4 +1,12 @@
 ; Inline startup controls use native settings and defer their effects to Start Game.
+@EXP_TR(nIndex, sFormat)
+#FUNCTIONS
+#DIM DYNAMIC nIndex
+#DIMS DYNAMIC sFormat
+SIF nIndex == 23 && sFormat == "ExpSh"
+	RETURNF "Train Masturb Exp"
+RETURNF HOTPATCH_ORIGINAL_EXP_TR(nIndex, sFormat)
+
 @HOTPATCH_SETUP_CHOICE(nValue, sName, nSelected, sDescription = "", nEnabled = 1, sRegion = "", nHomeRegion = 0, sEmphasis = "")
 #FUNCTIONS
 #DIM DYNAMIC nValue
@@ -79,13 +87,15 @@ HTML_PRINT @"<div class='era-setup-setting'><span>TSP</span><span>{MAXBASE:MASTE
 HTML_PRINT "<era-close>"
 HTML_PRINT "<era-close>"
 HTML_PRINT "<era-close>"
-HTML_PRINT @"<div class='era-sheet-subpages era-player-tabs'><button value='715' class='era-sheet-subpage%(nPage == 4 ? " era-current" # "")%'>Body</button><button value='710' class='era-sheet-subpage%(nPage == 0 ? " era-current" # "")%'>Clothing</button><button value='711' class='era-sheet-subpage%(nPage == 1 ? " era-current" # "")%'>Traits</button><button value='712' class='era-sheet-subpage%(nPage == 2 ? " era-current" # "")%'>Abilities</button><button value='713' class='era-sheet-subpage%(nPage == 3 ? " era-current" # "")%'>Experience</button></div>"
+HTML_PRINT @"<div class='era-sheet-subpages era-player-tabs'><button value='715' class='era-sheet-subpage%(nPage == 4 ? " era-current" # "")%'>Body</button><button value='710' class='era-sheet-subpage%(nPage == 0 ? " era-current" # "")%'>Clothing</button><button value='711' class='era-sheet-subpage%(nPage == 1 ? " era-current" # "")%'>Traits</button><button value='712' class='era-sheet-subpage%(nPage == 2 ? " era-current" # "")%'>Sensitivity &amp; Response</button><button value='713' class='era-sheet-subpage%(nPage == 3 ? " era-current" # "")%'>Experience</button></div>"
 SELECTCASE nPage
 CASE 0
 	CALL HOTPATCH_SETUP_CLOTHING(nDefaultClothes)
 CASE 1
 	CALL HOTPATCH_SETUP_TRAITS
 CASE 2
+	HTML_PRINT "<div class='era-setup-description'>Your sensitivity and response to pleasure and others. Starting levels: 0-2.</div>"
+	HTML_PRINT "<era-open class='era-setup-traits-layout'>"
 	HTML_PRINT "<era-open class='era-setup-grid era-setup-player-values era-setup-abilities'>"
 	FOR nIndex, 0, 59
 		SIF CUSTOM_選べない能力(nIndex, MASTER)
@@ -93,14 +103,19 @@ CASE 2
 		CALL HOTPATCH_SETUP_PLAYER_STEPPER(7000 + nIndex * 2, ABL_TR(nIndex), ABL:MASTER:nIndex, ABL:MASTER:nIndex > 0, ABL:MASTER:nIndex < 2)
 	NEXT
 	HTML_PRINT "<era-close>"
+	CALL HOTPATCH_SETUP_DETAILS("Sensitivity &amp; Response Details")
+	HTML_PRINT "<era-close>"
 CASE 3
-	HTML_PRINT "<div class='era-setup-description'>Select a value to enter it directly (0-30).</div>"
+	HTML_PRINT "<div class='era-setup-description'>Starting experience (0-30): records of past activities and encounters.</div>"
+	HTML_PRINT "<era-open class='era-setup-traits-layout'>"
 	HTML_PRINT "<era-open class='era-setup-grid era-setup-player-values'>"
 	FOR nIndex, 0, 110
 		SIF CUSTOM_選べない経験(nIndex, MASTER)
 			CONTINUE
 		CALL HOTPATCH_SETUP_PLAYER_STEPPER(8000 + nIndex * 2, EXP_TR(nIndex, "ExpSh"), EXP:MASTER:nIndex, EXP:MASTER:nIndex > 0, EXP:MASTER:nIndex < 30)
 	NEXT
+	HTML_PRINT "<era-close>"
+	CALL HOTPATCH_SETUP_DETAILS("Experience Details")
 	HTML_PRINT "<era-close>"
 CASE 4
 	HTML_PRINT "<era-open class='era-setup-body-options'>"
@@ -335,6 +350,126 @@ ELSE
 ENDIF
 CALL HOTPATCH_SETUP_NUMBER(nControl, nAction, sName, nValue, nDecrease, nIncrease)
 
+@HOTPATCH_SETUP_DETAILS(sHeading)
+#DIMS DYNAMIC sHeading
+HTML_PRINT @"<div class='era-setup-trait-help'><div class='era-launch-eyebrow'>%sHeading%</div><div class='era-setup-trait-help-text'>Hover or focus an item to read its description.</div></div>"
+
+@HOTPATCH_SETUP_NUMBER_HELP(nControl)
+#FUNCTIONS
+#DIM DYNAMIC nControl
+#DIMS DYNAMIC sName
+SELECTCASE nControl
+CASE 100
+	RETURNF "C Sense: sensitivity to clitoral or penile stimulation."
+CASE 101
+	RETURNF "V Sense: sensitivity to vaginal stimulation."
+CASE 102
+	RETURNF "A Sense: sensitivity to anal stimulation."
+CASE 103
+	RETURNF "B Sense: sensitivity to breast stimulation."
+CASE 104
+	RETURNF "M Sense: sensitivity to stimulation of the mouth."
+CASE 109
+	RETURNF "Intimacy: your capacity for closeness with others."
+CASE 110
+	RETURNF "Obedience: your willingness to follow another person's lead."
+CASE 111
+	RETURNF "Lust: your response to sexual desire."
+CASE 112
+	RETURNF "Technique: your skill at intimate actions, rather than your own sensitivity."
+CASE 113
+	RETURNF "Servitude: your inclination to find pleasure in pleasing others."
+CASE 114
+	RETURNF "Exposure: your response to being seen undressed."
+CASE 115
+	RETURNF "Masochism: your response to receiving pain."
+CASE 116
+	RETURNF "Sadism: your response to causing pain."
+CASE 117
+	RETURNF "Lesbianism: your response to intimacy with women."
+CASE 118
+	RETURNF "BoyLove: your response to intimacy with men."
+CASE 200 TO 204
+	SELECTCASE nControl
+	CASE 200
+		sName '= "clitoral or penile"
+	CASE 201
+		sName '= "vaginal"
+	CASE 202
+		sName '= "anal"
+	CASE 203
+		sName '= "breast"
+	CASE 204
+		sName '= "mouth"
+	ENDSELECT
+	RETURNF "Past experience of " + sName + " stimulation. This records experience, not current sensitivity."
+CASE 205 TO 209
+	RETURNF "Past orgasms associated with " + EXP_TR(nControl - 205, "") + ". Separate from your total orgasm experience."
+CASE 210
+	RETURNF "Your accumulated experience of orgasms."
+CASE 211
+	RETURNF "Your accumulated experience of ejaculation."
+CASE 212
+	RETURNF "Your accumulated experience of producing breast milk."
+CASE 213
+	RETURNF "Your accumulated urination experience."
+CASE 214
+	RETURNF "Your accumulated experience of contact with semen."
+CASE 215
+	RETURNF "Your accumulated experience of drinking semen."
+CASE 220
+	RETURNF "Your past experience of vaginal intercourse."
+CASE 221
+	RETURNF "Your past experience of anal intercourse."
+CASE 222
+	RETURNF "Your past experience of masturbation."
+CASE 223
+	RETURNF "Your past experience of masturbating under another person's direction."
+CASE 224
+	RETURNF "Your past experience of manual stimulation."
+CASE 225
+	RETURNF "Your past experience of oral sex."
+CASE 226
+	RETURNF "Your past experience of breast-based stimulation."
+CASE 227
+	RETURNF "Your past experience of kissing."
+CASE 228
+	RETURNF "Your past experience of using intimate toys and tools."
+CASE 229
+	RETURNF "Your past experience of performing penetration."
+CASE 240
+	RETURNF "Past experience of pleasure from serving or pleasing another person."
+CASE 241
+	RETURNF "Past experience of affection and loving intimacy."
+CASE 242
+	RETURNF "Past experience of pleasure associated with receiving pain."
+CASE 243
+	RETURNF "Past experience of pleasure associated with causing pain."
+CASE 244
+	RETURNF "Past experience of pleasure from being exposed or watched."
+CASE 245
+	RETURNF "Past experience of pleasure associated with urination."
+CASE 250
+	RETURNF "Your accumulated experience of training encounters."
+CASE 251
+	RETURNF "Your past experience of intimacy between women."
+CASE 252
+	RETURNF "Your past experience of intimacy between men."
+CASE 253
+	RETURNF "Your accumulated experience of unusual intimate encounters."
+CASE 254
+	RETURNF "Your past experience of vaginal stretching."
+CASE 255
+	RETURNF "Your past experience of anal stretching."
+CASE 256
+	RETURNF "Your past experience of being restrained."
+CASE 257
+	RETURNF "Your past experience of cervical stimulation."
+CASE 259
+	RETURNF "Your past experience of sexual activity while asleep."
+ENDSELECT
+RETURNF ""
+
 @HOTPATCH_SETUP_NUMBER(nControl, nAction, sName, nValue, nDecrease, nIncrease, sSuffix = "", sClass = "")
 #DIM DYNAMIC nControl
 #DIM DYNAMIC nAction
@@ -344,7 +479,9 @@ CALL HOTPATCH_SETUP_NUMBER(nControl, nAction, sName, nValue, nDecrease, nIncreas
 #DIM DYNAMIC nIncrease
 #DIMS DYNAMIC sSuffix
 #DIMS DYNAMIC sClass
-HTML_PRINT @"<div class='era-setup-setting %sClass%'><span>%HTML_ESCAPE(sName)%</span><span class='era-setup-stepper'><button value='{nAction}' class='era-setup-step' aria-disabled='%(nDecrease ? "false" # "true")%' aria-label='Decrease %HTML_ESCAPE(sName)%'>-</button><button value='{9500 + nControl}' class='era-setup-number' aria-label='%HTML_ESCAPE(sName)% value'>{nValue}</button>%sSuffix%<button value='{nAction + 1}' class='era-setup-step' aria-disabled='%(nIncrease ? "false" # "true")%' aria-label='Increase %HTML_ESCAPE(sName)%'>+</button></span></div>"
+#DIMS DYNAMIC sHelp
+sHelp '= HOTPATCH_SETUP_NUMBER_HELP(nControl)
+HTML_PRINT @"<div class='era-setup-setting %sClass%%(sHelp != "" ? " era-setup-detail" # "")%' title='%HTML_ESCAPE(sHelp)%'><span>%HTML_ESCAPE(sName)%</span><span class='era-setup-stepper'><button value='{nAction}' class='era-setup-step' aria-disabled='%(nDecrease ? "false" # "true")%' aria-label='Decrease %HTML_ESCAPE(sName)%'>-</button><button value='{9500 + nControl}' class='era-setup-number' aria-label='%HTML_ESCAPE(sName)% value'>{nValue}</button>%sSuffix%<button value='{nAction + 1}' class='era-setup-step' aria-disabled='%(nIncrease ? "false" # "true")%' aria-label='Increase %HTML_ESCAPE(sName)%'>+</button></span></div>"
 
 @HOTPATCH_SETUP_NUMBER_LIMIT(nControl, nMaximum = 0)
 #FUNCTION

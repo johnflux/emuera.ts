@@ -87,7 +87,16 @@ cycling and validation rules. Direct experience entry uses a focused
 prompt rather than the full customization menu. Name fields commit together on
 Enter, leaving the fields, or the next setup action, including Start Game.
 STA, ENE, abilities, experience and Yandere percentages share a numeric control:
-minus/plus buttons without tooltips and a right-aligned, directly editable value.
+minus/plus buttons without tooltips and a centered, directly editable value.
+The value has a muted cyan underline, at least 3ch wide (4ch for STA/ENE),
+which brightens and thickens on hover or focus without shifting the layout.
+Ability groups are 17ch wide within 110ch; experience groups are 26ch within
+118ch, with a minimum 10ch column gap. The short experience translation uses
+"Train Masturb Exp"; the full translation is unchanged.
+The Sensitivity & Response tab (formerly Abilities) explains starting sensitivity
+and responses. It and Experience share the Traits-style details sidebar, updated
+on item hover or keyboard focus, including focus within numeric controls.
+All three tabs use matching muted item labels without dashed tooltip underlines.
 Browser fields select on focus and commit on Enter, blur, or the next setup
 action, validating each setting's native range (experience remains 0–30).
 STA displays its native 500-point offset; its buttons and ENE still step by 100.

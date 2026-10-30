@@ -306,6 +306,10 @@ test("eraTW launch dialogs accept defaults, configure optionally and cancel safe
   assert.match(middleAge, /value='101711' class='era-setup-choice era-current'/);
   markup(runtime.input("101710"));
   const abilities = markup(runtime.input("712"));
+  assert.match(abilities, /Sensitivity &amp; Response/);
+  assert.match(abilities, /Your sensitivity and response to pleasure and others/);
+  assert.match(abilities, /Sensitivity &amp; Response Details/);
+  assert.match(abilities, /era-setup-detail' title='C Sense: sensitivity/);
   const abilityIncrease = /value='(7\d{2}[13579])'[^>]*aria-disabled='false'/.exec(abilities)?.[1];
   assert.ok(abilityIncrease, "eligible abilities have inline controls");
   const abilityIndex = Math.floor((Number(abilityIncrease) - 7000) / 2);
@@ -316,6 +320,11 @@ test("eraTW launch dialogs accept defaults, configure optionally and cancel safe
     "direct ability edits reject values above 2");
   assert.doesNotMatch(markup(runtime.input(abilityIncrease)), /era-setup-editor/);
   const experience = markup(runtime.input("713"));
+  assert.match(experience, /Starting experience \(0-30\): records of past activities and encounters/);
+  assert.match(experience, /Experience Details/);
+  assert.match(experience, /Past experience of clitoral or penile stimulation/);
+  assert.match(experience, /Train Masturb Exp/);
+  assert.doesNotMatch(experience, /Training Masturb Exp/);
   const inlineExperience = markup(runtime.input("140009"));
   assert.doesNotMatch(inlineExperience, /title='(?:Decrease|Increase|Enter a value)/);
   assert.match(markup(runtime.input("2160012")), /value='9700'[^>]*>12<\/button>/);
