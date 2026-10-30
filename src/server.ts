@@ -454,7 +454,6 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
         "/": "index.html", "/app.js": "app.js", "/translate.js": "translate.js", "/interaction-history.js": "interaction-history.js", "/style.css": "style.css",
         "/library.js": "library.js", "/library.css": "library.css",
         "/title/new-game.webp": "title/new-game.webp", "/title/load-game.webp": "title/load-game.webp",
-        "/title/new-game-hover.webp": "title/new-game-hover.webp", "/title/load-game-hover.webp": "title/load-game-hover.webp",
         "/fonts/BIZUDGothic-Regular.ttf": "fonts/BIZUDGothic-Regular.ttf",
         "/fonts/OFL.txt": "fonts/OFL.txt",
       };

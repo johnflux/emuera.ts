@@ -159,7 +159,7 @@ CALL HOTPATCH_DIALOGUE
 
 @DEFAULT_MAP_COLOR
 RECOLOREDMAPS = 1
-ANIMATERECOLOREDMAPS = 0
+ANIMATERECOLOREDMAPS = 1000
 
 @NEWGAME_OPTION
 #DIM DYNAMIC nStart
@@ -180,21 +180,26 @@ DO
 	CLEARLINE LINECOUNT - nStart
 	HTML_PRINT "<era-open class='era-dialog era-setup'>"
 	HTML_PRINT "<div class='era-inventory-header'><div class='era-inventory-heading'><span class='era-inventory-title'>New game</span><button value='999' class='era-dialog-close' title='Back to title'>×</button></div></div>"
-	HTML_PRINT @"<div class='era-sheet-subpages era-start-tabs'><button value='700' class='era-sheet-subpage%(nTab == 0 ? " era-current" # "")%'>Character</button><button value='701' class='era-sheet-subpage%(nTab == 1 ? " era-current" # "")%'>World</button><button value='702' class='era-sheet-subpage%(nTab == 2 ? " era-current" # "")%'>Dialogue</button></div>"
+	HTML_PRINT @"<div class='era-sheet-subpages era-start-tabs'><button value='700' class='era-sheet-subpage%(nTab == 0 ? " era-current" # "")%'>Character</button><button value='701' class='era-sheet-subpage%(nTab == 1 ? " era-current" # "")%'>World</button><button value='703' class='era-sheet-subpage%(nTab == 3 ? " era-current" # "")%'>Bonuses</button><button value='704' class='era-sheet-subpage%(nTab == 4 ? " era-current" # "")%'>Farming</button><button value='702' class='era-sheet-subpage%(nTab == 2 ? " era-current" # "")%'>Dialogue</button><button value='705' class='era-sheet-subpage%(nTab == 5 ? " era-current" # "")%'>Yandere</button></div>"
 	HTML_PRINT "<era-open class='era-inventory-body era-setup-body'>"
 	SELECTCASE nTab
 	CASE 0
 		HTML_PRINT @"<div class='era-setup-card'><span class='era-launch-eyebrow'>CHARACTER</span><div class='era-setup-name'>%HTML_ESCAPE(CALLNAME:MASTER)%</div><div class='era-sub'>%(FLAG:なりきり ? "Predefined character" # "Custom character")% · STA {MAX(MAXBASE:MASTER:体力 - 500, 0)} · ENE {MAXBASE:MASTER:気力} · TSP {MAXBASE:MASTER:TSP}</div><button value='10' class='era-chip-button'>Customize character</button><button value='11' class='era-chip-button'>Choose a predefined character</button></div>"
-		HTML_PRINT @"<div class='era-setup-card'><span class='era-launch-eyebrow'>CLOTHING</span><div>%HTML_ESCAPE(MASTER_CLOTHES_NAME(CFLAG:MASTER:基本服装セット))%</div><button value='12' class='era-chip-button'>Change clothing</button></div>"
-	CASE 1
-		HTML_PRINT @"<div class='era-setup-card'><span class='era-launch-eyebrow'>HOME</span><div class='era-setup-name'>%HTML_ESCAPE(GET_MAPNAME(MAIN_MAP))%</div><div class='era-sub'>%HTML_ESCAPE(STR_TR(デフォルト初期位置 + (MAIN_MAP ? 8000 # 0)))%</div><button value='20' class='era-chip-button'>Choose residence</button></div>"
-		HTML_PRINT @"<div class='era-setup-card'><span class='era-launch-eyebrow'>NEW GAME BONUS</span><div class='era-setup-description'>%(ニューゲーム特典 == "" ? "Starting money: 50,000 yen" # NEWGAMEBONUS_TEXT())%</div><button value='21' class='era-chip-button'>Starting bonuses</button></div>"
-		HTML_PRINT "<div class='era-setup-card'><span class='era-launch-eyebrow'>OPTIONS</span><button value='24' class='era-chip-button'>Confession settings</button><button value='25' class='era-chip-button'>Farming</button><button value='26' class='era-chip-button'>Character bodies</button><button value='27' class='era-chip-button'>Yandere settings</button><button value='28' class='era-chip-button'>Lunatic Survival</button></div>"
+		CALL HOTPATCH_SETUP_CLOTHING
+		HTML_PRINT "<div class='era-setup-card'><span class='era-launch-eyebrow'>CHARACTER BODIES</span><button value='26' class='era-chip-button'>Character body editor</button></div>"
 		SIF HAS_PENIS(MASTER)
-			HTML_PRINT "<div class='era-setup-card'><button value='29' class='era-chip-button'>Penis settings</button></div>"
+			CALL HOTPATCH_SETUP_PENIS
+	CASE 1
+		CALL HOTPATCH_SETUP_WORLD
 		HTML_PRINT @"<div class='era-setup-card'><span class='era-launch-eyebrow'>MAP DISPLAY</span><button value='23' class='era-chip-button'>Animation: %(ANIMATERECOLOREDMAPS ? "On" # "Off")%</button><div class='era-setup-description'>You can also change this in game options later.</div></div>"
 	CASE 2
-		HTML_PRINT "<div class='era-setup-card'><span class='era-launch-eyebrow'>CHARACTER DIALOGUE</span><div class='era-setup-description'>Alternative dialogue selection. Can also be changed later in character update settings.</div><button value='30' class='era-chip-button'>Configure dialogue</button></div>"
+		CALL HOTPATCH_SETUP_DIALOGUE
+	CASE 3
+		CALL HOTPATCH_SETUP_BONUSES
+	CASE 4
+		CALL HOTPATCH_SETUP_FARMING
+	CASE 5
+		CALL HOTPATCH_SETUP_YANDERE
 	ENDSELECT
 	HTML_PRINT "<era-close>"
 	HTML_PRINT @"<div class='era-inventory-footer'><button value='999' class='era-chip-button'>Back to title</button><span class='era-tone-red'>%sError%</span><button value='100' class='era-launch-primary'>Start game</button></div>"
@@ -202,6 +207,9 @@ DO
 	INPUT
 	nAction = RESULT
 	sError '= ""
+	CALL HOTPATCH_SETUP_INPUT(nAction)
+	SIF RESULT
+		CONTINUE
 	SELECTCASE nAction
 	CASE 100
 		CALL HOTPATCH_START_APPLY
@@ -209,11 +217,11 @@ DO
 	CASE 999
 		ゲーム開始処理中 = 0
 		RETURN 0
-	CASE 700 TO 702
+	CASE 700 TO 705
 		nTab = nAction - 700
 	CASE 23
 		ANIMATERECOLOREDMAPS = ANIMATERECOLOREDMAPS ? 0 # 1000
-	CASE 10, 11, 12, 20, 21, 24 TO 30
+	CASE 10, 11, 20, 26, 31, 32
 		CLEARLINE LINECOUNT - nStart
 		HTML_PRINT "<era-open class='era-dialog era-setup era-setup-editor'>"
 		HTML_PRINT "<div class='era-inventory-header'><span class='era-inventory-title'>Game settings</span><div class='era-sub'>Finish editing to return to new-game setup.</div></div>"
@@ -228,33 +236,18 @@ DO
 				CALL MASTER_CLOTHES_INIT
 				CALL HOTPATCH_CHARACTER_HOME
 			ENDIF
-		CASE 12
-			CALL MASTER_CLOTHES
 		CASE 20
 			; The original home picker owns its initialization and all move-in side effects.
 			CALL HOTPATCH_ORIGINAL_SET_MAINHOME
 			SIF MAIN_MAP != 3
 				CALL SET_QUEST_FLAG(LSScarletAlias, QLSScarletActive, 0)
-		CASE 21
-			CALL NEWGAME_BONUS_SELECT
-		CASE 24
-			CALL KAISYONASI
-		CASE 25
-			CALL RESET_NOUMIN
-			CALL SET_NOUMIN
 		CASE 26
 			CALL BODY_SET
-		CASE 27
-			CALL CUSTOM_OPTION_RESULT_4
-		CASE 28
-			CALL LS_NEW_GAME_OPTION
-		CASE 29
-			SIF HAS_PENIS(MASTER)
-				CALL TINKO_DECIDE(MASTER)
-		CASE 30
-			gDialogueUpdateInit = 1
-			CALL HOTPATCH_ORIGINAL_NEWGAME_DIALOGUE_SELECT
-			gDialogueUpdateInit = 0
+		CASE 31
+			CALL YANDERE_SET_MENU
+		CASE 32
+			CALL LS_RULES
+			WAIT
 		ENDSELECT
 		HTML_PRINT "<era-close>"
 		HTML_PRINT "<era-close>"

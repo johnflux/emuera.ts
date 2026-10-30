@@ -1,0 +1,380 @@
+; Inline startup controls use native settings and defer their effects to Start Game.
+@HOTPATCH_SETUP_CHOICE(nValue, sName, nSelected, sDescription = "")
+#FUNCTIONS
+#DIM DYNAMIC nValue
+#DIMS DYNAMIC sName
+#DIM DYNAMIC nSelected
+#DIMS DYNAMIC sDescription
+RETURNF @"<button value='{nValue}' class='era-setup-choice%(nSelected ? " era-current" # "")%' aria-pressed='%(nSelected ? "true" # "false")%'><span class='era-setup-choice-name'>%HTML_ESCAPE(sName)%</span><span class='era-setup-choice-description'>%REPLACE(HTML_ESCAPE(sDescription), "&lt;br&gt;", "&#10;")%</span></button>"
+
+@HOTPATCH_SETUP_CLOTHING
+#DIM DYNAMIC nIndex
+HTML_PRINT "<era-open class='era-setup-card'>"
+HTML_PRINT "<span class='era-launch-eyebrow'>CLOTHING</span>"
+HTML_PRINT "<era-open class='era-setup-grid'>"
+FOR nIndex, 1, 11
+	SIF nIndex == 7
+		CONTINUE
+	HTML_PRINT HOTPATCH_SETUP_CHOICE(1100 + nIndex, MASTER_CLOTHES_NAME(nIndex), CFLAG:MASTER:基本服装セット == nIndex)
+NEXT
+HTML_PRINT HOTPATCH_SETUP_CHOICE(1199, "Character default", CFLAG:MASTER:基本服装セット > 100)
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-close>"
+
+@HOTPATCH_SETUP_BONUS_VALUE(nIndex)
+#FUNCTIONS
+#DIM DYNAMIC nIndex
+SELECTCASE nIndex
+CASE 0
+	RETURNF 金額表示(50000)
+CASE 2
+	RETURNF "初期能力アップ"
+CASE 3
+	RETURNF "スケベセット"
+CASE 4
+	RETURNF "【Red Thread】"
+CASE 5
+	RETURNF "【Unmatched】"
+CASE 6
+	RETURNF "【Mysterious Charm】"
+CASE 7
+	RETURNF "【Almighty Impregnation】"
+CASE 8
+	RETURNF "Basic Combat Proficiency"
+CASE 9
+	RETURNF "【Fast Learner】"
+CASE 10
+	RETURNF "【Beautiful】"
+CASE 11
+	RETURNF "なし"
+ENDSELECT
+RETURNF ""
+
+@HOTPATCH_SETUP_PENIS
+#DIMS DYNAMIC sNames, 7
+#DIMS DYNAMIC sDescriptions, 7
+#DIM DYNAMIC nIndex
+sNames:1 '= "Immature"
+sNames:2 '= "Pathetic"
+sNames:3 '= "Normal"
+sNames:4 '= "Luminescent"
+sDescriptions:4 '= "What does that even mean? It'll shine just like a firefly squid."
+sNames:5 '= "Bumpy"
+sDescriptions:5 '= "Putting that inside someone will just hurt, y'know? Is this just self-satisfaction? Have you forgotten to be considerate of others?"
+sNames:6 '= "Huge"
+sDescriptions:6 '= "Do you think bigger is always better? A heart can only pump so much blood - if it gets too big it'll get soft. Besides, it's not the size that counts, it's the compatibility. If your sizes are incompatible it'll just hurt."
+HTML_PRINT "<era-open class='era-setup-card'>"
+HTML_PRINT "<span class='era-launch-eyebrow'>PENIS SETTINGS</span>"
+HTML_PRINT "<era-open class='era-setup-grid'>"
+FOR nIndex, 1, 7
+	HTML_PRINT HOTPATCH_SETUP_CHOICE(1200 + nIndex, sNames:nIndex, TALENT:MASTER:形状 == nIndex, sDescriptions:nIndex)
+NEXT
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-close>"
+
+@HOTPATCH_SETUP_BONUSES
+#DIMS DYNAMIC sNames, 12
+#DIMS DYNAMIC sDescriptions, 12
+#DIM DYNAMIC nIndex
+#DIM DYNAMIC nSelected
+sNames:0 '= "Starting money"
+sDescriptions:0 '= "50,000 yen"
+sNames:1 '= "Increase initial Favor and Trust"
+sDescriptions:1 '= "Choose a character below. Start with 500 Favor and 100 Trust."
+sNames:2 '= "Increased Skills"
+sDescriptions:2 '= "Cleaning, Education and Cooking 1; Technique 2; Conversation 3."
+sNames:3 '= "The Millennium Stone of Mirada that Monopolizes Lust"
+sDescriptions:3 '= "Stone of Mirada, basic adult toys and supplies, 500 TSP, 1,800 CM and Technique 2."
+sNames:4 '= "Red Thread"
+sDescriptions:4 '= "A chance to increase Affinity with your partner during a date."
+sNames:5 '= "Unmatched"
+sDescriptions:5 '= "Doubles ejaculation and removes its STA and ENE cost. Requires a penis."
+sNames:6 '= "Mysterious Charm"
+sDescriptions:6 '= "Easier commands, stronger effects and greater Favor increases."
+sNames:7 '= "Almighty Impregnation"
+sDescriptions:7 '= "Makes it significantly easier to impregnate any race."
+sNames:8 '= "Basic Combat Proficiency"
+sDescriptions:8 '= "Start with Combat Ability 2."
+sNames:9 '= "Fast Learner"
+sDescriptions:9 '= "Easier to raise sexual abilities and Technique."
+sNames:10 '= "Beautiful"
+sDescriptions:10 '= "Favor bonus when meeting characters and easier special judgment checks."
+sNames:11 '= "None"
+sDescriptions:11 '= "No starting bonus."
+HTML_PRINT "<div class='era-setup-description'>Select one new game bonus.</div>"
+HTML_PRINT "<era-open class='era-setup-grid'>"
+FOR nIndex, 0, 12
+	nSelected = ニューゲーム特典 == HOTPATCH_SETUP_BONUS_VALUE(nIndex)
+	SIF nIndex == 0 && ニューゲーム特典 == ""
+		nSelected = 1
+	SIF nIndex == 1
+		nSelected = ISNUMERIC(ニューゲーム特典)
+	HTML_PRINT HOTPATCH_SETUP_CHOICE(1000 + nIndex, sNames:nIndex, nSelected, sDescriptions:nIndex)
+NEXT
+HTML_PRINT "<era-close>"
+IF ISNUMERIC(ニューゲーム特典)
+	HTML_PRINT "<era-open class='era-setup-card'>"
+	HTML_PRINT "<span class='era-launch-eyebrow'>BONUS CHARACTER</span>"
+	HTML_PRINT "<era-open class='era-setup-grid'>"
+	FOR nIndex, 1, CHARANUM
+		SIF !IS_NAMED(nIndex) || nIndex == FLAG:なりきり
+			CONTINUE
+		HTML_PRINT HOTPATCH_SETUP_CHOICE(10000 + nIndex, CALLNAME:nIndex, ニューゲーム特典 == TOSTR(nIndex))
+	NEXT
+	HTML_PRINT "<era-close>"
+	HTML_PRINT "<era-close>"
+ENDIF
+
+@HOTPATCH_SETUP_WORLD
+#DIM DYNAMIC nIndex
+HTML_PRINT "<era-open class='era-setup-card'>"
+HTML_PRINT @"<span class='era-launch-eyebrow'>HOME</span><div class='era-setup-name'>%HTML_ESCAPE(GET_MAPNAME(MAIN_MAP))%</div><div class='era-setup-description'>%HTML_ESCAPE(STR_TR(デフォルト初期位置 + (MAIN_MAP ? 8000 # 0)))%</div>"
+HTML_PRINT "<era-open class='era-setup-grid'>"
+FOR nIndex, 0, 11
+	SIF !GET_EXISTMAP(nIndex)
+		CONTINUE
+	HTML_PRINT HOTPATCH_SETUP_CHOICE(2000 + nIndex, GET_MAPNAME(nIndex), MAIN_MAP == nIndex)
+NEXT
+HTML_PRINT "<era-close>"
+HTML_PRINT "<button value='20' class='era-chip-button'>Map details and room selection</button>"
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-open class='era-setup-card'>"
+HTML_PRINT "<span class='era-launch-eyebrow'>CONFESSION SETTINGS</span>"
+HTML_PRINT "<era-open class='era-setup-grid'>"
+HTML_PRINT HOTPATCH_SETUP_CHOICE(4100, "Normal", !FLAG:甲斐性無, "You can confess. Normal character behaviour.")
+FOR nIndex, 1, 4
+	HTML_PRINT HOTPATCH_SETUP_CHOICE(4100 + nIndex, "Cannot confess", FLAG:甲斐性無 == nIndex && !FLAG:LUSTMODE, @"Character pushiness: {nIndex} / 3. Some player actions are unavailable.")
+	HTML_PRINT HOTPATCH_SETUP_CHOICE(4103 + nIndex, "Hard to catch", FLAG:甲斐性無 == nIndex && FLAG:LUSTMODE, @"Character pushiness: {nIndex} / 3. No player action restrictions.")
+NEXT
+HTML_PRINT "<era-close>"
+HTML_PRINT HOTPATCH_SETUP_CHOICE(4110, "Ignore stable period restrictions", FLAG:STABLEBYPASS, "Allow sex outside the stable period of pregnancy.")
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-open class='era-setup-card'>"
+HTML_PRINT "<span class='era-launch-eyebrow'>LUNATIC SURVIVAL</span>"
+IF MAIN_MAP == 3 && IS_MASTER(0)
+	HTML_PRINT HOTPATCH_SETUP_CHOICE(4120, "Lunatic Survival", QUEST_FLAG(LSScarletAlias, QLSScarletActive), "Scarlet Devil Mansion survival mode. Restricts movement, waking times and character behaviour.")
+	HTML_PRINT "<button value='32' class='era-chip-button'>Detailed rules</button>"
+ELSE
+	HTML_PRINT "<div class='era-setup-description'>Requires Scarlet Devil Mansion and a custom character.</div>"
+ENDIF
+HTML_PRINT "<era-close>"
+
+@HOTPATCH_SETUP_HOME(nMap)
+#DIM DYNAMIC nMap
+#DIM DYNAMIC nSkip
+#DIM DYNAMIC nIndex
+SIF !GET_EXISTMAP(nMap)
+	THROW Invalid startup residence
+MAIN_MAP = nMap
+TRYCALLFORM ROOMSETTING_{MAIN_MAP}
+TRYCALLFORM DEFAULT_OWNER_{MAIN_MAP}
+CALL SET_ENKAI_LOCATIONDISPLAY
+nSkip = ISSKIP()
+SKIPDISP 1
+CALL MAP_DEFAULTRESIDENT(MAIN_MAP)
+VARSET LOCK
+FOR nIndex, 1, CHARANUM
+	CALL CHARA_SLEEP(nIndex, 0)
+NEXT
+CALL TRAP_MOVING
+SKIPDISP nSkip
+TFLAG:マップ切り替え = 0
+SIF FLAG:なりきり && CFLAG:(FLAG:なりきり):出禁 && MAIN_MAP == GET_MAPID(CSVCFLAG(NO:(FLAG:なりきり), 311)) && CSVCFLAG(NO:(FLAG:なりきり), 311) != SUKIMA()
+	CFLAG:MASTER:初期位置 = CSVCFLAG(NO:(FLAG:なりきり), 311)
+SIF MAIN_MAP != 3
+	CALL SET_QUEST_FLAG(LSScarletAlias, QLSScarletActive, 0)
+
+@HOTPATCH_SETUP_FARMING
+#DIM DYNAMIC nIndex
+HTML_PRINT "<era-open class='era-setup-card'>"
+HTML_PRINT "<span class='era-launch-eyebrow'>FARMING</span>"
+HTML_PRINT HOTPATCH_SETUP_CHOICE(3000, "No farming contract", !FLAG:地主)
+IF FLAG:地主
+	HTML_PRINT @"<div class='era-setup-description'>Landlord: %HTML_ESCAPE(CALLNAME:(FLAG:地主))% · Initial loan: %HTML_ESCAPE(金額表示(FLAG:地主貸付金))%</div>"
+	HTML_PRINT "<era-open class='era-setup-grid'>"
+	HTML_PRINT HOTPATCH_SETUP_CHOICE(3101, "Normal Peasant", FLAG:農民難易度 == 1, "Kind landlord. No loan interest; gardening tools are not included.")
+	HTML_PRINT HOTPATCH_SETUP_CHOICE(3102, "Hardcore Peasant", FLAG:農民難易度 == 2, "Strict landlord. Loan interest applies; gardening tools are included.")
+	HTML_PRINT HOTPATCH_SETUP_CHOICE(3103, "Extreme Peasant", FLAG:農民難易度 == 3, "Tyrannical landlord. Loan interest applies; gardening tools are included.")
+	HTML_PRINT "<era-close>"
+ENDIF
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-open class='era-setup-grid'>"
+FOR nIndex, 1, CHARANUM
+	SIF nIndex == FLAG:なりきり || !STRLENS(STR_NOUMIN(nIndex, "説明"))
+		CONTINUE
+	HTML_PRINT HOTPATCH_SETUP_CHOICE(30000 + nIndex, CALLNAME:nIndex, FLAG:地主 == nIndex, FARMING_DESCRIPTION_TR(STR_NOUMIN(nIndex, "説明")) + " · " + CROP_NAME_TR(STR_NOUMIN(nIndex, "作物")) + " · " + FARM_LOCATION_TR(STR_NOUMIN(nIndex, "畑のマップ")))
+NEXT
+HTML_PRINT "<era-close>"
+
+@HOTPATCH_SETUP_DIALOGUE
+#DIM DYNAMIC nIndex
+#DIM DYNAMIC nChoice
+HTML_PRINT "<div class='era-setup-description'>Alternative dialogue selection. Can also be changed later in character update settings.</div>"
+FOR nIndex, 1, CHARANUM
+	SIF CFLAG:nIndex:口上実装状況 <= 1 || nIndex == FLAG:なりきり || NO:nIndex != nIndex
+		CONTINUE
+	HTML_PRINT "<era-open class='era-setup-card'>"
+	HTML_PRINT @"<div class='era-setup-name'>%HTML_ESCAPE(CALLNAME:nIndex)%</div>"
+	HTML_PRINT "<era-open class='era-setup-grid'>"
+	FOR nChoice, 0, 4
+		CALL HOTPATCH_SETUP_DIALOGUE_INFO(nIndex, nChoice)
+		SIF !RESULT
+			CONTINUE
+		HTML_PRINT HOTPATCH_SETUP_CHOICE(20000 + nIndex * 4 + nChoice, RESULTS:1, CFLAG:nIndex:口上セレクタ == nChoice, RESULTS:2)
+	NEXT
+	HTML_PRINT "<era-close>"
+	HTML_PRINT "<era-close>"
+NEXT
+
+@HOTPATCH_SETUP_DIALOGUE_INFO(nIndex, nChoice)
+#DIM DYNAMIC nIndex
+#DIM DYNAMIC nChoice
+RESULT = 0
+RESULTS:1 '= "Default"
+RESULTS:2 '= ""
+IF !nChoice
+	TRYCALLFORM M_KOJO_K{NO:nIndex}
+ELSE
+	TRYCALLFORM M_KOJO_K{NO:nIndex}_{nChoice}
+ENDIF
+RETURN RESULT
+
+@HOTPATCH_SETUP_YANDERE
+CALL YANDERE_DEFAULTS_INIT
+HTML_PRINT "<era-open class='era-setup-card'>"
+HTML_PRINT "<span class='era-launch-eyebrow'>YANDERE SETTINGS</span><button value='31' class='era-chip-button'>Character potential</button>"
+CALL HOTPATCH_SETUP_PERCENT(4200, "Subtype change chance", FLAG:YANDERE_EVOLVE_CHANCE)
+CALL HOTPATCH_SETUP_PERCENT(4202, "Subtype skip chance", FLAG:YANDERE_SKIP_CHANCE)
+CALL HOTPATCH_SETUP_PERCENT(4204, "Tier 2 bonus chance", FLAG:YANDERE_TIER_2_CHANCE_BONUS)
+HTML_PRINT HOTPATCH_SETUP_CHOICE(4210, "Random subtype progression", FLAG:YANDERE_RANDOM_EVOLUTION, "Subtypes can change into any other subtype, instead of progressing in order.")
+HTML_PRINT "<button value='4211' class='era-chip-button'>Restore yandere defaults</button>"
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-open class='era-setup-card'>"
+HTML_PRINT "<span class='era-launch-eyebrow'>TRIGGERS</span>"
+FOR LOCAL, 0, 9
+	CALL HOTPATCH_SETUP_PERCENT(4300 + LOCAL * 2, FALL_NAME(LOCAL), YANDERE_CHANCE:LOCAL)
+NEXT
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-open class='era-setup-card'>"
+HTML_PRINT "<span class='era-launch-eyebrow'>EVENT FREQUENCY</span>"
+HTML_PRINT "<era-open class='era-setup-grid'>"
+FOR LOCAL, 1, 7
+	SELECTCASE LOCAL
+	CASE 1, 2, 3
+		LOCAL:1 = LOCAL
+	CASE 4
+		LOCAL:1 = 5
+	CASE 5
+		LOCAL:1 = 10
+	CASE 6
+		LOCAL:1 = 50
+	ENDSELECT
+	HTML_PRINT HOTPATCH_SETUP_CHOICE(4400 + LOCAL:1, TOSTR(LOCAL:1) + "x", MAX(FLAG:YANDERE_EVENT_FREQUENCY, 1) == LOCAL:1)
+NEXT
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-close>"
+
+@HOTPATCH_SETUP_PERCENT(nValue, sName, nPercent)
+#DIM DYNAMIC nValue
+#DIMS DYNAMIC sName
+#DIM DYNAMIC nPercent
+HTML_PRINT @"<div class='era-setup-setting'><span>%HTML_ESCAPE(sName)%</span><span class='era-setup-stepper'><button value='{nValue}' title='Decrease by 1 percentage point'>-</button><span>{nPercent}&#37;</span><button value='{nValue + 1}' title='Increase by 1 percentage point'>+</button></span></div>"
+
+@HOTPATCH_SETUP_INPUT(nAction)
+#DIM DYNAMIC nAction
+#DIM DYNAMIC nIndex
+#DIM DYNAMIC nChoice
+#DIM DYNAMIC nSkip
+SELECTCASE nAction
+CASE 1000 TO 1011
+	nIndex = nAction - 1000
+	IF nIndex == 1
+		FOR nChoice, 1, CHARANUM
+			SIF !IS_NAMED(nChoice) || nChoice == FLAG:なりきり
+				CONTINUE
+			ニューゲーム特典 '= TOSTR(nChoice)
+			BREAK
+		NEXT
+	ELSE
+		ニューゲーム特典 '= HOTPATCH_SETUP_BONUS_VALUE(nIndex)
+	ENDIF
+CASE 1101 TO 1106, 1108 TO 1110
+	CFLAG:MASTER:基本服装セット = nAction - 1100
+CASE 1199
+	CALL MASTER_CLOTHES_INIT
+CASE 1201 TO 1206
+	SIF !HAS_PENIS(MASTER)
+		RETURN 0
+	TALENT:MASTER:形状 = nAction - 1200
+CASE 2000 TO 2010
+	CALL HOTPATCH_SETUP_HOME(nAction - 2000)
+CASE 3000
+	CALL RESET_NOUMIN
+CASE 30001 TO 39999
+	nIndex = nAction - 30000
+	IF nIndex >= CHARANUM || nIndex == FLAG:なりきり || !STRLENS(STR_NOUMIN(nIndex, "説明"))
+		RETURN 0
+	ENDIF
+	CALL RESET_NOUMIN
+	FLAG:地主 = nIndex
+	FLAG:農民難易度 = 1
+	FLAG:畑拡張 = 1
+	FLAG:地主貸付金 = INT_NOUMIN(nIndex, "報酬") * 1000
+	FLAG:年始貸付金 = FLAG:地主貸付金
+CASE 3101 TO 3103
+	SIF !FLAG:地主
+		RETURN 0
+	FLAG:農民難易度 = nAction - 3100
+	FLAG:畑拡張 = FLAG:農民難易度
+CASE 4100 TO 4106
+	nIndex = nAction - 4100
+	FLAG:甲斐性無 = nIndex > 3 ? nIndex - 3 # nIndex
+	FLAG:LUSTMODE = nIndex > 3
+	SETBIT FLAG:1000, 3
+	SETBIT FLAG:1000, 4
+CASE 4110
+	FLAG:STABLEBYPASS = !FLAG:STABLEBYPASS
+CASE 4120
+	SIF MAIN_MAP != 3 || !IS_MASTER(0)
+		RETURN 0
+	CALL SET_QUEST_FLAG(LSScarletAlias, QLSScarletActive, !QUEST_FLAG(LSScarletAlias, QLSScarletActive))
+CASE 4200, 4201
+	FLAG:YANDERE_EVOLVE_CHANCE = LIMIT(FLAG:YANDERE_EVOLVE_CHANCE + (nAction % 2 ? 1 # -1), 0, 100)
+CASE 4202, 4203
+	FLAG:YANDERE_SKIP_CHANCE = LIMIT(FLAG:YANDERE_SKIP_CHANCE + (nAction % 2 ? 1 # -1), 0, 100)
+CASE 4204, 4205
+	FLAG:YANDERE_TIER_2_CHANCE_BONUS = LIMIT(FLAG:YANDERE_TIER_2_CHANCE_BONUS + (nAction % 2 ? 1 # -1), 0, 100)
+CASE 4210
+	FLAG:YANDERE_RANDOM_EVOLUTION = !FLAG:YANDERE_RANDOM_EVOLUTION
+CASE 4211
+	CALL YANDERE_DEFAULTS_INIT(1)
+CASE 4300 TO 4317
+	nIndex = (nAction - 4300) / 2
+	YANDERE_CHANCE:nIndex = LIMIT(YANDERE_CHANCE:nIndex + (nAction % 2 ? 1 # -1), 0, 100)
+CASE 4401, 4402, 4403, 4405, 4410, 4450
+	FLAG:YANDERE_EVENT_FREQUENCY = nAction - 4400
+CASE 10001 TO 19999
+	nIndex = nAction - 10000
+	SIF nIndex >= CHARANUM || !IS_NAMED(nIndex) || nIndex == FLAG:なりきり
+		RETURN 0
+	ニューゲーム特典 '= TOSTR(nIndex)
+CASE 20004 TO 23999
+	nIndex = (nAction - 20000) / 4
+	nChoice = (nAction - 20000) % 4
+	SIF nIndex <= 0 || nIndex >= CHARANUM
+		RETURN 0
+	SIF CFLAG:nIndex:口上実装状況 <= 1 || nIndex == FLAG:なりきり || NO:nIndex != nIndex
+		RETURN 0
+	CALL HOTPATCH_SETUP_DIALOGUE_INFO(nIndex, nChoice)
+	SIF !RESULT
+		RETURN 0
+	nSkip = ISSKIP()
+	SKIPDISP 1
+	gDialogueUpdateInit = 1
+	CALL KOJO_RESET_AND_APPLY(nIndex, nChoice)
+	gDialogueUpdateInit = 0
+	SKIPDISP nSkip
+CASEELSE
+	RETURN 0
+ENDSELECT
+RETURN 1

@@ -40,13 +40,22 @@ The eraTW launch screen retains the original TW title artwork with responsive
 sizing and no image filters or glow, alongside matching in-game panels. Setup fits
 its content rather than reserving a full-height dialog; editors and save lists
 remain scrollable within the viewport.
+The wake-up menu fills the terminal's available width and height, retaining
+scrolling on smaller screens. Its Home card aligns the room and area names
+beside the location pin, with spacing above the area and home controls.
 The title's New Game and Load Game controls use the supplied WebP artwork in
 [`web/title/`](../web/title/), retaining text labels for accessible button names.
 New Game sits to the left, with Load Game beneath it offset to the right.
-The supplied hover images are preloaded as pseudo-element backgrounds and used
-for both pointer hover and keyboard focus. Each has a separate proportional
-offset/scale in CSS to align its lettering with the original despite different
-crop sizes; button hit areas and layout do not change between states.
+Pointer hover and keyboard focus brighten the original button artwork with CSS
+brightness, saturation and alpha-shaped neon drop shadows (green for New Game,
+purple for Load Game, with a cyan halo). Both buttons stay stationary on hover:
+the glow powers on over 180 ms with an easeOutBack brightness peak, then settles;
+on exit it fades over 90 ms with ease-out. Pressing scales only the artwork to
+98.5% over 60 ms for tactile feedback, leaving hit areas and layout fixed.
+Reduced motion switches the glow instantly and disables the press scaling.
+No alternate hover images are used.
+The clicked title button retains its glow while input is pending and after
+selection, without the generic pending pulse, until the dialog opens.
 The artwork fills a borderless, black, full-window title screen, with version information at the
 top-right and New Game / Load Game stacked underneath; the redundant text title
 is omitted. Version and footer text are anchored outside the central composition;
@@ -61,10 +70,22 @@ heights. Descriptions can still wrap and increase a row's height when needed;
 scrolling remains available when the viewport cannot fit all rows. It
 cannot accidentally switch into saving over an existing game from the title.
 New Game initializes the standard custom character and Hakurei Shrine residence,
-then opens a Character / World / Dialogue setup dialog. Start Game accepts these
-defaults; the original character, residence, bonus and world-option editors
-remain available on demand inside a dialog. Dialogue selection is optional,
-and still uses the game's own reset/update routines. It can also be changed
+then opens a larger, viewport-bounded setup dialog with Character, World, Bonuses,
+Farming, Dialogue and Yandere tabs. Clothing, the six native penis-type choices
+(when applicable), residence presets, all starting
+bonuses with descriptions, bonus partners, farming contracts/difficulty,
+confession mode, Lunatic Survival, dialogue variants and common yandere settings
+are selectable directly as compact list rows with selection markers, names and
+descriptions, with the current choices highlighted. Settings changes preserve
+the current tab's scroll position; switching tabs starts at the top.
+Map display animation defaults to on. Dialogue descriptions convert literal
+`<br>` to line breaks, leaving other markup escaped as plain text.
+Bonuses are still applied exactly once by the native bonus routine on Start Game; farming uses the
+native debt, difficulty and tool rules. Residence presets initialize the native
+rooms, owners, residents, sleep and traps. The detailed map/room picker, full
+character/body editors and yandere character-potential editor remain available
+inside the enlarged dialog. Start Game accepts the defaults without visiting any
+tab. Dialogue still uses the game's own reset/update routines and can be changed
 later through the game's character update settings. No save layout or variable
 reservations are changed. Other games keep their own start flows.
 Setup is prepared before `BEGIN FIRST`, so Cancel does not run first-start

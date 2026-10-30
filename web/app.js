@@ -1424,7 +1424,7 @@ async function renderHtml(markup, parent, sprites) {
       element.dataset.htmlPosition = String(sizeAttribute(position, 0, scale ?? imageScale()));
     }
     applyClasses(element, node);
-    if (element.matches(".era-occupant-label, .era-guard-toggle"))
+    if (element.matches(".era-occupant-label, .era-guard-toggle, .era-setup-choice"))
       element.setAttribute("aria-pressed", String(node.getAttribute("aria-pressed") === "true"));
     // Hotpatch extension: data-room links a non-button element to the map's room buttons with that value.
     const room = node.getAttribute("data-room");
@@ -1449,6 +1449,15 @@ function render(snapshot, advanceScreen = false, fresh = false, keepFocus = fals
 /** Renders steps in order and shows the result at once; several steps rebuild a reloaded run's output. */
 async function renderSteps(steps, fresh = false, keepFocus = false, toBottom = fresh) {
   const clickingThrough = input?.kind === "wait";
+  const setup = terminal.querySelector(".screen.is-active .era-setup:not(.era-setup-editor)");
+  const setupTab = setup?.querySelector(".era-start-tabs .era-current")?.dataset.value;
+  const setupScroll = setup?.querySelector(".era-setup-body")?.scrollTop;
+  const restoreSetupScroll = () => {
+    if (fresh || setupTab === undefined || setupScroll === undefined) return;
+    const next = terminal.querySelector(".screen.is-active .era-setup:not(.era-setup-editor)");
+    if (next?.querySelector(".era-start-tabs .era-current")?.dataset.value === setupTab)
+      next.querySelector(".era-setup-body").scrollTop = setupScroll;
+  };
   const scrollTop = terminal.scrollTop;
   const followBottom = toBottom || terminal.scrollHeight - terminal.clientHeight - scrollTop < 2;
   const live = pageTranslated();
@@ -1466,6 +1475,7 @@ async function renderSteps(steps, fresh = false, keepFocus = false, toBottom = f
     staged.append(...terminal.childNodes);
     terminal.replaceChildren(...visible.childNodes);
     syncDialogs();
+    restoreSetupScroll();
   }
   outputRoot = staged;
   pendingImages = [];
@@ -1481,6 +1491,7 @@ async function renderSteps(steps, fresh = false, keepFocus = false, toBottom = f
     syncDialogs();
     layoutHtmlPositions();
     layoutMapPictures();
+    restoreSetupScroll();
     revealSelectedOccupants();
     markMapLabels();
     translation.translateTree(terminal);

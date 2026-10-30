@@ -330,7 +330,7 @@ test("HTTP UI, isolated sessions, real image bytes, sprite metadata, errors and 
     assert.match(await page.text(), /id="game"[^>]*>eraToho The World</);
     assert.match(page.headers.get("content-security-policy")!, /script-src 'self'/);
     assert.equal((await fetch(base + "/rooms/shrine.svg")).status, 404);
-    for (const name of ["new-game", "load-game", "new-game-hover", "load-game-hover"]) {
+    for (const name of ["new-game", "load-game"]) {
       const asset = await fetch(base + `/title/${name}.webp`);
       assert.equal(asset.status, 200);
       assert.equal(asset.headers.get("content-type"), "image/webp");

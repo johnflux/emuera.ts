@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { test } from "node:test";
-import { applyHotpatches, GAME_ROOT, loadGame } from "../src/loader.js";
+import { applyHotpatches, GAME_ROOT, indexScript, loadGame } from "../src/loader.js";
 import { GAME_INSTRUCTION_LIMIT, Runtime, type Snapshot } from "../src/runtime.js";
 import { MemorySaveStore } from "../src/storage.js";
 import { patchTitleImage } from "../src/render-patches.js";
@@ -40,13 +40,59 @@ test("eraTW launch dialogs accept defaults, configure optionally and cancel safe
   assert.match(markup(runtime.input("0")), /era-save-empty/);
   assert.match(markup(runtime.input("999")), /era-launch-version/);
   assert.match(markup(runtime.input("0")), /era-dialog era-setup/);
-  assert.match(markup(runtime.input("701")), /Choose residence/);
-  assert.match(markup(runtime.input("23")), /Animation: On/);
+  const world = markup(runtime.input("701"));
+  assert.match(world, /Map details and room selection/);
+  assert.match(world, /Animation: On/);
   assert.match(markup(runtime.input("23")), /Animation: Off/);
-  assert.match(markup(runtime.input("702")), /Configure dialogue/);
-  assert.match(markup(runtime.input("30")), /Some characters have alternative dialogue options/);
-  assert.match(markup(runtime.input("0")), /Configure dialogue/);
-  assert.match(markup(runtime.input("700")), /Customize character/);
+  assert.match(markup(runtime.input("23")), /Animation: On/);
+  const dialogue = markup(runtime.input("702"));
+  assert.match(dialogue, /Alternative dialogue selection/);
+  assert.doesNotMatch(dialogue, /Configure dialogue/);
+  assert.match(dialogue, /&#10;/, "dialogue descriptions render line breaks");
+  assert.doesNotMatch(dialogue, /&lt;br&gt;/, "literal break tags are not shown");
+  const dialogueAction = /value='(2\d{4})' class='era-setup-choice/.exec(dialogue)?.[1];
+  assert.ok(dialogueAction, "dialogue choices are available inline");
+  assert.match(markup(runtime.input(dialogueAction)), new RegExp(`value='${dialogueAction}' class='era-setup-choice era-current'`));
+  const bonuses = markup(runtime.input("703"));
+  assert.match(bonuses, /Starting money/);
+  assert.match(bonuses, /Basic Combat Proficiency/);
+  assert.match(bonuses, /value='1000' class='era-setup-choice era-current'/);
+  assert.doesNotMatch(bonuses, /Starting bonuses/);
+  assert.match(markup(runtime.input("1008")), /value='1008' class='era-setup-choice era-current'/);
+  assert.match(markup(runtime.input("1001")), /BONUS CHARACTER/);
+  assert.match(markup(runtime.input("10001")), /value='10001' class='era-setup-choice era-current'/);
+  markup(runtime.input("1000"));
+  const farming = markup(runtime.input("704"));
+  const landlordAction = /value='(3\d{4})' class='era-setup-choice/.exec(farming)?.[1];
+  assert.ok(landlordAction, "landlords are available inline");
+  assert.match(markup(runtime.input(landlordAction)), /Initial loan/);
+  assert.match(markup(runtime.input("3103")), /value='3103' class='era-setup-choice era-current'/);
+  assert.match(markup(runtime.input("3000")), /value='3000' class='era-setup-choice era-current'/);
+  assert.match(markup(runtime.input("705")), /Subtype change chance/);
+  assert.match(markup(runtime.input("4201")), /<span>6&#37;<\/span>/);
+  markup(runtime.input("4211"));
+  markup(runtime.input("701"));
+  assert.match(markup(runtime.input("4106")), /value='4106' class='era-setup-choice era-current'/);
+  markup(runtime.input("4100"));
+  assert.match(markup(runtime.input("2003")), /value='2003' class='era-setup-choice era-current'/);
+  assert.match(markup(runtime.input("2000")), /value='2000' class='era-setup-choice era-current'/);
+  const characterOptions = markup(runtime.input("700"));
+  assert.match(characterOptions, /Customize character/);
+  for (const [type, description] of [
+    [4, "firefly squid"],
+    [5, "Have you forgotten to be considerate of others"],
+    [6, "A heart can only pump so much blood"],
+  ] as const) {
+    assert.match(characterOptions, new RegExp(`value='${1200 + type}'[^<]*>.*?<span class='era-setup-choice-description'>[^<]*${description}`));
+  }
+  for (let type = 1; type <= 6; type++) {
+    const character = markup(runtime.input(String(1200 + type)));
+    assert.match(character, new RegExp(`value='${1200 + type}' class='era-setup-choice era-current'`));
+    assert.doesNotMatch(character, /era-setup-editor/, "type selection stays inside the setup dialog");
+  }
+  markup(runtime.input("1203"));
+  assert.match(markup(runtime.input("1104")), /value='1104' class='era-setup-choice era-current'/);
+  markup(runtime.input("1199"));
   assert.match(markup(runtime.input("10")), /\[9999\] Finished/);
   assert.match(markup(runtime.input("9999")), /Completely finished/);
   assert.match(markup(runtime.input("0")), /Customize character/);
@@ -80,6 +126,37 @@ test("eraTW launch dialogs accept defaults, configure optionally and cancel safe
   assert.match(markup(configured.input("0")), /Be a virgin/);
   assert.match(markup(settle(configured, configured.input("0"))), /era-setup-name'>Yukari/);
   const home = markup(configured.input("701"));
-  assert.doesNotMatch(home, /Hakurei Shrine/, "predefined characters retain their own home");
+  assert.match(home, /value='2006' class='era-setup-choice era-current'/, "predefined characters retain their own home");
   assert.match(markup(configured.input("999")), /era-launch-version/);
+
+  indexScript(game, `@TEST_INLINE_SETUP
+CALL MAKE_TALENT_MAP
+CALL Name_Array_Set
+CALL ADDCHARA_INIT(0)
+CALL HOTPATCH_NEWGAME_PREPARE
+PRINTFORML bonus=%ニューゲーム特典%;combat={ABL:MASTER:戦闘能力};money={MONEY};clothes={CFLAG:MASTER:基本服装セット};map={MAIN_MAP};farm={FLAG:農民難易度};tools={ITEM:園芸用品一式};loan={FLAG:地主貸付金};expansion={FLAG:畑拡張};confession={FLAG:甲斐性無};lust={FLAG:LUSTMODE};shape={TALENT:MASTER:形状}
+QUIT`, "TEST_INLINE_SETUP.ERB");
+  const inline = new Runtime(game, GAME_INSTRUCTION_LIMIT);
+  markup(inline.start("TEST_INLINE_SETUP"));
+  markup(inline.input("703"));
+  for (let bonus = 0; bonus < 12; bonus++) {
+    assert.match(markup(inline.input(String(1000 + bonus))),
+      new RegExp(`value='${1000 + bonus}' class='era-setup-choice era-current'`),
+      `bonus ${bonus} can be selected without a submenu or confirmation`);
+  }
+  markup(inline.input("1008"));
+  markup(inline.input("700"));
+  markup(inline.input("1104"));
+  markup(inline.input("1204"));
+  markup(inline.input("701"));
+  markup(inline.input("2003"));
+  markup(inline.input("4105"));
+  markup(inline.input("704"));
+  markup(inline.input(landlordAction));
+  markup(inline.input("3102"));
+  const accepted = inline.input("100");
+  assert.equal(accepted.error, null, JSON.stringify(accepted.error));
+  assert.equal(accepted.status, "halted", "inline choices do not leave questionnaire prompts at Start Game");
+  const values = accepted.output.flatMap(item => "text" in item ? [item.text] : []).join("\n");
+  assert.match(values, /combat=2;money=0;clothes=4;map=3;farm=2;tools=1;loan=\d+;expansion=2;confession=2;lust=1;shape=4/);
 });

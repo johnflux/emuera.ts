@@ -447,36 +447,55 @@ main:has(.screen.is-active .era-launch) { padding: 0; background: #000; }
 .era-launch-version { position: absolute; top: 0; right: 0; max-width: 100%; padding: 8px 14px; background: #000; color: #8a9c92; font-size: min(.75em, 3dvh); text-align: right; overflow-wrap: anywhere; }
 .era-launch-eyebrow { display: block; margin-bottom: 6px; color: #63d3f6; font-size: .75em; letter-spacing: .12em; }
 .era-launch-actions { display: flex; flex-direction: column; width: min(calc(100% - 24px), calc(var(--era-title-width) * .75)); margin: 0 auto; padding: 0 0 12px; }
-.line button.choice.era-launch-primary { padding: 9px 22px; border: 1px solid #4bb9b4; border-radius: 6px; background: linear-gradient(135deg, #163d42, #16303a); color: #b6f3e7; }
-.line button.choice.era-launch-primary:hover { background: #204856; border-color: #83e3db; }
-.era-launch .era-launch-actions button.choice { position: relative; display: block; flex: none; width: 67%; min-height: min(44px, 10dvh); aspect-ratio: 1672 / 286; margin: 0; padding: 0; border: 0; border-radius: 0; background: none; font-size: 0; text-shadow: none; box-shadow: none; }
-.era-launch .era-launch-actions button.choice.era-launch-load { align-self: flex-end; aspect-ratio: 1545 / 273; }
-.era-launch-actions button.choice::before, .era-launch-actions button.choice::after { content: ""; position: absolute; left: 0; top: 50%; width: 100%; aspect-ratio: inherit; transform: translateY(-50%); pointer-events: none; background: url("/title/new-game.webp") center / 100% 100% no-repeat; }
-/* Register the manually cropped hover artwork to the original lettering, not its outer glow. */
-.era-launch-actions button.choice::after { opacity: 0; background-image: url("/title/new-game-hover.webp"); background-size: 96.33% 101.82%; background-position: 70.4632% 24.011%; }
+.era-setup .line button.choice.era-launch-primary { padding: 9px 22px; border: 1px solid #4bb9b4; border-radius: 6px; background: linear-gradient(135deg, #163d42, #16303a); color: #b6f3e7; }
+.era-setup .line button.choice.era-launch-primary:enabled:hover { background: #204856; border-color: #83e3db; }
+.era-launch .era-launch-actions button.choice { --era-button-glow: #7dff42; position: relative; display: block; flex: none; width: 67%; min-height: min(44px, 10dvh); aspect-ratio: 1672 / 286; margin: 0; padding: 0; border: 0; border-radius: 0; background: none; font-size: 0; text-shadow: none; box-shadow: none; }
+.era-launch .era-launch-actions button.choice.era-launch-load { --era-button-glow: #aa53ff; align-self: flex-end; aspect-ratio: 1545 / 273; }
+.era-launch-actions button.choice::before { content: ""; position: absolute; left: 0; top: 50%; width: 100%; aspect-ratio: inherit; transform: translateY(-50%) scale(1); pointer-events: none; background: url("/title/new-game.webp") center / 100% 100% no-repeat; filter: brightness(1) saturate(1) drop-shadow(0 0 0 transparent) drop-shadow(0 0 0 transparent); transition: filter 90ms ease-out, transform 60ms ease-out; }
 .era-launch-actions button.choice.era-launch-load::before { background-image: url("/title/load-game.webp"); }
-.era-launch-actions button.choice.era-launch-load::after { background-image: url("/title/load-game-hover.webp"); background-size: 100.08% 109.45%; background-position: -157.5% 57.2169%; }
 .era-launch .era-launch-actions button.choice:enabled:is(:hover, :focus-visible) { background: transparent; }
-.era-launch-actions button.choice:enabled:is(:hover, :focus-visible)::before { opacity: 0; }
-.era-launch-actions button.choice:enabled:is(:hover, :focus-visible)::after { opacity: 1; }
+.era-launch-actions button.choice:is(:enabled:hover, :enabled:focus-visible, .is-pending, .is-selected)::before { transition: filter 180ms cubic-bezier(.34, 1.56, .64, 1), transform 60ms ease-out; filter: brightness(1.35) saturate(1.25) drop-shadow(0 0 2px var(--era-button-glow)) drop-shadow(0 0 7px #34e9ff80); }
+.screen.is-active .era-launch-actions button.choice.is-pending { animation: none; }
+.era-launch-actions button.choice:enabled:active::before { transform: translateY(-50%) scale(.985); }
+@media (prefers-reduced-motion: reduce) {
+  .era-launch-actions button.choice::before,
+  .era-launch-actions button.choice:is(:enabled:hover, :enabled:focus-visible, .is-pending, .is-selected)::before { transition: none; }
+  .era-launch-actions button.choice:enabled:active::before { transform: translateY(-50%) scale(1); }
+}
 .era-launch .era-launch-actions button.choice:focus-visible { outline: 2px solid #beff9d; outline-offset: 5px; }
 .era-launch .era-launch-actions button.choice:enabled:active { filter: brightness(.9); }
 .era-launch-footer { position: absolute; bottom: 0; left: 0; right: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; padding: 10px 24px; color: #718b9b; font-size: min(.75em, 3dvh); }
 .era-launch-debug { position: absolute; bottom: 36px; left: 0; right: 0; padding: 0 12px; text-align: center; font-size: min(.75em, 3dvh); }
-.era-setup:popover-open { width: min(760px, calc(100vw - 24px)); height: auto; max-height: calc(100dvh - 24px); top: 50%; bottom: auto; margin: 0 auto; transform: translateY(-50%); }
+.era-setup:popover-open { width: min(1280px, calc(100vw - 24px)); height: min(900px, calc(100dvh - 24px)); max-height: calc(100dvh - 24px); top: 50%; bottom: auto; margin: 0 auto; transform: translateY(-50%); }
 .era-load:popover-open { width: min(1200px, calc(100vw - 24px)); height: auto; max-height: calc(100dvh - 24px); top: 50%; bottom: auto; margin: 0 auto; transform: translateY(-50%); }
-.era-setup-editor:popover-open { height: min(680px, calc(100dvh - 24px)); }
 .era-dialog:is(.era-setup, .era-load) .era-inventory-header { padding: 10px 14px; }
 .era-dialog:is(.era-setup, .era-load) .era-inventory-body { padding: 12px 14px; }
 .era-dialog:is(.era-setup, .era-load) .era-inventory-footer { padding: 8px 14px; }
 .era-start-tabs { margin: 0; padding: 8px 14px; border-bottom: 1px solid #234050; }
 .era-setup-body { background: radial-gradient(ellipse at top right, #16313a60, transparent 70%); }
 .era-setup-body > .line { white-space: normal; }
+.era-setup .line .era-setup-card button.choice { margin: 6px 6px 0 0; padding: 4px 9px; border: 1px solid #365a6c; border-radius: 4px; background: #142c38; color: #9bd5ed; white-space: normal; }
+.era-start-tabs { flex-shrink: 0; }
+.era-setup-grid { display: flex; flex-direction: column; margin: 8px 0; }
+.era-setup-grid > .line { min-width: 0; white-space: normal; }
+.era-setup-grid > .line > .output-text { display: block; height: 100%; }
+.era-setup .line button.choice.era-setup-choice { display: grid; grid-template-columns: 14px minmax(0, 1fr) minmax(0, 2fr); align-items: baseline; gap: 4px 12px; width: 100%; margin: 0; padding: 10px 8px; border: 0; border-bottom: 1px solid #ffffff0d; border-radius: 0; background: transparent; color: #b7cbd7; text-align: left; white-space: normal; overflow-wrap: anywhere; }
+.era-setup-choice::before { content: ""; align-self: start; width: 12px; height: 12px; margin-top: 3px; border: 1px solid #607988; border-radius: 50%; }
+.era-setup-choice.era-current::before { border-color: #69c9b5; background: #69c9b5; box-shadow: inset 0 0 0 3px #15362f; }
+.era-setup .line button.choice.era-setup-choice.era-current { background: #69c9b50c; color: #ceeee1; }
+.era-setup .line button.choice.era-setup-choice:enabled:is(:hover, :focus-visible) { background: #8ddaff0c; }
+.era-setup-choice:has(.era-setup-choice-description:empty) .era-setup-choice-name { grid-column: 2 / -1; }
+.era-setup-choice-name { font-weight: bold; }
+.era-setup-choice-description { color: #99adba; font-size: .85em; line-height: 1.4; white-space: pre-line; }
+.era-setup-choice-description:empty { display: none; }
+.era-setup-setting { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid #ffffff0a; }
+.era-setup-stepper { display: inline-flex; flex: none; align-items: center; gap: 8px; }
+.era-setup-stepper > span { min-width: 4ch; text-align: center; }
+.era-setup .line .era-setup-stepper button.choice { margin: 0; min-width: 32px; }
 .era-setup-card { margin-bottom: 8px; padding: 12px; border: 1px solid #294656; border-radius: 5px; background: #10212b; white-space: normal; }
 .era-setup-body > .line:last-child .era-setup-card { margin-bottom: 0; }
 .era-setup-name { margin-bottom: 4px; color: #d7e5ed; font-size: 1.15em; }
 .era-setup-description { margin: 6px 0 8px; color: #9fb3bf; line-height: 1.45; }
-.era-setup .line .era-setup-card button.choice { margin: 6px 6px 0 0; padding: 4px 9px; border: 1px solid #365a6c; border-radius: 4px; background: #142c38; color: #9bd5ed; white-space: normal; }
 .era-dialog:is(.era-setup, .era-load) .line .era-inventory-footer .era-chip-button { padding: 5px 12px; border-radius: 4px; }
 .era-setup-editor .era-inventory-body { white-space: normal; }
 .era-save-list > .line { min-width: 0; white-space: normal; }
@@ -490,6 +509,8 @@ main:has(.screen.is-active .era-launch) { padding: 0; background: #000; }
 .era-save-empty .era-save-number { color: #637c8b; }
 .era-save-auto { border-color: #3a776c !important; }
 @media (max-width: 600px) {
+  .era-setup .line button.choice.era-setup-choice { grid-template-columns: 14px minmax(0, 1fr); }
+  .era-setup-choice-description { grid-column: 2; }
   .era-launch-footer { padding-left: 20px; padding-right: 20px; }
   .era-launch-actions { width: min(calc(100% - 16px), calc(var(--era-title-width) * .75)); }
   .era-launch .era-launch-actions button.choice { width: 85%; }
@@ -790,9 +811,12 @@ main:has(.screen.is-active .era-launch) { padding: 0; background: #000; }
 .era-main:has(.era-stopped) .era-main-header::before { z-index: 1; }
 .era-main:has(.era-stopped) .era-main-when { color: #cfe6f5; }
 /* Sleep menu (hotpatch/SLEEP_MENU.ERB): the main screen's header and cards; you | home, then the menu | system, the tip. */
-.era-shop { display: grid; gap: 10px; max-width: 100cqi; margin: 4px 0; white-space: normal;
+#terminal:has(.screen.is-active .era-shop) { container-type: size; }
+#terminal:has(.screen.is-active .era-shop) > .screen.is-active { min-width: 0; }
+.era-shop { display: grid; gap: 10px; width: 100cqi; max-width: 100cqi; margin: 4px 0; white-space: normal;
   grid-template-columns: minmax(32ch, 38ch) minmax(0, 1fr) minmax(32ch, 44ch);
   grid-template-areas: "header header header" "player menu system" "home menu system" "tip tip tip"; }
+.screen.is-active .era-shop { min-height: calc(100cqh - 8px); grid-template-rows: auto auto 1fr auto; }
 .era-shop > * { min-width: 0; }
 .era-shop > .line { grid-column: 1 / -1; }
 .era-shop > .era-shop-player { grid-area: player; }
@@ -808,12 +832,15 @@ main:has(.screen.is-active .era-launch) { padding: 0; background: #000; }
 .line button.choice.era-timestop-button.era-wake-button { border-color: #e8b860; background: linear-gradient(#4a3618, #2c200e); color: #ffe8b8; box-shadow: 0 0 14px #ffb84a44; }
 @container (max-width: 1100px) {
   .era-shop { grid-template-columns: minmax(32ch, 40ch) minmax(0, 1fr); grid-template-areas: "header header" "player menu" "home menu" "system system" "tip tip"; }
+  .screen.is-active .era-shop { grid-template-rows: auto auto 1fr auto auto; }
 }
 @container (max-width: 760px) {
   .era-shop { grid-template-columns: minmax(0, 1fr); grid-template-areas: "header" "player" "home" "menu" "system" "tip"; }
+  .screen.is-active .era-shop { grid-template-rows: auto; }
 }
-.era-shop-place { display: block; margin-bottom: 8px; font-size: 1.1em; font-weight: bold; }
-.era-shop-place .era-sub { display: block; font-size: .85em; font-weight: normal; }
+.era-shop-place { position: relative; display: block; padding-left: 1.05em; margin: 8px 0 14px; font-size: 1.1em; font-weight: bold; }
+.era-shop-place::before { position: absolute; left: 0; top: .25em; margin-right: 0; }
+.era-shop-place .era-sub { display: block; margin: 6px 0 0; font-size: .85em; font-weight: normal; }
 .era-shop :is(.era-shop-wake, .era-shop-chips, .era-main-header) .interactive-label { text-decoration-line: none; }
 /* Maps (hotpatch/MOVE_MAP.ERB): a text map's rows never wrap; with a picture in web/maps it replaces the rows and the
    room numbers become badges laid over it (app.js layoutMapPictures). */
