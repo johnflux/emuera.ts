@@ -344,10 +344,12 @@ function voiceEditor(chat, character) {
   const intimate = field("Example lines in intimate scenes", 6, "One per line. Used instead of the lines above during an intimate scene.");
   const save = element("button", "", "Save");
   const revert = element("button", "", "Revert to generated");
-  for (const button of [save, revert]) button.type = "button";
+  const download = element("button", "", "Download PNG card");
+  for (const button of [save, revert, download]) button.type = "button";
   const status = element("span", "era-history-note");
   const actions = element("div", "era-llm-voice-actions");
   actions.append(save, revert, status);
+  if (chat.downloadCard) actions.insertBefore(download, status);
   section.append(summary, note, description.wrapper, examples.wrapper, intimate.wrapper, actions);
   let settings = null;
   let loading = null;
@@ -364,6 +366,7 @@ function voiceEditor(chat, character) {
       ? `Your edited voice for ${character.name} is sent with every message (saved${where}).`
       : `Generated from ${character.name}'s kojo for the current game state. Edit and save to use your version instead (saved${where}).`;
     revert.disabled = !settings.saved;
+    download.disabled = !settings.saved;
   };
   const load = () => loading ??= chat.voice().then((result) => {
     settings = result;
@@ -374,13 +377,15 @@ function voiceEditor(chat, character) {
     note.textContent = `Could not load the voice: ${error.message}`;
   });
   const store = async (voice) => {
-    save.disabled = revert.disabled = true;
+    save.disabled = revert.disabled = download.disabled = true;
     status.textContent = "Saving…";
     try {
       await chat.saveVoice(voice);
       settings.saved = voice;
       if (!voice) show(settings.generated);
-      status.textContent = voice ? "Saved." : "Reverted to the generated voice.";
+      status.textContent = voice
+        ? settings.location ? `Saved to ${settings.location}.` : "Saved for this server run."
+        : "Reverted to the generated voice.";
     } catch (error) {
       status.textContent = `Could not save: ${error.message}`;
     } finally {
@@ -392,6 +397,21 @@ function voiceEditor(chat, character) {
     if (settings) void store({ description: description.textarea.value.trim(), examples: lines(examples.textarea), intimateExamples: lines(intimate.textarea) });
   });
   revert.addEventListener("click", () => { if (settings) void store(null); });
+  download.addEventListener("click", async () => {
+    download.disabled = true;
+    try {
+      const url = URL.createObjectURL(await chat.downloadCard());
+      const link = element("a");
+      link.href = url;
+      link.download = `${character.name.replace(/[<>:"/\\|?*\x00-\x1f]/g, "_")}.png`;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      status.textContent = "Downloaded the saved Character Card V2 PNG.";
+    } catch (error) { status.textContent = `Could not download: ${error.message}`; }
+    finally { showState(); }
+  });
   for (const { textarea } of [description, examples, intimate]) textarea.addEventListener("input", () => { status.textContent = "Unsaved changes."; });
   section.addEventListener("toggle", () => { if (section.open) void load(); });
   return { section, load };

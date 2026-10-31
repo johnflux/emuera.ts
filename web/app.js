@@ -1957,6 +1957,15 @@ async function renderSnapshot(snapshot, advanceScreen) {
         undo: (lines) => api("/api/character-chat/undo", { session, step, character: snapshot.characterHistory.character.id, lines }),
         voice: () => api("/api/character-voice", { session, step, character: snapshot.characterHistory.character.id }),
         saveVoice: (voice) => api("/api/character-voice/save", { session, character: snapshot.characterHistory.character.id, voice }),
+        downloadCard: async () => {
+          const query = new URLSearchParams({ session, character: snapshot.characterHistory.character.id });
+          const response = await fetch(`/api/character-card?${query}`);
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error ?? `Could not download the card (${response.status})`);
+          }
+          return response.blob();
+        },
         remember: (text, covers) => api("/api/character-memory", { session, character: snapshot.characterHistory.character.id, text, covers }),
         writeMemory: (history, signal) => writeMemory({ llm: activeLlm(), history, gameId: runGame ?? runMode, gameTitle: gameTitle(runGame), signal }),
         refresh: refreshScreen });

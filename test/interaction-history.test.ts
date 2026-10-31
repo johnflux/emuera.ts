@@ -853,7 +853,8 @@ test("corrupt history checkpoints are reported rather than silently treated as e
 
 test("HTTP delivery and resume expose the selected character history and serve the panel module", async () => {
   const savedVoices: [number, EditableVoice | null][] = [];
-  const voices = { load: () => null, save: (no: number, voice: EditableVoice | null) => { savedVoices.push([no, voice]); } };
+  const voices = { load: () => null, save: (no: number, voice: EditableVoice | null) => { savedVoices.push([no, voice]); },
+    card: () => savedVoices.at(-1)?.[1] ? Buffer.from("test-png") : null };
   const app = createApp([{ id: "tw", title: "Test", game: fixture(), saves: new MemorySaveStore(), voices }]);
   app.listen(0, "127.0.0.1");
   await once(app, "listening");
@@ -905,7 +906,17 @@ test("HTTP delivery and resume expose the selected character history and serve t
     assert.equal((await raw("/api/character-voice/save", { ...voiceCall, voice: { ...edited, examples: "Hello." } })).status, 400);
     assert.equal((await raw("/api/character-voice/save", { ...voiceCall, character: "someone-else", voice: edited })).status, 409);
     await post("/api/character-voice/save", { ...voiceCall, voice: edited });
+    const cardQuery = new URLSearchParams(voiceCall);
+    const card = await fetch(`${base}/api/character-card?${cardQuery}`);
+    assert.equal(card.status, 200);
+    assert.equal(card.headers.get("content-type"), "image/png");
+    assert.match(card.headers.get("content-disposition")!, /attachment/);
+    assert.equal(await card.text(), "test-png");
+    assert.equal((await fetch(`${base}/api/character-card`)).status, 400);
+    assert.equal((await fetch(`${base}/api/character-card?session=missing&character=x`)).status, 404);
+    assert.equal((await fetch(`${base}/api/character-card?session=${started.session}&character=someone-else`)).status, 409);
     await post("/api/character-voice/save", { ...voiceCall, voice: null });
+    assert.equal((await fetch(`${base}/api/character-card?${cardQuery}`)).status, 409);
     assert.deepEqual(savedVoices.map(([, voice]) => voice), [{ description: "A test.", examples: ["Hello."], intimateExamples: [] }, null]);
     assert.equal((await post("/api/resume", { session: started.session })).step, current.step, "voices do not advance the game");
     assert.equal((await raw("/api/refresh", { session: started.session })).status, 400);
@@ -1772,4 +1783,3 @@ test("live: the LLM speaks as YuugenMagan does, with her royal We (Ollama qwen-r
     assert.doesNotMatch(speech, /\b(?:I|I'm|I've|I'd|me|my|mine|myself)\b/, speech);
   } finally { globalThis.fetch = realFetch; }
 });
-

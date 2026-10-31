@@ -16,13 +16,19 @@ export interface EditableVoice {
   examples: string[];
   intimateExamples: string[];
 }
+export interface VoiceIdentity {
+  name: string;
+  portrait(): Buffer;
+}
 /** Voices the player has edited, by character number (NO), which stays the same across saves. */
 export interface VoiceStore {
-  load(no: number): EditableVoice | null;
+  load(no: number, identity?: VoiceIdentity): EditableVoice | null;
   /** Saves a voice, or with null goes back to the generated one. */
-  save(no: number, voice: EditableVoice | null): void;
+  save(no: number, voice: EditableVoice | null, identity?: VoiceIdentity): void;
   /** Where the voices are kept, to tell the player. */
   readonly location?: string;
+  locationFor?(no: number): string;
+  card?(no: number): Buffer | null;
 }
 export class MemoryVoiceStore implements VoiceStore {
   private voices = new Map<number, EditableVoice>();

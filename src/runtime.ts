@@ -944,7 +944,7 @@ export class Runtime {
    * Nothing in the game changes. A voice the player edited and saved is used instead.
    */
   characterVoice(index: number, intimate: boolean): CharacterVoice {
-    const saved = this.voices.load(this.characterNo(index));
+    const saved = this.voices.load(this.characterNo(index), this.voiceIdentity(index));
     if (saved) return { ...(saved.description ? { description: saved.description } : {}), examples: intimate ? saved.intimateExamples : saved.examples };
     return this.generatedVoice(index, intimate);
   }
@@ -955,13 +955,42 @@ export class Runtime {
     const everyday = this.generatedVoice(index, false), intimate = this.generatedVoice(index, true);
     return {
       generated: { description: everyday.description ?? "", examples: everyday.examples, intimateExamples: intimate.examples },
-      saved: this.voices.load(this.characterNo(index)),
-      ...(this.voices.location ? { location: this.voices.location } : {}),
+      saved: this.voices.load(this.characterNo(index), this.voiceIdentity(index)),
+      ...(this.voices.location ? { location: this.voices.locationFor?.(this.characterNo(index)) ?? this.voices.location } : {}),
     };
   }
   /** Saves the player's version of a character's voice, or with null goes back to the generated one. */
   saveCharacterVoice(character: string, voice: EditableVoice | null): void {
-    this.voices.save(this.characterNo(this.voiceCharacter(character)), voice);
+    const index = this.voiceCharacter(character);
+    this.voices.save(this.characterNo(index), voice, this.voiceIdentity(index));
+  }
+  characterCard(character: string): Buffer {
+    const index = this.voiceCharacter(character), no = this.characterNo(index);
+    this.voices.load(no, this.voiceIdentity(index));
+    const card = this.voices.card?.(no);
+    if (!card) throw new EraError("Save an edited character voice before downloading its PNG card");
+    return card;
+  }
+  private voiceIdentity(index: number) {
+    const name = text(this.globals.get("CALLNAME", [literal(BigInt(index))], this.context(this.globals)));
+    return { name, portrait: () => this.characterPortrait(index) };
+  }
+  private characterPortrait(index: number): Buffer {
+    const no = this.characterNo(index);
+    const body = this.sprite(`highres_${no}_本体_通常`), face = this.sprite(`highres_${no}_表情_通常`);
+    const frame = this.sprite(`highres_${no}_立ち絵_立ち絵`);
+    let picture: Picture | undefined;
+    if (body && frame) {
+      const ops = [body, ...(face ? [face] : [])].flatMap((part) => {
+        const op = this.spriteOp(part, [-frame.x, -frame.y, part.width, part.height]);
+        return op ? [op] : [];
+      });
+      picture = { width: frame.width, height: frame.height, ops };
+    } else {
+      picture = this.spritePicture(`立ち絵_服_通常_${no}`);
+    }
+    if (!picture) throw new EraError(`No normal portrait is available for character ${no}; the card was not saved`);
+    return encodePicture(picture, this.graphicImage);
   }
   private voiceCharacter(character: string): number {
     if (!this.interactionHistory) throw new EraError("Character voices are unavailable for this game");

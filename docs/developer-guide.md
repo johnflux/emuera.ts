@@ -424,8 +424,18 @@ messages. The prompt lists them as plain text after the scene and asks the model
 YuugenMagan's royal "We"), formality and verbal tics without copying them. The LLM debug tab has a "Character
 voice" editor: it shows the generated description and lines (`POST /api/character-voice`, only at a command screen)
 and saves an edited version (`POST /api/character-voice/save`; `voice: null` reverts). An edited voice is keyed by
-character `NO` in `llm-voices.json` in the game's save directory and replaces the generated one, its intimate lines
-used in intimate scenes. The conformance demo's scenario 12
+character `NO` in `character-cards/<game id>/<NO>.png`, beside `GAMES` rather than inside it, so custom cards can be
+tracked in git. The PNG uses the game's normal portrait and Character Card V2's base64 `chara` tEXt chunk,
+compatible with SillyTavern: description and everyday dialogue examples use standard fields; the
+`data.extensions["emuera.ts"]` object preserves the description, everyday examples, intimate examples and character
+number for lossless round trips. Editing preserves the image and unrelated card fields/extensions.
+Existing `llm-voices.json` entries migrate to PNG on first use, removing only the migrated JSON entry after the PNG
+is saved. Revert removes the custom card and any legacy entry. The editor's **Download PNG card** button downloads
+the saved card (`GET /api/character-card?session=…&character=…`).
+The edited voice replaces the generated one, with its intimate lines used in intimate scenes.
+Desktop builds store cards beside the user-data `GAMES` folder, in a writable `character-cards` directory.
+If a character has no supported normal portrait, saving reports an error instead of producing an empty card.
+The conformance demo's scenario 12
 (first meeting with YuugenMagan) exercises this, and a live test in `test/interaction-history.test.ts` checks it
 against Ollama `qwen-rp:latest` when that is running on port 11434 (it is skipped otherwise). With tools the model replies only through `say` (speech) and
 `act` (third-person actions), recorded in order and printed in the room;

@@ -11,6 +11,7 @@ import { CATALOG_UPDATED, downloadedCatalogGames, GAME_CATALOG, installGame } fr
 import { EraError, key } from "./model.js";
 import { GAME_INSTRUCTION_LIMIT, Runtime, type BackgroundLayer, type ClientState, type Snapshot } from "./runtime.js";
 import { editableVoice, FileVoiceStore, MemoryVoiceStore, type VoiceStore } from "./character-voice.js";
+import { CardVoiceStore } from "./character-card.js";
 import { FileGlobalStore, FileSaveStore, gameSaveDirectory, MemoryGlobalStore, MemorySaveStore, type GlobalStore, type SaveStore } from "./storage.js";
 import { patchTitleImage } from "./render-patches.js";
 import type { CharacterHistory, Encounter, HistoryCharacter } from "./interaction-history.js";
@@ -70,7 +71,7 @@ type Advance = "start" | "input" | "continue" | "timeout";
 /** A game the server runs; the first entry is the default, and also hosts the conformance demo. */
 export interface GameEntry {
   id: string; title: string; game: Game; store?: GlobalStore; saves?: SaveStore;
-  /** Character voices edited for LLM chat; by default llm-voices.json in the save directory. */
+  /** Character voices edited for LLM chat; by default V2 PNGs in character-cards/<game id>/ outside GAMES. */
   voices?: VoiceStore;
   /** Loads the game in Emuera's debug mode (with its [IF_DEBUG] code); by default a copy of `game` with the debug flag. */
   loadDebug?: () => Promise<Game>;
@@ -184,7 +185,10 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
       ...entry,
       store: entry.store ?? (saveDirectory ? new FileGlobalStore(path.join(saveDirectory, "global.sav")) : new MemoryGlobalStore()),
       saves: entry.saves ?? (saveDirectory ? new FileSaveStore(saveDirectory, path.join(game.root, "dat")) : new MemorySaveStore()),
-      voices: entry.voices ?? (saveDirectory ? new FileVoiceStore(path.join(saveDirectory, "llm-voices.json")) : new MemoryVoiceStore()),
+      voices: entry.voices ?? (saveDirectory ? new CardVoiceStore(
+        path.join(path.dirname(gamesDir), "character-cards", entry.id),
+        new FileVoiceStore(path.join(saveDirectory, "llm-voices.json")),
+      ) : new MemoryVoiceStore()),
       report: undefined as ReturnType<typeof compatibility> | undefined,
       debugGame: undefined as Promise<Game> | undefined,
     };
@@ -466,6 +470,23 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
             session.runtime.saveCharacterVoice(data.character, voice);
             json(response, { ok: true });
           } else json(response, session.runtime.characterVoiceSettings(data.character));
+        } catch (error) {
+          if (!(error instanceof EraError)) throw error;
+          throw new HttpError(409, error.message);
+        }
+        return;
+      }
+      if (request.method === "GET" && url.pathname === "/api/character-card") {
+        const id = url.searchParams.get("session"), character = url.searchParams.get("character");
+        if (!id || !character) throw new HttpError(400, "Expected session and character");
+        const session = sessions.get(id);
+        if (!session) throw new HttpError(404, "Session expired or does not exist; start a new run");
+        session.used = Date.now();
+        try {
+          const png = session.runtime.characterCard(character);
+          response.writeHead(200, { "Content-Type": "image/png", "Content-Disposition": 'attachment; filename="character-card.png"',
+            "Cache-Control": "no-store" });
+          response.end(png);
         } catch (error) {
           if (!(error instanceof EraError)) throw error;
           throw new HttpError(409, error.message);
