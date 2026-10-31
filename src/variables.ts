@@ -362,6 +362,18 @@ export class Variables {
     return ["GLOBAL", "GLOBALS", ...[...this.declarations].filter(([, line]) => /^#DIMS?\s+(?:\w+\s+)*GLOBAL\b/i.test(line.text))
       .map(([name]) => name)];
   }
+  /** Records every variable's values; the function returned puts them all back, undoing whatever ran in between. */
+  checkpoint(): () => void {
+    const saved = [...this.values.values()].map((variable) => ({ variable, values: new Map(variable.values), dimensions: [...variable.dimensions] }));
+    return () => {
+      for (const { variable, values, dimensions } of saved) {
+        // In place, since compiled code may hold on to the map.
+        variable.values.clear();
+        for (const [index, value] of values) variable.values.set(index, value);
+        variable.dimensions.splice(0, variable.dimensions.length, ...dimensions);
+      }
+    };
+  }
   exportGlobals(context: EvaluationContext): GlobalData {
     const result: GlobalData = {};
     for (const name of this.globalNames()) {

@@ -11,6 +11,9 @@ import { FileSaveStore, MemorySaveStore } from "../src/storage.js";
 import { readNativeSave } from "../src/save-format.js";
 import { createApp } from "../src/server.js";
 import { coloredHtml, plainHtml } from "../src/html.js";
+import { demoGame } from "../src/demo.js";
+import { proxyLlm } from "../src/llm.js";
+import { FileVoiceStore, type EditableVoice } from "../src/character-voice.js";
 
 function fixture(enabled = true) {
   const game = emptyGame();
@@ -511,9 +514,17 @@ GOTO AGAIN
 CFLAG:TARGET:好感度 += 3
 RETURN 1
 @SOURCE_CHECK
-PRINTL Source processing is not dialogue.
+PRINTL Alice seems rather upset.
 CALL KOJO_MESSAGE_SEND("COMMAND", 300, TARGET)
 CALL COM_KOJO_CALL(TARGET, 300)
+PRINTL ------------
+PRINTL Alice
+PRINTL Fear         0          + 30         =   30
+PRINTL Joy          0          + 0          =   0
+PRINT Hostility    50         - 5          =   45
+PRINTL
+PRINT ENE-20 
+PRINTL (Alice)
 @KOJO_MESSAGE_SEND(ARGS, ARG:1, ARG:2)
 PRINTL You have a normal conversation...
 @COM_KOJO_CALL(ARG, ARG:1)
@@ -530,8 +541,11 @@ PRINTL It's perfect for doing the laundry.`, "late-dialogue.ERB");
     assert.match(captured, /normal conversation/);
     assert.match(captured, /weather is nice/);
     assert.match(captured, /perfect for doing the laundry/);
-    assert.doesNotMatch(captured, /processing|status|Menu/);
-    assert.ok(event.lines.every((line) => line.character === event.target));
+    assert.doesNotMatch(captured, /status|Menu/);
+    // SOURCE_CHECK's own remarks are kept and its parameter table is condensed; separators and stamina are dropped.
+    assert.equal(event.lines.filter((line) => line.character === null).map((line) => line.text).join(""),
+      "Alice seems rather upset.\nAlice: Fear +30, Hostility -5\n");
+    assert.ok(event.lines.every((line) => line.character === null || line.character === event.target));
     assert.equal(event.after.affection, "3");
   });
 
@@ -838,7 +852,9 @@ test("corrupt history checkpoints are reported rather than silently treated as e
 });
 
 test("HTTP delivery and resume expose the selected character history and serve the panel module", async () => {
-  const app = createApp([{ id: "tw", title: "Test", game: fixture(), saves: new MemorySaveStore() }]);
+  const savedVoices: [number, EditableVoice | null][] = [];
+  const voices = { load: () => null, save: (no: number, voice: EditableVoice | null) => { savedVoices.push([no, voice]); } };
+  const app = createApp([{ id: "tw", title: "Test", game: fixture(), saves: new MemorySaveStore(), voices }]);
   app.listen(0, "127.0.0.1");
   await once(app, "listening");
   const address = app.address();
@@ -870,10 +886,345 @@ test("HTTP delivery and resume expose the selected character history and serve t
       body: JSON.stringify({ session: started.session, step: current.step - 1, character: recent.character.id }),
     });
     assert.equal(stale.status, 409);
+    const raw = (route: string, data: object) => fetch(base + route, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
+    const call = { session: started.session, step: current.step, character: recent.character.id, name: "change_feelings" };
+    const outside = await raw("/api/character-tool", { ...call, arguments: { favor: 99 } });
+    assert.equal(outside.status, 409, "tools only run at a command screen");
+    assert.match((await outside.json()).error, /waiting for a command/);
+    assert.equal((await raw("/api/character-tool", { ...call, arguments: [] })).status, 400);
+    assert.equal((await raw("/api/character-tool", { ...call, session: "missing" })).status, 404);
+    assert.equal((await raw("/api/character-tool", { ...call, step: current.step - 1 })).status, 409);
+    assert.equal((await raw("/api/character-tool", { ...call, character: "someone-else" })).status, 409);
+    // The character's voice: generated only at a command screen, while an edited one can be saved (or reverted) any time.
+    const voiceCall = { session: started.session, character: recent.character.id };
+    const generating = await raw("/api/character-voice", { ...voiceCall, step: current.step });
+    assert.equal(generating.status, 409);
+    assert.match((await generating.json()).error, /waiting for a command/);
+    assert.equal((await raw("/api/character-voice", voiceCall)).status, 400);
+    const edited = { description: " A test. ", examples: [" Hello. ", ""], intimateExamples: [] };
+    assert.equal((await raw("/api/character-voice/save", { ...voiceCall, voice: { ...edited, examples: "Hello." } })).status, 400);
+    assert.equal((await raw("/api/character-voice/save", { ...voiceCall, character: "someone-else", voice: edited })).status, 409);
+    await post("/api/character-voice/save", { ...voiceCall, voice: edited });
+    await post("/api/character-voice/save", { ...voiceCall, voice: null });
+    assert.deepEqual(savedVoices.map(([, voice]) => voice), [{ description: "A test.", examples: ["Hello."], intimateExamples: [] }, null]);
+    assert.equal((await post("/api/resume", { session: started.session })).step, current.step, "voices do not advance the game");
+    assert.equal((await raw("/api/refresh", { session: started.session })).status, 400);
+    assert.equal((await raw("/api/refresh", { session: started.session, step: current.step })).status, 409, "a plain INPUT is not a command screen");
     const module = await fetch(`${base}/interaction-history.js`);
     assert.equal(module.status, 200);
     assert.match(await module.text(), /export function renderCharacterHistory/);
   } finally { app.closeAllConnections(); await new Promise<void>((resolve) => app.close(() => resolve())); }
+});
+
+test("character tools query and change real eraTW state, and their room actions run when the screen is redrawn", {
+  skip: !existsSync(GAME_ROOT),
+}, async () => {
+  const game = await loadGame();
+  await applyHotpatches(game);
+  const runtime = new Runtime(demoGame(game), GAME_INSTRUCTION_LIMIT);
+  check(runtime.start());
+  check(runtime.input("8"));
+  let snapshot = check(runtime.input("2"));
+  for (let i = 0; snapshot.input?.kind === "wait" && i < 40; i++) snapshot = check(runtime.input(""));
+  const reimu = history(snapshot).character;
+  assert.equal(reimu.name, "Reimu");
+  const tool = (name: string, args: Record<string, unknown> = {}) => runtime.characterTool(reimu.id, name, args);
+  const text = (result: Snapshot) => result.output.filter((item) => item.type === "text").map((item) => item.text).join("\n");
+
+  const self = tool("get_character_info").result as Record<string, any>;
+  assert.equal(self.fullName, "Hakurei Reimu");
+  assert.equal(self.sex, "female");
+  assert.equal(self.race, "Human, Shrine Maiden");
+  assert.ok(self.traits.includes("Cheerful") && !self.traits.includes("Virgin♂"), "traits are one list without the other sex's virginity");
+  assert.equal(self.location, "Player's Back Room");
+  assert.equal(self.home, "Reimu's Boudoir (Hakurei Shrine area)");
+  assert.equal(self.romanticMood, "0/1500");
+  const player = tool("get_character_info", { character: "player" }).result as Record<string, any>;
+  assert.equal(player.isPlayer, true);
+  assert.equal(player.sex, "male");
+  assert.ok(!player.traits.includes("Male") && player.romanticMood === undefined && player.feelingsTowardPlayer === undefined);
+  const marisa = tool("get_character_info", { character: "Marisa" }).result as Record<string, any>;
+  assert.deepEqual([marisa.location, marisa.myAffinityForThem, marisa.theirAffinityForMe], ["away (not on this map)", 200, 200]);
+  assert.match((tool("get_character_info", { character: "nobody at all" }).result as { error: string }).error, /No character is called/);
+  const fairies = tool("find_characters", { query: "FAIRY| fairies " }).result as { found: number; characters: string[] };
+  assert.equal(fairies.found, 9);
+  assert.ok(fairies.characters.includes("Cirno (Fairy, Ice Fairy, female): lives at Ice Igloos (Scarlet Devil Mansion area); now Ice Igloos"));
+  assert.deepEqual(tool("find_characters", { query: "nothing-like-this" }).result, { found: 0 });
+  assert.match((tool("find_characters", { query: " | " }).result as { error: string }).error, /query is required/);
+
+  // Consent follows the game's own checks: REJECT_CHECK for a kiss, the push-down threshold for sex.
+  // The margin is the consent value (-50 here) less what the activity needs: 200 + 50 for an unkissed, reserved Reimu.
+  assert.deepEqual(tool("check_consent", { activity: "kiss" }).result, { activity: "kiss", decision: "NO: you absolutely refuse the kiss. Your words and actions must refuse it; it does not happen.", willing: false, answer: "firmly refuses", margin: -300,
+    why: "Reimu's feelings, less what it takes: −50 (trust) − 200 (base) − 30 (reserved) − 20 (never kissed) = −300",
+    otherActivities: { sex: "firmly refuses", become_lovers: "firmly refuses" } });
+  const sex = tool("check_consent", { activity: "sex" }).result as { margin: number; why: string };
+  assert.match(sex.why, /^Reimu's feelings, less what it takes: −50 \(trust\) − 350 \(base\) − 50 \(reserved\) \+ 50 \(chastity\) .*\+ \d+ \(pent-up frustration\) = −\d+$/);
+  assert.ok(sex.why.endsWith(`= −${-sex.margin}`));
+  // 抱き寄せ必要値: 350 + talents, less pent-up frustration (which grows with game time).
+  assert.ok(sex.margin < -400 && sex.margin >= -470, String(sex.margin));
+  assert.deepEqual(sex, { activity: "sex", decision: "NO: you absolutely refuse sex. Your words and actions must refuse it; it does not happen.", willing: false, answer: "firmly refuses", margin: sex.margin, why: sex.why,
+    otherActivities: { kiss: "firmly refuses", become_lovers: "firmly refuses" } });
+  assert.match((tool("check_consent", { activity: "hug" }).result as { error: string }).error, /activity must be one of/);
+  assert.deepEqual(tool("change_feelings", { favor: 500, trust: -3, reason: "test" }),
+    { result: { toward: "Player", favor: { before: 0, after: 50 }, trust: { before: 0, after: 0 } }, changed: true });
+  assert.deepEqual(tool("change_feelings", { toward: "Marisa", affinity: -40 }).result.affinity, { before: 200, after: 190 });
+  assert.deepEqual(tool("change_mark", { mark: "hate", change: 1 }).result, { mark: "hate", before: 0, after: 1, max: 3 });
+  assert.match((tool("change_mark", { mark: "hate", change: -1 }).result as { error: string }).error, /only the player's apology/);
+  assert.equal(tool("change_mark", { mark: "love", change: 1 }).changed, false);
+  assert.deepEqual(tool("change_mood", { anger: 900, romantic_mood: 20 }).result, { romanticMood: { before: 0, after: 20 }, anger: { before: 0, after: 300 } });
+  tool("change_mood", { romantic_mood: 280 });
+  assert.deepEqual(tool("check_consent", { activity: "become_lovers" }).result, { activity: "become_lovers", decision: "NO: you absolutely refuse becoming lovers. Your words and actions must refuse it; it does not happen.", willing: false, answer: "firmly refuses", margin: -518,
+    why: "Reimu's feelings, less what it takes: −50 (trust) + 12 (romantic mood) − 30 (hate mark) − 350 (base) − 100 (reserved) = −518",
+    otherActivities: { kiss: "firmly refuses", sex: "firmly refuses" } },
+    "a romantic mood of 300 raised this turn adds 300/25 to the consent value, and the hate mark gained above takes 30 (game patch 4)");
+  const scene = tool("describe_scene").result as Record<string, any>;
+  assert.equal(scene.time, "07:00, 1st of Spring, Year 1");
+  assert.equal(scene.me.name, "Reimu");
+  assert.deepEqual(scene.me.feelingsTowardPlayer, { favor: 50, trust: 0, marks: { hate: 1 } });
+  assert.equal(scene.player.isPlayer, true);
+  assert.equal(scene.othersHere, "nobody else");
+  assert.ok(scene.placesOnThisMap.includes("Kitchen") && new Set(scene.placesOnThisMap).size === scene.placesOnThisMap.length);
+  assert.equal((tool("move_to", { destination: "Atlantis" }).result as { error: string }).error.startsWith("Unknown destination"), true);
+
+  assert.equal(tool("act", { text: "Reimu points at the door." }).changed, true);
+  assert.equal(tool("say", { text: "Out of my storeroom!" }).changed, true);
+  assert.deepEqual(tool("move_to", { destination: "kitchen" }).result.to, "Kitchen");
+  assert.equal(tool("say", { text: "Nobody hears this" }).result.heard, false, "after moving away the player cannot hear");
+  assert.match((tool("push_down_player").result as { error: string }).error, /not in the same room/);
+  assert.throws(() => runtime.input("x"), /whole number/, "players cannot send the refresh sentinel");
+  snapshot = check(runtime.refresh());
+  assert.match(text(snapshot), /Reimu points at the door\.\n「Out of my storeroom!」\nReimu moves from【Player's Back Room】to the【Kitchen】/);
+  assert.doesNotMatch(text(snapshot), /Nobody hears this/);
+  for (let i = 0; snapshot.input?.kind === "wait" && i < 10; i++) snapshot = check(runtime.input(""));
+  assert.equal(snapshot.input?.kind, "integer");
+  assert.equal(check(runtime.refresh()).input?.kind, "integer", "redrawing with nothing queued is harmless");
+});
+
+test("the scene describes the other people in the room from the character's point of view", {
+  skip: !existsSync(GAME_ROOT),
+}, async () => {
+  const game = await loadGame();
+  await applyHotpatches(game);
+  const runtime = new Runtime(demoGame(game), GAME_INSTRUCTION_LIMIT);
+  check(runtime.start());
+  check(runtime.input("8"));
+  let snapshot = check(runtime.input("3"));
+  for (let i = 0; snapshot.input?.kind === "wait" && i < 40; i++) snapshot = check(runtime.input(""));
+  const scene = runtime.characterTool(history(snapshot).character.id, "describe_scene", {}).result as Record<string, any>;
+  assert.equal(scene.me.name, "Reimu");
+  assert.deepEqual(scene.othersHere, ["Kirisame Marisa (Human, Magician, female, my affinity 200%)"]);
+});
+
+test("pushing the player down uses eraTW's forced pushdown when the room is redrawn", {
+  skip: !existsSync(GAME_ROOT),
+}, async () => {
+  const game = await loadGame();
+  await applyHotpatches(game);
+  const runtime = new Runtime(demoGame(game), GAME_INSTRUCTION_LIMIT);
+  check(runtime.start());
+  assert.throws(() => runtime.refresh(), /command/, "only the command prompt can be redrawn");
+  check(runtime.input("8"));
+  let snapshot = check(runtime.input("2"));
+  for (let i = 0; snapshot.input?.kind === "wait" && i < 40; i++) snapshot = check(runtime.input(""));
+  assert.deepEqual(runtime.characterTool(history(snapshot).character.id, "push_down_player", {}).changed, true);
+  snapshot = check(runtime.refresh());
+  assert.match(snapshot.output.map((item) => item.text ?? "").join("\n"), /You are pushed down!/);
+});
+
+test("a player's attempt runs the game's own command, with its rejection and penalties, when the room is redrawn", {
+  skip: !existsSync(GAME_ROOT),
+}, async () => {
+  const game = await loadGame();
+  await applyHotpatches(game);
+  const runtime = new Runtime(demoGame(game), GAME_INSTRUCTION_LIMIT);
+  check(runtime.start());
+  check(runtime.input("8"));
+  let snapshot = check(runtime.input("2"));
+  for (let i = 0; snapshot.input?.kind === "wait" && i < 40; i++) snapshot = check(runtime.input(""));
+  const id = history(snapshot).character.id;
+  const tool = (name: string, args: Record<string, unknown> = {}) => runtime.characterTool(id, name, args);
+  // The hotpatched Kiss needs no closeness from earlier small talk: it is offered (behind the Petting filter) at once.
+  check(runtime.input("837"));
+  snapshot = check(runtime.refresh());
+  assert.match(snapshot.output.map((item) => item.text ?? "").join("\n"), /Kiss\[312\][\s\S]*Push Down\[350\][\s\S]*Confess\[352\]/);
+  assert.match((tool("player_attempts", { activity: "apologize" }).result as { error: string }).error, /Reimu is not furious with the player/);
+  assert.deepEqual(tool("player_attempts", { activity: "kiss" }),
+    { result: { note: "The player tries it now; the game decides how you react. The conversation ends here." }, changed: true });
+  assert.match((tool("player_attempts", { activity: "sex" }).result as { error: string }).error, /already trying/);
+  assert.match((tool("player_attempts", { activity: "hug" }).result as { error: string }).error, /activity must be one of/);
+  snapshot = check(runtime.refresh());
+  assert.match(snapshot.output.map((item) => item.text ?? "").join("\n"), /You try to kiss Reimu, but[\s\S]*so you give up/);
+  for (let i = 0; snapshot.input?.kind === "wait" && i < 20; i++) snapshot = check(runtime.input(""));
+  assert.equal(snapshot.input?.kind, "integer");
+  const feelings = (tool("get_character_info").result as Record<string, any>).feelingsTowardPlayer;
+  assert.deepEqual(feelings.marks, { hate: 1 }, "the unwelcome kiss's antipathy leaves a hate mark");
+  const kiss = history(snapshot).entries[0]!;
+  assert.equal(kiss.action.label, "Kiss");
+  const recorded = kiss.lines.map((line) => line.text).join("");
+  assert.match(recorded, /You try to kiss Reimu, but[\s\S]*Reimu: Fear \+\d+, Hostility \+\d+\n[\s\S]*Reimu is angry\.\.\./);
+  assert.deepEqual([kiss.before.marks?.hate, kiss.after.marks?.hate], ["0", "1"]);
+
+  // Now she is angry, an apology is the game's Apologize: it may calm her, but without a gift the hate mark stays.
+  assert.equal(tool("player_attempts", { activity: "apologize" }).changed, true);
+  snapshot = check(runtime.refresh());
+  for (let i = 0; snapshot.input?.kind === "wait" && i < 20; i++) snapshot = check(runtime.input(""));
+  assert.equal(history(snapshot).entries[0]!.action.label, "Apologize");
+  assert.deepEqual((tool("get_character_info").result as Record<string, any>).feelingsTowardPlayer.marks, { hate: 1 });
+});
+
+test("a character sulking after a refused push-down stays furious, so she can be apologised to (game patch 5)", {
+  skip: !existsSync(GAME_ROOT),
+}, async () => {
+  const game = await loadGame();
+  await applyHotpatches(game);
+  const runtime = new Runtime(demoGame(game), GAME_INSTRUCTION_LIMIT);
+  check(runtime.start());
+  check(runtime.input("8"));
+  let snapshot = check(runtime.input("2"));
+  for (let i = 0; snapshot.input?.kind === "wait" && i < 40; i++) snapshot = check(runtime.input(""));
+  const id = history(snapshot).character.id;
+  const tool = (name: string, args: Record<string, unknown> = {}) => runtime.characterTool(id, name, args);
+  assert.equal(tool("player_attempts", { activity: "sex" }).changed, true);
+  snapshot = check(runtime.refresh());
+  for (let i = 0; snapshot.input?.kind === "wait" && i < 40; i++) snapshot = check(runtime.input(""));
+  assert.equal(history(snapshot).entries[0]!.action.label, "Push Down");
+  assert.ok((tool("get_character_info").result as Record<string, any>).feelingsTowardPlayer.marks.hate >= 1);
+  // Unpatched, the time that passes after the scene clears her fury (anger was still 0) before the sulk refills it.
+  assert.equal(tool("player_attempts", { activity: "apologize" }).changed, true);
+});
+
+test("pushing someone down in company gets their own refusal before the group's objection", {
+  skip: !existsSync(GAME_ROOT),
+}, async () => {
+  const game = await loadGame();
+  await applyHotpatches(game);
+  const runtime = new Runtime(demoGame(game), GAME_INSTRUCTION_LIMIT);
+  check(runtime.start());
+  check(runtime.input("8"));
+  let snapshot = check(runtime.input("3"));
+  for (let i = 0; snapshot.input?.kind === "wait" && i < 40; i++) snapshot = check(runtime.input(""));
+  const id = history(snapshot).character.id;
+  runtime.characterTool(id, "change_mark", { mark: "hate", change: 1 });
+  const output: string[] = [];
+  snapshot = check(runtime.input("350"));
+  output.push(...snapshot.output.map((item) => item.text ?? ""));
+  for (let i = 0; snapshot.input?.kind === "wait" && i < 20; i++) {
+    snapshot = check(runtime.input(""));
+    output.push(...snapshot.output.map((item) => item.text ?? ""));
+  }
+  const text = output.join("\n");
+  assert.match(text, /embrace Reimu and the others[\s\S]*Reimu immediately takes a step back[\s\S]*Reimu is angry/);
+  assert.doesNotMatch(text, /oppose the idea of having an orgy/);
+  const feelings = (runtime.characterTool(id, "get_character_info", {}).result as Record<string, any>).feelingsTowardPlayer;
+  assert.deepEqual(feelings.marks, { hate: 3 });
+});
+
+test("in an intimate scene the character sees its live state and can run or end scene commands", {
+  skip: !existsSync(GAME_ROOT),
+}, async () => {
+  const game = await loadGame();
+  await applyHotpatches(game);
+  const runtime = new Runtime(demoGame(game), GAME_INSTRUCTION_LIMIT);
+  check(runtime.start());
+  check(runtime.input("8"));
+  let snapshot = check(runtime.input("2"));
+  for (let i = 0; snapshot.input?.kind === "wait" && i < 40; i++) snapshot = check(runtime.input(""));
+  const id = history(snapshot).character.id;
+  const play = (first: ReturnType<Runtime["refresh"]>) => {
+    let current = check(first);
+    const text = current.output.map((item) => item.text ?? "");
+    for (let i = 0; current.input?.kind === "wait" && i < 30; i++) {
+      current = check(runtime.input(""));
+      text.push(...current.output.map((item) => item.text ?? ""));
+    }
+    return text.join("\n");
+  };
+  const scene = () => (runtime.characterTool(id, "describe_scene", {}).result as Record<string, any>).intimateScene;
+  assert.equal(scene(), undefined);
+  assert.match(String(runtime.characterTool(id, "scene_action", { command: "Kiss" }).result.error), /not in an intimate scene/);
+  // Win Reimu over completely, then push her down.
+  const runner = runtime as any;
+  const context = runner.context(runner.globals);
+  const literal = (value: unknown) => ({ kind: "literal", value });
+  const target = runner.globals.get("TARGET", [literal(0n)], context);
+  for (const [name, key, value] of [["CFLAG", "好感度", 50001n], ["CFLAG", "信頼度", 1001n], ["TALENT", "恋慕", 1n], ["ABL", "親密", 10n]] as const) {
+    runner.globals.set(name, [literal(target), literal(key)], value, context);
+  }
+  // Push Down reads the consent cached by CHARA_ATTITUDE, which check_consent recalculates.
+  assert.equal(runtime.characterTool(id, "check_consent", { activity: "sex" }).result.answer, "eager");
+  assert.match(play(runtime.input("350")), /take care of me/);
+  let state = scene();
+  assert.match(state.me.stamina, /^\d+\/\d+$/);
+  assert.ok(state.player.vigor && state.player.erection && state.limits);
+  assert.equal(state.touching, "nothing right now");
+  assert.ok(state.availableCommands.includes("Breast Caress") && state.availableCommands.includes("Kiss"));
+  assert.match(String(runtime.characterTool(id, "scene_action", { command: "Fly" }).result.error), /not available now; choose one of: .*Breast Caress/);
+  assert.equal(runtime.characterTool(id, "scene_action", { command: "breast caress" }).result.command, "Breast Caress");
+  assert.match(play(runtime.refresh()), /caress her breasts/);
+  state = scene();
+  assert.equal(state.lastCommand, "Breast Caress");
+  assert.deepEqual(state.touching, ["the player's fingers on your breasts"]);
+  assert.ok(state.me.arousalLevels.breasts >= 1);
+  runtime.characterTool(id, "end_scene", {});
+  assert.match(play(runtime.refresh()), /it's already over/);
+  assert.equal(scene(), undefined);
+});
+
+test("the chat window's conversation goes straight into the interaction history and ends at the next command", {
+  skip: !existsSync(GAME_ROOT),
+}, async () => {
+  const game = await loadGame();
+  await applyHotpatches(game);
+  const runtime = new Runtime(demoGame(game), GAME_INSTRUCTION_LIMIT);
+  check(runtime.start());
+  check(runtime.input("8"));
+  let snapshot = check(runtime.input("2"));
+  for (let i = 0; snapshot.input?.kind === "wait" && i < 40; i++) snapshot = check(runtime.input(""));
+  let shown = history(snapshot);
+  const id = shown.character.id;
+  const newest = () => runtime.fullCharacterHistory(shown).entries[0];
+  const text = (line: { runs?: { text: string }[]; text?: string }) => line.runs ? line.runs.map((run) => run.text).join("") : line.text;
+  const before = newest()?.id;
+  runtime.chatMessage(id, "Hi *waves* “How are you?”");
+  runtime.characterTool(id, "describe_scene", {});
+  runtime.characterTool(id, "say", { text: "Fine, thanks." });
+  runtime.characterTool(id, "act", { text: "Reimu smiles." });
+  runtime.characterTool(id, "change_feelings", { favor: 10, reason: "greeting" });
+  runtime.characterTool(id, "move_to", { destination: "the Moon" });
+  runtime.characterTool(id, "check_consent", { activity: "kiss" });
+  let entry = newest()!;
+  assert.equal(entry.action.id, "chat");
+  assert.equal(entry.action.label, "Conversation");
+  const lines = entry.lines.map(text);
+  assert.equal(lines.length, 6, "describe_scene is not recorded");
+  // A consent check reads as its answer, coloured by willingness, and the reasons rather than raw JSON.
+  assert.match(lines[5]!, /^check_consent\(kiss\) → −50 \(trust\) − 200 \(base\) .* = −\d+ \(Reimu firmly refuses\)\. Will also firmly refuse: sex or becoming lovers$/);
+  assert.deepEqual((entry.lines[5] as { runs: { color: string }[] }).runs.map((run) => run.color), ["#6f6f6f", "#a8a8a8", "#e07a7a", "#a8a8a8", "#a8a8a8"]);
+  assert.equal(lines[0], '"Hi" *waves* "How are you?"');
+  assert.equal(lines[1], "「Fine, thanks.」");
+  assert.equal(lines[2], "Reimu smiles.");
+  assert.match(lines[3]!, /^change_feelings\(favor \+10\) \(greeting\) → favor \d+ → \d+$/);
+  assert.match(lines[4]!, /^move_to\(the Moon\) → failed: /);
+  const colors = entry.lines.flatMap((line) => (line as { runs?: { color: string }[] }).runs ?? []).map((run) => run.color);
+  for (const color of colors) assert.match(color, /^(?:#[0-9a-f]{3}(?:[0-9a-f]{3})?|[a-z]{1,30})$/i);
+  assert.notEqual(colors[1], colors[0], "speech is in the character's dialogue colour");
+  assert.equal(colors[3], "#6f6f6f");
+  // Undo takes lines back from the end; emptying the conversation removes it.
+  runtime.unchat(id, 3);
+  assert.equal(newest()!.lines.length, 3);
+  runtime.unchat(id, 3);
+  assert.equal(newest()?.id, before);
+  // The say still plays in the room, and the next command is a separate event.
+  runtime.chatMessage(id, "Bye");
+  runtime.characterTool(id, "say", { text: "See you." });
+  snapshot = check(runtime.refresh());
+  assert.match(snapshot.output.map((item) => item.text ?? "").join("\n"), /「See you\.」/);
+  shown = history(snapshot);
+  entry = newest()!;
+  assert.equal(entry.action.id, "chat");
+  assert.deepEqual(entry.lines.map(text), ['"Bye"', "「See you.」"]);
+  runtime.chatMessage(id, "Again");
+  assert.notEqual(newest()!.id, entry.id, "a conversation after the room is redrawn is a new event");
 });
 
 test("real eraTW contacts set separate saved penetration flags for group recipients", {
@@ -1016,3 +1367,113 @@ CFLAG:1:睡眠 = 0`, "history-test-setup.ERB");
   const event = JSON.parse(String(saves.read(events[0]!))).event;
   assert.ok(event.lines.some((line: { text: string }) => line.text.trim()), "actual eraTW post-command dialogue is captured");
 });
+
+/** The conformance demo's YuugenMagan scenario: her first-meeting event with the given route, then the main screen. */
+async function meetYuugenMagan(route: string) {
+  const game = await loadGame();
+  await applyHotpatches(game);
+  const runtime = new Runtime(demoGame(game), GAME_INSTRUCTION_LIMIT);
+  const output: string[] = [];
+  const step = (value: string) => {
+    let snapshot = check(runtime.input(value));
+    output.push(...snapshot.output.map((item) => item.text ?? ""));
+    for (let i = 0; snapshot.input?.kind === "wait" && i < 80; i++) {
+      snapshot = check(runtime.input(""));
+      output.push(...snapshot.output.map((item) => item.text ?? ""));
+    }
+    return snapshot;
+  };
+  check(runtime.start());
+  check(runtime.input("8"));
+  step("12");
+  step(route);
+  // Her kojo then asks how to build her body; the defaults are fine.
+  const snapshot = step("999");
+  return { runtime, snapshot, text: output.join("\n") };
+}
+
+test("the demo's YuugenMagan scenario plays her first meeting, and her kojo gives the LLM her voice", {
+  skip: !existsSync(GAME_ROOT),
+}, async () => {
+  const { runtime, snapshot, text } = await meetYuugenMagan("1");
+  assert.match(text, /YuugenMagan meets you for the first time[\s\S]*「A meeting is nice\.」/);
+  const { character, entries } = history(snapshot);
+  assert.equal(character.name, "YuugenMagan");
+  assert.equal(entries[0]!.action.label, "First meeting");
+  assert.match(entries[0]!.lines.map((line) => line.text).join("\n"), /But you may call Us YuugenMagan/);
+  const voice = (runtime.characterTool(character.id, "describe_scene", {}).result as { voice: { description: string; examples: string[] } }).voice;
+  assert.match(voice.description, /A mysterious creature from another dimension/);
+  assert.doesNotMatch(voice.description, /Dialogue v\d/);
+  assert.equal(voice.examples.length, 12);
+  assert.ok(voice.examples.filter((line) => /\b(?:We|Us|Our)\b/.test(line)).length >= 4, voice.examples.join("\n"));
+  // Lines about sex wait for an intimate scene, and she is not lying about her nature on this route (route 1).
+  assert.ok(voice.examples.every((line) => !/\b(?:seed|womb|erect\w*)\b/i.test(line)), voice.examples.join("\n"));
+  assert.ok(!voice.examples.some((line) => line.includes("But something tells you")), "the route 0 description line is for route 0");
+  assert.deepEqual((runtime.characterTool(character.id, "describe_scene", {}).result as { voice: unknown }).voice, voice, "the same lines each time");
+  // The player can edit her voice; the edited one is sent instead until reverted.
+  const settings = runtime.characterVoiceSettings(character.id);
+  assert.deepEqual(settings.generated.examples, voice.examples);
+  assert.equal(settings.generated.description, voice.description);
+  assert.equal(settings.generated.intimateExamples.length, 12);
+  assert.equal(settings.saved, null);
+  runtime.saveCharacterVoice(character.id, { description: "", examples: ["We are pleased."], intimateExamples: ["We are ready."] });
+  assert.deepEqual((runtime.characterTool(character.id, "describe_scene", {}).result as { voice: unknown }).voice, { examples: ["We are pleased."] });
+  assert.deepEqual(runtime.characterVoiceSettings(character.id).saved, { description: "", examples: ["We are pleased."], intimateExamples: ["We are ready."] });
+  runtime.saveCharacterVoice(character.id, null);
+  assert.deepEqual((runtime.characterTool(character.id, "describe_scene", {}).result as { voice: unknown }).voice, voice);
+});
+
+test("edited character voices are kept in a JSON file by character number", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "era-voices-"));
+  try {
+    const file = path.join(directory, "sav", "llm-voices.json");
+    const store = new FileVoiceStore(file);
+    assert.equal(store.load(151), null);
+    const voice = { description: "From below.", examples: ["We think not."], intimateExamples: [] };
+    store.save(151, voice);
+    store.save(1, { ...voice, examples: ["Donations, please."] });
+    assert.deepEqual(new FileVoiceStore(file).load(151), voice);
+    store.save(1, null);
+    assert.deepEqual(Object.keys(JSON.parse(readFileSync(file, "utf8"))), ["151"]);
+    assert.equal(store.location, file);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+const OLLAMA = "http://127.0.0.1:11434";
+const OLLAMA_MODEL = "qwen-rp:latest";
+const ollama = await fetch(`${OLLAMA}/api/tags`, { signal: AbortSignal.timeout(1000) })
+  .then(async (response) => ((await response.json()) as { models?: { name: string }[] }).models?.some((model) => model.name === OLLAMA_MODEL) ?? false, () => false);
+
+test("live: the LLM speaks as YuugenMagan does, with her royal We (Ollama qwen-rp)", {
+  skip: !existsSync(GAME_ROOT) ? "no game" : !ollama ? `Ollama with ${OLLAMA_MODEL} is not running on ${OLLAMA}` : false,
+  timeout: 300_000,
+}, async (t) => {
+  const { runtime, snapshot } = await meetYuugenMagan("1");
+  const { character } = history(snapshot);
+  const { buildMessages, converse, systemPrompt, toolsFor } = await import("../web/llm.js");
+  const { historyContext } = await import("../web/interaction-history.js");
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => url === "/api/llm"
+    ? new Response(JSON.stringify(await proxyLlm(JSON.parse(String(init!.body))))) : realFetch(url, init)) as typeof fetch;
+  try {
+    const said: string[] = [];
+    for (const message of ["Hello again! Tell me about yourself. Where do you come from?", "What do you think of Gensokyo?"]) {
+      const runTool = async (name: string, args: Record<string, unknown>) => runtime.characterTool(character.id, name, args).result;
+      const scene = await runTool("describe_scene", {});
+      const { tools } = await converse({
+        llm: { provider: "local", endpoint: `${OLLAMA}/v1`, apiKey: "", model: OLLAMA_MODEL, tools: true },
+        messages: buildMessages({
+          system: systemPrompt({ character, gameTitle: "eraTW", tools: true, scene }),
+          context: historyContext(runtime.fullCharacterHistory(history(snapshot)), 24000), scene, message,
+        }),
+        temperature: 0.8, log: [], runTool, toolset: toolsFor(scene),
+      });
+      said.push(...tools.filter((tool: { name: string }) => tool.name === "say").map((tool: { arguments: { text: string } }) => tool.arguments.text));
+    }
+    const speech = said.join("\n");
+    t.diagnostic(speech);
+    assert.match(speech, /\b(?:We|Us|Our)\b/, speech);
+    assert.doesNotMatch(speech, /\b(?:I|I'm|I've|I'd|me|my|mine|myself)\b/, speech);
+  } finally { globalThis.fetch = realFetch; }
+});
+

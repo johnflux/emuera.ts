@@ -518,3 +518,70 @@ test("development runtime metadata changes across server instances", async () =>
     })));
   }
 });
+
+test("LLM proxy forwards chat completions and model lists with the key, and reports upstream failures", async () => {
+  const { createServer } = await import("node:http");
+  const seen: { method?: string; url?: string; authorization?: string; title?: string; body: string }[] = [];
+  const upstream = createServer(async (request, response) => {
+    let body = "";
+    for await (const chunk of request) body += chunk;
+    seen.push({ method: request.method, url: request.url, authorization: request.headers.authorization, title: request.headers["x-title"] as string | undefined, body });
+    if (request.url === "/v1/models") {
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ data: [{ id: "b-model" }, { id: "a-model" }] }));
+    } else if (request.headers.authorization === "Bearer good") {
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ choices: [{ message: { content: "{\"speech\":\"Hi\"}" } }] }));
+    } else {
+      response.writeHead(401, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ error: { message: "bad key" } }));
+    }
+  });
+  upstream.listen(0, "127.0.0.1");
+  await once(upstream, "listening");
+  const app = createApp(emptyGame());
+  app.listen(0, "127.0.0.1");
+  await once(app, "listening");
+  try {
+    const endpoint = `http://127.0.0.1:${(upstream.address() as { port: number }).port}/v1/`;
+    const base = `http://127.0.0.1:${(app.address() as { port: number }).port}`;
+    const post = (data: unknown) => fetch(`${base}/api/llm`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
+    const payload = { model: "m", messages: [{ role: "user", content: "x".repeat(100_000) }] };
+    let response = await post({ provider: "openrouter", endpoint, apiKey: " good ", path: "chat/completions", payload });
+    assert.equal(response.status, 200);
+    let result = await response.json();
+    assert.equal(result.ok, true);
+    assert.equal(result.status, 200);
+    assert.equal(JSON.parse(result.text).choices[0].message.content, "{\"speech\":\"Hi\"}");
+    assert.deepEqual({ ...seen[0], body: JSON.parse(seen[0]!.body) }, {
+      method: "POST", url: "/v1/chat/completions", authorization: "Bearer good", title: "Emuera.ts", body: payload,
+    });
+    response = await post({ provider: "openai", endpoint, apiKey: "bad", path: "chat/completions", payload });
+    result = await response.json();
+    assert.equal(result.ok, false);
+    assert.equal(result.status, 401);
+    assert.match(result.text, /bad key/);
+    assert.equal(seen[1]!.title, undefined, "only OpenRouter gets its attribution headers");
+    response = await post({ provider: "local", endpoint, path: "models" });
+    result = await response.json();
+    assert.equal(seen[2]!.method, "GET");
+    assert.equal(seen[2]!.authorization, undefined, "no key, no Authorization header");
+    assert.deepEqual(JSON.parse(result.text).data.map((model: { id: string }) => model.id), ["b-model", "a-model"]);
+    for (const [data, status] of [
+      [{ endpoint: "file:///etc/passwd", path: "models" }, 400],
+      [{ endpoint, path: "../admin" }, 400],
+      [{ endpoint, path: "chat/completions" }, 400],
+      [{ endpoint: "http://user:pass@127.0.0.1:1/v1", path: "models" }, 400],
+      [{ endpoint: "http://127.0.0.1:1/v1", path: "models" }, 502],
+    ] as const) assert.equal((await post(data)).status, status, JSON.stringify(data));
+    const crossOrigin = await fetch(`${base}/api/llm`, {
+      method: "POST", headers: { "Content-Type": "application/json", Origin: "https://evil.example" },
+      body: JSON.stringify({ endpoint, path: "models" }),
+    });
+    assert.equal(crossOrigin.status, 403);
+    assert.equal((await fetch(`${base}/llm.js`)).status, 200);
+  } finally {
+    app.closeAllConnections(); app.close();
+    upstream.closeAllConnections(); upstream.close();
+  }
+});

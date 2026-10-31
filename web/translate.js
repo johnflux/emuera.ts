@@ -119,6 +119,8 @@ export function createTranslation({ onChange = () => {} } = {}) {
   }
   /** Translates Japanese text under root now and, once a model is ready, keeps doing so on every call. */
   function translateTree(root) {
+    // Redrawn history panels and closed dialogs are dropped rather than kept for later passes.
+    for (const old of roots) if (!old.isConnected) roots.delete(old);
     roots.add(root);
     protectMapTranslation(root);
     if (!enabled()) return;

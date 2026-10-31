@@ -28,6 +28,7 @@
         <button id="report" aria-expanded="false" aria-controls="compatibility">Compatibility report</button>
         <button id="debug-toggle" aria-pressed="false" aria-haspopup="dialog" title="Emuera's debug mode: restarts the run with [IF_DEBUG] code loaded, DEBUGPRINT output shown and ASSERT checked">Debug mode</button>
         <button id="settings-toggle" aria-expanded="false" aria-controls="settings">Settings</button>
+        <button id="llm-toggle" aria-haspopup="dialog" title="Choose the language model that lets characters reply in Interaction History">LLM… <span id="llm-state" class="menu-state"></span></button>
         <button id="translate-toggle" aria-pressed="false" title="Translate the game's Japanese text on this device as it is printed">Translate Japanese <span id="translate-state" class="menu-state"></span></button>
         <label class="menu-font">Font size <input id="font-size" type="range" min="12" max="24" value="16"></label>
       </nav>
@@ -93,6 +94,41 @@
       <div class="confirm-actions">
         <button value="cancel" autofocus>Cancel</button>
         <button value="ok" id="confirm-ok" class="danger"></button>
+      </div>
+    </form>
+  </dialog>
+  <dialog id="llm-config" class="confirm llm-config" aria-labelledby="llm-config-title">
+    <form method="dialog">
+      <h2 id="llm-config-title">LLM</h2>
+      <p>Lets characters reply to your messages in their Interaction History. Sending a message sends that character's interaction history to the provider. These settings, including the API key, are stored unencrypted in this browser only.</p>
+      <div class="llm-config-fields">
+        <label for="llm-provider">Provider</label>
+        <select id="llm-provider" name="provider">
+          <option value="openai">OpenAI</option>
+          <option value="openrouter">OpenRouter</option>
+          <option value="local">Local (OpenAI-compatible)</option>
+        </select>
+        <label for="llm-endpoint">API base URL</label>
+        <span class="llm-config-row"><input id="llm-endpoint" name="endpoint" type="url" required spellcheck="false"><button type="button" class="llm-reset-endpoint">Default</button></span>
+        <p class="llm-config-hint"></p>
+        <label for="llm-key">API key</label>
+        <input id="llm-key" name="apiKey" type="password" autocomplete="off" spellcheck="false">
+        <label for="llm-model">Model</label>
+        <span class="llm-config-row"><input id="llm-model" name="model" list="llm-models" required spellcheck="false"><button type="button" class="llm-load-models">Load models</button></span>
+        <datalist id="llm-models"></datalist>
+        <label class="llm-config-check"><input name="jsonMode" type="checkbox"><span>Request JSON output (<code>response_format</code>)</span></label>
+        <label class="llm-config-check"><input name="tools" type="checkbox"><span>Let the character act in the game with tools (the model must support tool calling)</span></label>
+        <label for="llm-temperature">Temperature</label>
+        <input id="llm-temperature" name="temperature" type="number" min="0" max="2" step="0.1">
+        <label for="llm-history-chars">History sent</label>
+        <span class="llm-config-row"><input id="llm-history-chars" name="historyChars" type="number" min="1000" step="1000"> characters (oldest dropped first)</span>
+        <label for="llm-instructions">Extra instructions</label>
+        <textarea id="llm-instructions" name="instructions" rows="3" placeholder="Optional, e.g. &quot;Reply in Japanese.&quot;"></textarea>
+      </div>
+      <p class="llm-config-status" role="status"></p>
+      <div class="confirm-actions">
+        <button value="cancel" formnovalidate>Cancel</button>
+        <button value="save">Save</button>
       </div>
     </form>
   </dialog>

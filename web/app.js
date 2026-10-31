@@ -1,6 +1,7 @@
 import { createTranslation, protectMapTranslation } from "./translate.js";
 import { createLibrary } from "./library.js";
-import { setupCharacterHistory } from "./interaction-history.js";
+import { setHistoryTranslator, setupCharacterHistory } from "./interaction-history.js";
+import { activeLlm, PROVIDERS, setupLlmConfig } from "./llm.js";
 
 const terminal = document.querySelector("#terminal");
 const status = document.querySelector("#status");
@@ -10,6 +11,7 @@ const report = document.querySelector("#compatibility");
 const tooltip = document.querySelector("#game-tooltip");
 let tooltipTarget = null;
 const translation = createTranslation({ onChange: (status) => showTranslation(status) });
+setHistoryTranslator((root) => translation.translateTree(root));
 const demoButton = document.querySelector("#demo");
 /** The menu's run buttons: the demo, then one per game (#game is the default game's; see showGames()). */
 const startButtons = [demoButton, document.querySelector("#game")];
@@ -1944,7 +1946,13 @@ async function renderSnapshot(snapshot, advanceScreen) {
     for (const parent of outputRoot.querySelectorAll(".screen.is-active .era-interaction-history:empty"))
       setupCharacterHistory(parent, snapshot.characterHistory, () => api("/api/character-history", {
         session, step, character: snapshot.characterHistory.character.id,
-      }));
+      }), { gameId: runGame ?? runMode, gameTitle: gameTitle(runGame),
+        runTool: (name, args) => api("/api/character-tool", { session, step, character: snapshot.characterHistory.character.id, name, arguments: args }),
+        record: (text) => api("/api/character-chat", { session, step, character: snapshot.characterHistory.character.id, text }),
+        undo: (lines) => api("/api/character-chat/undo", { session, step, character: snapshot.characterHistory.character.id, lines }),
+        voice: () => api("/api/character-voice", { session, step, character: snapshot.characterHistory.character.id }),
+        saveVoice: (voice) => api("/api/character-voice/save", { session, character: snapshot.characterHistory.character.id, voice }),
+        refresh: refreshScreen });
   }
   await prepareMapPictures();
   await prepareAreaArt();
@@ -2007,7 +2015,7 @@ function showReport(visible) {
   report.hidden = !visible;
   const mode = document.querySelector("#mode");
   mode.hidden = !runMode;
-  mode.textContent = (runMode === "demo" ? "Demo" : "Game") + (runDebug ? " · Debug" : "");
+  mode.textContent = (runMode === "demo" ? "Demo" : gameTitle(runGame)) + (runDebug ? " · Debug" : "");
   debugButton.setAttribute("aria-pressed", String(runDebug));
   debugPanel.hidden = !runDebug;
   document.querySelector("#report").setAttribute("aria-expanded", String(visible));
@@ -2234,6 +2242,27 @@ async function submit(value, selectedChoice = null) {
       nameField.focus({ preventScroll: true });
       nameField.setSelectionRange(nameFocus.start, nameFocus.end);
     } else if (input) command.focus({ preventScroll: true });
+    if (skipRequested) void continueSkipping();
+    runQueuedContinue();
+  }
+}
+/** Redraws the command screen after LLM character tools changed the game, showing what they did in the room. */
+async function refreshScreen() {
+  if (busy || !input) return;
+  busy = true;
+  message("Updating the room...");
+  beginActivity();
+  updateControls();
+  try {
+    const snapshot = await api("/api/refresh", { session, step });
+    activityResponded();
+    await render(snapshot, true, false, false, true);
+  } catch (error) { if (!staleTab(error)) message(error.message, true); }
+  finally {
+    busy = false;
+    endActivity();
+    updateControls();
+    if (input) command.focus({ preventScroll: true });
     if (skipRequested) void continueSkipping();
     runQueuedContinue();
   }
@@ -2526,6 +2555,20 @@ showTranslation(translation.status());
 translateToggle.addEventListener("click", () => {
   translation.setEnabled(!translation.enabled());
   translation.translateTree(terminal);
+});
+const llmConfig = document.querySelector("#llm-config");
+const openLlmConfig = setupLlmConfig(llmConfig);
+function showLlmState() {
+  const llm = activeLlm();
+  document.querySelector("#llm-state").textContent = llm ? `(${PROVIDERS[llm.provider].label}: ${llm.model})` : "(not set up)";
+}
+showLlmState();
+document.querySelector("#llm-toggle").addEventListener("click", openLlmConfig);
+// The Interaction History chat asks for this when no model is configured yet.
+document.addEventListener("era-llm-configure", openLlmConfig);
+llmConfig.addEventListener("close", () => {
+  showLlmState();
+  document.dispatchEvent(new Event("era-llm-changed"));
 });
 const settingsPanel = document.querySelector("#settings");
 document.querySelector("#settings-toggle").addEventListener("click", (event) => {

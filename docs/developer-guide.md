@@ -379,9 +379,124 @@ The history tab scrolls within the same panel dimensions.
 History opens at the bottom and scrolls to the newest text when refreshed.
 Collapsed entries use closely spaced headings without divider lines.
 Clicking the preview switches to Interaction History.
+
+The **more...** dialog also lets the player talk to the character through an
+LLM, configured from the menu's **LLM…** item (OpenAI, OpenRouter, or any local
+OpenAI-compatible server such as Ollama, LM Studio or llama.cpp). Settings and
+API keys live only in the browser's `localStorage` (`era-typescript.llm`).
+The conversation has no separate transcript: everything said and done goes
+straight into the interaction history as a "Conversation" event
+(`POST /api/character-chat` records the player's message, character tool calls
+record themselves). The player's words are in "quotes" with `*actions*` kept as
+written, the character's speech is in 「」 in its eraTW dialogue colour
+(`SET_KOJO_COLOR`), its actions are plain narration, and any other tool call is a
+line summarising it (`toolCallSummary` in `src/character-tools.ts`): the call
+in dim grey, the outcome in lighter grey, such as
+`change_feelings(favor +10) (gift) → favor 3 → 13` or
+`check_consent(kiss) → −50 (trust) − 200 (base) − 30 (reserved) − 20 (never kissed) = −300 (Reimu firmly refuses). Will also firmly refuse: sex or becoming lovers`
+(the character is named, never "you").
+A consent answer is green (willing), amber (gives in) or red (refuses), as are
+failures and hate marks. `check_consent`'s `why` is that same sum (feelings'
+parts less what it takes, equal to the margin), prefixed for the model with
+"Reimu's feelings, less what it takes:". Like any
+history line, each has text runs with a colour (hex or a colour name) taken when
+it is written. The conversation is one event that grows line by line; the next
+command (including the redraw after closing the dialog) ends it. A message is sent
+with a role-play system prompt, the character's history (newest interactions kept
+within the configured character budget, so earlier chat is included) and then the
+new message as the user turn. The model is asked for `{"speech": ..., "actions": [...]}`; replies are
+parsed leniently (code fences, `<think>` blocks and plain text are tolerated)
+and recorded through `say` and `act`. With **Allow tool calls** enabled
+(per provider, on by default) the model can also call game tools defined in
+`web/llm.js` and executed by `src/character-tools.ts` through
+`POST /api/character-tool`. Before each message the client fetches
+`describe_scene` (the time, the character, the player, who else is in the room
+with this character's feelings toward them, and the places on the map) and sends
+it as context. The scene also carries the character's `voice` (`src/character-voice.ts`): her kojo's introduction
+(`CHARA_INFO_KOJO…`, as the status screen prints it) and twelve 「」 lines from her kojo folder. The kojo is scanned
+rather than run: `IF`/`SELECTCASE`/`SIF` conditions are evaluated in the current state with `TARGET` set to her (so
+lines for another route or relationship are left out), conditions that only make sense mid-command (`RAND`, `LOCAL`,
+`ARG`, `TFLAG`, `TCVAR` and so on) count as possible, and every variable is restored afterwards because kojo
+functions such as `FIRSTTIME` have side effects. Lines from intimate routines (sexual command files, counters,
+arousal or orgasm routines, and commands below 300 or groping ones, by the command number in the routine name) or
+about sex are used only in intimate scenes. The lines are picked one per routine in a seed-by-character order, so they stay the same between
+messages. The prompt lists them as plain text after the scene and asks the model to match her pronouns (e.g.
+YuugenMagan's royal "We"), formality and verbal tics without copying them. The LLM debug tab has a "Character
+voice" editor: it shows the generated description and lines (`POST /api/character-voice`, only at a command screen)
+and saves an edited version (`POST /api/character-voice/save`; `voice: null` reverts). An edited voice is keyed by
+character `NO` in `llm-voices.json` in the game's save directory and replaces the generated one, its intimate lines
+used in intimate scenes. The conformance demo's scenario 12
+(first meeting with YuugenMagan) exercises this, and a live test in `test/interaction-history.test.ts` checks it
+against Ollama `qwen-rp:latest` when that is running on port 11434 (it is skipped otherwise). With tools the model replies only through `say` (speech) and
+`act` (third-person actions), recorded in order and printed in the room;
+the prompt says other text is ignored, but a plain-text reply is still used (see below). The prompt asks for about
+six seconds of time per reply and to verify people and places before mentioning
+them, then gives a decision flow taking the first match: an actual attempt at sex,
+a kiss or a confession goes to `player_attempts`; only asking or wanting goes to
+`check_consent`, answered by its band; rudeness or kindness changes feelings; a
+sincere apology goes to `player_attempts("apologize")` (a sarcastic or grudging one counts as rudeness); anything else is
+conversation, looking people up first. A fourth `say` (or `act`) in one reply is dropped and ends the reply.
+Calls a model writes out as text, such as `say(text: "...")`,
+are run as calls. Any other text reply is taken as the whole reply and goes into the history: speech in 「」, "" or
+“” is said and the narration around it acted (a `{"speech", "actions"}` object is read as such). Its other tools are
+`get_character_info` (anyone by name, including home and mutual affinity),
+`find_characters` (a `|`-separated case-insensitive search over names, races,
+traits, homes and locations), changing its favor (±50 per call), trust (±10),
+affinity toward another character (±10%), romantic mood or anger (±300) and
+pain/pleasure/lewd/hate
+marks (±1 level; a hate mark can only be gained, as removing one is Apologize's
+job); `check_consent` (kiss, sex or become_lovers, decided by eraTW's
+own checks after recomputing `CHARA_ATTITUDE`: `REJECT_CHECK` for a kiss, the
+`抱き寄せ必要値` push-down tiers for sex, and the confession threshold for lovers;
+command availability, random failures and rejection penalties are not applied;
+the result's `margin` is the consent value less what is needed, banded as eager
+(≥100), willing (≥30), hesitantly willing, or below zero tempted but not ready
+(down to −50), refuses (−150) and firmly refuses, the last two being the
+push-down refusal's own tiers; for sex, "gives in" marks the push-down outcomes
+that are not wanting it (a timid character within 50 giving in from fear, or one
+who lost to the player submitting); `why` is the margin written as a sum: the consent value's parts as
+`CHARA_ATTITUDE` adds them (favor and trust tiers, love talents, intimacy,
+mood, marks and so on) less the threshold's parts, each with an "other effects"
+remainder so they add up to the game's figures. Each hate mark lowers the consent
+value by 30 once [game patch 4](game-patches.md) is applied; a refusal also lists the other activities'
+answers as `otherActivities`);
+`player_attempts` (kiss, sex, become_lovers or apologize: queues the real command,
+312 Kiss, 350 Push Down, 352 Confess or 303 Apologize, which calms anger by a
+speech-skill roll and removes a first hate mark only with a gift box; the game offers it only while the character is furious, which a hate mark keeps her once [game patch 5](game-patches.md) is applied; after recomputing `CHARA_ATTITUDE` (the commands read its cached consent, so feelings changed in the chat count) and checking it is available via `COM_ABLE{n}`;
+the conversation ends, the dialog closes, and on refresh the game runs it as if
+the player typed the number, so its own consent check and penalties apply; see
+`hotpatch/INTIMACY_COMMANDS.ERB`);
+and `move_to` (same map only) or `push_down_player`
+(only as the current companion, both awake, in the same room, via eraTW's
+`nForcePushDown`). During an intimate scene (`CFLAG:うふふ`, entered by Push
+Down) the scene also has `intimateScene`: both characters' stamina (体力) and
+energy (気力), the player's vigor (精力, his sexual reserve), erection and
+ejaculation gauge, the character's PALAM levels and orgasm counts, what touches
+what (TEQUIP 101–108), the last command, the limits (the scene ends at once when the
+player's stamina reaches 500 or hers drops below it), and `availableCommands`,
+the TRAIN commands under 200 whose `COM_ABLE{n}` passes, by `TRAINNAME_TR` name.
+The prompt then switches to a scene flow (the player's physical request → that
+command; the player or the character wants to stop → `end_scene`; she wants
+something that fits → take the lead with a command; otherwise react in the moment),
+and the tools change to the lookups, feelings, `say`/`act`, `scene_action`
+(queues a command by name, like `player_attempts`) and `end_scene` (queues 999,
+eraTW's end-the-affair input); either ends the conversation and closes the dialog.
+Tools only run while the game is waiting for a command.
+Numeric changes apply immediately; speech, actions and moves are queued and, together
+with a forced pushdown, take effect when the dialog closes and the client calls
+`POST /api/refresh` to redraw the command screen (`Runtime.refresh`). While the
+conversation is open, each of your messages in it has **Edit** and **Retry**,
+shown when you hover over the line, which delete it and every line after it from the end of the history
+(`POST /api/character-chat/undo`), then put it back in the composer or send it
+again (for iterating on prompts; game changes the removed calls made are not
+undone). The
+**LLM debug** tab shows each request's messages and the raw response; the key
+is never displayed. The page's CSP only allows same-origin requests, so the
+browser calls `POST /api/llm`, which forwards `chat/completions` or `models`
+to the configured base URL (`src/llm.ts`).
 The adapter records first meetings, daily greetings,
-room encounters, conversation (300), serving tea (301), apologizing (303), and
-the custom **Play a game** action. Games are captured when an `ADD_GAME<n>`
+room encounters, conversation (300), serving tea (301), apologizing (303),
+kissing (312), pushing down (350), confessing (352), and the custom **Play a game** action. Games are captured when an `ADD_GAME<n>`
 routine actually runs, excluding setup menus and cancelled selections; the game's
 participant list is included.
 Time-resume cleanup also records state-derived English aftereffect summaries for
@@ -425,15 +540,20 @@ Meetings are captured through `AFFAIR_DISCLOSURE`, `SYOTAIMEN`, `FirstMeetToday`
 and `KOJO_MESSAGE_SEND("ENCOUNTER", ...)`, using their character argument rather
 than the selected target. Command dialogue dispatched by `KOJO_MESSAGE_SEND`
 or `COM_KOJO_CALL` during post-command processing is included in the active
-interaction, not just text printed inside `COM300`/`COM301`/`COM303`.
+interaction, not just text printed inside the command routine.
+`SOURCE_CHECK`'s own remarks are included, and its parameter table is condensed
+to one line per character (for example `Reimu: Fear +30, Hostility +1200`, with
+zero changes, separators and stamina/energy lines dropped). `EVENTCOMEND`'s own
+lines (such as "Reimu is angry...") are included, but not those of routines it calls.
 Nested greeting hooks form one event; silent checks
 do not create entries. Other commands, menus, maps, and status redraws are not
-general-purpose transcript sources. This is local logging, not an LLM integration;
-no history is sent to a service.
+general-purpose transcript sources. History is stored locally and is only sent
+to a service as context when you use the LLM chat.
 
 Each structured event preserves the command id and translated label, participants,
 script text, player inputs within the command, game day/time and location, and
-before/after affection and trust. `COM_KOJO_CALL` and `KOJO_MESSAGE_SEND` identify
+before/after affection, trust and mark levels (pain, pleasure, lewd, hate; shown
+as e.g. "Hate Mark 0→1", absent from events recorded before marks were tracked). `COM_KOJO_CALL` and `KOJO_MESSAGE_SEND` identify
 a character's scene; they do not prove that every line is spoken by that character.
 The panel does not guess individual speakers. Text and HTML
 output are captured before browser translation. Text colors (including nested HTML
@@ -536,7 +656,8 @@ off the machine. It is on by default unless the browser's language is Japanese,
 and **Menu → Translate Japanese** turns it off, restoring the original text.
 The first use downloads the language model, which starts on your next click or
 key press. Map art and box-drawing text art are left alone, and tooltips are
-translated too. Chrome's own Translate button only translates a page once, so it
+translated too, as is the interaction history each time it is drawn (its preview,
+panel and dialog); the history itself is stored in the original language. Chrome's own Translate button only translates a page once, so it
 misses lines printed later. While it is on (Chrome/Edge's `translated-ltr` class
 or its `<font>` wrappers), updates are rendered straight into the live page
 (marked `lang="ja"`), but the built-in translator above is the reliable option.

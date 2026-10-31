@@ -1,0 +1,263 @@
+;-------------------------------------------------------------------------------
+; Gameplay hotpatch: Kiss (312) and Confess (352) no longer need a closeness level (TCVAR:MASTER:馴れ合い) from
+; earlier small talk this visit. The command is offered (and can be typed) as soon as its other conditions hold, and
+; the game's own consent check decides: an unwelcome kiss is rejected with REJECT_CHECK's antipathy, fear and favor
+; loss, and a premature confession simply fails. LLM characters use these through the player_attempts tool.
+; The rest of each check is copied unchanged from ERB/コマンド関連/COMF/日常系/COMF312 キスする.ERB and
+; COMF352 告白する.ERB (including the spineless player's stricter rule for kissing).
+;-------------------------------------------------------------------------------
+@COM_ABLE312
+;キスする実行判定
+SIF !TFLAG:100
+	RETURN 0
+;一括管理
+SIF GLOBAL_COMABLE(312)
+	RETURN RESULT
+;時間停止中はスキップ
+IF !FLAG:70
+	;甲斐性なしはもう少し馴れ合い強度と既成事実が必要
+	;Lust mode custom code
+	SIF FLAG:甲斐性無 && ((TCVAR:MASTER:馴れ合い < 2 && !CFLAG:睡眠) || !GETBIT(CFLAG:既成事実, 0)) && !FLAG:LUSTMODE
+		RETURN 0
+	;睡眠中
+	SIF CFLAG:睡眠 && !CFLAG:イタズラ && !CFLAG:添い寝中
+		RETURN 0
+	;仕事中
+	SIF CFLAG:行動 == 5
+		RETURN 0
+	;1時間間隔
+	SIF TIME_PROGRESS(TCVAR:314) < 60 && CFLAG:うふふ != 2
+		RETURN 0
+ENDIF
+;気力0
+SIF BASE:MASTER:気力 <= 0
+	RETURN 0
+;口使用中
+SIF TFLAG:60 && MASTER_POSE(SET_M, SET_M) != TARGET
+	RETURN 0
+SIF GETBIT (TCVAR:26,2)
+	RETURN 0
+;シックスナイン体勢
+SIF TEQUIP:シックスナイン
+	RETURN 0
+RETURN 1
+
+@COM_ABLE352
+;停止中は不可
+SIF FLAG:70
+	RETURN 0
+;妄想中は告白できない
+SIF TFLAG:妄想中 == 1
+	RETURN 0
+;告白する実行判定
+SIF !TFLAG:100
+	RETURN 0
+;一括管理
+SIF GLOBAL_COMABLE(352)
+	RETURN RESULT
+;二人きりでないとだめ
+SIF GET_TARGETNUM() > 1
+	RETURN 0
+;すでに恋人の場合はだめ
+SIF TALENT:恋人
+	RETURN 0
+SIF GETBIT(TFLAG:一日一回, 12)
+	RETURN 0
+;恋人の数が上限に達していてはだめ
+SIF !CAN_MAKE_恋人()
+	RETURN 0
+SIF TALENT:TARGET:行きずり
+	RETURN 0
+;睡眠中
+SIF CFLAG:睡眠
+	RETURN 0
+;添い寝中
+SIF CFLAG:添い寝中
+	RETURN 0
+;気力0
+SIF BASE:MASTER:気力 <= 0
+	RETURN 0
+RETURN 1
+
+;-------------------------------------------------------------------------------
+; Gameplay hotpatch: Push Down (350) with others in the room (TARGET lists everyone present) asks each person who has
+; not consented before for their own answer before the group's. The original checks the group first and stops
+; ("some of them still oppose the idea of having an orgy..."), so the person you tried it on never reacted, even with
+; a hate mark. Now a refusal plays out with its usual antipathy, trust loss and hate marks, and the people after
+; them are not asked; if nobody refuses, the group's objection still stops it. The rest is copied unchanged from
+; ERB/コマンド関連/COMF/日常系/COMF350 押し倒す.ERB.
+;-------------------------------------------------------------------------------
+@COM350
+#DIM NUM_TARGET
+#DIM C_ID
+#DIM DYNAMIC 集団拒否
+;押し倒す
+NUM_TARGET = GET_TARGETNUM()
+IF TFLAG:パール期限
+	IF FLAG:70
+		PRINTFORML In a state like this, that's the last thing on your mind.
+	ELSEIF TARGET == TFLAG:パール入れた人
+		PRINTFORML %CALLNAME:TARGET% says that will have to wait, and shuts you down.
+	ELSE
+		PRINTFORML That's impossible to do right now.
+	ENDIF
+	RETURN -1
+ENDIF
+IF FLAG:70
+	;時間停止は無条件突破
+	FOR LOCAL,1, NUM_TARGET + 1
+		CFLAG:(TARGET:LOCAL):うふふ = 1
+	NEXT
+ELSE
+	;qol custom code, lewd/hypnotized characters accept sex while visible to others
+	;qol custom code, exhibitionists/nudists do too
+	LOCAL:10 = 1
+	FOR LOCAL,1, NUM_TARGET + 1
+		IF !(TALENT:(TARGET:LOCAL):ヤリマン || TALENT:(TARGET:LOCAL):ヤンデレ || TALENT:(TARGET:LOCAL):淫乱 || TCVAR:(TARGET:LOCAL):Common_Sense_Alteration_Status >= 75 || TCVAR:Exhibitionist_Nudist_Sense)
+			LOCAL:10 = 0
+			BREAK
+		ENDIF
+	NEXT
+	;視線による中断判定
+	IF EYEWITNESS() == 1 && !LOCAL:10 ;qol custom code, lewd/hypnotized accepts onlookers
+		TFLAG:194 = 1
+		TFLAG:押し倒せない ++
+	ENDIF
+	;MASTER的に多人数は無理だった
+	IF NUM_TARGET > 1 && TCVAR:MASTER:馴れ合い < 2
+		TFLAG:194 = 3
+		TFLAG:押し倒せない ++
+	ENDIF
+	IF LS_LUNATIC_TIME() ;Custom code, always succeed during lunatic time in Lunatic Survival.
+		TFLAG:194 = 0
+		TFLAG:押し倒せない = 0
+	ENDIF
+	;HOTPATCH: decided once, before anyone is asked (asking can change their consent)
+	集団拒否 = NUM_TARGET > 1 && !QOL_MULTI_PUSHDOWN_ALLOWED() && !LS_LUNATIC_TIME()
+
+	FOR LOCAL,1, NUM_TARGET + 1
+		C_ID = TARGET:LOCAL
+		;泥酔
+		IF TCVAR:C_ID:泥酔 == 1
+			CFLAG:C_ID:うふふ = 1
+			SIF CFLAG:C_ID:泥酔姦 < 2
+				CFLAG:C_ID:泥酔姦 = 1
+			IF INROOM(CFLAG:MASTER:現在位置) == 2
+				CALL DATUI_SHOES(LOCAL,0)
+				CALL DATUI_SHOES(MASTER,0)
+			ENDIF
+		;(addition) custom code, for outside flag
+		ELSEIF OUTROOF(CFLAG:C_ID:現在位置) && ABL:C_ID:露出癖 - TALENT:C_ID:羞恥心 < 3 && !TCVAR:C_ID:Exhibitionist_Nudist_Sense && TCVAR:C_ID:Common_Sense_Alteration_Status < 75 && !LS_LUNATIC_TIME() ;custom code
+			TFLAG:194 = 2
+			TFLAG:押し倒せない ++
+		;合意未取得
+		ELSEIF !GETBIT(CFLAG:C_ID:既成事実 , 1) && !TALENT:C_ID:合意誤認 && TCVAR:C_ID:Common_Sense_Alteration_Status < 75 && !LOCAL:10 ;hypnosis patch
+			;未取得だと多人数は駄目
+			;qol custom code, moved check up
+			IF 0; NUM_TARGET > 1 && !QOL_MULTI_PUSHDOWN_ALLOWED()
+				TFLAG:194 = 3
+				TFLAG:押し倒せない ++
+				BREAK
+			;口上側による制御
+			ELSEIF CFLAG:C_ID:口上内抱き寄せ判定_初回
+				CALL KOJO_MESSAGE_SEND("PERMISSION", 1, C_ID)
+				SELECTCASE RESULT
+					CASE -1
+						TCVAR:C_ID:抱き寄せ初回 = 98
+						TFLAG:押し倒せない ++
+						BREAK
+					CASE 0
+						CALL 抱き寄せ(C_ID)
+					CASE 1
+						TCVAR:C_ID:抱き寄せ初回 = 99
+						SETBIT CFLAG:C_ID:既成事実 , 1
+						CALL COLORMESSAGE(@"You receive %CALLNAME:C_ID%'s consent.",C_YELLOW,2)
+				ENDSELECT
+			ELSE
+				CALL 抱き寄せ(C_ID)
+			ENDIF
+			;HOTPATCH: their own answer comes before the group's. A refusal ends the attempt with their reaction;
+			;otherwise the group's objection still stops it.
+			IF 集団拒否 && GROUPMATCH(TCVAR:C_ID:抱き寄せ初回, 6, 7, 8, 98)
+				BREAK
+			ELSEIF 集団拒否
+				TFLAG:194 = 3
+				TFLAG:押し倒せない ++
+				BREAK
+			ENDIF
+		ELSEIF 集団拒否 ;qol custom code
+			TFLAG:194 = 3
+			TFLAG:押し倒せない ++
+			BREAK
+		;合意取得済み
+		ELSE
+			IF FLAG:守矢くじデート相手 == C_ID || TALENT:C_ID:ヤリマン || TALENT:C_ID:ヤンデレ || CFLAG:C_ID:うふふ ;hypnosis patch
+				GOTO OK
+			ELSEIF (BASE:C_ID:ムード < 300 || TCVAR:MASTER:馴れ合い < 2) && TCVAR:C_ID:Common_Sense_Alteration_Status < 75 && !LS_LUNATIC_TIME() ;custom code, ignore mood checks with high enough common sense alteration and during lunatic time in Lunatic Survival.
+				TFLAG:194 = 4
+				TFLAG:押し倒せない ++
+			;口上側による制御
+			ELSEIF CFLAG:C_ID:口上内抱き寄せ判定_通常
+				CALL KOJO_MESSAGE_SEND("PERMISSION", 2, C_ID)
+				IF RESULT == -1
+					TFLAG:194 = 100
+					TFLAG:押し倒せない ++
+				ELSE
+					GOTO OK
+				ENDIF
+			ELSE
+				$OK
+				SIF BASE:C_ID:ムード < 300
+					BASE:C_ID:ムード = 300
+				CFLAG:C_ID:うふふ = 1
+				IF INROOM(CFLAG:MASTER:現在位置) == 2
+					CALL DATUI_SHOES(LOCAL,0)
+					CALL DATUI_SHOES(MASTER,0)
+				ENDIF
+			ENDIF
+		ENDIF
+	NEXT
+ENDIF
+
+IF TFLAG:押し倒せない
+	FOR LOCAL,1, NUM_TARGET + 1
+		CALL ENDUFUFU(TARGET:LOCAL)
+	NEXT
+	DOWNBASE:MASTER:気力 = 50
+	BASE:TARGET:ムード /= 2
+	TFLAG:102 = 0
+ELSE
+;攻守交代
+;ELSEIF CFLAG:MASTER:うふふ == 1 && !FLAG:70
+;	FOR LOCAL,0,CHARANUM
+;		CFLAG:(TARGET:LOCAL):うふふ == 2 
+;	NEXT
+;	TIME += 1
+;	RETURN 1
+	IF !FLAG:70
+		FOR LOCAL,1, NUM_TARGET + 1
+			CALL UWAKI_RECORD(TARGET:LOCAL, 1)
+		NEXT
+	ENDIF
+	CFLAG:MASTER:うふふ = 1
+ENDIF
+SIF !FLAG:70 ;to trigger the action description
+	TIME += 5
+;経過時間表示用に開始時間を取っておく
+IF !UFUFU_START_TIME
+	UFUFU_START_TIME = TIME
+	UFUFU_START_DAY = DAY
+ENDIF
+SIF TFLAG:194 == 0 && TFLAG:押し倒せない == 0 && CHK_DATENOW(CFLAG:MASTER:デート中) && GROUPMATCH(CFLAG:TARGET:現在位置, 連れ込み宿, ラブホ)
+	addDateActionsDone:TARGET:date_Sex ++ ;addition custom code, successful sex attempt during the date at the hotel
+
+;qol custom code
+FOR LOCAL,1, NUM_TARGET + 1
+	CFLAG:(TARGET:LOCAL):LAST_SEX_DAY = DAY
+NEXT
+SIF GROUPMATCH(TCVAR:抱き寄せ初回, 6, 7, 8) ;in case of rejection, send the appropriate flag so it shows first no matter if it's in public etc
+	TFLAG:194 = 0
+RETURN !GROUPMATCH(TCVAR:抱き寄せ初回, 6, 7, 8) && TFLAG:押し倒せない ? 0 # 1 ;cancel favor gain when unsuccessful
+
+
+;連れ込み宿ラブホ以外の出かけ先でうふふするための特殊条件

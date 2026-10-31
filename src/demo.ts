@@ -82,17 +82,17 @@ ENDSELECT
 GOTO MENU
 
 @SCENARIOS
-#DIMS SCENE, 12 = "", "Alone", "One person", "Two people", "Crowd (six people)", "Time stopped, two people", "Time stopped, alone", "Partner asleep", "Exhausted", "Outdoors at night, in the rain", "Asleep, before waking (the sleep menu)", "Crowd stress test (24 people)"
+#DIMS SCENE, 13 = "", "Alone", "One person", "Two people", "Crowd (six people)", "Time stopped, two people", "Time stopped, alone", "Partner asleep", "Exhausted", "Outdoors at night, in the rain", "Asleep, before waking (the sleep menu)", "Crowd stress test (24 people)", "Meeting YuugenMagan (her first-meeting event; a distinctive voice for LLM chat)"
 ; RESETDATA resets static locals too.
 #DIM DYNAMIC CHOICE
 PRINTL Start the bundled game on its main screen in a prepared situation (Quicktest player, Hakurei Shrine back room).
 PRINTL Play continues normally from there; restart the demo to pick another scenario.
-FOR I, 1, 12
+FOR I, 1, 13
   PRINTFORML [{I}] %SCENE:I%
 NEXT
 PRINTL [0] Back
 INPUT
-IF RESULT < 1 || RESULT > 11
+IF RESULT < 1 || RESULT > 12
   RETURN 0
 ENDIF
 CHOICE = RESULT
@@ -130,9 +130,11 @@ CALL GAME_SHOW_STATUS
 #DIM CHARA, 6 = 1, 11, 120, 57, 10, 21
 #DIM COUNT
 #DIM ROOM
+#DIM MEET
 DevTest = 0
+MEET = -1
 SELECTCASE DEMO_SCENARIO
-  CASE 2, 7, 8, 9
+  CASE 2, 7, 8, 9, 12
     COUNT = 1
   CASE 3, 5
     COUNT = 2
@@ -163,6 +165,8 @@ NEXT
 FOR C, 0, COUNT
   IF DEMO_SCENARIO == 11
     N = C + 1
+  ELSEIF DEMO_SCENARIO == 12
+    N = GETCHARA(151)
   ELSE
     N = GETCHARA(CHARA:C)
   ENDIF
@@ -177,6 +181,13 @@ NEXT
 CALL SET_SLEEP(0, MASTER, 0)
 SIF COUNT
   TARGET = GETCHARA(CHARA)
+; Not met yet: the game's own first meeting (SYOTAIMEN) plays her encounter, where you choose which YuugenMagan she is.
+IF DEMO_SCENARIO == 12
+  TARGET = GETCHARA(151)
+  CFLAG:TARGET:面識 = 0
+  TCVAR:TARGET:今日会ったか = 0
+  MEET = TARGET
+ENDIF
 ; Start at the far end of the crowd to exercise selected-person scrolling.
 SIF DEMO_SCENARIO == 11
   TARGET = COUNT
@@ -192,6 +203,8 @@ SELECTCASE DEMO_SCENARIO
     BASE:TARGET:気力 = MAXBASE:TARGET:気力 / 12
 ENDSELECT
 DEMO_SCENARIO = 0
+SIF MEET >= 0
+  CALL SYOTAIMEN(MEET)
 
 @ANIMATIONS
 #DIM FRAME

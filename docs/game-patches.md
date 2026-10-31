@@ -14,6 +14,8 @@ of this document. Re-apply it after updating or reinstalling the game.
 | 1 | "Ego alert! Biten has Relation towards herself!" on every load | Typo in Biten's CSV: her affinity for Ubame uses Biten's number | `CSV/Chara/Chara153 美天.csv`, `ERB/TRANSLATION/Addition/Add_Relation.ERB` |
 | 2 | Play A Game: after picking a game, "Add a wager?" answers every choice with "Invalid input" and never lets you continue | Off-by-one in the bet-choice check (`RESULT < LOCAL-1`) | `ERB/TRANSLATION/Addition/Custom_Commands/Add_CUSTOM_COM0 Play Game.ERB` |
 | 3 | Pilfer Panties [821] and Take Panties [825] silently do nothing after starting mischief while time is frozen | Their handlers reject the session flag that frozen-time mischief sets, although the menu still offers both actions | `ERB/コマンド関連/USERCOM.ERB` |
+| 4 | A character with hate marks is as willing to kiss, have sex or become lovers as one without | Sign slip in the consent value: `MIN` instead of `MAX`, so the hate-mark penalty is never applied | `ERB/ステータス計算関連/ATTITUDE.ERB` |
+| 5 | After a hate mark (for example from a refused Push Down) the character is "angry..." at full anger, yet Apologize [303] is not offered | Anger decay clears the furious flag while anger is still 0, one step before the sulk refills anger to max, and nothing sets the flag again | `ERB/MOVEMENTS/BASE自然変動.ERB` |
 
 ## 1. Biten's self-relation ("Ego alert!")
 
@@ -98,11 +100,80 @@ eligibility checks and continue rejecting these actions during ordinary sessions
 Regression coverage in `test/hotpatch.test.ts` exercises both handlers with and
 without frozen-time sessions.
 
+## 4. Hate marks never lower consent
+
+`@CHARA_ATTITUDE` computes each character's consent value (`CFLAG:合意判定`),
+which Kiss, Push Down and Confess compare with their thresholds. Its mark
+adjustment is
+
+```
+LOCAL:1 -= MIN(MARK:LOCAL:反発刻印 - MARK:LOCAL:時姦刻印 , 0) * 30
+```
+
+The intent is −30 per hate mark (反発刻印) not offset by timestop marks
+(時姦刻印). With `MIN(…, 0)` the subtracted term is never positive: hate marks
+have no effect, and only timestop marks in excess of hate marks change the
+value, *raising* it. `MAX(…, 0)` gives the intended penalty and never raises the
+value. Timestop marks already lower the push-down threshold separately in
+`@抱き寄せ`.
+
+## 5. A sulking character cannot be apologised to
+
+Gaining a hate mark (`@TRACHECK_刻印取得`) sets `CFLAG:不機嫌` (sulking, the
+"X is angry..." line) and `CFLAG:ブチギレ` (furious), but leaves `BASE:怒り`
+(anger) where it was, often 0. The favor process that would max it out for a
+sulking character has already run in that step. The next time time passes,
+`@BASE自然変動` runs:
+
+1. anger decays, and `SIF BASE:ARG:怒り <= 0` clears `ブチギレ`;
+2. then `SIF CFLAG:ARG:不機嫌` sets anger to max, but not `ブチギレ`.
+
+The character is now sulking at full anger, but not furious. `@COM_ABLE303`
+requires `ブチギレ` (or a gift box with a first hate mark), so Apologize is
+not offered. Elsewhere the game treats sulking as always furious: the favor
+process sets both together, and a successful Apologize clears both together.
+The fix sets `ブチギレ` alongside the anger in the sulk block.
+
 ## Patch
 
 Apply from inside `GAMES/anon-tw-anon-tw_eng-modding` with `git apply -p1` or
 `patch -p1`. The files are UTF-8 with LF line endings. `Chara153 美天.csv`
 starts with a BOM, which the patch leaves untouched.
+
+For the hate-mark fix:
+
+```diff
+--- a/ERB/ステータス計算関連/ATTITUDE.ERB
++++ b/ERB/ステータス計算関連/ATTITUDE.ERB
+@@ -48,7 +48,7 @@
+ 	LOCAL:1 += BASE:LOCAL:ムード / 25 + (1000 - BASE:LOCAL:理性) / 25
+ 	;刻印による修正
+ 	LOCAL:1 += MARK:LOCAL:不埒刻印 * 20 + MARK:LOCAL:快楽刻印 * 20
+-	LOCAL:1 -= MIN(MARK:LOCAL:反発刻印 - MARK:LOCAL:時姦刻印 , 0) * 30
++	LOCAL:1 -= MAX(MARK:LOCAL:反発刻印 - MARK:LOCAL:時姦刻印 , 0) * 30 ;Patch: was MIN, which is never positive, so hate marks never lowered consent
+ 	;お薬
+ 	IF TCVAR:LOCAL:発情
+ 		LOCAL:1 += 50
+```
+
+For the sulking fix:
+
+```diff
+--- a/ERB/MOVEMENTS/BASE自然変動.ERB
++++ b/ERB/MOVEMENTS/BASE自然変動.ERB
+@@ -109,8 +109,10 @@
+ CALL Add_VigRecovery(ARG) ;addition custom code
+ 
+ ;不機嫌
+-SIF CFLAG:ARG:不機嫌
++IF CFLAG:ARG:不機嫌
+ 	BASE:ARG:怒り = MAXBASE:ARG:怒り
++	CFLAG:ARG:ブチギレ = 1 ;Patch: anger decay above clears this while a freshly gained hate mark still has 怒り at 0, leaving a sulking character who cannot be apologised to
++ENDIF
+ 
+ ;勃起度の自然増減
+ IF CFLAG:ARG:うふふ
+```
 
 For the pilfer-command fix, apply this additional patch:
 

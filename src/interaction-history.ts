@@ -11,6 +11,8 @@ export interface InteractionContext {
   locationName: string;
   affection: string;
   trust: string;
+  /** Mark levels by name (pain, pleasure, lewd, hate); absent in events recorded before marks were tracked. */
+  marks?: Record<string, string>;
 }
 export interface Interaction {
   id: string;
@@ -18,7 +20,7 @@ export interface Interaction {
   previous: Record<string, string | null>;
   source: "script" | "state";
   target: string;
-  action: { id: number | "encounter" | "greeting" | "play-game" | "reaction"; label: string };
+  action: { id: number | "encounter" | "greeting" | "play-game" | "reaction" | "chat"; label: string };
   participants: HistoryCharacter[];
   before: InteractionContext;
   after: InteractionContext;
@@ -40,6 +42,10 @@ interface Host {
 }
 interface Scope {
   capture: boolean;
+  /** Captures only this routine's own prints, not those of the routines it calls. */
+  direct?: boolean;
+  /** SOURCE_CHECK's printout, condensed line by line (see `sourceLine`). */
+  source?: { pending: ColoredText[]; group?: { name: string; color: string; changes: string[] } };
   character: HistoryCharacter | null;
   completes?: string;
   penetration?: { index: bigint; flags: bigint[] };
@@ -51,7 +57,12 @@ const PENETRATION_V = 7395n;
 const PENETRATION_A = 7396n;
 const PENETRATION_M = 7397n;
 const PENETRATION_FLAGS = [PENETRATION_V, PENETRATION_A, PENETRATION_M];
-const COMMANDS = new Set([300, 301, 303]);
+// Talk, Serve Tea, Ask about Dating; Kiss, Push Down, Confess.
+const COMMANDS = new Set([300, 301, 303, 312, 350, 352]);
+const MARKS = { pain: 0n, pleasure: 1n, lewd: 2n, hate: 3n };
+// SOURCE_CHECK prints each changed parameter as "Fear   0   + 108   =   108" under the character's name.
+const SOURCE_ROW = /^(\S.*?)\s+-?\d+\s+([+-])\s*(\d+)\s+=\s+-?\d+$/;
+const SOURCE_NOISE = /^(?:-{3,}|(?:STA|ENE|VIG|TSP)[+-]\d+.*)$/;
 const LIMIT = 20;
 const TEXT_LIMIT = 16_000;
 const uuid = (value: unknown): value is string => typeof value === "string" && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(value);
@@ -64,7 +75,8 @@ const uuidMap = (value: unknown): value is Record<string, string> =>
   isRecord(value) && Object.entries(value).every(([key, id]) => uuid(key) && uuid(id));
 function context(value: unknown): value is InteractionContext {
   return isRecord(value) && strings(value.time) && value.time.length === 5 && value.time.every((time) => /^-?\d+$/.test(time))
-    && ["day", "location", "locationName", "affection", "trust"].every((key) => typeof value[key] === "string");
+    && ["day", "location", "locationName", "affection", "trust"].every((key) => typeof value[key] === "string")
+    && (value.marks === undefined || isRecord(value.marks) && Object.values(value.marks).every((mark) => typeof mark === "string"));
 }
 function character(value: unknown): value is HistoryCharacter {
   return isRecord(value) && uuid(value.id) && typeof value.name === "string" && typeof value.number === "string";
@@ -75,7 +87,7 @@ function interaction(value: unknown): value is Interaction {
   return uuid(value.id) && (value.parent === null || uuid(value.parent)) && (value.source === "script" || value.source === "state")
     && isRecord(value.action) && (typeof value.action.id === "number" && COMMANDS.has(value.action.id)
       || value.action.id === "encounter" || value.action.id === "greeting" || value.action.id === "play-game"
-      || value.action.id === "reaction") && typeof value.action.label === "string"
+      || value.action.id === "reaction" || value.action.id === "chat") && typeof value.action.label === "string"
     && Array.isArray(value.participants) && value.participants.every(character) && uuid(value.target)
     && value.participants.some((person) => person.id === value.target) && context(value.before) && context(value.after)
     && isRecord(previous) && value.participants.every((person) => previous[person.id] === null || uuid(previous[person.id]))
@@ -105,6 +117,11 @@ export class TwInteractionHistory {
   private head: string | null = null;
   private heads = new Map<string, string>();
   private active: { event: Interaction; size: number } | undefined;
+  /**
+   * The conversation being held through the chat window. It is written after every line so it shows at once, and is
+   * closed (becoming immutable like any other event) by the next input at the command prompt.
+   */
+  private conversation: Interaction | undefined;
   private scopes: Scope[] = [];
   private notice = "";
   constructor(private store: SaveStore, private host: Host) {}
@@ -114,12 +131,18 @@ export class TwInteractionHistory {
     this.head = null;
     this.heads.clear();
     this.active = undefined;
+    this.conversation = undefined;
     this.scopes = [];
     this.notice = "";
   }
   private sync(): void {
     while (this.ids.length < this.host.count()) this.ids.push(randomUUID());
     this.ids.length = this.host.count();
+  }
+  /** The current registration index of a history character id, or -1 once they have left. */
+  indexOf(id: string): number {
+    this.sync();
+    return this.ids.indexOf(id);
   }
   rearrange(order: number[], copy = false): void {
     this.sync();
@@ -146,6 +169,7 @@ export class TwInteractionHistory {
       locationName: String(this.host.read("STR", [8000n + BigInt(location)])),
       affection: String(this.host.read("CFLAG", [BigInt(index), "好感度"])),
       trust: String(this.host.read("CFLAG", [BigInt(index), "信頼度"])),
+      marks: Object.fromEntries(Object.entries(MARKS).map(([name, mark]) => [name, String(this.host.read("MARK", [BigInt(index), mark]))])),
     };
   }
   private begin(target: number, action: Interaction["action"]): string | undefined {
@@ -295,6 +319,8 @@ export class TwInteractionHistory {
       this.active.event.action.label = "First meeting";
     const previous = this.scopes.at(-1);
     const scope: Scope = {
+      ...(name === "EVENTCOMEND" ? { direct: true } : {}),
+      ...(name === "SOURCE_CHECK" ? { source: { pending: [] } } : {}),
       capture: !!command && COMMANDS.has(Number(command[1])) || game || name.startsWith("ADD_GAME_BET_")
         || meeting || name === "KOJO_MESSAGE_SEND"
         || name === "COM_KOJO_CALL" || !!previous?.capture,
@@ -314,6 +340,7 @@ export class TwInteractionHistory {
   }
   leave(scope: Scope, success: boolean): void {
     // RESETDATA/LOADDATA may have discarded the old routine stack.
+    if (scope.source) this.flushSource(scope);
     if (this.scopes.at(-1) === scope) this.scopes.pop();
     if (!success) this.active = undefined;
     else {
@@ -326,10 +353,65 @@ export class TwInteractionHistory {
     }
   }
   output(type: string, value: string, newline: boolean, color: string): void {
-    if (!this.active || !this.scopes.at(-1)?.capture || (type !== "text" && type !== "html")) return;
+    const scope = this.scopes.at(-1);
+    if (!this.active || !scope || (type !== "text" && type !== "html")) return;
+    if (!scope.capture && !scope.direct && !scope.source) return;
     if (type === "html" && /<(?:button|era-open|era-close)\b/i.test(value)) return;
     const rendered = type === "html" ? coloredHtml(value, color) : [{ text: value, color }];
     if (newline) rendered.push({ text: "\n", color });
+    if (scope.source && !scope.capture) return this.source(scope, rendered);
+    this.append(rendered);
+  }
+  /** Condenses SOURCE_CHECK's printout: its parameter table becomes "Name: Fear +108, Hostility +432". */
+  private source(scope: Scope, runs: ColoredText[]): void {
+    const source = scope.source!;
+    source.pending.push(...runs);
+    for (;;) {
+      const text = source.pending.map((run) => run.text).join("");
+      const end = text.indexOf("\n");
+      if (end < 0) return;
+      const line: ColoredText[] = [];
+      let offset = 0;
+      for (const run of source.pending) {
+        const part = run.text.slice(Math.max(0, -offset), Math.max(0, end - offset));
+        offset += run.text.length;
+        if (part) line.push({ text: part, color: run.color });
+      }
+      source.pending = [{ text: text.slice(end + 1), color: source.pending.at(-1)!.color }];
+      this.sourceLine(scope, line);
+    }
+  }
+  private sourceLine(scope: Scope, runs: ColoredText[]): void {
+    const source = scope.source!;
+    const text = runs.map((run) => run.text).join("").trim();
+    const row = SOURCE_ROW.exec(text);
+    if (row && source.group) {
+      if (row[3] !== "0") source.group.changes.push(`${row[1]} ${row[2]}${row[3]}`);
+      return;
+    }
+    this.flushGroup(scope);
+    if (!text || SOURCE_NOISE.test(text)) return;
+    this.sync();
+    if (this.ids.some((_, i) => this.person(i)?.name === text)) {
+      source.group = { name: text, color: runs[0]?.color ?? "", changes: [] };
+      return;
+    }
+    this.append([...runs, { text: "\n", color: runs.at(-1)?.color ?? "" }]);
+  }
+  private flushGroup(scope: Scope): void {
+    const group = scope.source?.group;
+    if (!group) return;
+    delete scope.source!.group;
+    if (group.changes.length) this.append([{ text: `${group.name}: ${group.changes.join(", ")}\n`, color: group.color }]);
+  }
+  private flushSource(scope: Scope): void {
+    const pending = scope.source!.pending.map((run) => run.text).join("");
+    if (pending.trim()) this.sourceLine(scope, scope.source!.pending);
+    scope.source!.pending = [];
+    this.flushGroup(scope);
+  }
+  private append(rendered: ColoredText[]): void {
+    if (!this.active) return;
     const available = TEXT_LIMIT - this.active.size;
     let remaining = available;
     const runs: ColoredText[] = [];
@@ -384,6 +466,58 @@ export class TwInteractionHistory {
     this.active = undefined;
   }
   cancel(): void { this.active = undefined; }
+  /** Adds a line to the conversation with a character (by history id), starting one if needed. */
+  chat(character: string, line: { runs: ColoredText[]; speaker: string | null }): void {
+    const target = this.indexOf(character);
+    if (target < 0) throw new EraError("That character is no longer in the game");
+    if (this.conversation?.target !== character) {
+      this.endChat();
+      const master = Number(this.host.read("MASTER"));
+      const player = this.person(master), selected = this.person(target);
+      if (!player || !selected || target === master) throw new EraError("Only the player can talk with this character");
+      const before = this.state(target);
+      this.conversation = { id: randomUUID(), parent: this.head, source: "script", target: character,
+        previous: { [player.id]: this.heads.get(player.id) ?? null, [selected.id]: this.heads.get(selected.id) ?? null },
+        action: { id: "chat", label: "Conversation" }, participants: [player, selected], before, after: before,
+        lines: [], choices: [], truncated: false };
+    }
+    const event = this.conversation;
+    const runs = line.runs.filter((run) => run.text);
+    const text = runs.map((run) => run.text).join("");
+    if (!text) return;
+    if (event.lines.reduce((size, item) => size + item.text.length, 0) + text.length > TEXT_LIMIT) {
+      event.truncated = true;
+      return;
+    }
+    event.lines.push({ text, character: line.speaker, runs });
+    event.after = this.state(target);
+    this.writeChat();
+  }
+  /** Removes the last `count` lines of the newest conversation (for trying a message again); an emptied one is dropped. */
+  unchat(character: string, count: number): void {
+    const event = this.conversation?.target === character ? this.conversation : undefined;
+    if (!event) throw new EraError("There is no conversation to take back");
+    event.lines.splice(Math.max(0, event.lines.length - count));
+    if (event.lines.length) return this.writeChat();
+    // Nothing is left: the history goes back to where it was before the conversation started.
+    this.conversation = undefined;
+    this.head = event.parent;
+    for (const [id, previous] of Object.entries(event.previous))
+      if (previous) this.heads.set(id, previous); else this.heads.delete(id);
+  }
+  endChat(): void { this.conversation = undefined; }
+  /** Whether a conversation through the chat window is open (no command has been entered since it started). */
+  get chatting(): boolean { return this.conversation !== undefined; }
+  private writeChat(): void {
+    const event = this.conversation!;
+    this.store.write(eventFile(event.id), JSON.stringify({ version: 1, event }));
+    this.head = event.id;
+    for (const person of event.participants) this.heads.set(person.id, event.id);
+  }
+  /** The character's whole history as it stands now, including a conversation in progress. */
+  current(selected: HistoryCharacter): CharacterHistory {
+    return this.forCharacter(selected, this.heads.get(selected.id) ?? null);
+  }
   checkpoint(save: string, bytes: Buffer): void {
     this.sync();
     this.store.write(checkpointFile(save), JSON.stringify({

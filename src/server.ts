@@ -10,8 +10,10 @@ import { applyHotpatches, displayDefaults, displayMetrics, discoverGames, emptyG
 import { CATALOG_UPDATED, downloadedCatalogGames, GAME_CATALOG, installGame } from "./library.js";
 import { EraError, key } from "./model.js";
 import { GAME_INSTRUCTION_LIMIT, Runtime, type BackgroundLayer, type ClientState, type Snapshot } from "./runtime.js";
+import { editableVoice, FileVoiceStore, MemoryVoiceStore, type VoiceStore } from "./character-voice.js";
 import { FileGlobalStore, FileSaveStore, gameSaveDirectory, MemoryGlobalStore, MemorySaveStore, type GlobalStore, type SaveStore } from "./storage.js";
 import { patchTitleImage } from "./render-patches.js";
+import { LLM_REQUEST_BYTES, LlmRequestError, proxyLlm } from "./llm.js";
 
 type BrowserSnapshot = ReturnType<typeof patchTitleImage>;
 
@@ -67,6 +69,8 @@ type Advance = "start" | "input" | "continue" | "timeout";
 /** A game the server runs; the first entry is the default, and also hosts the conformance demo. */
 export interface GameEntry {
   id: string; title: string; game: Game; store?: GlobalStore; saves?: SaveStore;
+  /** Character voices edited for LLM chat; by default llm-voices.json in the save directory. */
+  voices?: VoiceStore;
   /** Loads the game in Emuera's debug mode (with its [IF_DEBUG] code); by default a copy of `game` with the debug flag. */
   loadDebug?: () => Promise<Game>;
 }
@@ -96,13 +100,13 @@ function json(response: ServerResponse, data: unknown, status = 200): void {
   response.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
   response.end(JSON.stringify(data));
 }
-async function body(request: IncomingMessage): Promise<Record<string, unknown>> {
+async function body(request: IncomingMessage, limit = 16_384): Promise<Record<string, unknown>> {
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunk of request) {
     const buffer: Buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     size += buffer.length;
-    if (size > 16_384) throw new HttpError(413, "Request body too large");
+    if (size > limit) throw new HttpError(413, "Request body too large");
     chunks.push(buffer);
   }
   let data: unknown;
@@ -179,6 +183,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
       ...entry,
       store: entry.store ?? (saveDirectory ? new FileGlobalStore(path.join(saveDirectory, "global.sav")) : new MemoryGlobalStore()),
       saves: entry.saves ?? (saveDirectory ? new FileSaveStore(saveDirectory, path.join(game.root, "dat")) : new MemorySaveStore()),
+      voices: entry.voices ?? (saveDirectory ? new FileVoiceStore(path.join(saveDirectory, "llm-voices.json")) : new MemoryVoiceStore()),
       report: undefined as ReturnType<typeof compatibility> | undefined,
       debugGame: undefined as Promise<Game> | undefined,
     };
@@ -333,6 +338,8 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
           const runtime = new Runtime(game, GAME_INSTRUCTION_LIMIT, {
             store: data.mode === "game" ? entry.store : new MemoryGlobalStore(),
             saves: data.mode === "game" ? entry.saves : new MemorySaveStore(),
+            // The demo plays the same game's characters, so their edited voices apply there too.
+            voices: entry.voices,
             columns: typeof data.columns === "number" ? data.columns : 120,
             ...(display ? { display } : {}),
             ...(client ? { client } : {}),
@@ -392,6 +399,93 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
         json(response, session.runtime.fullCharacterHistory(history));
         return;
       }
+      if (request.method === "POST" && url.pathname === "/api/character-tool") {
+        // An LLM speaking as the selected character calls a tool; errors the model can recover from come back as results.
+        const data = await body(request);
+        if (typeof data.session !== "string" || typeof data.character !== "string" || !Number.isSafeInteger(data.step)
+          || typeof data.name !== "string" || (data.arguments !== undefined && (typeof data.arguments !== "object" || data.arguments === null || Array.isArray(data.arguments))))
+          throw new HttpError(400, "Expected session, step, character, name and an arguments object");
+        const session = sessions.get(data.session);
+        if (!session) throw new HttpError(404, "Session expired or does not exist; start a new run");
+        if (data.step !== session.step) throw new HttpError(409, "This run has moved on; reopen history on the current screen");
+        const history = session.history.at(-1)?.snapshot.characterHistory;
+        if (!history || history.character.id !== data.character)
+          throw new HttpError(409, "The selected character has changed; reopen history on the current screen");
+        session.used = Date.now();
+        try { json(response, session.runtime.characterTool(data.character, data.name, (data.arguments ?? {}) as Record<string, unknown>)); }
+        catch (error) {
+          if (!(error instanceof EraError)) throw error;
+          throw new HttpError(409, error.message);
+        }
+        return;
+      }
+      if (request.method === "POST" && (url.pathname === "/api/character-voice" || url.pathname === "/api/character-voice/save")) {
+        // The character's voice for LLM chat: generated from her kojo, or the player's edited version saved to disk.
+        const data = await body(request);
+        const save = url.pathname.endsWith("/save");
+        const voice = save && data.voice !== null ? editableVoice(data.voice) : null;
+        if (typeof data.session !== "string" || typeof data.character !== "string" || (!save && !Number.isSafeInteger(data.step))
+          || (save && data.voice !== null && !voice))
+          throw new HttpError(400, save ? "Expected session, character and a voice (description, examples, intimateExamples) or null"
+            : "Expected session, step and character");
+        const session = sessions.get(data.session);
+        if (!session) throw new HttpError(404, "Session expired or does not exist; start a new run");
+        if (!save && data.step !== session.step) throw new HttpError(409, "This run has moved on; reopen history on the current screen");
+        session.used = Date.now();
+        try {
+          if (save) {
+            session.runtime.saveCharacterVoice(data.character, voice);
+            json(response, { ok: true });
+          } else json(response, session.runtime.characterVoiceSettings(data.character));
+        } catch (error) {
+          if (!(error instanceof EraError)) throw error;
+          throw new HttpError(409, error.message);
+        }
+        return;
+      }
+      if (request.method === "POST" && (url.pathname === "/api/character-chat" || url.pathname === "/api/character-chat/undo")) {
+        // The player's chat-window message goes into the interaction history at once; undo takes back its last lines.
+        const data = await body(request);
+        const undo = url.pathname.endsWith("/undo");
+        if (typeof data.session !== "string" || typeof data.character !== "string" || !Number.isSafeInteger(data.step)
+          || (undo ? !Number.isSafeInteger(data.lines) || (data.lines as number) < 1 : typeof data.text !== "string" || !data.text.trim()))
+          throw new HttpError(400, undo ? "Expected session, step, character and a number of lines" : "Expected session, step, character and text");
+        const session = sessions.get(data.session);
+        if (!session) throw new HttpError(404, "Session expired or does not exist; start a new run");
+        if (data.step !== session.step) throw new HttpError(409, "This run has moved on; reopen history on the current screen");
+        const history = session.history.at(-1)?.snapshot.characterHistory;
+        if (!history || history.character.id !== data.character)
+          throw new HttpError(409, "The selected character has changed; reopen history on the current screen");
+        session.used = Date.now();
+        try {
+          if (undo) session.runtime.unchat(data.character, data.lines as number);
+          else session.runtime.chatMessage(data.character, data.text as string);
+        } catch (error) {
+          if (!(error instanceof EraError)) throw error;
+          throw new HttpError(409, error.message);
+        }
+        json(response, { ok: true });
+        return;
+      }
+      if (request.method === "POST" && url.pathname === "/api/refresh") {
+        // Redraws the command screen after character tools changed the game, running their queued actions.
+        const data = await body(request);
+        if (typeof data.session !== "string" || !Number.isSafeInteger(data.step)) throw new HttpError(400, "Expected session and step");
+        const session = sessions.get(data.session);
+        if (!session) throw new HttpError(404, "Session expired or does not exist; start a new run");
+        if (data.step !== session.step) throw new HttpError(409, "This run was continued in another tab");
+        session.used = Date.now();
+        try {
+          executionBreadcrumb(data.session, session.game, session.step, "refresh", session.debug);
+          const snapshot = session.runtime.refresh();
+          if (snapshot.status !== "waiting") sessions.delete(data.session);
+          deliver(response, data.session, session, "input", snapshot, session.runtime.game);
+        } catch (error) {
+          if (!(error instanceof EraError)) throw error;
+          throw new HttpError(409, error.message);
+        }
+        return;
+      }
       if (request.method === "POST" && url.pathname === "/api/resume") {
         // Lets a reloaded page reattach to its still-running session: replays what was shown, without advancing it.
         const data = await body(request);
@@ -446,12 +540,24 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
         json(response, await mapManifest(path.join(WEB_ROOT, "maps")));
         return;
       }
+      if (request.method === "POST" && url.pathname === "/api/llm") {
+        const data = await body(request, LLM_REQUEST_BYTES);
+        // Stop the upstream request (and its billing) if the player cancels or closes the page.
+        const abort = new AbortController();
+        response.on("close", () => { if (!response.writableFinished) abort.abort(); });
+        try { json(response, await proxyLlm(data, abort.signal)); }
+        catch (error) {
+          if (error instanceof LlmRequestError) throw new HttpError(error.message.startsWith("Could not reach") ? 502 : 400, error.message);
+          throw error;
+        }
+        return;
+      }
       if (request.method === "GET" && url.pathname === "/api/areas") {
         json(response, await areaManifest(path.join(WEB_ROOT, "areas")));
         return;
       }
       const pages: Record<string, string> = {
-        "/": "index.html", "/app.js": "app.js", "/translate.js": "translate.js", "/interaction-history.js": "interaction-history.js", "/style.css": "style.css",
+        "/": "index.html", "/app.js": "app.js", "/translate.js": "translate.js", "/interaction-history.js": "interaction-history.js", "/llm.js": "llm.js", "/style.css": "style.css",
         "/library.js": "library.js", "/library.css": "library.css",
         "/title/new-game.webp": "title/new-game.webp", "/title/load-game.webp": "title/load-game.webp",
         "/fonts/BIZUDGothic-Regular.ttf": "fonts/BIZUDGothic-Regular.ttf",

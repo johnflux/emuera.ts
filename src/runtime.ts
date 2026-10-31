@@ -8,7 +8,7 @@ import { symbolTable, Variables, type GlobalData, type SaveData } from "./variab
 import { parseFormat } from "./format.js";
 import { MemoryGlobalStore, MemorySaveStore, StagedStores, type GlobalStore, type SaveStore } from "./storage.js";
 import { randomInt, randomUUID } from "node:crypto";
-import { escapeHtml, htmlButtons, htmlLineCount, htmlSpriteNames, htmlTagSplit, htmlWidth, plainHtml } from "./html.js";
+import { escapeHtml, type ColoredText, htmlButtons, htmlLineCount, htmlSpriteNames, htmlTagSplit, htmlWidth, plainHtml } from "./html.js";
 import { formatInteger, stringWidth, toFullWidth, toHalfWidth } from "./strings.js";
 import { DataTables, TABLE_OPERATIONS } from "./data-tables.js";
 import { CONFIG_ITEMS, configSetting } from "./config-items.js";
@@ -21,6 +21,8 @@ import { fixHistoryHtml, SHARP_METHODS, supportedSharpCall, translateHistoryDate
 import { regexCharacterClasses, regexGroupOrder, replaceRegex } from "./regex.js";
 import { decodePicture, encodePicture, InvalidGraphicsImage, pictureColor, resourceColor } from "./graphics.js";
 import { TwInteractionHistory, type CharacterHistory } from "./interaction-history.js";
+import { runCharacterTool, toolCallSummary, type CharacterAction } from "./character-tools.js";
+import { characterVoice, MemoryVoiceStore, type CharacterVoice, type EditableVoice, type VoiceStore } from "./character-voice.js";
 
 export interface Style { color: string; background: string; alignment: "left" | "center" | "right"; fontStyle: number; font?: string }
 type Rect = [x: number, y: number, width: number, height: number];
@@ -214,6 +216,15 @@ function rgbColor(value: bigint): string {
   return "#" + value.toString(16).padStart(6, "0");
 }
 const SKIPPED: Yield = { output: { type: "text", text: "", newline: false, style: {} as Style } };
+/** Sent by refresh() to the TRAIN command prompt; integer input validation means a player cannot send it. */
+const REFRESH = "\u0000refresh";
+/** Character tool calls in the interaction history: their results are cut to this length, in this colour. */
+// History colours for character tool calls: a dim call, a lighter outcome, and willing, refusing or uneasy picked out.
+const TOOL_CALL = "#6f6f6f";
+const TOOL_COLOR = "#a8a8a8";
+const TOOL_GOOD = "#7fc98f";
+const TOOL_BAD = "#e07a7a";
+const TOOL_UNEASY = "#d8b25a";
 /** .NET KnownColor names accepted by SETCOLORBYNAME (lowercase keys are matched case-insensitively). */
 const KNOWN_COLORS: Record<string, string> = Object.fromEntries(Object.entries({
   AliceBlue: "f0f8ff", AntiqueWhite: "faebd7", Aqua: "00ffff", Aquamarine: "7fffd4", Azure: "f0ffff", Beige: "f5f5dc", Bisque: "ffe4c4",
@@ -331,6 +342,8 @@ export interface RuntimeOptions {
   intrinsics?: boolean;
   /** Compiles hot routines to JavaScript (default on); see src/jit.ts. */
   jit?: boolean;
+  /** Character voices the player edited for LLM chat (default: kept in memory). */
+  voices?: VoiceStore;
 }
 // RanceK's default scenario builds its diplomacy maps in ~187 million instructions before asking for input.
 export const GAME_INSTRUCTION_LIMIT = 250_000_000;
@@ -375,6 +388,8 @@ export class Runtime {
   private style: Style;
   private finished = false;
   private expressionCache = new Map<string, Expr>();
+  private kojoCache = new Map<string, Routine[]>();
+  private voices: VoiceStore;
   /** Names that resolved to a user function without REF parameters, so later calls skip builtin dispatch. */
   private userFunctions = new Set<string>();
   private intrinsics = new Map<string, Intrinsic>();
@@ -426,6 +441,10 @@ export class Runtime {
   private saves: SaveStore;
   private staged: StagedStores;
   private interactionHistory: TwInteractionHistory | undefined;
+  /** Character tool actions (lines spoken, moves) that run on the next TRAIN command input or refresh(). */
+  private characterActions: CharacterAction[] = [];
+  /** The TRAIN command prompt currently awaited, which refresh() may resume without a command. */
+  private trainRequest: InputRequest | undefined;
   /** The result of continuing a click-to-continue wait ahead of the click; see prefetch(). */
   private ahead: { snapshot: Snapshot } | { error: unknown } | null = null;
   private stainDefault: bigint[];
@@ -480,6 +499,7 @@ export class Runtime {
     this.buttonWrap = this.configValue("ボタンの途中で行を折りかえさない") === 1n;
     this.autoToStr = this.configValue("ユーザー関数の引数に自動的にTOSTRを補完する") === 1n;
     this.saves = this.staged.saves;
+    this.voices = options.voices ?? new MemoryVoiceStore();
     if (game.routines.has("HOTPATCH_TARGET_DATAGROUP") && game.routines.has("KOJO_MESSAGE_SEND") && game.routines.has("TRAINNAME_TR")) {
       this.interactionHistory = new TwInteractionHistory(this.saves, {
         read: (name, indices = []) => this.globals.get(name, indices.map(literal), this.context(this.globals)),
@@ -614,6 +634,7 @@ export class Runtime {
   /** RESETDATA: non-global variables return to their defaults and the VarExt SAVE_* containers are emptied. */
   private resetData(): void {
     this.interactionHistory?.reset();
+    this.characterActions = [];
     this.globals.resetData();
     for (const variables of this.statics.values()) variables.resetData();
     this.seedDefaults();
@@ -622,6 +643,7 @@ export class Runtime {
   }
   private restart(): void {
     this.interactionHistory?.reset();
+    this.characterActions = [];
     this.statics.clear();
     this.contexts = new WeakMap();
     this.evaluatorCache = new WeakMap();
@@ -811,6 +833,203 @@ export class Runtime {
     yield this.emit("input", value, true);
     return BigInt(value.trim());
   }
+  /** The TRAIN command prompt; undefined when refresh() resumed it instead of a command. */
+  private *commandInput(): Generator<Yield, bigint | undefined, string> {
+    const request: InputRequest = { kind: "integer" };
+    this.trainRequest = request;
+    let value: string;
+    try { value = yield { input: request }; }
+    finally { this.trainRequest = undefined; }
+    yield this.emit("input", value === REFRESH ? "" : value, true);
+    // Anything the game does next belongs to a new interaction, not to the chat window's conversation.
+    this.interactionHistory?.endChat();
+    const command = yield* this.runCharacterActions();
+    // A command a character tool asked for runs as if the player had typed its number.
+    if (value === REFRESH && command !== undefined) return BigInt(command);
+    return value === REFRESH ? undefined : BigInt(value.trim());
+  }
+  /** Runs queued say/act/move actions and returns the number of a queued command, if any. */
+  private *runCharacterActions(): Generator<Yield, number | undefined, string> {
+    const actions = this.characterActions;
+    this.characterActions = [];
+    let command: number | undefined;
+    for (const action of actions) {
+      const index = this.interactionHistory?.indexOf(action.character) ?? -1;
+      if (index < 0) continue;
+      if (action.kind === "command") command = action.command;
+      else if (action.kind === "say") {
+        const style = this.style;
+        this.style = { ...style, color: this.kojoColor(index) };
+        try { yield this.emit("text", `「${action.text}」`, true); }
+        finally { this.style = style; }
+      } else if (action.kind === "act") {
+        yield this.emit("text", action.text, true);
+      } else {
+        const from = integer(this.globals.get("CFLAG", [literal(BigInt(index)), literal("現在位置")], this.context(this.globals)));
+        if (from !== BigInt(action.destination)) yield* this.execute("キャラ移動処理２", [BigInt(index), BigInt(action.destination), from]);
+      }
+    }
+    return command;
+  }
+  /**
+   * Resumes the TRAIN command prompt without a command so the status is redrawn, running queued character actions
+   * first. Character tools change state outside the script, and this shows the result the way the game would.
+   */
+  refresh(): Snapshot {
+    if (this.ahead || !this.pending || this.pending !== this.trainRequest) throw new EraError("The game is not waiting for a command, so it cannot redraw now");
+    this.action = "refresh";
+    this.messageSkip = false;
+    this.textbox = "";
+    this.buttonLines = [];
+    this.lineButtons = [];
+    this.pending = null;
+    this.timed = undefined;
+    return this.advance(REFRESH);
+  }
+  /** Runs an LLM tool for a character in the current interaction history; see character-tools.ts. */
+  characterTool(character: string, name: string, args: Record<string, unknown>): { result: Record<string, unknown>; changed: boolean } {
+    const history = this.interactionHistory;
+    if (!history) throw new EraError("Character tools are unavailable for this game");
+    if (this.ahead || !this.pending || this.pending !== this.trainRequest) throw new EraError("The game is not waiting for a command; character tools can only run there");
+    const self = history.indexOf(character);
+    if (self < 0) throw new EraError("That character is no longer in the game");
+    this.steps = 0;
+    const read = (variable: string, indices: Value[] = []) => this.globals.get(variable, indices.map(literal), this.context(this.globals));
+    const outcome = runCharacterTool({
+      read,
+      write: (variable, indices, value) => this.globals.set(variable, indices.map(literal), value, this.context(this.globals)),
+      call: (routine, args) => this.expressionFunction(routine, args),
+      run: (routine, args) => this.runQuietly(routine, args),
+      has: (routine) => this.game.routines.has(routine),
+      count: () => this.globals.characterCount(),
+      queued: () => this.characterActions,
+      voice: (intimate) => this.characterVoice(self, intimate),
+    }, self, character, name, args);
+    if (outcome.action) this.characterActions.push({ ...outcome.action, character } as CharacterAction);
+    if (name !== "describe_scene") history.chat(character, { speaker: character, runs: this.toolLine(self, name, args, outcome.result) });
+    return { result: outcome.result, changed: outcome.changed };
+  }
+  /**
+   * How a character talks: her kojo's introduction and lines from her kojo that she could say in the current state
+   * (branches on her route, relationship and so on are followed; ones decided only at the moment, like RAND, are kept).
+   * Nothing in the game changes. A voice the player edited and saved is used instead.
+   */
+  characterVoice(index: number, intimate: boolean): CharacterVoice {
+    const saved = this.voices.load(this.characterNo(index));
+    if (saved) return { ...(saved.description ? { description: saved.description } : {}), examples: intimate ? saved.intimateExamples : saved.examples };
+    return this.generatedVoice(index, intimate);
+  }
+  /** A character's voice for the editor: what the game generates now, and the player's saved version if any. */
+  characterVoiceSettings(character: string): { generated: EditableVoice; saved: EditableVoice | null; location?: string } {
+    const index = this.voiceCharacter(character);
+    if (this.ahead || !this.pending || this.pending !== this.trainRequest) throw new EraError("The game is not waiting for a command; the voice can only be generated there");
+    const everyday = this.generatedVoice(index, false), intimate = this.generatedVoice(index, true);
+    return {
+      generated: { description: everyday.description ?? "", examples: everyday.examples, intimateExamples: intimate.examples },
+      saved: this.voices.load(this.characterNo(index)),
+      ...(this.voices.location ? { location: this.voices.location } : {}),
+    };
+  }
+  /** Saves the player's version of a character's voice, or with null goes back to the generated one. */
+  saveCharacterVoice(character: string, voice: EditableVoice | null): void {
+    this.voices.save(this.characterNo(this.voiceCharacter(character)), voice);
+  }
+  private voiceCharacter(character: string): number {
+    if (!this.interactionHistory) throw new EraError("Character voices are unavailable for this game");
+    const index = this.interactionHistory.indexOf(character);
+    if (index < 0) throw new EraError("That character is no longer in the game");
+    return index;
+  }
+  private characterNo(index: number): number {
+    return Number(integer(this.globals.get("NO", [literal(BigInt(index))], this.context(this.globals))));
+  }
+  private generatedVoice(index: number, intimate: boolean): CharacterVoice {
+    const context = this.context(this.globals);
+    const get = (name: string, ...indices: Value[]) => this.globals.get(name, indices.map(literal), context);
+    const set = (name: string, value: Value, ...indices: Value[]) => this.globals.set(name, indices.map(literal), value, context);
+    // Kojo conditions call functions that can change things (FIRSTTIME marks an event seen), so all of it is put back.
+    const saved = { random: this.randomState, style: this.style, restore: this.globals.checkpoint() };
+    try {
+      let suffix = "";
+      if (this.game.routines.has("KOJO_ACTIVE_INFO")) {
+        this.runQuietly("KOJO_ACTIVE_INFO", [BigInt(index)]);
+        if (integer(get("RESULT"))) suffix = text(get("RESULTS"));
+      }
+      const no = integer(get("NO", BigInt(index)));
+      const routine = (name: string) => this.game.routines.get(key(name))?.[0];
+      const selector = this.game.routines.has("KOJO_ACTIVE_INFO") ? integer(get("CFLAG", BigInt(index), "口上セレクタ")) : 0n;
+      const entry = routine(selector ? `M_KOJO_K${no}_${selector}` : `M_KOJO_K${no}`);
+      set("TARGET", BigInt(index));
+      const transient = /\b(?:LOCALS?|ARGS?|RESULTS?|RAND|IFRAND|TFLAG|TCVAR|TEQUIP|SELECTCOM|PREVCOM|PALAM|SOURCE|NOWEX)\b/;
+      return characterVoice(routine(`CHARA_INFO_KOJO${suffix}_K${no}`) ?? routine(`CHARA_INFO_KOJO_K${no}_0`), entry ? this.kojoRoutines(entry.file) : [], Number(no), intimate, {
+        condition: (source) => {
+          if (transient.test(source)) return undefined;
+          try { const value = evaluate(this.parse(source), context); return typeof value === "string" ? value !== "" : value !== 0n; } catch { return undefined; }
+        },
+        format: (source) => { try { return this.formatIn(source, context); } catch { return undefined; } },
+      });
+    } catch (error) {
+      if (error instanceof EraError) return { examples: [] };
+      throw error;
+    } finally {
+      this.randomState = saved.random;
+      this.style = saved.style;
+      saved.restore();
+    }
+  }
+  /** The routines of the kojo a file belongs to: its folder under 個人口上/<character>/, or else the file's own folder. */
+  private kojoRoutines(file: string): Routine[] {
+    const parts = file.split(/[\\/]/), at = parts.indexOf("個人口上");
+    const folder = (at >= 0 && parts.length > at + 3 ? parts.slice(0, at + 3) : parts.slice(0, -1)).join("/") + "/";
+    let routines = this.kojoCache.get(folder);
+    if (!routines) {
+      routines = [...this.game.routines.values()].flat().filter((routine) => routine.file.replaceAll("\\", "/").startsWith(folder));
+      this.kojoCache.set(folder, routines);
+    }
+    return routines;
+  }
+  /** How a character's tool call reads in the interaction history: speech in 「」, actions as narration, other calls summarised. */
+  private toolLine(index: number, name: string, args: Record<string, unknown>, result: Record<string, unknown>): ColoredText[] {
+    const said = typeof args.text === "string" ? args.text.trim() : "";
+    if (!result.error && said && name === "say") return [{ text: `「${said}」`, color: this.kojoColor(index) }];
+    if (!result.error && said && name === "act") return [{ text: said, color: this.display.foreground }];
+    const tones = { call: TOOL_CALL, good: TOOL_GOOD, bad: TOOL_BAD, uneasy: TOOL_UNEASY };
+    const read = (variable: string) => String(this.globals.get(variable, [literal(BigInt(index))], this.context(this.globals)));
+    return toolCallSummary(read("CALLNAME") || read("NAME"), name, args, result).map((part) => ({ text: part.text, color: part.tone ? tones[part.tone] : TOOL_COLOR }));
+  }
+  /** Records something the player said or did to a character in the chat window: speech in quotes, *actions* as written. */
+  chatMessage(character: string, message: string): void {
+    const history = this.chatHistory();
+    const parts = message.trim().split(/(\*[^*]+\*)/).map((part) => part.trim()).filter(Boolean)
+      .map((part) => part.startsWith("*") ? part : `"${part.replace(/^["“「]+|["”」]+$/g, "")}"`);
+    history.chat(character, { speaker: null, runs: [{ text: parts.join(" "), color: this.display.foreground }] });
+  }
+  /** Takes back the last lines of the conversation in the chat window (for trying a message again). */
+  unchat(character: string, count: number): void { this.chatHistory().unchat(character, count); }
+  private chatHistory(): TwInteractionHistory {
+    if (!this.interactionHistory) throw new EraError("Interaction history is unavailable for this game");
+    if (this.ahead || !this.pending || this.pending !== this.trainRequest) throw new EraError("The game is not waiting for a command; the conversation can only continue there");
+    return this.interactionHistory;
+  }
+  /** The colour eraTW prints a character's dialogue in (SET_KOJO_COLOR), or the normal text colour. */
+  private kojoColor(index: number): string {
+    const style = this.style;
+    try {
+      if (this.game.routines.has("SET_KOJO_COLOR")) this.runQuietly("SET_KOJO_COLOR", [BigInt(index)]);
+      return this.style.color;
+    } catch (error) {
+      if (error instanceof EraError) return this.display.foreground;
+      throw error;
+    } finally { this.style = style; }
+  }
+  /** Runs a procedure for its effect on variables; its output is discarded and it may not ask for input. */
+  private runQuietly(routine: string, args: Value[]): void {
+    const generator = this.execute(routine, args);
+    try {
+      for (let step = generator.next(); !step.done; step = generator.next())
+        if ("input" in step.value) throw new EraError(`${routine} asked for input`);
+    } finally { generator.return(undefined); }
+  }
   /** Prints a line that the next output replaces, optionally removing the echoed input first. */
   private *temporary(message: string, removeEcho: boolean): Generator<Yield, void, string> {
     if (removeEcho && !this.temporaryLine) {
@@ -924,7 +1143,9 @@ export class Runtime {
         }
         if (command === undefined) {
           this.clearVariables(COMMAND_RESET);
-          const value = yield* this.systemInput();
+          const value = yield* this.commandInput();
+          // refresh(): redraw the status, where eraTW also acts on flags such as nForcePushDown.
+          if (value === undefined) break;
           const selected = value >= 0n && value < BigInt(available.length) ? available[Number(value)]! : -1;
           if (selected >= 0) command = BigInt(selected);
           else {
@@ -1323,6 +1544,8 @@ export class Runtime {
   get prefetched(): boolean { return this.ahead !== null; }
   fullCharacterHistory(history: CharacterHistory): CharacterHistory {
     if (!this.interactionHistory) throw new EraError("Interaction history is unavailable for this game");
+    // An open conversation only adds to what is on screen (any input ends it), so it is shown as it stands now.
+    if (!this.ahead && this.interactionHistory.chatting) return this.interactionHistory.current(history.character);
     return this.interactionHistory.forCharacter(history.character, history.entries[0]?.id ?? null);
   }
   input(value: string): Snapshot {
@@ -2754,11 +2977,12 @@ export class Runtime {
     if (reference.kind !== "variable") throw new EraError("Assignment target must be a variable");
     frame.variables.set(reference.name, reference.indices, value, frame.context);
   }
-  private formatted(source: string, frame: Frame): string {
+  private formatted(source: string, frame: Frame): string { return this.formatIn(source, frame.context); }
+  private formatIn(source: string, base: EvaluationContext): string {
     let expr = this.formatCache.get(source);
     if (!expr) { expr = parseFormat(source); this.formatCache.set(source, expr); }
     const context: EvaluationContext = {
-      ...frame.context,
+      ...base,
       translateName: (name, value) => {
         if (typeof value !== "string" || name === "NAME" || !name.endsWith("NAME") && !/^CDFLAGNAME[12]$/.test(name)) return value;
         const table = name === "STRNAME" ? "STR" : symbolTable(name);
