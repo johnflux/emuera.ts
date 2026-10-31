@@ -156,6 +156,168 @@ function check(snapshot: Snapshot): Snapshot {
   assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
   return snapshot;
 }
+
+for (const jit of [false, true]) {
+  test(`resuming time records sudden player appearances and disappearances, including across saves (JIT ${jit})`, () => {
+    const game = fixture();
+    game.names.get("CFLAG")!.set("睡眠", 2950);
+    game.routines.delete("SYSTEM_TITLE");
+    game.routines.delete("SHOW_SHOP");
+    indexScript(game, `@SYSTEM_TITLE
+ADDVOIDCHARA
+ADDVOIDCHARA
+ADDVOIDCHARA
+MASTER = 0
+TARGET = 1
+CALLNAME:0 = Alex
+CALLNAME:1 = Reimu
+CALLNAME:2 = Marisa
+NO:1 = 1
+NO:2 = 2
+CFLAG:0:現在位置 = 9
+CFLAG:1:現在位置 = 9
+CFLAG:2:現在位置 = 12
+STR:8009 = Living room
+STR:8012 = Garden
+JUMP PRESENCE_LOOP
+@PRESENCE_LOOP
+$AGAIN
+CALL SHOW_STATUS
+INPUT
+SELECTCASE RESULT
+CASE 17
+  FLAG:70 = 1
+  CALL PRESENCE_CHECK
+CASE 18
+  CFLAG:0:現在位置 = 12
+CASE 19
+  FLAG:70 = 0
+  CALL PRESENCE_CHECK
+CASE 20
+  CFLAG:0:現在位置 = 9
+CASE 21
+  CFLAG:2:睡眠 = 1
+CASE 22
+  CFLAG:2:344 = 1
+CASE 25
+  CFLAG:2:睡眠 = 0
+CASE 26
+  CFLAG:2:現在位置 = 9
+CASE 27
+  CFLAG:2:現在位置 = 12
+CASE 28
+  CFLAG:2:344 = 0
+CASE 29
+  CFLAG:0:現在位置 = 15
+CASE 23
+  SAVEDATA 0, "frozen"
+CASE 24
+  LOADDATA 0
+ENDSELECT
+GOTO AGAIN
+@PRESENCE_CHECK
+RETURN
+@SHOW_SHOP
+JUMP PRESENCE_LOOP
+`, "time-presence.ERB");
+    const runtime = new Runtime(game, undefined, { jit });
+    let snapshot = check(runtime.start());
+    const reimu = history(snapshot).character;
+    const records = (runtime as unknown as { interactionHistory: { ids: string[]; person(i: number): { id: string; name: string; number: string } | undefined; encounters(): { character: { name: string }; arrived: string }[] } }).interactionHistory;
+    const marisa = records.ids.map((_, i) => records.person(i)).find((person) => person?.name === "Marisa")!;
+    const entries = (who: typeof reimu) => runtime.encounterHistory(who).entries;
+    const settle = (next: Snapshot) => {
+      for (let i = 0; next.input?.kind === "wait" && i < 20; i++) next = check(runtime.input(""));
+      return next;
+    };
+    check(runtime.input("17"));
+    check(runtime.input("18"));
+    assert.equal(entries(reimu).length, 0, "moving during stopped time is not yet noticed");
+    assert.equal(entries(marisa).length, 0);
+    settle(check(runtime.input("23")));
+    snapshot = settle(check(runtime.input("19")));
+    const disappearances = [
+      "Reimu notices that Alex is suddenly gone, without having seen them leave.",
+      "Reimu notices that Alex vanished from the room in the blink of an eye.",
+      "Reimu notices that Alex just vanished into thin air.",
+    ];
+    const appearances = [
+      "Marisa notices that Alex is suddenly here, without having seen them enter.",
+      "Marisa notices that Alex appeared in the room in the blink of an eye.",
+      "Marisa notices that Alex just appeared out of nowhere.",
+    ];
+    assert.ok(disappearances.includes(entries(reimu)[0]!.lines[0]!.text));
+    assert.ok(appearances.includes(entries(marisa)[0]!.lines[0]!.text));
+    const savedNotice = entries(reimu)[0]!.lines[0]!.text;
+    assert.equal(entries(reimu)[0]!.before.locationName, "Living room");
+    assert.equal(entries(marisa)[0]!.before.locationName, "Garden");
+    assert.equal(entries(reimu)[0]!.source, "state");
+    assert.doesNotMatch(JSON.stringify(entries(reimu)), /time.stop|time.resum/i, "characters do not know the cause");
+    check(runtime.input("19"));
+    assert.equal(entries(reimu).length, 1, "the change is noticed only once");
+    assert.equal(entries(reimu)[0]!.lines[0]!.text, savedNotice, "reading the event does not reroll its wording");
+    settle(check(runtime.input("24")));
+    assert.equal(entries(reimu).length, 0, "loading the frozen save discards the future");
+    settle(check(runtime.input("19")));
+    assert.ok(disappearances.includes(entries(reimu)[0]!.lines[0]!.text),
+      "the pre-freeze baseline survives loading");
+    check(runtime.input("20"));
+    assert.equal(entries(reimu).length, 1, "ordinary movement does not create an unexplained disappearance");
+    check(runtime.input("17"));
+    check(runtime.input("18"));
+    check(runtime.input("20"));
+    check(runtime.input("19"));
+    assert.equal(entries(reimu).length, 1, "leaving and returning during the same freeze has no visible change");
+    check(runtime.input("21"));
+    check(runtime.input("17"));
+    check(runtime.input("18"));
+    check(runtime.input("19"));
+    assert.equal(entries(marisa).length, 1, "sleeping characters do not witness a sudden appearance");
+    check(runtime.input("20"));
+    check(runtime.input("25"));
+    check(runtime.input("22"));
+    check(runtime.input("17"));
+    check(runtime.input("18"));
+    check(runtime.input("19"));
+    assert.equal(entries(marisa).length, 1, "characters who can move during stopped time do not get a false surprise");
+    check(runtime.input("20"));
+    check(runtime.input("28"));
+    check(runtime.input("26"));
+    const beforeCrowd = entries(reimu).length;
+    check(runtime.input("17"));
+    check(runtime.input("18"));
+    check(runtime.input("19"));
+    assert.equal(entries(reimu).length, beforeCrowd, "another NPC distracts the observer from a sudden disappearance");
+    check(runtime.input("17"));
+    check(runtime.input("20"));
+    check(runtime.input("19"));
+    assert.equal(entries(reimu).length, beforeCrowd, "another NPC distracts the observer from a sudden appearance");
+    check(runtime.input("27"));
+    check(runtime.input("17"));
+    check(runtime.input("18"));
+    check(runtime.input("26"));
+    check(runtime.input("19"));
+    assert.equal(entries(reimu).length, beforeCrowd, "company arriving during the freeze also suppresses the note");
+    check(runtime.input("20"));
+    check(runtime.input("17"));
+    check(runtime.input("18"));
+    check(runtime.input("27"));
+    check(runtime.input("19"));
+    assert.equal(entries(reimu).length, beforeCrowd, "company at the start still suppresses the note if it leaves during the freeze");
+    check(runtime.input("26"));
+    check(runtime.input("29"));
+    records.encounters();
+    check(runtime.input("17"));
+    assert.deepEqual(records.encounters(), [], "time-stopped command prompts do not trigger LLM encounters");
+    check(runtime.input("20"));
+    assert.deepEqual(records.encounters(), [], "entering a crowded room during stopped time does not consume the encounter");
+    check(runtime.input("19"));
+    assert.deepEqual(records.encounters().map(({ character, arrived }) => [character.name, arrived]),
+      [["Reimu", "player"], ["Marisa", "player"]], "both NPCs get a normal LLM encounter when time resumes");
+    assert.deepEqual(records.encounters(), [], "redrawing after resume does not repeat the encounters");
+    assert.equal(entries(reimu).length, beforeCrowd, "normal encounters do not restore the suppressed sudden-presence note");
+  });
+}
 function history(snapshot: Snapshot) {
   return check(snapshot).characterHistory!;
 }
@@ -959,7 +1121,7 @@ test("character tools query and change real eraTW state, and their room actions 
   assert.match((tool("get_character_info", { character: "nobody at all" }).result as { error: string }).error, /No character is called/);
   const fairies = tool("find_characters", { query: "FAIRY| fairies " }).result as { found: number; characters: string[] };
   assert.equal(fairies.found, 9);
-  assert.ok(fairies.characters.includes("Cirno (Fairy, Ice Fairy, female): lives at Ice Igloos (Scarlet Devil Mansion area); now Ice Igloos"));
+  assert.ok(fairies.characters.includes("Cirno (Fairy, Ice Fairy, female): lives at Ice Igloos (Scarlet Devil Mansion area); now probably near Scarlet Devil Mansion"));
   assert.deepEqual(tool("find_characters", { query: "nothing-like-this" }).result, { found: 0 });
   assert.match((tool("find_characters", { query: " | " }).result as { error: string }).error, /query is required/);
 
@@ -1004,7 +1166,7 @@ test("character tools query and change real eraTW state, and their room actions 
   assert.match((tool("push_down_player").result as { error: string }).error, /not in the same room/);
   assert.throws(() => runtime.input("x"), /whole number/, "players cannot send the refresh sentinel");
   snapshot = check(runtime.refresh());
-  assert.match(text(snapshot), /Reimu points at the door\.\n「Out of my storeroom!」\nReimu moves from【Player's Back Room】to the【Kitchen】/);
+  assert.match(text(snapshot), /Reimu points at the door\.\nReimu: 「Out of my storeroom!」\nReimu moves from【Player's Back Room】to the【Kitchen】/);
   assert.doesNotMatch(text(snapshot), /Nobody hears this/);
   for (let i = 0; snapshot.input?.kind === "wait" && i < 10; i++) snapshot = check(runtime.input(""));
   assert.equal(snapshot.input?.kind, "integer");
@@ -1047,14 +1209,255 @@ test("what a character says and does in company goes into the others' histories 
   runtime.characterTool(reimu.id, "act", { text: "Reimu glares at Marisa." });
   runtime.characterTool(reimu.id, "change_feelings", { favor: 5 });
   runtime.characterTool(marisa.id, "say", { text: "「Who, me?」" });
-  assert.deepEqual(newest(reimu).lines.map(text).slice(0, 3), ['"Hello"', "「Marisa, behave.」", "Reimu glares at Marisa."]);
+  assert.deepEqual(newest(reimu).lines.map(text).slice(0, 3), ['Player: "Hello"', "Reimu: 「Marisa, behave.」", "Reimu glares at Marisa."]);
   assert.equal(newest(reimu).lines.map(text)[4], "Marisa: 「Who, me?」", "Reimu hears Marisa");
-  assert.deepEqual(newest(marisa).lines.map(text), ["Reimu: 「Marisa, behave.」", "Reimu glares at Marisa.", "「Who, me?」"],
-    "Marisa hears and sees Reimu, but not the player's line to her or Reimu's feelings");
+  assert.deepEqual(newest(marisa).lines.map(text), ['Player: "Hello"', "Reimu: 「Marisa, behave.」", "Reimu glares at Marisa.", "Marisa: 「Who, me?」"],
+    "Marisa hears the player and Reimu, but not Reimu's private feelings");
   assert.equal(newest(marisa).target, marisa.id);
   // Taking Reimu's lines back takes back what Marisa heard of them.
   runtime.unchat(reimu.id, 3);
-  assert.deepEqual(newest(marisa).lines.map(text), ["Reimu: 「Marisa, behave.」", "「Who, me?」"]);
+  assert.deepEqual(newest(marisa).lines.map(text), ['Player: "Hello"', "Reimu: 「Marisa, behave.」", "Marisa: 「Who, me?」"]);
+  runtime.unchat(reimu.id, 1);
+  assert.deepEqual(newest(marisa).lines.map(text), ['Player: "Hello"', "Marisa: 「Who, me?」"]);
+  runtime.unchat(reimu.id, 1);
+  assert.deepEqual(newest(marisa).lines.map(text), ["Marisa: 「Who, me?」"], "undo also removes overheard player speech");
+  const thought = "It is strange and suspicious that Player just disappeared.";
+  const othersBefore = JSON.stringify(runtime.encounterHistory(marisa));
+  assert.deepEqual(runtime.characterTool(reimu.id, "think", { text: thought }),
+    { result: { remembered: true, private: true }, changed: false });
+  const privateLine = newest(reimu).lines.at(-1)!;
+  assert.equal(privateLine.text, `Reimu (thought): ${thought}`);
+  assert.equal(privateLine.thought, true);
+  assert.equal(JSON.stringify(runtime.encounterHistory(marisa)), othersBefore, "thoughts never enter a witness's history");
+  assert.match(String(runtime.characterTool(reimu.id, "think", { text: " " }).result.error), /text is required/);
+  runtime.characterTool(reimu.id, "think", { text: "I need to remember this quietly." }, true);
+  assert.equal(JSON.stringify(runtime.encounterHistory(marisa)), othersBefore, "thoughts during gossip remain private too");
+  const privateState = (runtime as unknown as { interactionHistory: {
+    checkpoint(save: string, bytes: Buffer): void; restore(save: string, bytes: Buffer): void;
+  } }).interactionHistory;
+  privateState.checkpoint("private-thought", Buffer.from("checkpoint"));
+  privateState.restore("private-thought", Buffer.from("checkpoint"));
+  assert.equal(newest(reimu).lines.at(-1)!.thought, true, "private thought markers survive checkpoint restore");
+  assert.equal(JSON.stringify(runtime.encounterHistory(marisa)), othersBefore, "restore does not leak the thoughts");
+  assert.doesNotMatch(check(runtime.refresh()).output.map((item) => item.text ?? "").join("\n"), /strange and suspicious|remember this quietly/);
+});
+
+test("player identity and legacy speech prefixes are explicit in LLM history without copying other speakers", async () => {
+  const { historyContext } = await import("../web/interaction-history.js");
+  const { buildMessages, systemPrompt } = await import("../web/llm.js");
+  const player = { id: "p", name: "Alex", number: "0" }, character = { id: "k", name: "Kana", number: "3" };
+  const other = { id: "r", name: "Ruukoto", number: "2" };
+  const state = { day: "1", time: ["422"], location: "1", locationName: "Living room", affection: "0", trust: "0" };
+  const entry = { id: "e", action: { id: "chat", label: "Conversation" }, participants: [player, character, other],
+    before: state, after: state, choices: [], lines: [
+      { text: '"Hello both of you!"', character: null },
+      { text: "「Happy New Year!」\nKana adjusts her gloves.\n「Good morning.」", character: "k" },
+      { text: "Ruukoto: 「Welcome!」", character: "r" },
+      { text: 'You see a girl who looks like a maid, wearing a dress with an apron.\nYour eyes meet hers.\n「You look tired. I can help.」', character: "r" },
+      { text: 'Alex: "I am happy."\nAlex (narration): You wave.', character: "p" },
+      { text: "●You wish Ruukoto a happy New Year.", character: "r", runs: [
+        { text: "●", color: "gray" }, { text: "You wish Ruukoto a happy New Year.", color: "green" },
+      ] },
+      { text: "Kana (thought): I suspect something odd happened.", character: "k", thought: true },
+    ] };
+  const context = historyContext({ player, character, entries: [entry] }, 10000);
+  assert.match(context, /Alex: "Hello both of you!"/);
+  assert.match(context, /Kana: 「Happy New Year!」\nNarration to Alex: Kana adjusts her gloves\.\nKana: 「Good morning.」/);
+  assert.match(context, /Ruukoto: 「Welcome!」/);
+  assert.doesNotMatch(context, /Ruukoto: Ruukoto:/);
+  assert.match(context, /Alex is the player/);
+  assert.match(context, /Narration to Alex: You see a girl who looks like a maid, wearing a dress with an apron\./);
+  assert.match(context, /Narration to Alex: Your eyes meet hers\./);
+  assert.match(context, /Narration to Alex: ●You wish Ruukoto a happy New Year\./);
+  assert.match(context, /Narration to Alex: You wave\./);
+  assert.match(context, /Ruukoto: 「You look tired\. I can help\.」/);
+  assert.match(context, /Alex: "I am happy\."/);
+  assert.doesNotMatch(context, /Alex \(narration\):|Narration to Alex: (?:Alex:|Kana \(thought\):|Ruukoto:)/);
+  assert.match(context, /not words they spoke/);
+  assert.match(context, /Kana \(thought\): I suspect something odd happened\./);
+  assert.match(context, /suspicions in them are not established facts/);
+  const notice = historyContext({ player, character, entries: [{ ...entry, source: "state",
+    action: { id: "reaction", label: "Reaction" },
+    lines: [{ text: "Kana notices that Alex is suddenly there.", character: "k" }] }] }, 10000);
+  assert.match(notice, /Narration to Kana: Kana notices that Alex is suddenly there\./);
+  assert.doesNotMatch(notice, /Narration to Alex: Kana notices/);
+  const messages = buildMessages({ system: "rules", context, scene: { player: { name: "Alex" } }, message: "Hello!", player: "Alex" });
+  assert.equal(messages.at(-1)!.content, "Alex: Hello!");
+  assert.equal(buildMessages({ system: "rules", context, message: "An encounter occurs." }).at(-1)!.content, "An encounter occurs.",
+    "background instructions are not player speech");
+  const system = systemPrompt({ character, gameTitle: "eraTW", tools: true });
+  assert.match(system, /not a script for you to repeat/);
+  assert.match(system, /Only react to the player's latest message once/);
+});
+
+test("character lookup estimates locations by region and summarizes only significant relationships", async () => {
+  const { runCharacterTool, toolCallSummary } = await import("../src/character-tools.js");
+  let location = 12n, lover = 0n, hate = 0n, mine = 100n, theirs = 100n;
+  const names = ["Player", "Ruukoto", "Reimu"];
+  const host = {
+    read: (name: string, indices: (string | bigint)[] = []): string | bigint => {
+      const i = Number(indices[0]);
+      if (name === "MASTER") return 0n;
+      if (name === "NAME" || name === "CALLNAME") return names[i] ?? "";
+      if (name === "NO") return BigInt(i);
+      if (name === "CSTR") return "";
+      if (name === "STR") return "Reimu's Boudoir";
+      if (name === "CFLAG" && indices[1] === "現在位置") return i === 2 ? location : 9n;
+      if (name === "TALENT" && indices[1] === "性別") return 1n;
+      if (name === "TALENT" && i === 2 && indices[1] === 7n) return lover;
+      if (name === "MARK" && i === 2 && indices[1] === 3n) return hate;
+      if (name === "RELATION") return i === 1 ? mine : theirs;
+      return 0n;
+    },
+    call: (name: string, args: (string | bigint)[]): string | bigint => {
+      if (name === "GET_MAPID") return BigInt(args[0]!) / 100n;
+      if (name === "GET_MAPNAME") return args[0] === 0n ? "Hakurei Shrine" : "Human Village";
+      if (name === "SUKIMA") return 9999n;
+      if (name === "NAME_FROM_PLACE") return args[0] === 112n ? "Private Bedroom" : "Reimu's Boudoir";
+      return "";
+    },
+    has: () => true, count: () => 3, queued: () => [],
+    write: () => assert.fail("lookup does not write"), run: () => assert.fail("lookup does not run procedures"),
+  };
+  const info = () => runCharacterTool(host, 1, "ruukoto", "get_character_info", { character: "Reimu" }).result;
+  assert.equal(info().location, "probably near Reimu's Boudoir");
+  assert.equal(info().significantRelationships, undefined, "neutral affinity is omitted");
+  location = 112n;
+  assert.equal(info().location, "probably near Human Village");
+  assert.doesNotMatch(JSON.stringify(info()), /Private Bedroom/, "another region's room is not revealed");
+  const search = runCharacterTool(host, 1, "ruukoto", "find_characters", { query: "Reimu" }).result;
+  assert.match(JSON.stringify(search), /now probably near Human Village/);
+  assert.doesNotMatch(JSON.stringify(search), /Private Bedroom/);
+  location = 9n;
+  assert.equal(info().location, "Reimu's Boudoir", "co-located people are directly visible");
+  location = 9999n;
+  assert.equal(info().location, "away (not on this map)");
+  lover = 1n; hate = 2n; mine = 200n; theirs = 50n;
+  assert.deepEqual(info().significantRelationships, [
+    "lovers with Player", "lasting resentment toward Player (hate mark 2/3)",
+    "Ruukoto feels close toward Reimu", "Reimu feels dislike toward Ruukoto",
+  ]);
+  const summary = toolCallSummary("Ruukoto", "get_character_info", { character: "Reimu" }, info())
+    .map((part) => part.text).join("");
+  assert.match(summary, /lovers with Player/);
+  assert.match(summary, /hate mark 2\/3/);
+  mine = 150n; theirs = 60n; lover = 0n; hate = 0n;
+  assert.equal(info().significantRelationships, undefined, "moderate affinity at the boundaries is omitted");
+});
+
+test("encounter follow-ups can address another NPC after the scripted player greeting", async () => {
+  const { runEncounters } = await import("../web/encounters.js");
+  const { debugLog } = await import("../web/llm.js");
+  const previousStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+  const realFetch = globalThis.fetch;
+  const characters = [{ id: "ruukoto-followup", name: "Ruukoto", number: "2" },
+    { id: "kana-followup", name: "Kana", number: "3" }];
+  const config = JSON.stringify({ provider: "local", providers: { local: {
+    endpoint: "http://localhost:11434/v1", apiKey: "", model: "test", tools: true,
+  } } });
+  Object.defineProperty(globalThis, "localStorage", { configurable: true, value: { getItem: () => config } });
+  let request = 0;
+  const speech: [string, string][] = [];
+  globalThis.fetch = (async () => {
+    const turn = request++;
+    const message = { content: null, tool_calls: [{ id: `say-${turn}`, type: "function",
+      function: { name: "say", arguments: JSON.stringify({ text: turn === 0
+        ? "Kana, would you help me set the table?" : "Ruukoto, I can manage the cups." }) } }] };
+    return new Response(JSON.stringify({ ok: true, status: 200, statusText: "OK",
+      text: JSON.stringify({ choices: [{ message }] }) }));
+  }) as typeof fetch;
+  try {
+    const changed = await runEncounters({
+      encounters: characters.map((character) => ({ character, arrived: "player",
+        intro: `${character.name}: 「Good morning, Player.」` })),
+      gameId: "npc-followups", gameTitle: "eraTW", signal: new AbortController().signal,
+      game: {
+        history: async (id: string) => ({ character: characters.find((character) => character.id === id)!, entries: [] }),
+        runTool: async (id: string, name: string, args: Record<string, unknown>) => {
+          if (name === "describe_scene") return { result: { me: { location: "Living room" },
+            othersHere: characters.filter((character) => character.id !== id).map((character) => `${character.name} (friend)`) },
+            changed: false };
+          assert.equal(name, "say");
+          speech.push([id, String(args.text)]);
+          return { result: { heard: true }, changed: true };
+        },
+      },
+    });
+    assert.equal(changed, true);
+    assert.deepEqual(speech, [[characters[0]!.id, "Kana, would you help me set the table?"],
+      [characters[1]!.id, "Ruukoto, I can manage the cups."]]);
+    for (const character of characters) {
+      const sent = JSON.stringify(debugLog(`npc-followups:${character.id}`)[0]!.sent);
+      assert.match(sent, /equally valid recipients/);
+      assert.match(sent, /distinct, character-specific follow-up/);
+      assert.match(sent, /do not repeat or rephrase/);
+    }
+  } finally {
+    globalThis.fetch = realFetch;
+    if (previousStorage) Object.defineProperty(globalThis, "localStorage", previousStorage);
+    else Reflect.deleteProperty(globalThis, "localStorage");
+  }
+});
+
+test("think records only a bounded in-character note and rejects empty input or sleeping characters", async () => {
+  const { runCharacterTool } = await import("../src/character-tools.js");
+  const { CHAT_TOOLS, SCENE_TOOLS, ENCOUNTER_TOOLS, GOSSIP_TOOLS, LISTENER_TOOLS } = await import("../web/llm.js");
+  let asleep = false;
+  const host = {
+    read: (name: string, indices: unknown[] = []) => name === "CFLAG" && indices[1] === "睡眠" && asleep ? 1n : 0n,
+    write: () => assert.fail("think must not mutate feelings or game variables"),
+    call: () => 0n, run: () => assert.fail("think must not run a game action"),
+    has: () => false, count: () => 2, queued: () => [],
+  };
+  const thought = runCharacterTool(host, 1, "test", "think", { text: "  I suspect something.\nI should be careful. " });
+  assert.equal(thought.thought, "I suspect something. I should be careful.");
+  assert.equal(thought.changed, false);
+  assert.equal(thought.action, undefined);
+  assert.equal(thought.told, undefined);
+  assert.equal(runCharacterTool(host, 1, "test", "think", { text: "x".repeat(1000) }).thought?.length, 600);
+  assert.match(String(runCharacterTool(host, 1, "test", "think", { text: "" }).result.error), /text is required/);
+  asleep = true;
+  assert.match(String(runCharacterTool(host, 1, "test", "think", { text: "Hello." }).result.error), /asleep/);
+  for (const tools of [CHAT_TOOLS, SCENE_TOOLS, ENCOUNTER_TOOLS, GOSSIP_TOOLS, LISTENER_TOOLS])
+    assert.ok(tools.some((tool: { function: { name: string } }) => tool.function.name === "think"));
+});
+
+test("LLM dialogue colors use the speaker's context, preserve game state and cover characters without a kojo color", {
+  skip: !existsSync(GAME_ROOT),
+}, async () => {
+  const game = await loadGame();
+  await applyHotpatches(game);
+  const stub = emptyGame();
+  indexScript(stub, `@SET_KOJO_COLOR(ARG)
+IF NO:TARGET == 2
+  SETCOLOR 0xA0FF00
+ELSE
+  RESETCOLOR
+ENDIF
+RESULT = 999
+`, "speaker-colors.ERB");
+  game.routines.set("SET_KOJO_COLOR", stub.routines.get("SET_KOJO_COLOR")!);
+  const runtime = new Runtime(demoGame(game), GAME_INSTRUCTION_LIMIT);
+  check(runtime.start());
+  check(runtime.input("8"));
+  let snapshot = check(runtime.input("3"));
+  for (let i = 0; snapshot.input?.kind === "wait" && i < 80; i++) snapshot = check(runtime.input(""));
+  const store = (runtime as unknown as { interactionHistory: { ids: string[]; person(i: number): { id: string; name: string; number: string } | undefined } }).interactionHistory;
+  const people = store.ids.map((_, i) => store.person(i));
+  const ruukoto = people.find((person) => person?.number === "2")!, kana = people.find((person) => person?.number === "3")!;
+  const internals = runtime as unknown as { context(g: unknown): unknown; globals: {
+    get(n: string, i: unknown[], c: unknown): unknown; set(n: string, i: unknown[], v: unknown, c: unknown): void;
+  } };
+  const context = internals.context(internals.globals);
+  const result = internals.globals.get("RESULT", [], context), target = internals.globals.get("TARGET", [], context);
+  runtime.characterTool(ruukoto.id, "say", { text: "Morning." });
+  runtime.characterTool(kana.id, "say", { text: "Hello." });
+  const ownColor = (who: typeof ruukoto) => runtime.encounterHistory(who).entries[0]!.lines.at(-1)!.runs!.at(-1)!.color;
+  assert.equal(ownColor(ruukoto), "#a0ff00", "the color routine sees the speaker as TARGET");
+  assert.notEqual(ownColor(kana), "#a0ff00");
+  assert.notEqual(ownColor(kana), "#c0c0c0", "a missing color routine does not leave speech as normal grey");
+  assert.equal(internals.globals.get("RESULT", [], context), result);
+  assert.equal(internals.globals.get("TARGET", [], context), target);
 });
 
 test("characters who meet away from the player may pass on news about the player, into both their histories", {
@@ -1146,8 +1549,8 @@ test("memory and gossip prompts ask only for what happened, in the character's o
   const { historyContext, sinceMemory } = await import("../web/interaction-history.js");
   const reimu = { id: "a", name: "Reimu", number: "1" }, marisa = { id: "b", name: "Marisa", number: "2" };
   const names = (list: { function: { name: string } }[]) => list.map((tool) => tool.function.name);
-  assert.deepEqual(names(GOSSIP_TOOLS), ["get_character_info", "find_characters", "tell"]);
-  assert.deepEqual(names(LISTENER_TOOLS), ["change_feelings", "change_mark", "tell"]);
+  assert.deepEqual(names(GOSSIP_TOOLS), ["get_character_info", "find_characters", "think", "tell"]);
+  assert.deepEqual(names(LISTENER_TOOLS), ["change_feelings", "change_mark", "think", "tell"]);
   const teller = gossipPrompt({ character: reimu, other: marisa, place: "the Shrine", gameTitle: "eraTW" });
   assert.match(teller, /The player is not there/);
   assert.match(teller, /never anything that is not in the history/);
@@ -1352,15 +1755,15 @@ test("the chat window's conversation goes straight into the interaction history 
   // A consent check reads as its answer, coloured by willingness, and the reasons rather than raw JSON.
   assert.match(lines[5]!, /^check_consent\(kiss\) → −50 \(trust\) − 200 \(base\) .* = −\d+ \(Reimu firmly refuses\)\. Will also firmly refuse: sex or becoming lovers$/);
   assert.deepEqual((entry.lines[5] as { runs: { color: string }[] }).runs.map((run) => run.color), ["#6f6f6f", "#a8a8a8", "#e07a7a", "#a8a8a8", "#a8a8a8"]);
-  assert.equal(lines[0], '"Hi" *waves* "How are you?"');
-  assert.equal(lines[1], "「Fine, thanks.」");
+  assert.equal(lines[0], 'Player: "Hi" *waves* "How are you?"');
+  assert.equal(lines[1], "Reimu: 「Fine, thanks.」");
   assert.equal(lines[2], "Reimu smiles.");
   assert.match(lines[3]!, /^change_feelings\(favor \+10\) \(greeting\) → favor \d+ → \d+$/);
   assert.match(lines[4]!, /^move_to\(the Moon\) → failed: /);
   const colors = entry.lines.flatMap((line) => (line as { runs?: { color: string }[] }).runs ?? []).map((run) => run.color);
   for (const color of colors) assert.match(color, /^(?:#[0-9a-f]{3}(?:[0-9a-f]{3})?|[a-z]{1,30})$/i);
-  assert.notEqual(colors[1], colors[0], "speech is in the character's dialogue colour");
-  assert.equal(colors[3], "#6f6f6f");
+  assert.notEqual(colors[2], colors[0], "speech is in the character's dialogue colour");
+  assert.equal(colors[4], "#6f6f6f");
   // Undo takes lines back from the end; emptying the conversation removes it.
   runtime.unchat(id, 3);
   assert.equal(newest()!.lines.length, 3);
@@ -1374,7 +1777,7 @@ test("the chat window's conversation goes straight into the interaction history 
   shown = history(snapshot);
   entry = newest()!;
   assert.equal(entry.action.id, "chat");
-  assert.deepEqual(entry.lines.map(text), ['"Bye"', "「See you.」"]);
+  assert.deepEqual(entry.lines.map(text), ['Player: "Bye"', "Reimu: 「See you.」"]);
   runtime.chatMessage(id, "Again");
   assert.notEqual(newest()!.id, entry.id, "a conversation after the room is redrawn is a new event");
 });
@@ -1566,6 +1969,17 @@ test("the demo's YuugenMagan scenario plays her first meeting, and her kojo give
   const settings = runtime.characterVoiceSettings(character.id);
   assert.deepEqual(settings.generated.examples, voice.examples);
   assert.equal(settings.generated.description, voice.description);
+  const info = runtime.characterTool(character.id, "get_character_info", {}).result;
+  assert.match(settings.generated.description, /^Name: YuugenMagan\n/);
+  for (const [label, field] of [["Full name", "fullName"], ["Race", "race"], ["Sex", "sex"], ["Home", "home"],
+    ["Workplace", "workplace"], ["Schedule", "schedule"], ["Profile", "profile"]]) {
+    const value = info[field!];
+    if (typeof value === "string" && value && value !== "unknown")
+      assert.ok(settings.generated.description.includes(`${label}: ${value}`), `card includes the live info's ${field}`);
+  }
+  assert.ok(Array.isArray(info.traits) && info.traits.length > 0);
+  assert.ok(settings.generated.description.includes(`Traits: ${info.traits.join(", ")}`));
+  assert.doesNotMatch(settings.generated.description, /^(?:Location|Wearing|Favor|Trust|Marks|Romantic mood|Anger):/m);
   assert.equal(settings.generated.intimateExamples.length, 12);
   assert.equal(settings.saved, null);
   runtime.saveCharacterVoice(character.id, { description: "", examples: ["We are pleased."], intimateExamples: ["We are ready."] });
@@ -1573,6 +1987,11 @@ test("the demo's YuugenMagan scenario plays her first meeting, and her kojo give
   assert.deepEqual(runtime.characterVoiceSettings(character.id).saved, { description: "", examples: ["We are pleased."], intimateExamples: ["We are ready."] });
   runtime.saveCharacterVoice(character.id, null);
   assert.deepEqual((runtime.characterTool(character.id, "describe_scene", {}).result as { voice: unknown }).voice, voice);
+  const custom = { description: "My custom personality.", examples: ["We are pleased."], intimateExamples: [] };
+  runtime.saveCharacterVoice(character.id, custom);
+  assert.deepEqual(runtime.characterVoiceSettings(character.id).saved, custom, "autofill never changes an existing saved card");
+  assert.deepEqual(runtime.characterTool(character.id, "describe_scene", {}).result.voice,
+    { description: custom.description, examples: custom.examples }, "custom descriptions are not auto-prefixed");
 });
 
 /** A character steps out of the player's room and back in, so the player runs into her again. */
@@ -1626,7 +2045,7 @@ test("an encounter prompts the character to react, or not, with only the tools t
   assert.match(system, /naked or in underwear/);
   assert.doesNotMatch(system, /player_attempts/);
   assert.deepEqual(ENCOUNTER_TOOLS.map((tool: { function: { name: string } }) => tool.function.name),
-    ["get_character_info", "find_characters", "change_feelings", "change_mark", "change_mood", "say", "act", "move_to"]);
+    ["get_character_info", "find_characters", "change_feelings", "change_mark", "change_mood", "say", "act", "think", "move_to"]);
   assert.match(encounterMessage({ character, encounter: { character, arrived: "player" }, scene }),
     /^The player has just walked into Shrine Grounds, where Reimu is\.\nThe game showed nothing more\./);
   assert.match(encounterMessage({ character, encounter: { character, arrived: "character", intro: "「Oh, you.」" }, scene }),

@@ -21,7 +21,7 @@ import { fixHistoryHtml, SHARP_METHODS, supportedSharpCall, translateHistoryDate
 import { regexCharacterClasses, regexGroupOrder, replaceRegex } from "./regex.js";
 import { decodePicture, encodePicture, InvalidGraphicsImage, pictureColor, resourceColor } from "./graphics.js";
 import { TwInteractionHistory, type CharacterHistory, type Encounter, type Gossip, type HistoryCharacter, type Memory } from "./interaction-history.js";
-import { runCharacterTool, toolCallSummary, unquoteSpeech, type CharacterAction } from "./character-tools.js";
+import { runCharacterTool, toolCallSummary, unquoteSpeech, type CharacterAction, type ToolHost } from "./character-tools.js";
 import { characterVoice, MemoryVoiceStore, type CharacterVoice, type EditableVoice, type VoiceStore } from "./character-voice.js";
 
 export interface Style { color: string; background: string; alignment: "left" | "center" | "right"; fontStyle: number; font?: string }
@@ -117,7 +117,7 @@ export interface InputRequest {
 }
 type Yield = { output: Output } | { input: InputRequest };
 /** What characters may do when talking among themselves away from the player (see characterTool). */
-const ASIDE_TOOLS = new Set(["describe_scene", "get_character_info", "find_characters", "change_feelings", "change_mark", "tell"]);
+const ASIDE_TOOLS = new Set(["describe_scene", "get_character_info", "find_characters", "change_feelings", "change_mark", "tell", "think"]);
 export interface Snapshot {
   status: "waiting" | "halted" | "error";
   output: Output[];
@@ -874,8 +874,9 @@ export class Runtime {
       if (action.kind === "command") command = action.command;
       else if (action.kind === "say") {
         const style = this.style;
+        const who = this.voiceIdentity(index).name;
         this.style = { ...style, color: this.kojoColor(index) };
-        try { yield this.emit("text", `「${action.text}」`, true); }
+        try { yield this.emit("text", `${who}: 「${action.text}」`, true); }
         finally { this.style = style; }
       } else if (action.kind === "act") {
         yield this.emit("text", action.text, true);
@@ -914,17 +915,12 @@ export class Runtime {
     if (self < 0) throw new EraError("That character is no longer in the game");
     if (aside ? !ASIDE_TOOLS.has(name) : name === "tell") return { result: { error: `${name} is not available now` }, changed: false };
     this.steps = 0;
-    const read = (variable: string, indices: Value[] = []) => this.globals.get(variable, indices.map(literal), this.context(this.globals));
-    const outcome = runCharacterTool({
-      read,
-      write: (variable, indices, value) => this.globals.set(variable, indices.map(literal), value, this.context(this.globals)),
-      call: (routine, args) => this.expressionFunction(routine, args),
-      run: (routine, args) => this.runQuietly(routine, args),
-      has: (routine) => this.game.routines.has(routine),
-      count: () => this.globals.characterCount(),
-      queued: () => this.characterActions,
-      voice: (intimate) => this.characterVoice(self, intimate),
-    }, self, character, name, args);
+    const outcome = runCharacterTool(this.characterToolHost(self), self, character, name, args);
+    if (outcome.thought) {
+      history.chat(character, { speaker: character, thought: true,
+        runs: [{ text: `${this.voiceIdentity(self).name} (thought): ${outcome.thought}`, color: this.display.foreground }] });
+      return { result: outcome.result, changed: false };
+    }
     if (aside) {
       if (outcome.told) history.gossipLine(self, outcome.told.listener, this.heardLine(self, "say", { text: outcome.told.text }, {})!);
       else if (!outcome.result.error && (name === "change_feelings" || name === "change_mark")) {
@@ -1002,6 +998,37 @@ export class Runtime {
     return Number(integer(this.globals.get("NO", [literal(BigInt(index))], this.context(this.globals))));
   }
   private generatedVoice(index: number, intimate: boolean): CharacterVoice {
+    const voice = this.generatedKojoVoice(index, intimate);
+    const saved = { random: this.randomState, style: this.style, restore: this.globals.checkpoint() };
+    try {
+      const { result } = runCharacterTool(this.characterToolHost(index), index, "", "get_character_info", {});
+      if (result.error) throw new EraError(`Cannot generate character card: ${String(result.error)}`);
+      const identity = [
+        ["Name", result.name], ["Full name", result.fullName], ["Race", result.race], ["Sex", result.sex],
+        ["Traits", Array.isArray(result.traits) ? result.traits.join(", ") : undefined],
+        ["Home", result.home], ["Workplace", result.workplace], ["Schedule", result.schedule], ["Profile", result.profile],
+      ].filter(([, value]) => typeof value === "string" && value && value !== "unknown")
+        .map(([label, value]) => `${label}: ${value}`).join("\n");
+      return { ...voice, description: [identity, voice.description].filter(Boolean).join("\n\n") };
+    } finally {
+      this.randomState = saved.random;
+      this.style = saved.style;
+      saved.restore();
+    }
+  }
+  private characterToolHost(index: number): ToolHost {
+    return {
+      read: (variable, indices = []) => this.globals.get(variable, indices.map(literal), this.context(this.globals)),
+      write: (variable, indices, value) => this.globals.set(variable, indices.map(literal), value, this.context(this.globals)),
+      call: (routine, args) => this.expressionFunction(routine, args),
+      run: (routine, args) => this.runQuietly(routine, args),
+      has: (routine) => this.game.routines.has(routine),
+      count: () => this.globals.characterCount(),
+      queued: () => this.characterActions,
+      voice: (intimate) => this.characterVoice(index, intimate),
+    };
+  }
+  private generatedKojoVoice(index: number, intimate: boolean): CharacterVoice {
     const context = this.context(this.globals);
     const get = (name: string, ...indices: Value[]) => this.globals.get(name, indices.map(literal), context);
     const set = (name: string, value: Value, ...indices: Value[]) => this.globals.set(name, indices.map(literal), value, context);
@@ -1049,7 +1076,7 @@ export class Runtime {
   /** How a character's tool call reads in the interaction history: speech in 「」, actions as narration, other calls summarised. */
   private toolLine(index: number, name: string, args: Record<string, unknown>, result: Record<string, unknown>): ColoredText[] {
     const said = typeof args.text === "string" ? args.text.trim() : "";
-    if (!result.error && said && name === "say") return [{ text: `「${unquoteSpeech(said)}」`, color: this.kojoColor(index) }];
+    if (!result.error && said && name === "say") return this.heardLine(index, name, args, result)!;
     if (!result.error && said && name === "act") return [{ text: said, color: this.display.foreground }];
     const tones = { call: TOOL_CALL, good: TOOL_GOOD, bad: TOOL_BAD, uneasy: TOOL_UNEASY };
     const read = (variable: string) => String(this.globals.get(variable, [literal(BigInt(index))], this.context(this.globals)));
@@ -1072,9 +1099,12 @@ export class Runtime {
   /** Records something the player said or did to a character in the chat window: speech in quotes, *actions* as written. */
   chatMessage(character: string, message: string): void {
     const history = this.chatHistory();
+    const master = Number(this.globals.get("MASTER", [], this.context(this.globals)));
+    const who = this.voiceIdentity(master).name || "Player";
     const parts = message.trim().split(/(\*[^*]+\*)/).map((part) => part.trim()).filter(Boolean)
       .map((part) => part.startsWith("*") ? part : `"${part.replace(/^["“「]+|["”」]+$/g, "")}"`);
-    history.chat(character, { speaker: null, runs: [{ text: parts.join(" "), color: this.display.foreground }] });
+    const runs = [{ text: `${who}: ${parts.join(" ")}`, color: this.display.foreground }];
+    history.chat(character, { speaker: history.player()?.id ?? null, runs }, runs);
   }
   /** Sets a character's memory (her own summary of her history up to `covers`); empty text clears it. */
   rememberCharacter(character: string, text: string, covers: string | null): Memory | undefined {
@@ -1091,13 +1121,17 @@ export class Runtime {
   /** The colour eraTW prints a character's dialogue in (SET_KOJO_COLOR), or the normal text colour. */
   private kojoColor(index: number): string {
     const style = this.style;
+    const restore = this.globals.checkpoint();
     try {
+      this.globals.set("TARGET", [], BigInt(index), this.context(this.globals));
       if (this.game.routines.has("SET_KOJO_COLOR")) this.runQuietly("SET_KOJO_COLOR", [BigInt(index)]);
+      if (this.style.color === this.display.foreground && this.game.names.get("FLAG")?.has("口上色")
+        && this.globals.get("FLAG", [literal("口上色")], this.context(this.globals)) !== 0n) {
+        const colors = ["#8fd3ff", "#ffc68f", "#c5a3ff", "#8fe0bd", "#ff9fc9", "#e3d58f"];
+        return colors[this.characterNo(index) % colors.length]!;
+      }
       return this.style.color;
-    } catch (error) {
-      if (error instanceof EraError) return this.display.foreground;
-      throw error;
-    } finally { this.style = style; }
+    } finally { restore(); this.style = style; }
   }
   /** Runs a procedure for its effect on variables; its output is discarded and it may not ask for input. */
   private runQuietly(routine: string, args: Value[]): void {

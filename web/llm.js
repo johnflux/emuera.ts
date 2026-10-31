@@ -15,10 +15,12 @@ const who = (description) => ({ type: "string", description });
 export const TOOLS = [
   fn("get_character_info", "Look up a character by name: sex, race, traits, where they are, workplace and schedule, romantic "
     + "mood and anger, their feelings toward the player, and your affinity with each other (a percentage: 100 is neutral, "
-    + "higher is closer). Everyone in this room is already described in the scene.",
+    + "higher is closer), plus significant relationships. Off-room locations are estimates ('probably near'), not "
+    + "certain knowledge; someone in another region is located only to that region. Do not claim to know their "
+    + "current activity from this estimate. Everyone in this room is already described in the scene.",
     { character: who("A name such as \"Marisa\"") }, ["character"]),
   fn("find_characters", "Search everyone in the world by name, race, trait, home or current location; each match says where "
-    + "they live and where they are now. Matching is plain case-insensitive text, so list alternative spellings and "
+    + "they live and their estimated whereabouts (only the region when elsewhere). Matching is plain case-insensitive text, so list alternative spellings and "
     + "translations separated by |.",
     { query: who("Words to look for, separated by |, e.g. \"fairy|fairies\" or \"misty lake|lake\"") }, ["query"]),
   fn("change_feelings", "Change how you feel about the player (favor and trust) or another character (affinity), in proportion to "
@@ -52,9 +54,13 @@ export const TOOLS = [
     { activity: { type: "string", enum: ["kiss", "sex", "become_lovers", "apologize"] } }, ["activity"]),
   fn("say", "Say something out loud. This is how you talk: the player sees it in this conversation and everyone in the "
     + "room hears it in the game.",
-    { text: who("The words, without quotation marks") }, ["text"]),
+    { text: who("Only your spoken words, without quotation marks or a speaker-name prefix; the game adds those") }, ["text"]),
   fn("act", "Describe something you physically do, such as a gesture or expression; it is shown to the player and in the room.",
     { text: who("A short third-person description, e.g. \"Reimu sips her tea.\"") }, ["text"]),
+  fn("think", "Leave a short private in-character thought in your own history, for your future self. Nobody else hears "
+    + "it and it is not an action or speech. Use for an impression, suspicion, intention or reminder grounded in what "
+    + "you actually noticed. Do not invent hidden causes or treat suspicion as proven fact. You may think without speaking.",
+    { text: who("Your brief first-person thought, without a speaker prefix or formatting, at most 600 characters") }, ["text"]),
   fn("move_to", "Walk to another place on the current map, for example to leave the room.",
     { destination: who("A place name from the scene's placesOnThisMap") }, ["destination"]),
   fn("push_down_player", "Push the player down to start being intimate with them. Only possible when you are the player's "
@@ -73,17 +79,17 @@ const HANDOVER = new Set(["player_attempts", "scene_action", "end_scene"]);
 const tools = (...names) => TOOLS.filter((tool) => names.includes(tool.function.name));
 /** Outside an intimate scene. */
 export const CHAT_TOOLS = tools("get_character_info", "find_characters", "change_feelings", "change_mark", "change_mood",
-  "check_consent", "player_attempts", "say", "act", "move_to", "push_down_player");
+  "check_consent", "player_attempts", "say", "act", "think", "move_to", "push_down_player");
 /** During one: consent was already given, and leaving or starting over goes through end_scene. */
 export const SCENE_TOOLS = tools("get_character_info", "find_characters", "change_feelings", "change_mark", "change_mood",
-  "say", "act", "scene_action", "end_scene");
+  "say", "act", "think", "scene_action", "end_scene");
 /** When the player and a character run into each other: she may react, but nothing is asked of her yet. */
 export const ENCOUNTER_TOOLS = tools("get_character_info", "find_characters", "change_feelings", "change_mark", "change_mood",
-  "say", "act", "move_to");
+  "say", "act", "think", "move_to");
 /** Meeting another character away from the player, with news about the player to pass on (or not). */
-export const GOSSIP_TOOLS = tools("get_character_info", "find_characters", "tell");
+export const GOSSIP_TOOLS = tools("get_character_info", "find_characters", "tell", "think");
 /** Being told something about the player by another character: it may change her feelings, and she may answer. */
-export const LISTENER_TOOLS = tools("change_feelings", "change_mark", "tell");
+export const LISTENER_TOOLS = tools("change_feelings", "change_mark", "tell", "think");
 /** The toolset for the moment described by describe_scene. */
 export const toolsFor = (scene) => scene?.intimateScene ? SCENE_TOOLS : CHAT_TOOLS;
 
@@ -166,8 +172,9 @@ export function systemPrompt({ character, gameTitle, instructions, tools = false
     `Do not invent people, places or facts about them; look up anyone or anything not in the scene first.`,
     `Decide what to do by following the first rule that matches:`,
     `1. The game just showed ${name} greeting the player or reacting (the latest message quotes it): that already `
-      + `happened, so do not repeat or rephrase it. Add something only if there is something new worth reacting to `
-      + `(rule 3 or 4); otherwise DONE.`,
+      + `happened, so do not repeat or rephrase it. You may add a distinct, character-specific follow-up, speak to `
+      + `someone else here, or comment on the shared situation. Choose whom to address by personality and relationships, `
+      + `not automatically the player. If there is nothing worthwhile to add, DONE.`,
     `2. ${name} hates the player (a hate mark) or is angry with the player: a cold remark, a glare or pointedly `
       + `ignoring the player (DONE), as fits ${name}'s personality; if ${name} cannot stand being near the player, `
       + `move_to somewhere else.`,
@@ -253,6 +260,11 @@ export function systemPrompt({ character, gameTitle, instructions, tools = false
       + `how ${name} feels about the player given the interaction history (including favor and trust). Reply in English.`,
     `Keep the reply short: usually one to four sentences of speech. Never speak or act for the player, `
       + `and never repeat the player's words back as ${name}'s own.`,
+    `Speaker names in the history identify who actually said each line, including your own. Other characters' `
+      + `speech is something you overheard, not a script for you to repeat. Respond in your own voice and from your `
+      + `own perspective; do not echo another character's greeting, wording or gestures. If they already expressed `
+      + `what you would say, add a distinct reaction or stay silent. Only react to the player's latest message once; `
+      + `your own tool calls and replies are not new messages from the player.`,
     ...(scene?.voice?.examples?.length ? [`Speak the way ${name} does in the example lines below: the same formality, `
       + `vocabulary and verbal tics. Above all, ${name} refers to ${name}self exactly as in the examples, in every line `
       + `(characters differ: some say "I", some a royal "We"/"Us"/"Our", some their own name). Say new things that fit `
@@ -288,6 +300,9 @@ export function encounterMessage({ character, encounter, scene }) {
       + `did or said, and lines in 「」 are what ${character.name} already said):\n${encounter.intro}`
       : `The game showed nothing more.`,
     `Anything said or done in the room since is at the end of the interaction history.`,
+    `The player and the other people here are equally valid recipients: choose whom to address based on `
+      + `${character.name}'s personality, relationships and what just happened. You may talk to someone else even `
+      + `if the game's introduction already greeted the player. Use the recipient's name in your speech.`,
     `What does ${character.name} do now, if anything? Only ${character.name}'s own words and actions: never say the `
       + `player's lines or address ${character.name} by name as if you were the player.`,
   ].join("\n");
@@ -357,12 +372,12 @@ export function memoryMessages({ character, gameTitle, previous, since }) {
  * Messages for the chat completion: instructions, the interaction history (which includes the conversation so far:
  * speech in 「」, actions as narration and tool calls summarised) and the scene as context, then the new message.
  */
-export function buildMessages({ system, context, scene, message }) {
+export function buildMessages({ system, context, scene, message, player }) {
   return [
     { role: "system", content: system },
     { role: "system", content: context },
     ...(scene ? [{ role: "system", content: sceneContext(scene) }] : []),
-    { role: "user", content: message },
+    { role: "user", content: player ? `${player}: ${message}` : message },
   ];
 }
 

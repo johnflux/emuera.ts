@@ -185,7 +185,7 @@ test("character history renders literal text and local controls without game inp
     ],
   }] }] });
   const spans = nodes(colored).filter((node) => node.className === "era-history-text").flatMap((node) => node.children);
-  assert.equal(spans[0]!.textContent, "<red>");
+  assert.equal(spans[0]!.textContent, "Narration to Player: <red>");
   assert.equal(spans[0]!.style.color, "#ff0000");
   assert.equal(spans[1]!.style.color, "green");
   assert.equal(spans[2]!.style.color, undefined);
@@ -201,10 +201,19 @@ test("character history renders literal text and local controls without game inp
   }] }] });
   const trimmedSpans = nodes(padded).filter((node) => node.className === "era-history-text").flatMap((node) => node.children);
   assert.equal(trimmedSpans.length, 2);
-  assert.equal(trimmedSpans[0]!.textContent, "Kana is here.\n");
+  assert.equal(trimmedSpans[0]!.textContent, "Narration to Player: Kana is here.\n");
   assert.equal(trimmedSpans[0]!.style.color, "#c0c0c0");
-  assert.equal(trimmedSpans[1]!.textContent, "You realize you haven't greeted her today.");
+  assert.equal(trimmedSpans[1]!.textContent, "Narration to Player: You realize you haven't greeted her today.");
   assert.equal(trimmedSpans[1]!.style.color, "green");
+  const toolHistory = new Element("div");
+  const calls = "find_characters(Reimi|Reimu|Rei) → 19 found\nget_character_info(Reimu) → Hakurei Reimu";
+  render(toolHistory, { ...history, entries: [{ ...history.entries[0], lines: [{
+    character: "alice", text: calls, runs: [{ text: calls.slice(0, 12), color: "blue" },
+      { text: calls.slice(12), color: "green" }],
+  }] }] });
+  assert.equal(nodes(toolHistory).filter((node) => node.className === "era-history-text")
+    .flatMap((node) => node.children).map((node) => node.textContent).join(""), calls,
+    "formatted tool calls are not narration, even when split across colored runs");
   const whitespace = new Element("div");
   render(whitespace, { ...history, entries: [{ ...history.entries[0], lines: [{
     character: "alice", text: " \n ", runs: [{ text: " \n ", color: "white" }],
@@ -236,7 +245,7 @@ test("character history renders literal text and local controls without game inp
     }] }] });
     const paragraphs = nodes(compact).filter((node) => node.className === "era-history-text");
     const dialogue = paragraphs[0]!.children.map((node) => node.textContent).join("");
-    assert.equal(dialogue, "You and the Robot Maid talk...\n「Nice weather.」");
+    assert.equal(dialogue, "Narration to Player: You and the Robot Maid talk...\nAlice: 「Nice weather.」");
     if (colored) assert.ok(paragraphs[0]!.children.every((node) => node.style.color === "green"));
     const note = nodes(compact).find((node) => node.tag === "p" && node.className === "era-history-note");
     assert.equal(note!.children.map((node) => node.textContent).join(""), "Living room · Alice");
@@ -250,9 +259,28 @@ test("character history renders literal text and local controls without game inp
       ...(colored ? { runs: [{ text: content, color: "green" }] } : {}),
     }] }] });
     const dialogue = nodes(intro).filter((node) => node.className === "era-history-text")[0]!;
-    assert.equal(dialogue.children.map((node) => node.textContent).join(""), "「You serve some tea to Alice...」\nAlice enjoys the tea.");
+    assert.equal(dialogue.children.map((node) => node.textContent).join(""), "Alice: 「You serve some tea to Alice...」\nNarration to Player: Alice enjoys the tea.");
     if (colored) assert.equal(dialogue.children[0]!.style.color, "green");
   }
+  const noticeHistory = new Element("div");
+  render(noticeHistory, { ...history, entries: [{ ...history.entries[0], source: "state",
+    action: { id: "reaction", label: "Reaction" }, lines: [{
+      character: "alice", text: "Alice notices that Player is suddenly there.",
+    }] }] });
+  assert.equal(nodes(noticeHistory).find((node) => node.className === "era-history-text")!.children
+    .map((node) => node.textContent).join(""),
+    "Narration to Alice: Alice notices that Player is suddenly there.");
+  assert.ok(nodes(noticeHistory).find((node) => node.className === "era-history-text")!.children
+    .every((node) => node.style.color === "#c5a3ff"), "observer notices use lavender, including older saved events");
+  const privateHistory = new Element("div");
+  render(privateHistory, { ...history, entries: [{ ...history.entries[0], lines: [{
+    character: "alice", text: "Alice (thought): I find this suspicious.", thought: true,
+    runs: [{ text: "Alice (thought): I find this suspicious.", color: "green" }],
+  }] }] });
+  const thoughtText = nodes(privateHistory).find((node) => node.className === "era-history-text")!;
+  assert.equal(thoughtText.children[0]!.tag, "em", "private thoughts are italic, not spoken dialogue");
+  assert.equal(thoughtText.children[0]!.style.color, "green");
+  assert.equal(thoughtText.children[0]!.textContent, "Alice (thought): I find this suspicious.");
   const card = new Element("div");
   card.className = "era-character-info";
   const tabs = new Element("div");
@@ -280,7 +308,7 @@ test("character history renders literal text and local controls without game inp
   const localEvent = { stopPropagation() {}, preventDefault() {} };
   const preview = info.querySelector(".era-history-preview")!;
   const previewText = preview.querySelector(".era-history-preview-content")!;
-  assert.equal(previewText.children.map((node) => node.textContent).join(""), `${"Older padding.\n".repeat(5)}Oldest line.\nOlder interaction.\nEarlier line.\nRecent line.\nLatest line.`);
+  assert.equal(previewText.children.map((node) => node.textContent).join(""), `${"Narration to Player: Older padding.\n".repeat(5)}Narration to Player: Oldest line.\nNarration to Player: Older interaction.\nNarration to Player: Earlier line.\nNarration to Player: Recent line.\nNarration to Player: Latest line.`);
   assert.equal(previewText.children[0]!.style.color, "blue");
   assert.equal(previewText.children[2]!.style.color, "red");
   assert.equal(previewText.children[3]!.style.color, "green");
@@ -376,12 +404,12 @@ test("character history renders literal text and local controls without game inp
   assert.match(prompt[0].content, /role-playing as Alice.*"eraTW"/);
   assert.match(prompt[0].content, /"speech".*"actions"/);
   assert.match(prompt[1].content, /Current situation: Day 5, 10:00 at Living room\. Alice's favor toward the player: 3; trust: 2\./);
-  assert.match(prompt[1].content, /\[Day 5, 10:00 · Living room\] Talk \(present: Alice\)\n.*Hello\.\nNarration\.\nPlayer inputs: A choice\nFavor\+2/);
+  assert.match(prompt[1].content, /\[Day 5, 10:00 · Living room\] Talk \(present: Alice\)\n.*Hello\.\nNarration to Player: Narration\.\nPlayer inputs: A choice\nFavor\+2/);
   assert.doesNotMatch(prompt[1].content, /Hello there/, "the new message is the player's turn, not part of the history context");
-  assert.deepEqual(prompt.at(-1), { role: "user", content: "Hello there" });
+  assert.deepEqual(prompt.at(-1), { role: "user", content: "Player: Hello there" });
   assert.equal(chat.textarea.value, "");
   assert.deepEqual(game.lines.map((line) => line.text), ['"Hello there"', "Alice waves.", "「Hi!」"]);
-  assert.deepEqual(chat.shown().slice(-3), ['"Hello there"', "Alice waves.", "「Hi!」"]);
+  assert.deepEqual(chat.shown().slice(-3), ['Player: "Hello there"', "Narration to Player: Alice waves.", "Alice: 「Hi!」"]);
   assert.ok(!nodes(chat.chatDialog).some((node) => /era-llm-message is-|era-llm-transcript/.test(node.className)), "no separate chat transcript");
   const debugTab = chat.find((node) => node.textContent.startsWith("LLM debug"));
   assert.equal(debugTab.textContent, "LLM debug (1)");
@@ -400,10 +428,10 @@ test("character history renders literal text and local controls without game inp
   // The conversation is part of the history: a later prompt carries it as context. A failed reply is taken back.
   storage.set("era-typescript.llm", JSON.stringify({ provider: "openrouter", providers: { openrouter: { apiKey: "sk-test", model: "test/model" } } }));
   chat = await openChat(game);
-  assert.deepEqual(chat.shown().slice(-3), ['"Hello there"', "Alice waves.", "「Hi!」"]);
+  assert.deepEqual(chat.shown().slice(-3), ['Player: "Hello there"', "Narration to Player: Alice waves.", "Alice: 「Hi!」"]);
   replies.push({ status: 401, body: { error: { message: "No auth" } } });
   await chat.say("Again");
-  assert.match(sent[1]!.payload.messages[1].content, /Conversation \(present: Alice\)\n"Hello there"\nAlice waves\.\n「Hi!」/);
+  assert.match(sent[1]!.payload.messages[1].content, /Conversation \(present: Alice\)\nPlayer: "Hello there"\nNarration to Player: Alice waves\.\nAlice: 「Hi!」/);
   assert.match(chat.text(), /No reply: 401 Unauthorized: No auth/);
   assert.equal(chat.textarea.value, "Again");
   assert.equal(game.lines.length, 3, "the unanswered message is taken back");
@@ -414,7 +442,7 @@ test("character history renders literal text and local controls without game inp
   assert.match(retry.parentElement!.parentElement!.textContent + retry.parentElement!.parentElement!.children.map((node) => node.textContent).join(""), /"Hello there"/);
   await retry.listeners.get("click")!(localEvent);
   await settled();
-  assert.deepEqual(sent.at(-2)!.payload.messages.slice(-1), [{ role: "user", content: "Hello there" }]);
+  assert.deepEqual(sent.at(-2)!.payload.messages.slice(-1), [{ role: "user", content: "Player: Hello there" }]);
   assert.doesNotMatch(sent.at(-2)!.payload.messages[1].content, /Hi!/);
   assert.deepEqual(game.lines.map((line) => line.text), ['"Hello there"', "「Hello again!」"]);
   await chat.find((node) => node.tag === "button" && node.textContent === "Edit").listeners.get("click")!(localEvent);
@@ -423,6 +451,21 @@ test("character history renders literal text and local controls without game inp
   assert.equal(game.lines.length, 0);
   assert.doesNotMatch(chat.text(), /Hello again!/);
   chat.chatDialog.listeners.get("cancel")!(localEvent);
+
+  const namedGame = fakeGame();
+  namedGame.lines.push({ character: "player-id", text: 'Alex: "I saw something odd."' });
+  namedGame.lines.push({ character: "alice", text: "「What did you see?」" });
+  const originalHistory = namedGame.loadAll;
+  namedGame.loadAll = async () => ({
+    ...await originalHistory(),
+    player: { id: "player-id", name: "Alex", number: "0" },
+  });
+  const namedChat = await openChat(namedGame);
+  await namedChat.find((node) => node.tag === "button" && node.textContent === "Edit").listeners.get("click")!(localEvent);
+  await settled();
+  assert.equal(namedChat.textarea.value, "I saw something odd.", "Edit strips the actual player-name prefix");
+  assert.equal(namedGame.lines.length, 0);
+  namedChat.chatDialog.listeners.get("cancel")!(localEvent);
 
   // Tool calls run in the game and their results go back to the model until it replies; closing then redraws the room.
   let refreshed = 0;
@@ -440,7 +483,7 @@ test("character history renders literal text and local controls without game inp
   assert.equal(JSON.stringify(game.ran), JSON.stringify([["describe_scene", {}], ["change_feelings", { favor: 10, reason: "gift" }], ["move_to", { destination: "Moon" }], ["say", { text: "Thank you!" }]]));
   const [first, second] = sent.slice(-2).map((request) => request.payload);
   assert.equal(second.messages.length, first.messages.length + 3, "nothing more is asked after a text reply");
-  assert.deepEqual(first.tools.map((tool: { function: { name: string } }) => tool.function.name), ["get_character_info", "find_characters", "change_feelings", "change_mark", "change_mood", "check_consent", "player_attempts", "say", "act", "move_to", "push_down_player"]);
+  assert.deepEqual(first.tools.map((tool: { function: { name: string } }) => tool.function.name), ["get_character_info", "find_characters", "change_feelings", "change_mark", "change_mood", "check_consent", "player_attempts", "say", "act", "think", "move_to", "push_down_player"]);
   assert.match(first.messages[0].content, /Talk and act only through tool calls/);
   assert.match(first.messages[0].content, /call check_consent for it and answer/);
   assert.doesNotMatch(first.messages[0].content, /"speech"/);
@@ -449,7 +492,7 @@ test("character history renders literal text and local controls without game inp
   assert.equal(first.messages.length, 4, "earlier turns are history, not replayed messages");
   assert.deepEqual(second.messages.slice(-3).map((message: { role: string }) => message.role), ["assistant", "tool", "tool"]);
   assert.equal(JSON.stringify(second.messages.at(-2)), JSON.stringify({ role: "tool", tool_call_id: "a", name: "change_feelings", content: '{"favor":{"before":3,"after":13}}' }));
-  assert.deepEqual(chat.shown().slice(-4).map((line) => line.replace(/`.*/, "`")), ['*hands over a gift* "Here is a gift"', "`", "`", "「Thank you!」"]);
+  assert.deepEqual(chat.shown().slice(-4).map((line) => line.replace(/`.*/, "`")), ['Narration to Player: *hands over a gift* "Here is a gift"', "`", "`", "Alice: 「Thank you!」"]);
   assert.match(chat.text(), /Close this window to see what happens in the room/);
   chat.find((node) => node.textContent.startsWith("LLM debug")).listeners.get("click")!(localEvent);
   const toolDebug = nodes(chat.find((node) => node.className.includes("era-llm-debug") && node.tag === "div")).map((node) => node.textContent).join("\n");
@@ -499,7 +542,7 @@ test("character history renders literal text and local controls without game inp
   assert.match(sent.at(-1)!.payload.messages[0].content, /reply with just DONE/);
   chat.chatDialog.close();
 
-  // The character's voice is edited in the debug tab: loaded from the game, saved to disk, and reverted.
+  // The character card has its own tab: loaded from the game, saved to disk, and reverted.
   const savedVoices: unknown[] = [];
   const generated = { description: "A demon from below.", examples: ["We think not.", "A meeting is nice."], intimateExamples: ["Our body."] };
   let voiceRequests = 0;
@@ -507,11 +550,20 @@ test("character history renders literal text and local controls without game inp
     voice: async () => { voiceRequests++; return { generated, saved: null, location: "/saves/llm-voices.json" }; },
     saveVoice: async (voice: unknown) => { savedVoices.push(voice); },
   });
-  assert.equal(voiceRequests, 0, "the voice is loaded only when the debug tab is opened");
+  assert.equal(voiceRequests, 0, "the voice is loaded only when the character card tab is opened");
   chat.find((node) => node.textContent.startsWith("LLM debug")).listeners.get("click")!(localEvent);
   await settled();
+  assert.equal(voiceRequests, 0, "debug no longer loads the character card");
+  const cardTab = chat.find((node) => node.tag === "button" && node.textContent === "Character card");
+  cardTab.listeners.get("click")!(localEvent);
+  await settled();
   assert.equal(voiceRequests, 1);
+  const cardPane = chat.find((node) => node.className.includes("era-llm-card"));
+  assert.equal(cardPane.hidden, false);
+  assert.equal(cardTab.attributes.get("aria-pressed"), "true");
+  assert.equal(chat.find((node) => node.className.includes("era-llm-debug") && node.tag === "div").hidden, true);
   const voiceSection = chat.find((node) => node.className === "era-llm-voice");
+  assert.equal(voiceSection.tag, "section", "the editor is always expanded");
   const voiceText = () => nodes(voiceSection).map((node) => node.textContent).join("\n");
   const [descriptionBox, examplesBox, intimateBox] = nodes(voiceSection).filter((node) => node.tag === "textarea") as (Element & { value: string })[];
   assert.equal(descriptionBox!.value, "A demon from below.");
@@ -528,13 +580,18 @@ test("character history renders literal text and local controls without game inp
   await settled();
   assert.deepEqual(JSON.parse(JSON.stringify(savedVoices)), [{ description: "A demon from below.", examples: ["We think not.", "We shall see."], intimateExamples: ["Our body."] }]);
   assert.match(voiceText(), /Character voice \(edited\)/);
-  assert.match(voiceText(), /Saved\./);
+  assert.match(voiceText(), /Saved to \/saves\/llm-voices\.json\./);
   assert.equal(voiceButton("Revert to generated").disabled, false);
   await voiceButton("Revert to generated").listeners.get("click")!(localEvent);
   await settled();
   assert.equal(savedVoices.at(-1), null);
   assert.equal(examplesBox!.value, "We think not.\nA meeting is nice.");
   assert.match(voiceText(), /Character voice \(generated\)/);
+  chat.find((node) => node.tag === "button" && node.textContent === "History & chat").listeners.get("click")!(localEvent);
+  assert.equal(cardPane.hidden, true);
+  cardTab.listeners.get("click")!(localEvent);
+  await settled();
+  assert.equal(voiceRequests, 1, "returning to the card preserves the existing editor");
   chat.chatDialog.close();
 
   // The player's attempt is handed to the game: nothing after it runs, nothing more is asked, and the dialog closes.

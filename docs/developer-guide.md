@@ -421,8 +421,10 @@ functions such as `FIRSTTIME` have side effects. Lines from intimate routines (s
 arousal or orgasm routines, and commands below 300 or groping ones, by the command number in the routine name) or
 about sex are used only in intimate scenes. The lines are picked one per routine in a seed-by-character order, so they stay the same between
 messages. The prompt lists them as plain text after the scene and asks the model to match her pronouns (e.g.
-YuugenMagan's royal "We"), formality and verbal tics without copying them. The LLM debug tab has a "Character
-voice" editor: it shows the generated description and lines (`POST /api/character-voice`, only at a command screen)
+YuugenMagan's royal "We"), formality and verbal tics without copying them. The interaction history dialog's
+**Character card** tab opens the "Character voice" editor directly, with its three text areas sharing the available
+height: it shows the generated description and lines
+(`POST /api/character-voice`, only at a command screen)
 and saves an edited version (`POST /api/character-voice/save`; `voice: null` reverts). An edited voice is keyed by
 character `NO` in `character-cards/<game id>/<NO>.png`, beside `GAMES` rather than inside it, so custom cards can be
 tracked in git. The PNG uses the game's normal portrait and Character Card V2's base64 `chara` tEXt chunk,
@@ -433,6 +435,10 @@ Existing `llm-voices.json` entries migrate to PNG on first use, removing only th
 is saved. Revert removes the custom card and any legacy entry. The editor's **Download PNG card** button downloads
 the saved card (`GET /api/character-card?session=…&character=…`).
 The edited voice replaces the generated one, with its intimate lines used in intimate scenes.
+Generated descriptions include name, full name, race, sex, traits, home, workplace, schedule and profile when known,
+using the same character-info lookup as the live prompt, followed by the kojo introduction. Transient information
+(location, clothing, feelings, marks and gauges) remains in the live scene rather than being frozen into the card.
+Existing custom descriptions are not overwritten.
 Desktop builds store cards beside the user-data `GAMES` folder, in a writable `character-cards` directory.
 If a character has no supported normal portrait, saving reports an error instead of producing an empty card.
 The conformance demo's scenario 12
@@ -509,10 +515,14 @@ to the configured base URL (`src/llm.ts`).
 player's room with the previous prompt's; anyone new is an encounter (`arrived: "player"` when the player moved,
 otherwise `"character"`), with the text of this turn's script events that include her (her kojo greeting, the daily
 greeting, EVENT 4's "Stopped to talk") as `intro`. Starting or loading a game only sets the baseline. The snapshot
+carries no encounters during stopped time, and frozen movement does not update the encounter baseline: when time
+resumes, newly met awake occupants can react normally, including in crowded rooms without sudden-presence notes.
+The snapshot
 carries them as `encounters`, and while they are current the character endpoints accept those characters, not
 only the selected one. With **Characters you run into may speak up** on (LLM settings, on by default, needs tools),
 `web/encounters.js` asks the LLM for each in turn after the screen is shown, using the encounter flow in
-`systemPrompt` (the intro already happened, so add only something new; hate or anger → cold or leave; the player's
+`systemPrompt` (the intro already happened, so a distinct follow-up or a remark to another NPC is allowed, never a
+repeat/rephrase; hate or anger → cold or leave; the player's
 nakedness, odd outfit, odd hour or intrusion → react; a special day or weather → a fitting greeting; otherwise by
 relationship, often nothing) and `ENCOUNTER_TOOLS` (lookups, feelings, `say`/`act`, `move_to`), with one `say`
 at most. She may speak to anyone in the room: `othersHere` gives each person's mutual affinity as a word and
@@ -522,11 +532,52 @@ for the player in the same room, what is visibly worn (`GET_CURRENT_CLOTHES`, wi
 Exchanges go into that character's LLM debug log; if anything changed, the room is redrawn once at the end.
 Sending input cancels a run in progress.
 
-**Overhearing.** What a character says (`say`), does (`act`) or where she goes (`move_to`) also goes into the
+**Speech attribution and overhearing.** Speech is prefixed with the speaker's name, including a character's own
+lines, in the history and LLM room output. Player chat uses the actual player's name, records their history ID, and
+is copied to other awake characters in the room, just like audible character speech. The latest user message sent
+to the LLM is also prefixed with the player's name; encounter instructions are not player dialogue.
+Older quoted history lines with a known speaker get a prefix at rendering/prompt time without rewriting saves.
+Character lookups and search results describe off-room whereabouts as "probably near"; across regions they reveal
+only the region, not the room. Self and people in the observer's room keep exact locations. These are estimates,
+not evidence of someone's current activity. Significant relationships summarize lovers/in-love/attachment talents,
+lasting resentment (hate marks) toward the player, and strong mutual NPC affinity (close above 150%, dislike below
+60%). Ordinary affinity does not imply lovers, and dislike is not labelled hatred.
+Narrative lines (including bullet-prefixed messages) are labelled `Narration to <player name>:` in history,
+previews and prompt context. This identifies whose perspective it describes without pretending the player spoke
+it. Prompt instructions distinguish "you/your" in player narration from "I/my" in the named speaker's dialogue.
+Formatted tool calls remain unprefixed in history, previews and prompts.
+Dialogue colors come from `SET_KOJO_COLOR` evaluated for the speaker with game variables restored afterwards.
+When dialogue coloring is enabled but a character has no distinct game-defined color, LLM speech uses a
+deterministic fallback palette keyed by `NO`; turning dialogue coloring off still uses the normal text color.
+What a character says (`say`), does (`act`) or where she goes (`move_to`) also goes into the
 history of everyone else awake in her room, prefixed with her name (`Reimu: 「…」`, `Reimu leaves for the Shrine.`),
 so the others can react to it. Each character has her own open conversation event until the next command; taking a
-line back (Edit/Retry) takes back the copies too. `historyContext` tells the model that "Name: …" lines are what
-someone else said or did.
+line back (Edit/Retry) takes back the copies too. `historyContext` explains speaker attribution, and the character
+prompt tells the model not to repeat overheard greetings, wording or gestures, and to react to each player message
+only once rather than treating its own tool calls as new requests.
+
+**Sudden presence changes.** When `FLAG:70` enters stopped time, the history adapter remembers whether each awake,
+frozen character shared the player's room. When time resumes, a changed presence creates a state-sourced
+`reaction` event with a random phrase ranging from noticing an arrival/departure without seeing the transition to
+"just appeared out of nowhere" / "just vanished into thin air". The phrase is chosen once at event creation,
+stored with the event, and does not consume the game's random-number sequence.
+It uses the character's location even if the player is now elsewhere, and does not tell the character the hidden
+cause. State-sourced reaction notices use `Narration to <observer name>:` in history, previews and LLM context,
+identifying the character who perceived the change rather than the player, with a distinct lavender color (including
+older notices). Sleeping characters and those able to
+move during stopped time (`CFLAG:344`) are excluded. An observer with
+another NPC in the room when time stops or resumes does not get this note; the player is excluded from that count.
+No note is added
+if the player leaves and returns within the same freeze. The baseline is saved in the history checkpoint so loading
+a frozen save preserves the comparison without changing the native `.sav` layout.
+
+**Private thoughts.** `think {text}` records a short first-person in-character note (up to 600 characters) as
+`Name (thought): …` in the character's own conversation history, with a `thought: true` line marker. History and
+preview rendering italicize it; subsequent prompts and memory summaries include it with an explicit private-thought
+label. It never queues room output, changes feelings itself, or copies the line to witnesses, including during
+gossip. The tool is available in chat, encounters, intimate scenes and gossip. It rejects empty input and sleeping
+characters, and prompts distinguish a character's suspicion from knowledge of hidden causes. A thought-only reply
+is allowed and does not count as spoken dialogue.
 
 **Memories** (option "Characters keep a memory of you"). At the first command prompt of a new in-game day the
 snapshot carries `memoriesDue`: characters whose history has moved on since their memory was written (most recent

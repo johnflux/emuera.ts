@@ -1,4 +1,4 @@
-import { activeLlm, buildMessages, converse, debugLog, handedOver, loadLlmConfig, parseReply, PROVIDERS, systemPrompt, toolsFor } from "./llm.js";
+import { activeLlm, buildMessages, converse, debugLog, handedOver, loadLlmConfig, parseReply, PROVIDERS, systemPrompt, TOOLS, toolsFor } from "./llm.js";
 
 let expanded = true;
 let selectedTab = "info";
@@ -18,7 +18,7 @@ function clock(context) {
   return `Day ${context.day}, ${hour}:${minute}`;
 }
 
-function compactRuns(runs, entry) {
+function compactRuns(runs, entry, speaker, playerName = "Player", narrationName = playerName) {
   const content = runs.map((run) => run.text).join("");
   const result = [];
   const append = (text, color) => {
@@ -37,17 +37,38 @@ function compactRuns(runs, entry) {
       || line === `You offer to take a break and serve some tea to ${person.name}...`
       || line === `You offer to take a break and serve some tea to ${person.name} and the others...`);
     if (roomIntro || teaIntro) continue;
-    const start = match.index + match[0].length - match[0].trimStart().length;
+    const legacyNarration = [playerName, ...entry.participants.map((person) => person.name)]
+      .map((name) => `${name} (narration): `).find((prefix) => line.startsWith(prefix));
+    const start = match.index + match[0].length - match[0].trimStart().length + (legacyNarration?.length ?? 0);
     const end = match.index + match[0].trimEnd().length;
     if (result.length) append("\n", result.at(-1).color);
+    const attributed = entry.participants.some((person) =>
+      line.startsWith(`${person.name}:`) || line.startsWith(`${person.name} (thought):`));
+    const narration = `Narration to ${narrationName}: `;
+    const tool = TOOLS.some(({ function: fn }) => line.startsWith(`${fn.name}(`));
+    let prefix = speaker && /^["“「]/.test(line) ? `${speaker}: `
+      : attributed || tool || /^["“「`]/.test(line) || line.startsWith(narration) ? "" : narration;
     let offset = 0;
     for (const run of runs) {
       const text = run.text.slice(Math.max(0, start - offset), Math.max(0, end - offset));
       offset += run.text.length;
-      if (text) append(text, run.color);
+      if (text) {
+        if (prefix) { append(prefix, run.color); prefix = ""; }
+        append(text, run.color);
+      }
     }
   }
   return result;
+}
+
+function attributedRuns(line, entry, player) {
+  const speaker = entry.participants.find((person) => person.id === line.character)?.name
+    ?? (entry.action.id === "chat" && line.character === null ? player?.name ?? "Player" : undefined);
+  const reaction = entry.source === "state" && entry.action.id === "reaction";
+  const narrationName = reaction ? speaker : player?.name;
+  return compactRuns(line.runs ?? [{ text: line.text }], entry, speaker, player?.name ?? "Player",
+    narrationName ?? player?.name ?? "Player")
+    .map((run) => line.thought ? { ...run, thought: true } : reaction ? { ...run, color: "#c5a3ff" } : run);
 }
 
 function changes(entry) {
@@ -63,11 +84,11 @@ function changes(entry) {
   return result;
 }
 
-function entryText(entry) {
+function entryText(entry, player) {
   const where = entry.before.locationName || `Location ${entry.before.location}`;
   const parts = [`[${clock(entry.before)} · ${where}] ${entry.action.label} (present: ${entry.participants.map((person) => person.name).join(", ")})`];
   for (const line of entry.lines) {
-    const text = compactRuns(line.runs ?? [{ text: line.text }], entry).map((run) => run.text).join("");
+    const text = attributedRuns(line, entry, player).map((run) => run.text).join("");
     if (text) parts.push(text);
   }
   if (entry.choices.length) parts.push(`Player inputs: ${entry.choices.join(" → ")}`);
@@ -86,7 +107,7 @@ export function historyContext(history, limit) {
   const blocks = [];
   let size = 0;
   for (const entry of history.entries) {
-    const block = entryText(entry);
+    const block = entryText(entry, history.player);
     if (blocks.length && size + block.length > limit) break;
     blocks.unshift(block);
     size += block.length + 2;
@@ -94,7 +115,13 @@ export function historyContext(history, limit) {
   const omitted = history.entries.length - blocks.length;
   const heading = blocks.length
     ? `Interaction history between the player and ${name}, oldest first${omitted ? ` (${omitted} older interactions omitted)` : ""}. `
-      + `Lines starting with someone else's name ("Name: ...") are what that person said or did where ${name} could hear and see it:`
+      + `Speaker prefixes ("Name: ...") identify who said or did something, including ${name}'s own lines. `
+      + `${history.player?.name ?? "Player"} is the player; other characters' lines are overheard speech/actions, `
+      + `not ${name}'s words and not new player requests. "Narration to ${history.player?.name ?? "Player"}: ..." labels game narration for `
+      + `the player, not words they spoke. "You" and "your" in that narration refer to the player, never ${name}. `
+      + `"Narration to Name: ..." on a reaction describes that named character's own perceptions, not audible speech. `
+      + `"I" and "my" inside quoted speech refer to the named speaker. Lines labelled "(thought)" are private `
+      + `in-character notes, not speech anyone else heard; suspicions in them are not established facts:`
     : `There is no interaction history between the player and ${name} yet.`;
   const memory = history.memory?.text
     ? `${name}'s own memory of the player and what happened (her notes as of ${clock(history.memory)}; the history below may repeat some of it):\n${history.memory.text}`
@@ -177,7 +204,7 @@ export function renderCharacterHistory(parent, history, { loadAll, embedded = fa
     body.append(item);
     text("summary", `${clock(entry.before)} · ${entry.action.label}`, item);
     const lines = entry.lines.map((line, index) => ({
-      index, character: line.character, runs: compactRuns(line.runs ?? [{ text: line.text }], entry),
+      index, character: line.character, runs: attributedRuns(line, entry, history.player),
     })).filter((line) => line.runs.length);
     const note = text("p", "", item, "era-history-note");
     text("span", entry.before.locationName || `Location ${entry.before.location}`, note);
@@ -187,7 +214,7 @@ export function renderCharacterHistory(parent, history, { loadAll, embedded = fa
     for (const line of lines) {
       const paragraph = text("p", "", item, "era-history-text");
       for (const run of line.runs) {
-        const span = text("span", run.text, paragraph);
+        const span = text(run.thought ? "em" : "span", run.text, paragraph);
         if (/^(?:#[0-9a-f]{3}(?:[0-9a-f]{3})?|[a-z]{1,30})$/i.test(run.color)) span.style.color = run.color;
       }
       const tools = lineTools?.(entry, line.index, index === history.entries.length - 1);
@@ -238,7 +265,7 @@ export function setupCharacterHistory(parent, history, loadAll, chat) {
   }
   if (history.entries.length) {
     const runs = [...history.entries].reverse().flatMap((entry) => entry.lines.flatMap((line) => {
-      const compact = compactRuns(line.runs ?? [{ text: line.text }], entry);
+      const compact = attributedRuns(line, entry, history.player);
       return compact.length ? [...compact, { text: "\n" }] : [];
     }));
     const content = runs.map((run) => run.text).join("").trimEnd();
@@ -258,7 +285,7 @@ export function setupCharacterHistory(parent, history, loadAll, chat) {
       const value = run.text.slice(Math.max(0, start - offset), Math.max(0, content.length - offset));
       offset += run.text.length;
       if (!value) continue;
-      const span = document.createElement("span");
+      const span = document.createElement(run.thought ? "em" : "span");
       span.textContent = value;
       if (/^(?:#[0-9a-f]{3}(?:[0-9a-f]{3})?|[a-z]{1,30})$/i.test(run.color)) span.style.color = run.color;
       previewText.append(span);
@@ -327,8 +354,8 @@ function renderDebug(container, log) {
  * and the player can change it and save it to disk, after which the saved version is sent instead.
  */
 function voiceEditor(chat, character) {
-  const section = element("details", "era-llm-voice");
-  const summary = element("summary", "", "Character voice");
+  const section = element("section", "era-llm-voice");
+  const summary = element("h3", "era-llm-voice-title", "Character voice");
   const note = element("p", "era-history-note");
   const field = (label, rows, hint) => {
     const wrapper = element("label", "era-llm-voice-field");
@@ -339,7 +366,7 @@ function voiceEditor(chat, character) {
     if (hint) wrapper.append(element("small", "era-history-note", hint));
     return { wrapper, textarea };
   };
-  const description = field("Description", 4, "How the game introduces the character.");
+  const description = field("Description", 4, "Identity, traits and background from the game, followed by the character's introduction.");
   const examples = field("Example lines", 8, "One per line. Sent with every message so the model matches how the character talks.");
   const intimate = field("Example lines in intimate scenes", 6, "One per line. Used instead of the lines above during an intimate scene.");
   const save = element("button", "", "Save");
@@ -413,7 +440,6 @@ function voiceEditor(chat, character) {
     finally { showState(); }
   });
   for (const { textarea } of [description, examples, intimate]) textarea.addEventListener("input", () => { status.textContent = "Unsaved changes."; });
-  section.addEventListener("toggle", () => { if (section.open) void load(); });
   return { section, load };
 }
 
@@ -545,30 +571,43 @@ function setupChat({ dialog, tabs, pane, content, history, loadAll, chat, cleanu
   debugPane.hidden = true;
   const debugLogPane = element("div");
   const voice = chat.voice && chat.saveVoice ? voiceEditor(chat, character) : null;
-  if (voice) debugPane.append(voice.section);
+  const cardPane = element("div", "era-history-pane era-llm-card");
+  cardPane.hidden = true;
+  if (voice) {
+    cardPane.append(voice.section);
+    dialog.append(cardPane);
+  }
   const memory = chat.remember && chat.writeMemory ? memoryEditor(chat, character, loadAll) : null;
   if (memory) debugPane.append(memory.section);
   debugPane.append(debugLogPane);
   dialog.append(debugPane);
   const historyTab = element("button", "era-info-tab", "History & chat");
+  const cardTab = element("button", "era-info-tab", "Character card");
   const debugTab = element("button", "era-info-tab", "LLM debug");
-  for (const tab of [historyTab, debugTab]) tab.type = "button";
-  tabs.append(historyTab, debugTab);
-  const select = (debug) => {
-    pane.hidden = debug;
-    form.hidden = debug;
-    debugPane.hidden = !debug;
-    historyTab.setAttribute("aria-pressed", String(!debug));
-    debugTab.setAttribute("aria-pressed", String(debug));
-    if (debug) {
-      void voice?.load();
+  for (const tab of [historyTab, cardTab, debugTab]) tab.type = "button";
+  tabs.append(historyTab);
+  if (voice) tabs.append(cardTab);
+  tabs.append(debugTab);
+  const select = (tab) => {
+    pane.hidden = tab !== "history";
+    form.hidden = tab !== "history";
+    cardPane.hidden = tab !== "card";
+    debugPane.hidden = tab !== "debug";
+    historyTab.setAttribute("aria-pressed", String(tab === "history"));
+    cardTab.setAttribute("aria-pressed", String(tab === "card"));
+    debugTab.setAttribute("aria-pressed", String(tab === "debug"));
+    if (tab === "card" && voice) {
+      void voice.load();
+    }
+    if (tab === "debug") {
       void memory?.load();
       renderDebug(debugLogPane, log);
       debugPane.scrollTop = debugPane.scrollHeight;
     }
   };
-  historyTab.addEventListener("click", () => select(false));
-  debugTab.addEventListener("click", () => select(true));
+  historyTab.addEventListener("click", () => select("history"));
+  cardTab.addEventListener("click", () => select("card"));
+  debugTab.addEventListener("click", () => select("debug"));
   const refreshDebug = () => {
     debugTab.textContent = `LLM debug (${log.length})`;
     if (!debugPane.hidden) renderDebug(debugLogPane, log);
@@ -592,13 +631,15 @@ function setupChat({ dialog, tabs, pane, content, history, loadAll, chat, cleanu
   /** Edit and Retry on the player's lines in the newest conversation: they take back that line and everything after it. */
   const lineTools = (entry, index, newest) => {
     const line = entry.lines[index];
-    if (!newest || entry.action.id !== "chat" || line.character !== null || pending) return undefined;
+    if (!newest || entry.action.id !== "chat" || (line.character !== null && line.character !== history.player?.id) || line.thought || pending) return undefined;
     const tools = element("span", "era-llm-message-tools");
     for (const [label, resend] of [["Edit", false], ["Retry", true]]) {
       const button = element("button", "", label);
       button.type = "button";
       button.title = `${resend ? "Send this message again" : "Edit this message"}: it and everything after it are removed from the history. Game changes the removed replies made stay.`;
-      button.addEventListener("click", () => void rewind(entry.lines.length - index, typed(line.text), resend));
+      const prefix = `${history.player?.name ?? "Player"}: `;
+      const message = line.text.startsWith(prefix) ? line.text.slice(prefix.length) : line.text;
+      button.addEventListener("click", () => void rewind(entry.lines.length - index, typed(message), resend));
       tools.append(button);
     }
     return tools;
@@ -659,6 +700,7 @@ function setupChat({ dialog, tabs, pane, content, history, loadAll, chat, cleanu
       const prompt = buildMessages({
         system: systemPrompt({ character, gameTitle: chat.gameTitle, instructions: config.instructions, tools: !!runTool, scene }),
         context, scene, chat: [], message, tools: !!runTool,
+        player: history.player?.name ?? scene?.player?.name ?? "Player",
       });
       const request = converse({ llm, messages: prompt, temperature: config.temperature, log, signal: pending.signal, runTool,
         toolset: toolsFor(scene), onTool: () => {
@@ -681,7 +723,8 @@ function setupChat({ dialog, tabs, pane, content, history, loadAll, chat, cleanu
         }
       }
       await reload();
-      showStatus(spoke || handedOver(tools) ? "" : `${character.name} did not reply.`);
+      const thought = tools.some((tool) => tool.name === "think" && !tool.result?.error);
+      showStatus(spoke || handedOver(tools) ? "" : thought ? `${character.name} kept her thoughts to herself.` : `${character.name} did not reply.`);
       // The player's attempt or a scene command plays out on the game screen, which closing redraws.
       if (handedOver(tools)) dialog.close();
     } catch (error) {
@@ -721,6 +764,6 @@ function setupChat({ dialog, tabs, pane, content, history, loadAll, chat, cleanu
   showState();
   refreshDebug();
   render();
-  select(false);
+  select("history");
   textarea.focus();
 }

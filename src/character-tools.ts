@@ -29,6 +29,8 @@ export interface ToolOutcome {
   changed: boolean;
   /** Words said to another character away from the player (`tell`), for the interaction history. */
   told?: { listener: number; text: string };
+  /** A private in-character note, never queued as speech or copied to witnesses. */
+  thought?: string;
 }
 
 /** Per-call limits, roughly the largest change a single player command makes. */
@@ -100,6 +102,7 @@ export function runCharacterTool(host: ToolHost, self: number, id: string, name:
       case "end_scene": return tools.endScene();
       case "say": return tools.say(args);
       case "act": return tools.act(args);
+      case "think": return tools.think(args);
       case "move_to": return tools.move(args);
       case "push_down_player": return tools.pushDown();
       case "describe_scene": return tools.scene();
@@ -200,6 +203,35 @@ class CharacterTools {
     const location = this.location(i);
     return location === Number(this.call("SUKIMA") || NaN) ? "away (not on this map)" : this.place(location);
   }
+  private knownLocation(i: number): string {
+    const location = this.location(i);
+    if (i === this.self || location === this.location(this.self)) return this.whereabouts(i);
+    if (location === Number(this.call("SUKIMA") || NaN)) return "away (not on this map)";
+    const region = this.call("GET_MAPID", BigInt(location));
+    const ownRegion = this.call("GET_MAPID", BigInt(this.location(this.self)));
+    if (region !== ownRegion) {
+      const name = region ? this.call("GET_MAPNAME", BigInt(region)) : "";
+      return name ? `probably near ${name}` : "whereabouts unknown";
+    }
+    return `probably near ${this.place(location)}`;
+  }
+  private significantRelationships(i: number): string[] {
+    const relationships: string[] = [];
+    if (i !== this.master) {
+      const player = this.name(this.master);
+      if (this.num("TALENT", BigInt(i), 7n)) relationships.push(`lovers with ${player}`);
+      else if (this.num("TALENT", BigInt(i), 3n)) relationships.push(`in love with ${player}`);
+      else if (this.num("TALENT", BigInt(i), 8n)) relationships.push(`attached to ${player}`);
+      const hate = this.num("MARK", BigInt(i), BigInt(MARKS.hate));
+      if (hate) relationships.push(`lasting resentment toward ${player} (hate mark ${hate}/${MARK_MAX})`);
+    }
+    if (i !== this.self && i !== this.master) {
+      const mine = this.affinity(this.self, i), theirs = this.affinity(i, this.self);
+      if (mine > 150 || mine < 60) relationships.push(`${this.name(this.self)} feels ${feeling(mine)} toward ${this.name(i)}`);
+      if (theirs > 150 || theirs < 60) relationships.push(`${this.name(i)} feels ${feeling(theirs)} toward ${this.name(this.self)}`);
+    }
+    return relationships;
+  }
   /** Where the character lives, as eraTW's detailed info shows it; residents of the player's map have a room there. */
   private home(i: number): string {
     const resident = this.num("CFLAG", BigInt(i), "神社在住"), home = this.num("CFLAG", BigInt(i), "自宅位置");
@@ -233,7 +265,9 @@ class CharacterTools {
       .map(([key, index]) => [key, this.str("CSTR", BigInt(i), BigInt(index as number))]).filter(([, value]) => value));
     const result: Record<string, unknown> = { name, ...(fullName && fullName !== name ? { fullName } : {}),
       ...(i === this.master ? { isPlayer: true } : {}), sex: this.sex(i), race: this.race(i), traits: this.traits(i),
-      location: this.whereabouts(i), home: this.home(i), ...(this.asleep(i) ? { asleep: true } : {}), ...profile };
+      location: this.knownLocation(i), home: this.home(i), ...(this.asleep(i) ? { asleep: true } : {}), ...profile };
+    const relationships = this.significantRelationships(i);
+    if (relationships.length) result.significantRelationships = relationships;
     if (i !== this.master) Object.assign(result, { romanticMood: this.gauge(i, "ムード"), anger: this.gauge(i, "怒り"), feelingsTowardPlayer: this.towardPlayer(i) });
     if (i !== this.self && i !== this.master) Object.assign(result, { myAffinityForThem: this.affinity(this.self, i), theirAffinityForMe: this.affinity(i, this.self) });
     return { result, changed: false };
@@ -246,7 +280,7 @@ class CharacterTools {
     for (let i = 0; i < this.host.count(); i++) {
       const home = this.home(i), location = this.whereabouts(i);
       const text = [this.str("NAME", BigInt(i)), this.str("CALLNAME", BigInt(i)), this.race(i), ...this.traits(i), home, location].join("\n").toLowerCase();
-      if (terms.some((term) => text.includes(term))) matches.push(`${this.line(i)}: lives at ${home}; now ${location}`);
+      if (terms.some((term) => text.includes(term))) matches.push(`${this.line(i)}: lives at ${home}; now ${this.knownLocation(i)}`);
     }
     return { result: matches.length ? { found: matches.length, characters: matches.slice(0, FIND_LIMIT) } : { found: 0 }, changed: false };
   }
@@ -404,6 +438,12 @@ class CharacterTools {
     if (this.asleep(this.self)) throw new ToolError("You are asleep");
     if (!this.together(this.self)) return { result: { heard: false, note: "The player is not in the same room, so nobody heard you" }, changed: false };
     return { result: { heard: true }, action: { kind: "say", text: line }, changed: true };
+  }
+  think(args: Record<string, unknown>): ToolOutcome {
+    const text = typeof args.text === "string" ? unquoteSpeech(args.text.replace(/\s+/g, " ")).slice(0, 600) : "";
+    if (!text) throw new ToolError("text is required");
+    if (this.asleep(this.self)) throw new ToolError("You are asleep");
+    return { result: { remembered: true, private: true }, changed: false, thought: text };
   }
   /**
    * Whether the character is willing, decided the way eraTW decides when the player tries the matching command:
@@ -711,7 +751,9 @@ function outcome(who: string, name: string, result: Record<string, unknown>): To
     }
     case "get_character_info": {
       const traits = Array.isArray(result.traits) ? result.traits.slice(0, 6).join(", ") : "";
-      return [{ text: clip([result.fullName ?? result.name, `${result.race}, ${result.sex}`, `at ${result.location}`, traits].filter(Boolean).join(" · ")) }];
+      const relationships = Array.isArray(result.significantRelationships) ? result.significantRelationships.join("; ") : "";
+      return [{ text: clip([result.fullName ?? result.name, `${result.race}, ${result.sex}`, result.location,
+        relationships, traits].filter(Boolean).join(" · ")) }];
     }
     case "find_characters": {
       const names = ((result.characters as string[] | undefined) ?? []).map((line) => line.replace(/ \(.*$/, ""));

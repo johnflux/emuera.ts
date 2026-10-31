@@ -5,7 +5,7 @@ import { EraError, type Routine } from "./model.js";
 
 /** How a character talks, taken from her kojo (dialogue) files, so an LLM playing her can match her voice. */
 export interface CharacterVoice {
-  /** The kojo's own introduction of the character (CHARA_INFO_KOJO), as the status screen prints it. */
+  /** Identity/background details and the kojo's introduction (CHARA_INFO_KOJO). */
   description?: string;
   /** Lines she says in the kojo, in her own words. */
   examples: string[];

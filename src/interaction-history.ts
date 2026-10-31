@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomInt, randomUUID } from "node:crypto";
 import { EraError, type Value } from "./model.js";
 import { coloredHtml, type ColoredText } from "./html.js";
 import type { SaveStore } from "./storage.js";
@@ -25,7 +25,7 @@ export interface Interaction {
   participants: HistoryCharacter[];
   before: InteractionContext;
   after: InteractionContext;
-  lines: { text: string; character: string | null; runs?: ColoredText[] }[];
+  lines: { text: string; character: string | null; runs?: ColoredText[]; thought?: boolean }[];
   choices: string[];
   truncated: boolean;
 }
@@ -39,6 +39,7 @@ export interface Encounter {
 }
 export interface CharacterHistory {
   character: HistoryCharacter;
+  player?: HistoryCharacter;
   entries: Interaction[];
   notice: string;
   limit: number;
@@ -113,6 +114,7 @@ function interaction(value: unknown): value is Interaction {
     && value.participants.some((person) => person.id === value.target) && context(value.before) && context(value.after)
     && isRecord(previous) && value.participants.every((person) => previous[person.id] === null || uuid(previous[person.id]))
     && Array.isArray(value.lines) && value.lines.every((line) => isRecord(line) && typeof line.text === "string" && (line.character === null || uuid(line.character))
+      && (line.thought === undefined || typeof line.thought === "boolean")
       && (line.runs === undefined || Array.isArray(line.runs) && line.runs.every((run) => isRecord(run) && typeof run.text === "string"
         && typeof run.color === "string" && /^(?:#[0-9a-f]{3}(?:[0-9a-f]{3})?|[a-z]{1,30})$/i.test(run.color))
         && line.runs.map((run) => run.text).join("") === line.text))
@@ -154,6 +156,8 @@ export class TwInteractionHistory {
   private notice = "";
   /** Who was in the player's room, and where it was, at the previous command prompt; unset after a start or load. */
   private presence: { location: Value; ids: Set<string> } | undefined;
+  /** Whether each frozen, awake character could see the player when time stopped. */
+  private frozenPresence: Map<string, boolean> | undefined;
   /** Interactions recorded since the previous command prompt. */
   private turn: Interaction[] = [];
   /** Each character's memory, by history id; saved with the checkpoint like the heads. */
@@ -177,6 +181,7 @@ export class TwInteractionHistory {
     this.scopes = [];
     this.notice = "";
     this.presence = undefined;
+    this.frozenPresence = undefined;
     this.turn = [];
     this.memories.clear();
     this.day = undefined;
@@ -325,7 +330,61 @@ export class TwInteractionHistory {
     }
     return notices;
   }
+  private observeTimePresence(): void {
+    const frozen = this.host.read("FLAG", [70n]) === 1n;
+    if (frozen && !this.frozenPresence) {
+      this.sync();
+      const master = this.host.read("MASTER"), location = this.host.read("CFLAG", [master, "現在位置"]);
+      this.frozenPresence = new Map();
+      for (let i = 0; i < this.ids.length; i++) {
+        if (BigInt(i) === master || this.asleep(i) || this.host.read("CFLAG", [BigInt(i), 344n]) !== 0n
+          || this.hasOtherNpc(i)) continue;
+        this.frozenPresence.set(this.ids[i]!, this.host.read("CFLAG", [BigInt(i), "現在位置"]) === location);
+      }
+    } else if (!frozen && this.frozenPresence) {
+      const previous = this.frozenPresence;
+      this.frozenPresence = undefined;
+      const player = this.player();
+      if (!player) return;
+      const location = this.host.read("CFLAG", [this.host.read("MASTER"), "現在位置"]);
+      for (const [id, wasHere] of previous) {
+        const index = this.indexOf(id);
+        if (index < 0 || this.asleep(index) || this.host.read("CFLAG", [BigInt(index), 344n]) !== 0n
+          || this.hasOtherNpc(index)) continue;
+        const isHere = this.host.read("CFLAG", [BigInt(index), "現在位置"]) === location;
+        if (wasHere === isHere) continue;
+        this.finish();
+        this.begin(index, { id: "reaction", label: "Reaction" });
+        if (this.active) {
+          const person = this.person(index)!;
+          this.active.event.source = "state";
+          this.active.event.before = this.state(index, true);
+          const notices = isHere ? [
+            `${person.name} notices that ${player.name} is suddenly here, without having seen them enter.`,
+            `${person.name} notices that ${player.name} appeared in the room in the blink of an eye.`,
+            `${person.name} notices that ${player.name} just appeared out of nowhere.`,
+          ] : [
+            `${person.name} notices that ${player.name} is suddenly gone, without having seen them leave.`,
+            `${person.name} notices that ${player.name} vanished from the room in the blink of an eye.`,
+            `${person.name} notices that ${player.name} just vanished into thin air.`,
+          ];
+          this.active.event.lines.push({ character: person.id,
+            text: notices[randomInt(notices.length)]! });
+          this.finish();
+        }
+      }
+    }
+  }
+  private hasOtherNpc(index: number): boolean {
+    const master = Number(this.host.read("MASTER"));
+    const location = this.host.read("CFLAG", [BigInt(index), "現在位置"]);
+    for (let i = 0; i < this.host.count(); i++) {
+      if (i !== index && i !== master && this.host.read("CFLAG", [BigInt(i), "現在位置"]) === location) return true;
+    }
+    return false;
+  }
   enter(name: string, args: readonly (Value | object | undefined)[]): Scope {
+    this.observeTimePresence();
     if (name === "SHOW_STATUS") this.finish();
     let reaction: string | undefined;
     const notices = name === "TIMESTOP_RESET" && typeof args[0] === "bigint" ? this.timeResumeNotices(args[0]) : [];
@@ -521,7 +580,9 @@ export class TwInteractionHistory {
    * previous one. The first prompt after a start or load only notes who is there.
    */
   encounters(): Encounter[] {
+    this.observeTimePresence();
     this.sync();
+    if (this.host.read("FLAG", [70n]) === 1n) return [];
     const master = this.host.read("MASTER");
     const location = this.host.read("CFLAG", [master, "現在位置"]);
     const here: HistoryCharacter[] = [];
@@ -683,11 +744,11 @@ export class TwInteractionHistory {
    * Adds a line to the conversation with a character (by history id), starting one if needed. With `heard`, everyone
    * else awake in her room gets that version of the line (naming her) in their own conversation, so they know of it too.
    */
-  chat(character: string, line: { runs: ColoredText[]; speaker: string | null }, heard?: ColoredText[]): void {
+  chat(character: string, line: { runs: ColoredText[]; speaker: string | null; thought?: boolean }, heard?: ColoredText[]): void {
     const target = this.indexOf(character);
     if (target < 0) throw new EraError("That character is no longer in the game");
     const added = this.addLine(target, line);
-    if (!added || !heard) return;
+    if (!added || !heard || line.thought) return;
     const master = this.host.read("MASTER"), location = this.host.read("CFLAG", [BigInt(target), "現在位置"]);
     const copies: { event: Interaction; line: Line }[] = [];
     for (let i = 0; i < this.ids.length; i++) {
@@ -697,7 +758,7 @@ export class TwInteractionHistory {
     }
     if (copies.length) this.heard.set(added.line, copies);
   }
-  private addLine(target: number, line: { runs: ColoredText[]; speaker: string | null }): { event: Interaction; line: Line } | undefined {
+  private addLine(target: number, line: { runs: ColoredText[]; speaker: string | null; thought?: boolean }): { event: Interaction; line: Line } | undefined {
     const character = this.ids[target]!;
     let event = this.conversations.get(character);
     if (!event) {
@@ -718,7 +779,7 @@ export class TwInteractionHistory {
       event.truncated = true;
       return undefined;
     }
-    const added: Line = { text, character: line.speaker, runs };
+    const added: Line = { text, character: line.speaker, runs, ...(line.thought ? { thought: true } : {}) };
     event.lines.push(added);
     event.after = this.state(target);
     this.writeChat(event);
@@ -773,6 +834,7 @@ export class TwInteractionHistory {
     this.store.write(checkpointFile(save), JSON.stringify({
       version: 1, digest: digest(bytes), head: this.head, ids: this.ids, heads: Object.fromEntries(this.heads),
       ...(this.memories.size ? { memories: Object.fromEntries(this.memories) } : {}),
+      ...(this.frozenPresence ? { frozenPresence: Object.fromEntries(this.frozenPresence) } : {}),
     }));
   }
   restore(save: string, bytes: Buffer): void {
@@ -786,7 +848,9 @@ export class TwInteractionHistory {
     if (!isRecord(data) || data.version !== 1 || typeof data.digest !== "string" || (data.head !== null && !uuid(data.head))
       || !Array.isArray(data.ids) || !data.ids.every(uuid) || new Set(data.ids).size !== data.ids.length
       || !uuidMap(data.heads) || (data.memories !== undefined && !(isRecord(data.memories)
-        && Object.entries(data.memories).every(([id, item]) => uuid(id) && memory(item)))))
+        && Object.entries(data.memories).every(([id, item]) => uuid(id) && memory(item))))
+      || (data.frozenPresence !== undefined && !(isRecord(data.frozenPresence)
+        && Object.entries(data.frozenPresence).every(([id, here]) => uuid(id) && typeof here === "boolean"))))
       throw new EraError(`Invalid interaction history checkpoint: ${file}`);
     if (data.digest !== digest(bytes) || data.ids.length !== this.host.count()) {
       this.notice = "This save was replaced outside the app. Its previous interaction history was not attached.";
@@ -796,6 +860,8 @@ export class TwInteractionHistory {
     this.ids = data.ids;
     this.heads = new Map(Object.entries(data.heads));
     this.memories = new Map(Object.entries((data.memories ?? {}) as Record<string, Memory>));
+    if (data.frozenPresence !== undefined)
+      this.frozenPresence = new Map(Object.entries(data.frozenPresence as Record<string, boolean>));
   }
   remove(save: string): void { this.store.remove(checkpointFile(save)); }
   selected(): CharacterHistory | undefined {
@@ -818,6 +884,8 @@ export class TwInteractionHistory {
       id = data.event.previous[selected.id]!;
     }
     const memory = this.memories.get(selected.id);
-    return { character: selected, entries, notice: this.notice, limit: Number.isFinite(limit) ? limit : entries.length, ...(memory ? { memory } : {}) };
+    const player = this.player();
+    return { character: selected, ...(player ? { player } : {}), entries, notice: this.notice, limit: Number.isFinite(limit) ? limit : entries.length, ...(memory ? { memory } : {}) };
   }
+  player(): HistoryCharacter | undefined { return this.person(Number(this.host.read("MASTER"))); }
 }

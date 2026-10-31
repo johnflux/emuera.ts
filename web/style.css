@@ -800,6 +800,11 @@ main:has(.screen.is-active .era-launch) { padding: 0; background: #000; }
 .era-llm-debug-raw { margin: 4px 0; }
 .era-llm-debug-raw > summary { cursor: pointer; color: #91adbd; }
 .era-llm-voice { margin: 6px 0 10px; padding: 4px 8px; border: 1px solid #3c9bb7; border-radius: 4px; }
+.era-llm-card:not([hidden]) { display: flex; flex-direction: column; }
+.era-llm-card > .era-llm-voice { flex: 1 0 auto; min-height: 32rem; display: flex; flex-direction: column; }
+.era-llm-voice-title { font: inherit; color: #b7dbea; margin: 0; }
+.era-llm-card .era-llm-voice-field { flex: 1 1 0; min-height: 0; }
+.era-llm-card .era-llm-voice-field textarea { flex: 1 1 0; min-height: 3em; height: 0; resize: none; }
 .era-llm-voice > summary { cursor: pointer; color: #b7dbea; }
 .era-llm-voice-field { display: flex; flex-direction: column; gap: 2px; margin: 8px 0; }
 .era-llm-voice-field textarea { resize: vertical; padding: 5px 8px; border: 1px solid #3c9bb7; border-radius: 4px; background: #06131c; color: #d7eff8; font: inherit; user-select: text; }
