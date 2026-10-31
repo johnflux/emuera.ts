@@ -978,7 +978,7 @@ test("character tools query and change real eraTW state, and their room actions 
     otherActivities: { kiss: "firmly refuses", sex: "firmly refuses" } },
     "a romantic mood of 300 raised this turn adds 300/25 to the consent value, and the hate mark gained above takes 30 (game patch 4)");
   const scene = tool("describe_scene").result as Record<string, any>;
-  assert.equal(scene.time, "07:00, 1st of Spring, Year 1");
+  assert.equal(scene.time, "07:00, Mon, 1st of Spring, Year 1");
   assert.equal(scene.me.name, "Reimu");
   assert.deepEqual(scene.me.feelingsTowardPlayer, { favor: 50, trust: 0, marks: { hate: 1 } });
   assert.equal(scene.player.isPlayer, true);
@@ -1012,7 +1012,38 @@ test("the scene describes the other people in the room from the character's poin
   for (let i = 0; snapshot.input?.kind === "wait" && i < 40; i++) snapshot = check(runtime.input(""));
   const scene = runtime.characterTool(history(snapshot).character.id, "describe_scene", {}).result as Record<string, any>;
   assert.equal(scene.me.name, "Reimu");
-  assert.deepEqual(scene.othersHere, ["Kirisame Marisa (Human, Magician, female, my affinity 200%)"]);
+  assert.deepEqual(scene.othersHere, ["Kirisame Marisa (Human, Magician, female, my feelings for them: close (affinity 200%), theirs for me: close (200%))"]);
+});
+
+test("what a character says and does in company goes into the others' histories too, under her name", {
+  skip: !existsSync(GAME_ROOT),
+}, async () => {
+  const game = await loadGame();
+  await applyHotpatches(game);
+  const runtime = new Runtime(demoGame(game), GAME_INSTRUCTION_LIMIT);
+  check(runtime.start());
+  check(runtime.input("8"));
+  let snapshot = check(runtime.input("3"));
+  for (let i = 0; snapshot.input?.kind === "wait" && i < 40; i++) snapshot = check(runtime.input(""));
+  const reimu = history(snapshot).character;
+  const records = (runtime as unknown as { interactionHistory: { ids: string[]; person(index: number): { id: string; name: string } | undefined } }).interactionHistory;
+  const marisa = records.ids.map((_, i) => records.person(i)).find((person) => person && /Marisa/.test(person.name))!;
+  assert.ok(marisa, "Marisa is in the game");
+  const text = (line: { runs?: { text: string }[]; text: string }) => line.runs ? line.runs.map((run) => run.text).join("") : line.text;
+  const newest = (who: typeof reimu) => runtime.encounterHistory(who).entries[0]!;
+  runtime.chatMessage(reimu.id, "Hello");
+  runtime.characterTool(reimu.id, "say", { text: "Marisa, behave." });
+  runtime.characterTool(reimu.id, "act", { text: "Reimu glares at Marisa." });
+  runtime.characterTool(reimu.id, "change_feelings", { favor: 5 });
+  runtime.characterTool(marisa.id, "say", { text: "「Who, me?」" });
+  assert.deepEqual(newest(reimu).lines.map(text).slice(0, 3), ['"Hello"', "「Marisa, behave.」", "Reimu glares at Marisa."]);
+  assert.equal(newest(reimu).lines.map(text)[4], "Marisa: 「Who, me?」", "Reimu hears Marisa");
+  assert.deepEqual(newest(marisa).lines.map(text), ["Reimu: 「Marisa, behave.」", "Reimu glares at Marisa.", "「Who, me?」"],
+    "Marisa hears and sees Reimu, but not the player's line to her or Reimu's feelings");
+  assert.equal(newest(marisa).target, marisa.id);
+  // Taking Reimu's lines back takes back what Marisa heard of them.
+  runtime.unchat(reimu.id, 3);
+  assert.deepEqual(newest(marisa).lines.map(text), ["Reimu: 「Marisa, behave.」", "「Who, me?」"]);
 });
 
 test("pushing the player down uses eraTW's forced pushdown when the room is redrawn", {
@@ -1423,6 +1454,79 @@ test("the demo's YuugenMagan scenario plays her first meeting, and her kojo give
   assert.deepEqual((runtime.characterTool(character.id, "describe_scene", {}).result as { voice: unknown }).voice, voice);
 });
 
+/** A character steps out of the player's room and back in, so the player runs into her again. */
+function stepsOutAndBack(runtime: Runtime, id: string) {
+  const settle = (snapshot: Snapshot) => {
+    for (let i = 0; snapshot.input?.kind === "wait" && i < 80; i++) snapshot = check(runtime.input(""));
+    return snapshot;
+  };
+  const scene = runtime.characterTool(id, "describe_scene", {}).result as { me: { location: string }; placesOnThisMap: string[] };
+  const room = scene.me.location;
+  runtime.characterTool(id, "move_to", { destination: scene.placesOnThisMap.find((place) => place !== room) });
+  const away = settle(check(runtime.refresh()));
+  runtime.characterTool(id, "move_to", { destination: room });
+  return { away, back: settle(check(runtime.refresh())), room };
+}
+
+test("running into a character is reported with the game's own intro, and the scene gives the day, weather and clothes", {
+  skip: !existsSync(GAME_ROOT),
+}, async () => {
+  const { runtime, snapshot } = await meetYuugenMagan("1");
+  const { character } = history(snapshot);
+  assert.equal(snapshot.encounters, undefined, "meeting her at the start is the baseline, not an encounter");
+  const scene = runtime.characterTool(character.id, "describe_scene", {}).result as Record<string, any>;
+  assert.match(scene.time, /^\d\d:\d\d, [A-Z][a-z]{2}, 1st of Spring, Year 1$/);
+  assert.equal(scene.specialDay, "New Year's Day");
+  assert.equal(typeof scene.weather, "string");
+  assert.ok(scene.me.wearing.includes("Kimono: Kimono"), scene.me.wearing);
+  assert.ok(scene.player.wearing.includes("Outer Garment: Jacket"), scene.player.wearing);
+  assert.ok(scene.player.wearing.every((item: string) => !/^Underwear/.test(item)), "covered underwear is not visible");
+  const { away, back } = stepsOutAndBack(runtime, character.id);
+  assert.equal(away.encounters, undefined, "leaving is not an encounter");
+  assert.equal(back.encounters?.length, 1);
+  const [encounter] = back.encounters!;
+  assert.equal(encounter!.character.id, character.id);
+  assert.equal(encounter!.arrived, "character");
+  assert.match(encounter!.intro ?? "", /happy New Year/, "her scripted New Year greeting is the intro");
+  // While the encounter is current her history and tools are open to the LLM, though she is not the selected character.
+  assert.equal(runtime.encounterHistory(encounter!.character).character.id, character.id);
+  assert.equal(check(runtime.refresh()).encounters, undefined, "redrawing the room is not another encounter");
+});
+
+test("an encounter prompts the character to react, or not, with only the tools that fit a chance meeting", async () => {
+  const { ENCOUNTER_TOOLS, encounterMessage, systemPrompt } = await import("../web/llm.js");
+  const character = { id: "x", name: "Reimu", number: "1" };
+  const scene = { me: { location: "Shrine Grounds" } };
+  const system = systemPrompt({ character, gameTitle: "eraTW", tools: true, scene, encounter: { character, arrived: "player" } });
+  assert.match(system, /has just run into people/);
+  assert.match(system, /may speak to anyone here, not only the player/);
+  assert.match(system, /feels about the player and anyone else here/);
+  assert.match(system, /Saying nothing is often right/);
+  assert.match(system, /naked or in underwear/);
+  assert.doesNotMatch(system, /player_attempts/);
+  assert.deepEqual(ENCOUNTER_TOOLS.map((tool: { function: { name: string } }) => tool.function.name),
+    ["get_character_info", "find_characters", "change_feelings", "change_mark", "change_mood", "say", "act", "move_to"]);
+  assert.match(encounterMessage({ character, encounter: { character, arrived: "player" }, scene }),
+    /^The player has just walked into Shrine Grounds, where Reimu is\.\nThe game showed nothing more\./);
+  assert.match(encounterMessage({ character, encounter: { character, arrived: "character", intro: "「Oh, you.」" }, scene }),
+    /^Reimu has just walked into Shrine Grounds, where the player is\.\nThe game just showed this .*\n「Oh, you\.」/);
+});
+
+test("a character's quoted speech loses the quotes around it, as the game adds its own 「」", async () => {
+  const { unquoteSpeech } = await import("../src/character-tools.js");
+  assert.equal(unquoteSpeech("「Thank you, and Happy New Year!」"), "Thank you, and Happy New Year!");
+  assert.equal(unquoteSpeech("「「Doubled.」」"), "Doubled.");
+  assert.equal(unquoteSpeech(" \"Hello.\" "), "Hello.");
+  assert.equal(unquoteSpeech("“Hi there.”"), "Hi there.");
+  assert.equal(unquoteSpeech("『We see.』"), "We see.");
+  // Quotes that are part of the line stay.
+  assert.equal(unquoteSpeech("「Hi.」 she says, 「Bye.」"), "「Hi.」 she says, 「Bye.」");
+  assert.equal(unquoteSpeech("\"Yes,\" she said, \"no.\""), "\"Yes,\" she said, \"no.\"");
+  assert.equal(unquoteSpeech("They call it \"Gensokyo\""), "They call it \"Gensokyo\"");
+  assert.equal(unquoteSpeech("「Nested 『quote』 inside.」"), "Nested 『quote』 inside.");
+  assert.equal(unquoteSpeech("'Tis the season'"), "'Tis the season'");
+});
+
 test("edited character voices are kept in a JSON file by character number", async () => {
   const directory = await mkdtemp(path.join(tmpdir(), "era-voices-"));
   try {
@@ -1443,6 +1547,88 @@ const OLLAMA = "http://127.0.0.1:11434";
 const OLLAMA_MODEL = "qwen-rp:latest";
 const ollama = await fetch(`${OLLAMA}/api/tags`, { signal: AbortSignal.timeout(1000) })
   .then(async (response) => ((await response.json()) as { models?: { name: string }[] }).models?.some((model) => model.name === OLLAMA_MODEL) ?? false, () => false);
+
+test("live: running into YuugenMagan lets her react through the LLM (Ollama qwen-rp)", {
+  skip: !existsSync(GAME_ROOT) ? "no game" : !ollama ? `Ollama with ${OLLAMA_MODEL} is not running on ${OLLAMA}` : false,
+  timeout: 300_000,
+}, async (t) => {
+  const { runtime, snapshot } = await meetYuugenMagan("1");
+  const { character } = history(snapshot);
+  const { back } = stepsOutAndBack(runtime, character.id);
+  const storage = new Map([["era-typescript.llm", JSON.stringify({ provider: "local", temperature: 0.8, providers: {
+    local: { endpoint: `${OLLAMA}/v1`, apiKey: "", model: OLLAMA_MODEL, tools: true } } })]]);
+  const realFetch = globalThis.fetch;
+  Object.assign(globalThis, { localStorage: { getItem: (key: string) => storage.get(key) ?? null, setItem() {} } });
+  globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => url === "/api/llm"
+    ? new Response(JSON.stringify(await proxyLlm(JSON.parse(String(init!.body))))) : realFetch(url, init)) as typeof fetch;
+  try {
+    const { runEncounters, encountersEnabled } = await import("../web/encounters.js");
+    const { debugLog } = await import("../web/llm.js");
+    assert.ok(encountersEnabled());
+    const statuses: string[] = [];
+    await runEncounters({
+      encounters: back.encounters!, gameId: "test", gameTitle: "eraTW", signal: new AbortController().signal,
+      onStatus: (text: string) => statuses.push(text),
+      game: {
+        history: async () => runtime.encounterHistory(back.encounters![0]!.character),
+        runTool: async (id: string, name: string, args: Record<string, unknown>) => runtime.characterTool(id, name, args),
+      },
+    });
+    assert.deepEqual(statuses, ["YuugenMagan noticed you…"]);
+    const log = debugLog(`test:${character.id}`);
+    assert.ok(log.length >= 1);
+    const sent = JSON.stringify(log[0].sent);
+    assert.match(sent, /YuugenMagan has just walked into/);
+    assert.match(sent, /New Year's Day/);
+    assert.match(sent, /happy New Year/);
+    t.diagnostic(log.map((entry: { received?: unknown }) => JSON.stringify(entry.received)).join("\n").slice(0, 3000));
+  } finally {
+    globalThis.fetch = realFetch;
+    delete (globalThis as { localStorage?: unknown }).localStorage;
+  }
+});
+
+test("live: running into Reimu with Marisa there, she may talk to Marisa too (Ollama qwen-rp)", {
+  skip: !existsSync(GAME_ROOT) ? "no game" : !ollama ? `Ollama with ${OLLAMA_MODEL} is not running on ${OLLAMA}` : false,
+  timeout: 300_000,
+}, async (t) => {
+  const game = await loadGame();
+  await applyHotpatches(game);
+  const runtime = new Runtime(demoGame(game), GAME_INSTRUCTION_LIMIT);
+  check(runtime.start());
+  check(runtime.input("8"));
+  let snapshot = check(runtime.input("3"));
+  for (let i = 0; snapshot.input?.kind === "wait" && i < 40; i++) snapshot = check(runtime.input(""));
+  const { character } = history(snapshot);
+  const { back } = stepsOutAndBack(runtime, character.id);
+  assert.equal(back.encounters?.[0]?.character.name, "Reimu");
+  const storage = new Map([["era-typescript.llm", JSON.stringify({ provider: "local", temperature: 0.8, providers: {
+    local: { endpoint: `${OLLAMA}/v1`, apiKey: "", model: OLLAMA_MODEL, tools: true } } })]]);
+  const realFetch = globalThis.fetch;
+  Object.assign(globalThis, { localStorage: { getItem: (key: string) => storage.get(key) ?? null, setItem() {} } });
+  globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => url === "/api/llm"
+    ? new Response(JSON.stringify(await proxyLlm(JSON.parse(String(init!.body))))) : realFetch(url, init)) as typeof fetch;
+  try {
+    const { runEncounters } = await import("../web/encounters.js");
+    const { debugLog } = await import("../web/llm.js");
+    await runEncounters({
+      encounters: back.encounters!, gameId: "test-marisa", gameTitle: "eraTW", signal: new AbortController().signal,
+      game: {
+        history: async () => runtime.encounterHistory(back.encounters![0]!.character),
+        runTool: async (id: string, name: string, args: Record<string, unknown>) => runtime.characterTool(id, name, args),
+      },
+    });
+    const log = debugLog(`test-marisa:${character.id}`);
+    const sent = JSON.stringify(log[0].sent);
+    assert.match(sent, /Also here: Kirisame Marisa/);
+    assert.match(sent, /may speak to anyone here, not only the player/);
+    assert.match(sent, /my feelings for them: close/);
+    t.diagnostic(log.map((entry: { received?: any }) => JSON.stringify(entry.received?.choices?.[0]?.message)).join("\n"));
+  } finally {
+    globalThis.fetch = realFetch;
+    delete (globalThis as { localStorage?: unknown }).localStorage;
+  }
+});
 
 test("live: the LLM speaks as YuugenMagan does, with her royal We (Ollama qwen-rp)", {
   skip: !existsSync(GAME_ROOT) ? "no game" : !ollama ? `Ollama with ${OLLAMA_MODEL} is not running on ${OLLAMA}` : false,

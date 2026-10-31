@@ -148,7 +148,7 @@ test("character history renders literal text and local controls without game inp
   assert.ok(all.every((element) => !["button", "img", "script"].includes(element.tag)));
   const text = all.map((element) => element.textContent).join("\n");
   assert.match(text, /Alice's interaction history \(1\)/);
-  assert.match(text, /Talk · Day 5, 10:00/);
+  assert.match(text, /Day 5, 10:00 · Talk/);
   assert.ok(text.includes(history.entries[0]!.lines[0]!.text));
   const metadata = all.find((node) => node.tag === "p" && node.className === "era-history-note")!;
   assert.equal(metadata.children.map((node) => node.textContent).join(""), "Living room · Alice");
@@ -217,9 +217,9 @@ test("character history renders literal text and local controls without game inp
     { ...history.entries[0], action: { label: "Oldest" }, after: context },
   ] });
   const entries = nodes(ordered).filter((node) => node.className === "era-history-entry");
-  assert.match(entries[0]!.children[0]!.textContent, /^Oldest/);
+  assert.match(entries[0]!.children[0]!.textContent, / · Oldest$/);
   assert.equal(entries[0]!.open, false);
-  assert.match(entries[1]!.children[0]!.textContent, /^Newest/);
+  assert.match(entries[1]!.children[0]!.textContent, / · Newest$/);
   assert.equal(entries[1]!.open, true);
   assert.ok(nodes(entries[1]!).some((node) => node.textContent === "Favor+3 · Trust-1 · Hate Mark 0→1"));
   assert.ok(!nodes(entries[0]!).some((node) => /Favor|Trust/.test(node.textContent)), "omit unchanged stats");

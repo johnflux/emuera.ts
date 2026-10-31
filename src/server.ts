@@ -13,6 +13,7 @@ import { GAME_INSTRUCTION_LIMIT, Runtime, type BackgroundLayer, type ClientState
 import { editableVoice, FileVoiceStore, MemoryVoiceStore, type VoiceStore } from "./character-voice.js";
 import { FileGlobalStore, FileSaveStore, gameSaveDirectory, MemoryGlobalStore, MemorySaveStore, type GlobalStore, type SaveStore } from "./storage.js";
 import { patchTitleImage } from "./render-patches.js";
+import type { CharacterHistory, Encounter } from "./interaction-history.js";
 import { LLM_REQUEST_BYTES, LlmRequestError, proxyLlm } from "./llm.js";
 
 type BrowserSnapshot = ReturnType<typeof patchTitleImage>;
@@ -230,6 +231,14 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
     }
     json(response, { session: id, step: session?.step ?? 0, ...patched });
   }
+  /** The character a chat or encounter request is about: the one whose history is on screen, or someone just run into. */
+  function chatCharacter(session: Session, character: string): { history?: CharacterHistory; encounter?: Encounter } {
+    const snapshot = session.history.at(-1)?.snapshot;
+    if (snapshot?.characterHistory?.character.id === character) return { history: snapshot.characterHistory };
+    const encounter = snapshot?.encounters?.find((item) => item.character.id === character);
+    if (encounter) return { encounter };
+    throw new HttpError(409, "The selected character has changed; reopen history on the current screen");
+  }
   const demo = demoGame(defaultEntry().game);
   let debugDemo: Game | undefined;
   /** Debug-mode games are loaded the first time a debug run asks for one. */
@@ -392,11 +401,9 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
         const session = sessions.get(data.session);
         if (!session) throw new HttpError(404, "Session expired or does not exist; start a new run");
         if (data.step !== session.step) throw new HttpError(409, "This run has moved on; reopen history on the current screen");
-        const history = session.history.at(-1)?.snapshot.characterHistory;
-        if (!history || history.character.id !== data.character)
-          throw new HttpError(409, "The selected character has changed; reopen history on the current screen");
+        const { history, encounter } = chatCharacter(session, data.character);
         session.used = Date.now();
-        json(response, session.runtime.fullCharacterHistory(history));
+        json(response, history ? session.runtime.fullCharacterHistory(history) : session.runtime.encounterHistory(encounter!.character));
         return;
       }
       if (request.method === "POST" && url.pathname === "/api/character-tool") {
@@ -408,9 +415,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
         const session = sessions.get(data.session);
         if (!session) throw new HttpError(404, "Session expired or does not exist; start a new run");
         if (data.step !== session.step) throw new HttpError(409, "This run has moved on; reopen history on the current screen");
-        const history = session.history.at(-1)?.snapshot.characterHistory;
-        if (!history || history.character.id !== data.character)
-          throw new HttpError(409, "The selected character has changed; reopen history on the current screen");
+        chatCharacter(session, data.character);
         session.used = Date.now();
         try { json(response, session.runtime.characterTool(data.character, data.name, (data.arguments ?? {}) as Record<string, unknown>)); }
         catch (error) {
@@ -453,9 +458,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
         const session = sessions.get(data.session);
         if (!session) throw new HttpError(404, "Session expired or does not exist; start a new run");
         if (data.step !== session.step) throw new HttpError(409, "This run has moved on; reopen history on the current screen");
-        const history = session.history.at(-1)?.snapshot.characterHistory;
-        if (!history || history.character.id !== data.character)
-          throw new HttpError(409, "The selected character has changed; reopen history on the current screen");
+        chatCharacter(session, data.character);
         session.used = Date.now();
         try {
           if (undo) session.runtime.unchat(data.character, data.lines as number);
@@ -557,7 +560,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
         return;
       }
       const pages: Record<string, string> = {
-        "/": "index.html", "/app.js": "app.js", "/translate.js": "translate.js", "/interaction-history.js": "interaction-history.js", "/llm.js": "llm.js", "/style.css": "style.css",
+        "/": "index.html", "/app.js": "app.js", "/translate.js": "translate.js", "/interaction-history.js": "interaction-history.js", "/llm.js": "llm.js", "/encounters.js": "encounters.js", "/style.css": "style.css",
         "/library.js": "library.js", "/library.css": "library.css",
         "/title/new-game.webp": "title/new-game.webp", "/title/load-game.webp": "title/load-game.webp",
         "/fonts/BIZUDGothic-Regular.ttf": "fonts/BIZUDGothic-Regular.ttf",

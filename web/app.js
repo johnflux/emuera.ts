@@ -2,6 +2,7 @@ import { createTranslation, protectMapTranslation } from "./translate.js";
 import { createLibrary } from "./library.js";
 import { setHistoryTranslator, setupCharacterHistory } from "./interaction-history.js";
 import { activeLlm, PROVIDERS, setupLlmConfig } from "./llm.js";
+import { encountersEnabled, runEncounters } from "./encounters.js";
 
 const terminal = document.querySelector("#terminal");
 const status = document.querySelector("#status");
@@ -71,6 +72,10 @@ function rememberRun() {
 }
 let input = null;
 let busy = false;
+/** Characters the player just ran into, from the last command screen, waiting for the LLM to give them a say. */
+let pendingEncounters = null;
+/** Cancels LLM encounter reactions still running when the player moves on. */
+let encounterRun = null;
 let timedWait = null;
 let expiring = false;
 let queuedSubmit = null;
@@ -1964,6 +1969,7 @@ async function renderSnapshot(snapshot, advanceScreen) {
   session = snapshot.session;
   input = snapshot.input;
   if (snapshot.step !== undefined) step = snapshot.step;
+  pendingEncounters = snapshot.encounters?.length ? { session, step, encounters: snapshot.encounters } : null;
   rememberRun();
   if (snapshot.error) {
     const { file, line: sourceLine, message: reason, trace = [], context } = snapshot.error;
@@ -2097,6 +2103,8 @@ function resetRun() {
   resetAudio();
   continueQueued = false;
   skipRequested = false;
+  encounterRun?.abort();
+  pendingEncounters = null;
   hideTooltip();
   busy = true;
   input = null;
@@ -2196,6 +2204,7 @@ async function submit(value, selectedChoice = null) {
   const numberEdits = numberFields.filter((field) => field.value !== field.defaultValue)
     .map((field) => String(160000 + Number(field.dataset.control) * 10000 + Number(field.value)));
   hideTooltip();
+  encounterRun?.abort();
   busy = true;
   const nameFields = [...terminal.querySelectorAll(".screen.is-active .era-player-name-input")];
   const names = nameFields.some((field) => field.value !== field.defaultValue) ? nameFields.map((field) => field.value) : null;
@@ -2244,7 +2253,34 @@ async function submit(value, selectedChoice = null) {
     } else if (input) command.focus({ preventScroll: true });
     if (skipRequested) void continueSkipping();
     runQueuedContinue();
+    void reactToEncounters();
   }
+}
+/**
+ * After the player runs into characters (and the game's own intro for them is shown), lets each one say or do something
+ * through the LLM, then redraws the room once to show it. Sending new input cancels it.
+ */
+async function reactToEncounters() {
+  const pendingRun = pendingEncounters;
+  pendingEncounters = null;
+  if (!pendingRun || pendingRun.session !== session || pendingRun.step !== step || busy || !input || !encountersEnabled()) return;
+  const controller = new AbortController();
+  encounterRun = controller;
+  const { session: id, step: at } = pendingRun;
+  let changed = false, shown = "";
+  try {
+    changed = await runEncounters({
+      encounters: pendingRun.encounters, gameId: runGame ?? runMode, gameTitle: gameTitle(runGame), signal: controller.signal,
+      game: {
+        history: (character) => api("/api/character-history", { session: id, step: at, character }),
+        runTool: (character, name, args) => api("/api/character-tool", { session: id, step: at, character, name, arguments: args }),
+      },
+      onStatus: (text) => { if (!controller.signal.aborted) message(shown = text); },
+    });
+  } finally { if (encounterRun === controller) encounterRun = null; }
+  if (controller.signal.aborted || session !== id || step !== at) return;
+  if (status.textContent === shown) message("");
+  if (changed) await refreshScreen();
 }
 /** Redraws the command screen after LLM character tools changed the game, showing what they did in the room. */
 async function refreshScreen() {

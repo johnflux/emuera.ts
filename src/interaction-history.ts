@@ -14,6 +14,7 @@ export interface InteractionContext {
   /** Mark levels by name (pain, pleasure, lewd, hate); absent in events recorded before marks were tracked. */
   marks?: Record<string, string>;
 }
+type Line = Interaction["lines"][number];
 export interface Interaction {
   id: string;
   parent: string | null;
@@ -27,6 +28,14 @@ export interface Interaction {
   lines: { text: string; character: string | null; runs?: ColoredText[] }[];
   choices: string[];
   truncated: boolean;
+}
+/** Someone the player has just run into: they are now in the same room, and were not at the previous command prompt. */
+export interface Encounter {
+  character: HistoryCharacter;
+  /** Who came in: the player walked into the room the character is in, or the character into the player's. */
+  arrived: "player" | "character";
+  /** What the game itself printed about meeting them since that prompt, such as a daily greeting, if anything. */
+  intro?: string;
 }
 export interface CharacterHistory {
   character: HistoryCharacter;
@@ -118,12 +127,19 @@ export class TwInteractionHistory {
   private heads = new Map<string, string>();
   private active: { event: Interaction; size: number } | undefined;
   /**
-   * The conversation being held through the chat window. It is written after every line so it shows at once, and is
-   * closed (becoming immutable like any other event) by the next input at the command prompt.
+   * The conversations being held through the chat window, by character: one with whoever spoke or heard something.
+   * Each is written after every line so it shows at once, and is closed (becoming immutable like any other event) by
+   * the next input at the command prompt.
    */
-  private conversation: Interaction | undefined;
+  private conversations = new Map<string, Interaction>();
+  /** The copies of a conversation line that others in the room heard, so taking the line back takes them back too. */
+  private heard = new WeakMap<Line, { event: Interaction; line: Line }[]>();
   private scopes: Scope[] = [];
   private notice = "";
+  /** Who was in the player's room, and where it was, at the previous command prompt; unset after a start or load. */
+  private presence: { location: Value; ids: Set<string> } | undefined;
+  /** Interactions recorded since the previous command prompt. */
+  private turn: Interaction[] = [];
   constructor(private store: SaveStore, private host: Host) {}
 
   reset(): void {
@@ -131,9 +147,11 @@ export class TwInteractionHistory {
     this.head = null;
     this.heads.clear();
     this.active = undefined;
-    this.conversation = undefined;
+    this.endChat();
     this.scopes = [];
     this.notice = "";
+    this.presence = undefined;
+    this.turn = [];
   }
   private sync(): void {
     while (this.ids.length < this.host.count()) this.ids.push(randomUUID());
@@ -308,12 +326,14 @@ export class TwInteractionHistory {
       }
     }
     const meeting = name === "AFFAIR_DISCLOSURE" || name === "SYOTAIMEN" || name === "FIRSTMEETTODAY";
-    const encounter = name === "KOJO_MESSAGE_SEND" && args[0] === "ENCOUNTER";
+    // EVENT 4 with 1: the player stopped on the way to talk to someone they passed (COMF400's "Stop").
+    const stopped = name === "KOJO_MESSAGE_SEND" && args[0] === "EVENT" && args[1] === 4n && args[3] === 1n;
+    const encounter = name === "KOJO_MESSAGE_SEND" && args[0] === "ENCOUNTER" || stopped;
     const owner = meeting || name === "COM_KOJO_CALL" ? args[0] : name === "KOJO_MESSAGE_SEND" ? args[2] : undefined;
     let completes = reaction;
     if ((meeting || encounter) && typeof owner === "bigint" && !this.active) {
       completes = this.begin(Number(owner), name === "FIRSTMEETTODAY" ? { id: "greeting", label: "Daily greeting" }
-        : { id: "encounter", label: name === "SYOTAIMEN" ? "First meeting" : "Meeting" });
+        : { id: "encounter", label: name === "SYOTAIMEN" ? "First meeting" : stopped ? "Stopped to talk" : "Meeting" });
     }
     if (name === "SYOTAIMEN" && this.active?.event.action.id === "encounter")
       this.active.event.action.label = "First meeting";
@@ -463,53 +483,119 @@ export class TwInteractionHistory {
     this.store.write(eventFile(event.id), JSON.stringify({ version: 1, event }));
     this.head = event.id;
     for (const person of event.participants) this.heads.set(person.id, event.id);
+    this.turn.push(event);
     this.active = undefined;
   }
+  /**
+   * Called at each command prompt: the awake characters who are now in the player's room but were not at the
+   * previous one. The first prompt after a start or load only notes who is there.
+   */
+  encounters(): Encounter[] {
+    this.sync();
+    const master = this.host.read("MASTER");
+    const location = this.host.read("CFLAG", [master, "現在位置"]);
+    const here: HistoryCharacter[] = [];
+    for (let i = 0; i < this.ids.length; i++) {
+      if (BigInt(i) === master || this.host.read("CFLAG", [BigInt(i), "現在位置"]) !== location || this.asleep(i)) continue;
+      const person = this.person(i);
+      if (person) here.push(person);
+    }
+    const previous = this.presence, turn = this.turn;
+    this.presence = { location, ids: new Set(here.map((person) => person.id)) };
+    this.turn = [];
+    if (!previous) return [];
+    const arrived = previous.location === location ? "character" : "player";
+    return here.filter((person) => !previous.ids.has(person.id)).map((character) => {
+      const intro = turn.filter((event) => event.source === "script" && event.participants.some((person) => person.id === character.id))
+        .map((event) => event.lines.map((line) => line.text).join("").trim()).filter(Boolean).join("\n").slice(0, 2000);
+      return { character, arrived, ...(intro ? { intro } : {}) };
+    });
+  }
+  private asleep(index: number): boolean {
+    try { return this.host.read("CFLAG", [BigInt(index), "睡眠"]) !== 0n; }
+    catch (error) { if (error instanceof EraError) return false; throw error; }
+  }
   cancel(): void { this.active = undefined; }
-  /** Adds a line to the conversation with a character (by history id), starting one if needed. */
-  chat(character: string, line: { runs: ColoredText[]; speaker: string | null }): void {
+  /**
+   * Adds a line to the conversation with a character (by history id), starting one if needed. With `heard`, everyone
+   * else awake in her room gets that version of the line (naming her) in their own conversation, so they know of it too.
+   */
+  chat(character: string, line: { runs: ColoredText[]; speaker: string | null }, heard?: ColoredText[]): void {
     const target = this.indexOf(character);
     if (target < 0) throw new EraError("That character is no longer in the game");
-    if (this.conversation?.target !== character) {
-      this.endChat();
+    const added = this.addLine(target, line);
+    if (!added || !heard) return;
+    const master = this.host.read("MASTER"), location = this.host.read("CFLAG", [BigInt(target), "現在位置"]);
+    const copies: { event: Interaction; line: Line }[] = [];
+    for (let i = 0; i < this.ids.length; i++) {
+      if (i === target || BigInt(i) === master || this.asleep(i) || this.host.read("CFLAG", [BigInt(i), "現在位置"]) !== location || !this.person(i)) continue;
+      const copy = this.addLine(i, { runs: heard, speaker: line.speaker });
+      if (copy) copies.push(copy);
+    }
+    if (copies.length) this.heard.set(added.line, copies);
+  }
+  private addLine(target: number, line: { runs: ColoredText[]; speaker: string | null }): { event: Interaction; line: Line } | undefined {
+    const character = this.ids[target]!;
+    let event = this.conversations.get(character);
+    if (!event) {
       const master = Number(this.host.read("MASTER"));
       const player = this.person(master), selected = this.person(target);
       if (!player || !selected || target === master) throw new EraError("Only the player can talk with this character");
       const before = this.state(target);
-      this.conversation = { id: randomUUID(), parent: this.head, source: "script", target: character,
+      event = { id: randomUUID(), parent: this.head, source: "script", target: character,
         previous: { [player.id]: this.heads.get(player.id) ?? null, [selected.id]: this.heads.get(selected.id) ?? null },
         action: { id: "chat", label: "Conversation" }, participants: [player, selected], before, after: before,
         lines: [], choices: [], truncated: false };
+      this.conversations.set(character, event);
     }
-    const event = this.conversation;
     const runs = line.runs.filter((run) => run.text);
     const text = runs.map((run) => run.text).join("");
-    if (!text) return;
+    if (!text) return undefined;
     if (event.lines.reduce((size, item) => size + item.text.length, 0) + text.length > TEXT_LIMIT) {
       event.truncated = true;
-      return;
+      return undefined;
     }
-    event.lines.push({ text, character: line.speaker, runs });
+    const added: Line = { text, character: line.speaker, runs };
+    event.lines.push(added);
     event.after = this.state(target);
-    this.writeChat();
+    this.writeChat(event);
+    return { event, line: added };
   }
-  /** Removes the last `count` lines of the newest conversation (for trying a message again); an emptied one is dropped. */
+  /**
+   * Removes the last `count` lines of the conversation with a character (for trying a message again), and the copies
+   * others in the room heard; an emptied conversation is dropped.
+   */
   unchat(character: string, count: number): void {
-    const event = this.conversation?.target === character ? this.conversation : undefined;
+    const event = this.conversations.get(character);
     if (!event) throw new EraError("There is no conversation to take back");
-    event.lines.splice(Math.max(0, event.lines.length - count));
-    if (event.lines.length) return this.writeChat();
-    // Nothing is left: the history goes back to where it was before the conversation started.
-    this.conversation = undefined;
-    this.head = event.parent;
-    for (const [id, previous] of Object.entries(event.previous))
-      if (previous) this.heads.set(id, previous); else this.heads.delete(id);
+    const removed = event.lines.splice(Math.max(0, event.lines.length - count));
+    const changed = new Set([event]);
+    for (const line of removed) {
+      for (const copy of this.heard.get(line) ?? []) {
+        const at = copy.event.lines.indexOf(copy.line);
+        if (at >= 0) copy.event.lines.splice(at, 1);
+        changed.add(copy.event);
+      }
+      this.heard.delete(line);
+    }
+    for (const item of changed) {
+      if (item.lines.length) { this.writeChat(item); continue; }
+      // Nothing is left: the history goes back to where it was before the conversation started.
+      this.conversations.delete(item.target);
+      if (this.head === item.id) this.head = item.parent;
+      for (const [id, previous] of Object.entries(item.previous)) {
+        if (this.heads.get(id) !== item.id) continue;
+        if (previous) this.heads.set(id, previous); else this.heads.delete(id);
+      }
+    }
   }
-  endChat(): void { this.conversation = undefined; }
+  endChat(): void {
+    this.conversations.clear();
+    this.heard = new WeakMap();
+  }
   /** Whether a conversation through the chat window is open (no command has been entered since it started). */
-  get chatting(): boolean { return this.conversation !== undefined; }
-  private writeChat(): void {
-    const event = this.conversation!;
+  get chatting(): boolean { return this.conversations.size > 0; }
+  private writeChat(event: Interaction): void {
     this.store.write(eventFile(event.id), JSON.stringify({ version: 1, event }));
     this.head = event.id;
     for (const person of event.participants) this.heads.set(person.id, event.id);

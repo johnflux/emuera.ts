@@ -494,6 +494,30 @@ undone). The
 is never displayed. The page's CSP only allows same-origin requests, so the
 browser calls `POST /api/llm`, which forwards `chat/completions` or `models`
 to the configured base URL (`src/llm.ts`).
+
+**Encounters.** At each command prompt `TwInteractionHistory.encounters()` compares the awake characters in the
+player's room with the previous prompt's; anyone new is an encounter (`arrived: "player"` when the player moved,
+otherwise `"character"`), with the text of this turn's script events that include her (her kojo greeting, the daily
+greeting, EVENT 4's "Stopped to talk") as `intro`. Starting or loading a game only sets the baseline. The snapshot
+carries them as `encounters`, and while they are current the character endpoints accept those characters, not
+only the selected one. With **Characters you run into may speak up** on (LLM settings, on by default, needs tools),
+`web/encounters.js` asks the LLM for each in turn after the screen is shown, using the encounter flow in
+`systemPrompt` (the intro already happened, so add only something new; hate or anger → cold or leave; the player's
+nakedness, odd outfit, odd hour or intrusion → react; a special day or weather → a fitting greeting; otherwise by
+relationship, often nothing) and `ENCOUNTER_TOOLS` (lookups, feelings, `say`/`act`, `move_to`), with one `say`
+at most. She may speak to anyone in the room: `othersHere` gives each person's mutual affinity as a word and
+whether they are the player's lover, and later characters hear what earlier ones said through their own history (below). The scene for every
+prompt includes the weekday, the special day (`FESTIVAL_TR`), the weather (`GET_WEATHER_TR`) and, for her and
+for the player in the same room, what is visibly worn (`GET_CURRENT_CLOTHES`, with covered underwear left out).
+Exchanges go into that character's LLM debug log; if anything changed, the room is redrawn once at the end.
+Sending input cancels a run in progress.
+
+**Overhearing.** What a character says (`say`), does (`act`) or where she goes (`move_to`) also goes into the
+history of everyone else awake in her room, prefixed with her name (`Reimu: 「…」`, `Reimu leaves for the Shrine.`),
+so the others can react to it. Each character has her own open conversation event until the next command; taking a
+line back (Edit/Retry) takes back the copies too. `historyContext` tells the model that "Name: …" lines are what
+someone else said or did.
+
 The adapter records first meetings, daily greetings,
 room encounters, conversation (300), serving tea (301), apologizing (303),
 kissing (312), pushing down (350), confessing (352), and the custom **Play a game** action. Games are captured when an `ADD_GAME<n>`

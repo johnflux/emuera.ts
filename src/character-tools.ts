@@ -35,6 +35,33 @@ const MARKS = { pain: 0, pleasure: 1, lewd: 2, hate: 3 } as const;
 const OLD_HATE = 4, MARK_MAX = 3, FAVOR_MAX = 1_000_000, TRUST_MAX = 999_999;
 const LOVE = [3, 7, 8, 184];
 const FIND_LIMIT = 25;
+const QUOTES: [string, string][] = [["「", "」"], ["『", "』"], ["“", "”"], ["\"", "\""]];
+/** Whether the line is one quotation: its first character opens a quote that its last one closes. */
+function wholeQuote(line: string, open: string, close: string): boolean {
+  if (line.length < 2 || !line.startsWith(open) || !line.endsWith(close)) return false;
+  const inner = line.slice(1, -1);
+  if (open === close) return !inner.includes(close);
+  let depth = 0;
+  for (const char of inner) {
+    if (char === open) depth++;
+    else if (char === close && --depth < 0) return false;
+  }
+  return depth === 0;
+}
+/**
+ * Speech without quotation marks around the whole of it; the game adds its own 「」, so a model that quotes its line
+ * would otherwise show 「「...」」. Quotes within the line, or around only part of it, stay.
+ */
+export function unquoteSpeech(text: string): string {
+  let line = text.trim();
+  while (QUOTES.some(([open, close]) => wholeQuote(line, open, close))) line = line.slice(1, -1).trim();
+  return line;
+}
+/** RELATION as a feeling, so the model need not guess what a percentage means (100% is eraTW's neutral). */
+const feeling = (affinity: number) => affinity < 60 ? "dislike" : affinity < 90 ? "cool"
+  : affinity <= 110 ? "neutral" : affinity <= 150 ? "fond" : "close";
+/** GET_CURRENT_CLOTHES fills RESULTS:1 onwards, one line per worn part (22 parts at most). */
+const CLOTHING_LINES = 24n;
 /** CFLAG 既成事実 bits: 1 has agreed to sex before, 2 kisses are always welcome. */
 const AGREED_SEX = 1, AGREED_KISS = 2;
 const KISS = 312n;
@@ -181,14 +208,17 @@ class CharacterTools {
   /** "value/max" for a BASE gauge. */
   private gauge(i: number, base: string): string { return `${this.num("BASE", BigInt(i), base)}/${this.num("MAXBASE", BigInt(i), base)}`; }
   /** One line per character: who they are and, from this character's point of view, how they relate. */
-  private line(i: number): string {
+  /** One line about a character; `here` describes someone in the room, whose relationship is given even when neutral. */
+  private line(i: number, here = false): string {
     const tags = [this.race(i), this.sex(i), i === this.self ? "me" : "", i === this.master ? "the player" : "", this.asleep(i) ? "asleep" : ""];
     if (i === this.master) {
       const { favor, trust, love, marks } = this.towardPlayer(this.self) as { favor: number; trust: number; love?: string[]; marks?: Record<string, number> };
       tags.push(`my favor ${favor}`, `my trust ${trust}`, ...(love ?? []), ...Object.entries(marks ?? {}).map(([mark, level]) => `my ${mark} mark ${level}`));
     } else if (i !== this.self) {
-      const affinity = this.affinity(this.self, i);
-      if (affinity !== 100) tags.push(`my affinity ${affinity}%`);
+      const mine = this.affinity(this.self, i), theirs = this.affinity(i, this.self);
+      if (here || mine !== 100 || theirs !== 100)
+        tags.push(`my feelings for them: ${feeling(mine)} (affinity ${mine}%)`, `theirs for me: ${feeling(theirs)} (${theirs}%)`);
+      if (here) tags.push(...this.loveTalents(i).map((love) => `the player's ${love.toLowerCase()}`));
     }
     return `${this.str("NAME", BigInt(i))} (${tags.filter(Boolean).join(", ")})`;
   }
@@ -219,16 +249,39 @@ class CharacterTools {
   }
   /** What the character can see without asking: the time, the room, who is here, and where they could go. */
   scene(): ToolOutcome {
-    const time = this.num("TIME"), date = this.call("PRINT_DATE_F", this.host.read("DAY"), 1n);
+    const time = this.num("TIME"), date = this.call("PRINT_DATE_F", this.host.read("DAY"), 1n), weekday = this.call("GET_DAY_TR");
+    const weather = this.call("GET_WEATHER_TR"), specialDay = this.call("FESTIVAL_TR");
     const present: string[] = [];
-    for (let i = 0; i < this.host.count(); i++) if (i !== this.self && i !== this.master && this.together(i)) present.push(this.line(i));
+    for (let i = 0; i < this.host.count(); i++) if (i !== this.self && i !== this.master && this.together(i)) present.push(this.line(i, true));
+    const dressed = (i: number) => { const wearing = this.wearing(i); return wearing ? { wearing } : {}; };
     return { result: {
-      time: `${String(Math.floor(time / 60)).padStart(2, "0")}:${String(time % 60).padStart(2, "0")}${date ? `, ${date}` : ""}`,
-      me: this.info({}).result, player: this.info({ character: "player" }).result,
+      time: [`${String(Math.floor(time / 60)).padStart(2, "0")}:${String(time % 60).padStart(2, "0")}`, weekday, date].filter(Boolean).join(", "),
+      ...(specialDay ? { specialDay } : {}), ...(weather ? { weather } : {}),
+      me: { ...this.info({}).result, ...dressed(this.self) },
+      player: { ...this.info({ character: "player" }).result, ...(this.together(this.master) ? dressed(this.master) : {}) },
       othersHere: present.length ? present : "nobody else", placesOnThisMap: [...new Set(this.places().map((place) => place.name))],
       ...(this.inScene() ? { intimateScene: this.intimate() } : {}),
       ...this.voice(),
     }, changed: false };
+  }
+  /**
+   * What a character visibly wears, as the game's clothing screen lists it ("Outer Garment: Jacket"); underwear only
+   * where nothing covers it, and "nothing (naked)" when there is nothing at all.
+   */
+  private wearing(i: number): string[] | undefined {
+    if (!this.host.has("GET_CURRENT_CLOTHES")) return undefined;
+    for (let n = 1n; n <= CLOTHING_LINES; n++) this.host.write("RESULTS", [n], "");
+    this.host.run("GET_CURRENT_CLOTHES", [BigInt(i)]);
+    const worn: [string, string][] = [];
+    for (let n = 1n; n <= CLOTHING_LINES; n++) {
+      const match = /^[\s　]*(.+?)[\s　]*\[(.*)\][\s　]*$/.exec(String(this.host.read("RESULTS", [n])));
+      if (match && match[2]!.trim() && !/^(?:None|？+)$/.test(match[2]!.trim())) worn.push([match[1]!, match[2]!.trim()]);
+    }
+    const covered = (parts: RegExp) => worn.some(([part]) => parts.test(part));
+    const top = covered(/^(?:Upper Garment|Outer Garment|Kimono|Full-body)$/), bottom = covered(/^(?:Skirt|Lower Garment|Pants|Kimono|Full-body)$/);
+    const visible = worn.filter(([part]) => !(part === "Underwear(top)" && top) && !(part === "Underwear(bot)" && bottom))
+      .map(([part, item]) => `${part}: ${item}`);
+    return visible.length ? visible : ["nothing (naked)"];
   }
   /** The character's voice from her kojo, if it has anything to say about it. */
   private voice(): { voice?: CharacterVoice } {
@@ -343,7 +396,7 @@ class CharacterTools {
     return { result, changed: true };
   }
   say(args: Record<string, unknown>): ToolOutcome {
-    const line = typeof args.text === "string" ? args.text.replace(/\s+/g, " ").trim().slice(0, 500) : "";
+    const line = typeof args.text === "string" ? unquoteSpeech(args.text.replace(/\s+/g, " ")).slice(0, 500) : "";
     if (!line) throw new ToolError("text is required");
     if (this.asleep(this.self)) throw new ToolError("You are asleep");
     if (!this.together(this.self)) return { result: { heard: false, note: "The player is not in the same room, so nobody heard you" }, changed: false };

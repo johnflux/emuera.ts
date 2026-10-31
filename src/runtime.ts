@@ -20,8 +20,8 @@ import { readNativeSave, writeNativeSave, type NativeSave, type SavedContainers,
 import { fixHistoryHtml, SHARP_METHODS, supportedSharpCall, translateHistoryDate } from "./plugin-compat.js";
 import { regexCharacterClasses, regexGroupOrder, replaceRegex } from "./regex.js";
 import { decodePicture, encodePicture, InvalidGraphicsImage, pictureColor, resourceColor } from "./graphics.js";
-import { TwInteractionHistory, type CharacterHistory } from "./interaction-history.js";
-import { runCharacterTool, toolCallSummary, type CharacterAction } from "./character-tools.js";
+import { TwInteractionHistory, type CharacterHistory, type Encounter, type HistoryCharacter } from "./interaction-history.js";
+import { runCharacterTool, toolCallSummary, unquoteSpeech, type CharacterAction } from "./character-tools.js";
 import { characterVoice, MemoryVoiceStore, type CharacterVoice, type EditableVoice, type VoiceStore } from "./character-voice.js";
 
 export interface Style { color: string; background: string; alignment: "left" | "center" | "right"; fontStyle: number; font?: string }
@@ -125,6 +125,8 @@ export interface Snapshot {
   /** The TARGET character index, so the client can mark that character's picture. */
   target: number;
   characterHistory?: CharacterHistory;
+  /** At a command prompt: characters the player has just run into (eraTW), for the LLM to have them speak up. */
+  encounters?: Encounter[];
   /** Debug mode: text for Emuera's debug window since the previous snapshot; `debugClear` (DEBUGCLEAR) empties it first. */
   debug?: string;
   debugClear?: boolean;
@@ -447,6 +449,8 @@ export class Runtime {
   private trainRequest: InputRequest | undefined;
   /** The result of continuing a click-to-continue wait ahead of the click; see prefetch(). */
   private ahead: { snapshot: Snapshot } | { error: unknown } | null = null;
+  /** Who the player ran into, found at the command prompt and passed on with its snapshot. */
+  private encounters: Encounter[] | undefined;
   private stainDefault: bigint[];
   private maxShopItem: number;
   private printCPerLine: number;
@@ -837,6 +841,7 @@ export class Runtime {
   private *commandInput(): Generator<Yield, bigint | undefined, string> {
     const request: InputRequest = { kind: "integer" };
     this.trainRequest = request;
+    this.encounters = this.interactionHistory?.encounters();
     let value: string;
     try { value = yield { input: request }; }
     finally { this.trainRequest = undefined; }
@@ -906,7 +911,8 @@ export class Runtime {
       voice: (intimate) => this.characterVoice(self, intimate),
     }, self, character, name, args);
     if (outcome.action) this.characterActions.push({ ...outcome.action, character } as CharacterAction);
-    if (name !== "describe_scene") history.chat(character, { speaker: character, runs: this.toolLine(self, name, args, outcome.result) });
+    if (name !== "describe_scene")
+      history.chat(character, { speaker: character, runs: this.toolLine(self, name, args, outcome.result) }, this.heardLine(self, name, args, outcome.result));
     return { result: outcome.result, changed: outcome.changed };
   }
   /**
@@ -991,11 +997,25 @@ export class Runtime {
   /** How a character's tool call reads in the interaction history: speech in 「」, actions as narration, other calls summarised. */
   private toolLine(index: number, name: string, args: Record<string, unknown>, result: Record<string, unknown>): ColoredText[] {
     const said = typeof args.text === "string" ? args.text.trim() : "";
-    if (!result.error && said && name === "say") return [{ text: `「${said}」`, color: this.kojoColor(index) }];
+    if (!result.error && said && name === "say") return [{ text: `「${unquoteSpeech(said)}」`, color: this.kojoColor(index) }];
     if (!result.error && said && name === "act") return [{ text: said, color: this.display.foreground }];
     const tones = { call: TOOL_CALL, good: TOOL_GOOD, bad: TOOL_BAD, uneasy: TOOL_UNEASY };
     const read = (variable: string) => String(this.globals.get(variable, [literal(BigInt(index))], this.context(this.globals)));
     return toolCallSummary(read("CALLNAME") || read("NAME"), name, args, result).map((part) => ({ text: part.text, color: part.tone ? tones[part.tone] : TOOL_COLOR }));
+  }
+  /**
+   * How what a character said or did reads to others in the room, prefixed with her name so they can tell who it was;
+   * undefined for calls nobody else would notice (looking things up, her own feelings).
+   */
+  private heardLine(index: number, name: string, args: Record<string, unknown>, result: Record<string, unknown>): ColoredText[] | undefined {
+    if (result.error) return undefined;
+    const said = typeof args.text === "string" ? args.text.trim() : "";
+    const who = String(this.globals.get("CALLNAME", [literal(BigInt(index))], this.context(this.globals))) || "Someone";
+    const plain = (text: string): ColoredText => ({ text, color: this.display.foreground });
+    if (name === "say" && said) return [plain(`${who}: `), { text: `「${unquoteSpeech(said)}」`, color: this.kojoColor(index) }];
+    if (name === "act" && said) return [plain(said.toLowerCase().startsWith(who.toLowerCase()) ? said : `${who}: ${said}`)];
+    if (name === "move_to" && typeof result.to === "string") return [plain(`${who} leaves for ${result.to}.`)];
+    return undefined;
   }
   /** Records something the player said or did to a character in the chat window: speech in quotes, *actions* as written. */
   chatMessage(character: string, message: string): void {
@@ -1542,6 +1562,11 @@ export class Runtime {
   }
   /** Whether a click-to-continue has been run ahead and is waiting for the player. */
   get prefetched(): boolean { return this.ahead !== null; }
+  /** The whole history with a character the player has just run into, as it stands now. */
+  encounterHistory(character: HistoryCharacter): CharacterHistory {
+    if (!this.interactionHistory) throw new EraError("Interaction history is unavailable for this game");
+    return this.interactionHistory.current(character);
+  }
   fullCharacterHistory(history: CharacterHistory): CharacterHistory {
     if (!this.interactionHistory) throw new EraError("Interaction history is unavailable for this game");
     // An open conversation only adds to what is on screen (any input ends it), so it is shown as it stands now.
@@ -3010,6 +3035,8 @@ export class Runtime {
     const history = snapshot.output.some((item) => item.type === "html" && item.text === "<div class='era-interaction-history'></div>")
       ? this.interactionHistory?.selected() : undefined;
     if (history) snapshot.characterHistory = history;
+    if (this.encounters?.length && snapshot.input && snapshot.input === this.trainRequest) snapshot.encounters = this.encounters;
+    this.encounters = undefined;
     if (this.debugClear) snapshot.debugClear = true;
     if (this.debugText) snapshot.debug = this.debugText;
     this.debugText = "";

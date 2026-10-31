@@ -75,6 +75,9 @@ export const CHAT_TOOLS = tools("get_character_info", "find_characters", "change
 /** During one: consent was already given, and leaving or starting over goes through end_scene. */
 export const SCENE_TOOLS = tools("get_character_info", "find_characters", "change_feelings", "change_mark", "change_mood",
   "say", "act", "scene_action", "end_scene");
+/** When the player and a character run into each other: she may react, but nothing is asked of her yet. */
+export const ENCOUNTER_TOOLS = tools("get_character_info", "find_characters", "change_feelings", "change_mark", "change_mood",
+  "say", "act", "move_to");
 /** The toolset for the moment described by describe_scene. */
 export const toolsFor = (scene) => scene?.intimateScene ? SCENE_TOOLS : CHAT_TOOLS;
 
@@ -86,7 +89,7 @@ export const PROVIDERS = {
   local: { label: "Local (OpenAI-compatible)", endpoint: "http://127.0.0.1:11434/v1", model: "", jsonMode: false, tools: true,
     hint: "Any OpenAI-compatible server. Ollama: http://127.0.0.1:11434/v1 · LM Studio: http://127.0.0.1:1234/v1 · llama.cpp: http://127.0.0.1:8080/v1. The key is usually not needed." },
 };
-const DEFAULTS = { provider: "openai", temperature: 0.8, historyChars: 24000, instructions: "" };
+const DEFAULTS = { provider: "openai", temperature: 0.8, historyChars: 24000, instructions: "", encounters: true };
 
 export function loadLlmConfig() {
   let saved = {};
@@ -142,9 +145,38 @@ export function debugLog(key) {
   return debugLogs.get(key);
 }
 
-export function systemPrompt({ character, gameTitle, instructions, tools = false, scene }) {
+export function systemPrompt({ character, gameTitle, instructions, tools = false, scene, encounter }) {
   const name = character.name;
-  const reply = tools && scene?.intimateScene ? [
+  const reply = tools && encounter ? [
+    `${name} has just run into people (the latest message says who walked in where). Nobody has said anything to `
+      + `${name} yet: this is ${name}'s chance to react, or not. The current scene below gives the time, weekday and `
+      + `date (and a special day such as a festival, if it is one), the weather, where you are, what ${name} and the `
+      + `player are wearing, and in othersHere everyone else in the room with how ${name} and they feel about each other.`,
+    `${name} may speak to anyone here, not only the player: greet a friend, needle a rival, or say something to the `
+      + `room. Address whoever ${name} is talking to by name. Everyone in the room hears what ${name} says.`,
+    `Talk and act only through tool calls: call say for what ${name} says out loud and act for what ${name} physically `
+      + `does. Any other text is ignored. Keep it to a moment: at most one short say and one act. Saying nothing is `
+      + `often right; then reply with just DONE and call no tools. When ${name} has finished, reply with just DONE.`,
+    `Do not invent people, places or facts about them; look up anyone or anything not in the scene first.`,
+    `Decide what to do by following the first rule that matches:`,
+    `1. The game just showed ${name} greeting the player or reacting (the latest message quotes it): that already `
+      + `happened, so do not repeat or rephrase it. Add something only if there is something new worth reacting to `
+      + `(rule 3 or 4); otherwise DONE.`,
+    `2. ${name} hates the player (a hate mark) or is angry with the player: a cold remark, a glare or pointedly `
+      + `ignoring the player (DONE), as fits ${name}'s personality; if ${name} cannot stand being near the player, `
+      + `move_to somewhere else.`,
+    `3. Something about the player stands out: naked or in underwear, dressed oddly for the place, weather or occasion, `
+      + `showing up at an odd hour, or walking into ${name}'s bath, bedroom or other private place. React as ${name} `
+      + `would (embarrassed, angry, amused, teasing, indifferent...), and change_feelings if it is offensive or pleasing.`,
+    `4. It is a special day, or the weather or time of day is notable (a storm, late at night, early morning): a `
+      + `fitting greeting or remark, if ${name} is the kind to make one and knows the player at least a little.`,
+    `5. Otherwise it depends on relationships and ${name}'s mood and personality, with the player and with each other `
+      + `person here: a lover greets warmly, a friend says hello, an acquaintance may nod or say a word, someone ${name} `
+      + `dislikes gets a cool look or a jab, and a stranger, someone shy or someone busy usually gets nothing (DONE). `
+      + `Something ${name} wants to tell or ask the player, from your recent interactions, is fine. If someone just `
+      + `spoke to ${name} (the latest message says), ${name} may answer them.`,
+    `Call change_feelings, change_mood or change_mark only when something meaningful happened.`,
+  ] : tools && scene?.intimateScene ? [
     `${name} and the player are in the middle of an intimate scene; intimateScene in the current scene below gives its `
       + `live state: both bodies' stamina and energy, the player's vigor, ${name}'s arousal levels and orgasms, what is `
       + `touching what, the last command, and the commands available now.`,
@@ -206,7 +238,11 @@ export function systemPrompt({ character, gameTitle, instructions, tools = false
   ];
   return [
     `You are role-playing as ${name}, a character in the text adventure game "${gameTitle}".`,
-    `The player character ("you" in the history) is talking to ${name} directly. Stay in character as ${name}: react `
+    encounter ? `The player character ("you" in the history) and ${name} have just met, maybe with others around. Stay `
+      + `in character as ${name}: react in a way consistent with ${name}'s personality, the current situation, and how `
+      + `${name} feels about the player and anyone else here given the interaction history (including favor and trust). `
+      + `Reply in English.`
+      : `The player character ("you" in the history) is talking to ${name} directly. Stay in character as ${name}: react `
       + `to what the player says and does in a way consistent with ${name}'s personality, the current situation, and `
       + `how ${name} feels about the player given the interaction history (including favor and trust). Reply in English.`,
     `Keep the reply short: usually one to four sentences of speech. Never speak or act for the player, `
@@ -229,6 +265,26 @@ export function sceneContext(scene) {
     voice?.description ? `How the game introduces you:\n${voice.description}` : "",
     voice?.examples?.length ? `Example lines you say in the game (your voice):\n${voice.examples.map((line) => `「${line}」`).join("\n")}` : "",
   ].filter(Boolean).join("\n\n");
+}
+
+/**
+ * The message that starts an encounter: who walked in where, and what the game itself just showed of it (her scripted
+ * greeting or the like), so the model adds to it rather than repeating it.
+ */
+export function encounterMessage({ character, encounter, scene }) {
+  const room = scene?.me?.location ?? "the room";
+  const others = Array.isArray(scene?.othersHere) ? scene.othersHere.map((line) => String(line).replace(/ \(.*$/, "")) : [];
+  const also = others.length ? ` Also here: ${others.join(", ")}.` : "";
+  return [
+    (encounter.arrived === "player" ? `The player has just walked into ${room}, where ${character.name} is.`
+      : `${character.name} has just walked into ${room}, where the player is.`) + also,
+    encounter.intro ? `The game just showed this (in it "you" is the player, lines starting with ● are what the player `
+      + `did or said, and lines in 「」 are what ${character.name} already said):\n${encounter.intro}`
+      : `The game showed nothing more.`,
+    `Anything said or done in the room since is at the end of the interaction history.`,
+    `What does ${character.name} do now, if anything? Only ${character.name}'s own words and actions: never say the `
+      + `player's lines or address ${character.name} by name as if you were the player.`,
+  ].join("\n");
 }
 
 /**
@@ -332,7 +388,8 @@ const DONE = /(?:^|\n)\W*DONE\W*$/;
  * written out as text are run too, and other text is taken as the reply itself (speech in quotes said, the rest acted),
  * which ends it. Returns the final text and the tool calls made, in order.
  */
-export async function converse({ llm, messages, temperature, log, signal, runTool, onTool, toolset = CHAT_TOOLS }) {
+export async function converse({ llm, messages, temperature, log, signal, runTool, onTool, toolset = CHAT_TOOLS,
+  spokenLimit = SPOKEN_LIMIT }) {
   const useTools = !!runTool && llm.tools !== false;
   const tools = [];
   const attempted = () => handedOver(tools);
@@ -367,7 +424,7 @@ export async function converse({ llm, messages, temperature, log, signal, runToo
       const raw = call.function?.arguments;
       const args = typeof raw === "string" ? parseJson(raw || "{}") : raw;
       // Past the limit the reply is over: the extra lines are dropped (they stay in the debug log) and nothing more is asked.
-      if (SPOKEN.has(name) && tools.filter((tool) => tool.name === name && spoken(tool)).length >= SPOKEN_LIMIT) {
+      if (SPOKEN.has(name) && tools.filter((tool) => tool.name === name && spoken(tool)).length >= spokenLimit) {
         overran = true;
         continue;
       }
@@ -383,7 +440,9 @@ export async function converse({ llm, messages, temperature, log, signal, runToo
       messages.push({ role: "tool", tool_call_id: call.id ?? "", name, content: JSON.stringify(result) });
     }
     // The player's attempt or a scene command is the game's to play out, so the conversation stops there.
-    if (overran || attempted() || finished) return done();
+    // Once the character has said all it may, there is nothing left to ask for.
+    const saidAll = tools.filter((tool) => tool.name === "say" && spoken(tool)).length >= spokenLimit;
+    if (overran || saidAll || attempted() || finished) return done();
   }
 }
 
@@ -472,7 +531,8 @@ export function setupLlmConfig(dialog) {
     keep();
     const temperature = fields.temperature.value === "" ? undefined : Number(fields.temperature.value);
     const historyChars = Math.max(1000, Math.round(Number(fields.historyChars.value) || DEFAULTS.historyChars));
-    draft = { ...draft, provider: shown, temperature, historyChars, instructions: fields.instructions.value };
+    draft = { ...draft, provider: shown, temperature, historyChars, instructions: fields.instructions.value,
+      encounters: fields.encounters.checked };
     saveLlmConfig(draft);
   });
   // Keys typed here are not game input.
@@ -489,6 +549,7 @@ export function setupLlmConfig(dialog) {
     fields.temperature.value = draft.temperature ?? "";
     fields.historyChars.value = draft.historyChars;
     fields.instructions.value = draft.instructions;
+    fields.encounters.checked = draft.encounters !== false;
     dialog.showModal();
   };
 }

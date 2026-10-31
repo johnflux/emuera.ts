@@ -580,6 +580,7 @@ test("LLM proxy forwards chat completions and model lists with the key, and repo
     });
     assert.equal(crossOrigin.status, 403);
     assert.equal((await fetch(`${base}/llm.js`)).status, 200);
+    assert.equal((await fetch(`${base}/encounters.js`)).status, 200);
   } finally {
     app.closeAllConnections(); app.close();
     upstream.closeAllConnections(); upstream.close();

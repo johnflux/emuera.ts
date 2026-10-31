@@ -93,7 +93,8 @@ export function historyContext(history, limit) {
   }
   const omitted = history.entries.length - blocks.length;
   const heading = blocks.length
-    ? `Interaction history between the player and ${name}, oldest first${omitted ? ` (${omitted} older interactions omitted)` : ""}:`
+    ? `Interaction history between the player and ${name}, oldest first${omitted ? ` (${omitted} older interactions omitted)` : ""}. `
+      + `Lines starting with someone else's name ("Name: ...") are what that person said or did where ${name} could hear and see it:`
     : `There is no interaction history between the player and ${name} yet.`;
   return [situation, heading, blocks.join("\n\n")].filter(Boolean).join("\n\n");
 }
@@ -160,7 +161,7 @@ export function renderCharacterHistory(parent, history, { loadAll, embedded = fa
     item.className = "era-history-entry";
     item.open = expandAll || index === history.entries.length - 1;
     body.append(item);
-    text("summary", `${entry.action.label} · ${clock(entry.before)}`, item);
+    text("summary", `${clock(entry.before)} · ${entry.action.label}`, item);
     const lines = entry.lines.map((line, index) => ({
       index, character: line.character, runs: compactRuns(line.runs ?? [{ text: line.text }], entry),
     })).filter((line) => line.runs.length);

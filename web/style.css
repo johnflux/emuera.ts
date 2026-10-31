@@ -763,11 +763,12 @@ main:has(.screen.is-active .era-launch) { padding: 0; background: #000; }
 .era-character-info .era-history-body { max-height: none; overflow: visible; }
 .era-history-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px; }
 .era-history-toolbar button { font: inherit; color: #b7dbea; background: #16394b; border: 1px solid #3c9bb7; border-radius: 4px; padding: 5px 10px; cursor: pointer; }
-.era-history-more { float: right; position: relative; z-index: 1; margin: 3px 8px 0 6px; padding: 0; border: 0; background: transparent; color: #b7dbea; font: inherit; cursor: pointer; }
+/* Stays in the top right corner while the history scrolls under it. */
+.era-history-more { float: right; position: sticky; top: 0; z-index: 1; margin: 0 0 0 6px; padding: 2px 8px; border: 0; border-radius: 0 0 0 5px; background: #05111b; color: #b7dbea; font: inherit; line-height: var(--era-history-line); cursor: pointer; }
 .era-history-more:is(:hover, :focus-visible) { text-decoration: underline; }
-.era-history-dialog { width: min(960px, calc(100vw - 48px)); max-height: calc(100dvh - 48px); padding: 12px; border: 1px solid #3c9bb7; border-radius: 6px; background: #0b1c28; color: #d7eff8; }
+.era-history-dialog { width: min(calc(var(--logical-width, 1200px) + 64px), calc(100vw - 48px)); height: calc(100dvh - 48px); max-width: none; max-height: none; box-sizing: border-box; padding: 12px; border: 1px solid #3c9bb7; border-radius: 6px; background: #0b1c28; color: #d7eff8; }
 .era-history-dialog::backdrop { background: #000000b0; }
-.era-history-dialog h2 { font-size: 1.1em; margin: 0; }
+.era-history-dialog h2 { font: inherit; font-size: var(--era-history-size); line-height: var(--era-history-line); margin: 0; color: #b7dbea; }
 .era-history-dialog[open] { display: flex; flex-direction: column; overflow: hidden; }
 .era-history-dialog .era-history-toolbar h2 { flex: 1; }
 .era-history-tabs { display: flex; gap: 4px; }
@@ -833,15 +834,20 @@ main:has(.screen.is-active .era-launch) { padding: 0; background: #000; }
 .era-history-preview-viewport { position: absolute; inset: 4px; overflow: hidden; }
 .era-history-preview-content { position: absolute; bottom: 0; left: 0; width: 100%; }
 .era-history-preview:focus-visible { outline: 1px solid #5da8bf; outline-offset: 1px; }
-.era-interaction-history { margin-top: 8px; border: 1px solid #24526b; border-radius: 5px; background: #05111bd9; font-size: .85em; }
+.era-interaction-history { margin-top: 8px; border: 1px solid #24526b; border-radius: 5px; background: #05111bd9; }
 .era-interaction-history:empty { display: none; }
 .era-interaction-history summary { cursor: pointer; padding: 8px; color: #b7dbea; overflow-wrap: anywhere; }
-.era-history-body { max-height: 22rem; overflow: auto; padding: 0 10px 8px; }
-.era-history-body p { margin: 6px 0; }
-.era-history-note { color: #9ab3c3; font-size: .9em; }
+/* Every line in the history, whatever kind (headings, notes, speech, narration), has the same font and height as the preview. */
+.era-interaction-history, .era-history-dialog { --era-history-size: .8rem; --era-history-line: 1.25; }
+.era-interaction-history > summary { font-size: var(--era-history-size); line-height: var(--era-history-line); }
+.era-history-body { max-height: 22rem; overflow: auto; padding: 0 10px 8px; font-size: var(--era-history-size); line-height: var(--era-history-line); }
+.era-history-body :is(p, summary, em, span) { font: inherit; line-height: inherit; }
+.era-history-body p { margin: 0; }
+.era-history-note { color: #9ab3c3; }
 .era-history-notice { color: #efca8a; }
 .era-history-entry { border: 0; padding: 0; }
-.era-history-entry > summary { margin: 10px 0 6px; padding: 0; font: inherit; line-height: inherit; }
+.era-history-entry > summary { margin: 0; padding: 0; color: #b7dbea; list-style: none; }
+.era-history-entry > summary::-webkit-details-marker { display: none; }
 .era-history-text { white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
 @container (max-width: 760px) {
   .era-character { grid-template-columns: minmax(0, 1fr); row-gap: 10px; }
