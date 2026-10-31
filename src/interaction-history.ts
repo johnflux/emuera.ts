@@ -21,7 +21,7 @@ export interface Interaction {
   previous: Record<string, string | null>;
   source: "script" | "state";
   target: string;
-  action: { id: number | "encounter" | "greeting" | "play-game" | "reaction" | "chat"; label: string };
+  action: { id: number | "encounter" | "greeting" | "play-game" | "reaction" | "chat" | "gossip"; label: string };
   participants: HistoryCharacter[];
   before: InteractionContext;
   after: InteractionContext;
@@ -42,7 +42,19 @@ export interface CharacterHistory {
   entries: Interaction[];
   notice: string;
   limit: number;
+  /** What the character remembers of everything up to an event, in her own words (written by the LLM, or edited). */
+  memory?: Memory;
 }
+export interface Memory {
+  text: string;
+  /** The newest event the memory takes in, or null if it was written before there were any. */
+  covers: string | null;
+  /** When that event ended, or when it was written if it covers none. */
+  day: string;
+  time: string[];
+}
+/** Two characters who have just met away from the player, the first with news about the player the other has not heard. */
+export interface Gossip { teller: HistoryCharacter; listener: HistoryCharacter; place: string }
 interface Host {
   read(name: string, indices?: Value[]): Value;
   write(name: string, indices: Value[], value: Value): void;
@@ -96,7 +108,7 @@ function interaction(value: unknown): value is Interaction {
   return uuid(value.id) && (value.parent === null || uuid(value.parent)) && (value.source === "script" || value.source === "state")
     && isRecord(value.action) && (typeof value.action.id === "number" && COMMANDS.has(value.action.id)
       || value.action.id === "encounter" || value.action.id === "greeting" || value.action.id === "play-game"
-      || value.action.id === "reaction" || value.action.id === "chat") && typeof value.action.label === "string"
+      || value.action.id === "reaction" || value.action.id === "chat" || value.action.id === "gossip") && typeof value.action.label === "string"
     && Array.isArray(value.participants) && value.participants.every(character) && uuid(value.target)
     && value.participants.some((person) => person.id === value.target) && context(value.before) && context(value.after)
     && isRecord(previous) && value.participants.every((person) => previous[person.id] === null || uuid(previous[person.id]))
@@ -105,6 +117,10 @@ function interaction(value: unknown): value is Interaction {
         && typeof run.color === "string" && /^(?:#[0-9a-f]{3}(?:[0-9a-f]{3})?|[a-z]{1,30})$/i.test(run.color))
         && line.runs.map((run) => run.text).join("") === line.text))
     && strings(value.choices) && typeof value.truncated === "boolean";
+}
+function memory(value: unknown): value is Memory {
+  return isRecord(value) && typeof value.text === "string" && (value.covers === null || uuid(value.covers))
+    && typeof value.day === "string" && strings(value.time);
 }
 function readJson(store: SaveStore, file: string): unknown {
   const raw = store.read(file);
@@ -140,6 +156,16 @@ export class TwInteractionHistory {
   private presence: { location: Value; ids: Set<string> } | undefined;
   /** Interactions recorded since the previous command prompt. */
   private turn: Interaction[] = [];
+  /** Each character's memory, by history id; saved with the checkpoint like the heads. */
+  private memories = new Map<string, Memory>();
+  /** The day at the previous command prompt; unset after a start or load. */
+  private day: string | undefined;
+  /** Pairs of characters together away from the player at the previous command prompt; unset after a start or load. */
+  private together: Set<string> | undefined;
+  /** Each character's newest event when she was last given the chance to tell another ("teller>listener") about it. */
+  private told = new Map<string, string | null>();
+  /** Gossip events still open (until the next command), by their two characters' ids in order. */
+  private gossips = new Map<string, Interaction>();
   constructor(private store: SaveStore, private host: Host) {}
 
   reset(): void {
@@ -152,6 +178,10 @@ export class TwInteractionHistory {
     this.notice = "";
     this.presence = undefined;
     this.turn = [];
+    this.memories.clear();
+    this.day = undefined;
+    this.together = undefined;
+    this.told.clear();
   }
   private sync(): void {
     while (this.ids.length < this.host.count()) this.ids.push(randomUUID());
@@ -511,6 +541,139 @@ export class TwInteractionHistory {
       return { character, arrived, ...(intro ? { intro } : {}) };
     });
   }
+  /**
+   * Called at each command prompt: on the first one of a new day, the characters whose history has moved on since their
+   * memory was written, newest first, so it can be brought up to date. The first prompt after a start or load only
+   * notes the day.
+   */
+  memoriesDue(limit = 8): HistoryCharacter[] {
+    this.sync();
+    const day = String(this.host.read("DAY")), previous = this.day;
+    this.day = day;
+    if (previous === undefined || previous === day) return [];
+    const master = Number(this.host.read("MASTER"));
+    const due: HistoryCharacter[] = [];
+    for (let i = 0; i < this.ids.length; i++) {
+      const id = this.ids[i]!, head = this.heads.get(id);
+      if (i === master || !head || head === this.memories.get(id)?.covers) continue;
+      const person = this.person(i);
+      if (person) due.push(person);
+    }
+    // Every event moves the global head along, so the order of the heads in the chain is the order of recency.
+    const order = new Map<string, number>();
+    let id = this.head, at = 0;
+    const seen = new Set<string>();
+    while (id && !seen.has(id) && order.size < due.length && at < 2000) {
+      seen.add(id);
+      for (const person of due) if (!order.has(person.id) && this.heads.get(person.id) === id) order.set(person.id, at);
+      const data = this.readEvent(id);
+      id = data?.parent ?? null;
+      at++;
+    }
+    return due.sort((a, b) => (order.get(a.id) ?? Infinity) - (order.get(b.id) ?? Infinity)).slice(0, limit);
+  }
+  private readEvent(id: string): Interaction | undefined {
+    try {
+      const data = readJson(this.store, eventFile(id));
+      return isRecord(data) && interaction(data.event) ? data.event : undefined;
+    } catch (error) { if (error instanceof EraError) return undefined; throw error; }
+  }
+  /**
+   * Called at each command prompt: characters who have just come together somewhere away from the player, where one has
+   * something new in her history with the player since she last had the chance to tell the other. At most `limit`, the
+   * closest friends first. The first prompt after a start or load only notes who is together and what everyone knows.
+   */
+  gossip(limit = 2): Gossip[] {
+    this.sync();
+    const master = this.host.read("MASTER");
+    const playerAt = this.host.read("CFLAG", [master, "現在位置"]);
+    const rooms = new Map<Value, number[]>();
+    for (let i = 0; i < this.ids.length; i++) {
+      const at = this.host.read("CFLAG", [BigInt(i), "現在位置"]);
+      if (BigInt(i) === master || at === playerAt || this.asleep(i)) continue;
+      rooms.set(at, [...rooms.get(at) ?? [], i]);
+    }
+    const pairs = new Set<string>(), candidates: { teller: number; listener: number; at: Value; affinity: number }[] = [];
+    const first = !this.together;
+    for (const [at, people] of rooms) {
+      for (const a of people) for (const b of people) {
+        if (a === b) continue;
+        const key = `${this.ids[a]}>${this.ids[b]}`;
+        pairs.add(key);
+        const head = this.heads.get(this.ids[a]!) ?? null;
+        if (first) { this.told.set(key, head); continue; }
+        if (this.together!.has(key) || !head || head === (this.told.has(key) ? this.told.get(key) : null)) continue;
+        candidates.push({ teller: a, listener: b, at, affinity: this.affinity(a, b) });
+      }
+    }
+    this.together = pairs;
+    if (first) return [];
+    const chosen = candidates.sort((x, y) => y.affinity - x.affinity).slice(0, limit);
+    return chosen.flatMap(({ teller, listener, at }) => {
+      this.told.set(`${this.ids[teller]}>${this.ids[listener]}`, this.heads.get(this.ids[teller]!) ?? null);
+      const a = this.person(teller), b = this.person(listener);
+      return a && b ? [{ teller: a, listener: b, place: String(this.host.read("STR", [8000n + BigInt(at as bigint)])) }] : [];
+    });
+  }
+  /** RELATION is a percentage keyed by character NO; eraTW treats an unset 0 as the neutral 100. */
+  private affinity(from: number, to: number): number {
+    try {
+      const value = Number(this.host.read("RELATION", [BigInt(from), this.host.read("NO", [BigInt(to)])]));
+      return value === 0 ? 100 : value;
+    } catch (error) { if (error instanceof EraError) return 100; throw error; }
+  }
+  /**
+   * Records what one character says to another away from the player, in an event in both their histories (one per
+   * pair until the next command), so each knows it was said. `speaker` is the history id of who said it.
+   */
+  gossipLine(speaker: number, other: number, runs: ColoredText[]): void {
+    const a = this.person(speaker), b = this.person(other);
+    if (!a || !b) throw new EraError("That character is no longer in the game");
+    const key = [a.id, b.id].sort().join(">");
+    let event = this.gossips.get(key);
+    if (!event) {
+      const before = this.state(other, true);
+      event = { id: randomUUID(), parent: this.head, source: "script", target: b.id,
+        previous: { [a.id]: this.heads.get(a.id) ?? null, [b.id]: this.heads.get(b.id) ?? null },
+        action: { id: "gossip", label: `${a.name} and ${b.name} talked about the player (the player was not there)` },
+        participants: [a, b], before, after: before, lines: [], choices: [], truncated: false };
+      this.gossips.set(key, event);
+    }
+    this.addTo(event, { runs, speaker: a.id }, other);
+  }
+  /** Adds a line by a character to the open gossip event she is in, if any (her reaction to what she was told). */
+  gossipAside(speaker: number, runs: ColoredText[]): void {
+    const id = this.ids[speaker];
+    const event = [...this.gossips.values()].find((item) => item.participants.some((person) => person.id === id));
+    if (event) this.addTo(event, { runs, speaker: id ?? null }, this.ids.indexOf(event.target));
+  }
+  private addTo(event: Interaction, line: { runs: ColoredText[]; speaker: string | null }, target: number): void {
+    const runs = line.runs.filter((run) => run.text);
+    const text = runs.map((run) => run.text).join("");
+    if (!text) return;
+    if (event.lines.reduce((size, item) => size + item.text.length, 0) + text.length > TEXT_LIMIT) {
+      event.truncated = true;
+      return;
+    }
+    event.lines.push({ text, character: line.speaker, runs });
+    if (target >= 0) event.after = this.state(target, true);
+    this.writeChat(event);
+  }
+  /** Sets (or with empty text, clears) a character's memory, taking in her history up to `covers`. */
+  remember(character: string, text: string, covers: string | null): Memory | undefined {
+    const index = this.indexOf(character);
+    if (index < 0) throw new EraError("That character is no longer in the game");
+    if (!text.trim()) {
+      this.memories.delete(character);
+      return undefined;
+    }
+    const event = covers ? this.readEvent(covers) : undefined;
+    if (covers && !event?.participants.some((person) => person.id === character)) throw new EraError("That event is not in this character's history");
+    const when = event?.after ?? this.state(index);
+    const memory = { text: text.trim().slice(0, 4000), covers, day: when.day, time: when.time };
+    this.memories.set(character, memory);
+    return memory;
+  }
   private asleep(index: number): boolean {
     try { return this.host.read("CFLAG", [BigInt(index), "睡眠"]) !== 0n; }
     catch (error) { if (error instanceof EraError) return false; throw error; }
@@ -591,6 +754,7 @@ export class TwInteractionHistory {
   }
   endChat(): void {
     this.conversations.clear();
+    this.gossips.clear();
     this.heard = new WeakMap();
   }
   /** Whether a conversation through the chat window is open (no command has been entered since it started). */
@@ -608,6 +772,7 @@ export class TwInteractionHistory {
     this.sync();
     this.store.write(checkpointFile(save), JSON.stringify({
       version: 1, digest: digest(bytes), head: this.head, ids: this.ids, heads: Object.fromEntries(this.heads),
+      ...(this.memories.size ? { memories: Object.fromEntries(this.memories) } : {}),
     }));
   }
   restore(save: string, bytes: Buffer): void {
@@ -620,7 +785,8 @@ export class TwInteractionHistory {
     const data = readJson(this.store, file);
     if (!isRecord(data) || data.version !== 1 || typeof data.digest !== "string" || (data.head !== null && !uuid(data.head))
       || !Array.isArray(data.ids) || !data.ids.every(uuid) || new Set(data.ids).size !== data.ids.length
-      || !uuidMap(data.heads))
+      || !uuidMap(data.heads) || (data.memories !== undefined && !(isRecord(data.memories)
+        && Object.entries(data.memories).every(([id, item]) => uuid(id) && memory(item)))))
       throw new EraError(`Invalid interaction history checkpoint: ${file}`);
     if (data.digest !== digest(bytes) || data.ids.length !== this.host.count()) {
       this.notice = "This save was replaced outside the app. Its previous interaction history was not attached.";
@@ -629,6 +795,7 @@ export class TwInteractionHistory {
     this.head = data.head;
     this.ids = data.ids;
     this.heads = new Map(Object.entries(data.heads));
+    this.memories = new Map(Object.entries((data.memories ?? {}) as Record<string, Memory>));
   }
   remove(save: string): void { this.store.remove(checkpointFile(save)); }
   selected(): CharacterHistory | undefined {
@@ -650,6 +817,7 @@ export class TwInteractionHistory {
       entries.push(data.event);
       id = data.event.previous[selected.id]!;
     }
-    return { character: selected, entries, notice: this.notice, limit: Number.isFinite(limit) ? limit : entries.length };
+    const memory = this.memories.get(selected.id);
+    return { character: selected, entries, notice: this.notice, limit: Number.isFinite(limit) ? limit : entries.length, ...(memory ? { memory } : {}) };
   }
 }

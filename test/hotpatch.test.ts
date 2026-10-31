@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -7,6 +7,8 @@ import { test } from "node:test";
 import { demoGame } from "../src/demo.js";
 import { applyHotpatches, emptyGame, GAME_ROOT, indexScript, loadGame } from "../src/loader.js";
 import { GAME_INSTRUCTION_LIMIT, Runtime } from "../src/runtime.js";
+import { readNativeSave } from "../src/save-format.js";
+import { MemoryGlobalStore, MemorySaveStore } from "../src/storage.js";
 
 async function withPatchDir(files: Record<string, string>, body: (dir: string) => Promise<void>) {
   const dir = await mkdtemp(path.join(tmpdir(), "hotpatch-"));
@@ -38,6 +40,93 @@ test("hotpatches reject new routines that are not named HOTPATCH_*", async () =>
   await withPatchDir({ "A.ERB": "@TYPO_NAME\nPRINTL x" }, async (dir) => {
     await assert.rejects(applyHotpatches(game, dir), /does not define/);
   });
+});
+
+test("Wake Up clears the screen before delegating, but other shop commands do not", async () => {
+  const patch = readFileSync(new URL("../hotpatch/SLEEP_MENU.ERB", import.meta.url), "utf8");
+  for (const jit of [false, true]) {
+    for (const command of [100, 2400]) {
+      const game = emptyGame("<memory>");
+      indexScript(game, `@SYSTEM_TITLE
+HTML_PRINT "<div class='era-shop'>Wake Up</div>"
+RESULT = ${command}
+CALL USERSHOP
+PRINTFORML Returned: {RESULT}
+QUIT
+@SHOW_SHOP
+WAIT
+@USERSHOP
+PRINTFORML Original command: {RESULT}, lines: {LINECOUNT}
+RETURN 7`, "<shop-test>");
+      await withPatchDir({ "SLEEP_MENU.ERB": patch }, async (dir) => {
+        await applyHotpatches(game, dir);
+      });
+      const snapshot = new Runtime(game, undefined, { jit }).start();
+      assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
+      const clear = snapshot.output.findIndex((item) => item.type === "clear");
+      const original = snapshot.output.findIndex((item) => item.type === "text" && item.text.startsWith("Original command:"));
+      assert.equal(clear >= 0, command === 100);
+      if (command === 100) {
+        assert.ok(clear < original, "clear precedes all original wake-up output");
+        assert.deepEqual(snapshot.output[clear], { type: "clear", count: 1 });
+      }
+      assert.ok(snapshot.output.some((item) => item.type === "text"
+        && item.text === `Original command: ${command}, lines: ${command === 100 ? 0 : 1}`));
+      assert.ok(snapshot.output.some((item) => item.type === "text" && item.text === "Returned: 7"));
+    }
+  }
+});
+
+test("eraTW native load reaches Wake Up without a confirmation pause and clears it on waking", {
+  skip: !existsSync(path.join(GAME_ROOT, "sav", "save00.sav"))
+    || !existsSync(path.join(GAME_ROOT, "sav", "global.sav")),
+}, async () => {
+  const game = await loadGame();
+  await applyHotpatches(game);
+  const roomInstructions = (name: string) => game.routines.get(name)![0]!.lines
+    .map((line) => line.text.replace(/;.*$/, "").trim()).filter(Boolean);
+  assert.deepEqual(roomInstructions("ROOMSETTING"),
+    roomInstructions("HOTPATCH_ORIGINAL_ROOMSETTING").map((line) =>
+      line === "PRINTFORMW %GET_MAPNAME(MAIN_MAP)%'s room info has been set."
+        ? line.replace("PRINTFORMW", "PRINTFORML") : line),
+    "room initialization preserves every original instruction except the success wait");
+  const save = readFileSync(path.join(GAME_ROOT, "sav", "save00.sav"));
+  const global = readNativeSave(readFileSync(path.join(GAME_ROOT, "sav", "global.sav")));
+  const stub = emptyGame(game.root);
+  indexScript(stub, `@EVENTTRAIN
+PRINTL Starting the day
+WAIT
+@HOTPATCH_TEST_ROOM_FAILURE
+MAIN_MAP = 999
+デフォルト初期位置 = 1
+CALL ROOMSETTING
+QUIT`, "<wake-test>");
+  for (const [name, routines] of stub.routines) game.routines.set(name, routines);
+  for (const jit of [false, true]) {
+    const saves = new MemorySaveStore();
+    saves.write("save00.sav", save);
+    const store = new MemoryGlobalStore();
+    store.save(global.data.variables);
+    const runtime = new Runtime(game, GAME_INSTRUCTION_LIMIT, { saves, store, jit });
+    assert.equal(runtime.start().error, null);
+    assert.equal(runtime.input("1").input?.kind, "integer");
+    const loaded = runtime.input("0");
+    assert.equal(loaded.error, null, JSON.stringify(loaded.error));
+    assert.equal(loaded.input?.kind, "integer", "no intermediate WAIT after choosing a save");
+    assert.ok(loaded.output.some((item) => item.type === "html" && item.text.includes("era-wake-button")));
+    const awake = runtime.input("100");
+    assert.equal(awake.error, null, JSON.stringify(awake.error));
+    const clear = awake.output.findIndex((item) => item.type === "clear");
+    const day = awake.output.findIndex((item) => item.type === "text" && item.text === "Starting the day");
+    assert.ok(clear >= 0 && clear < day, "the sleep screen is cleared before EVENTTRAIN");
+    assert.ok(!awake.output.some((item) => item.type === "html" && item.text.includes("era-shop")));
+    assert.deepEqual(saves.read("save00.sav"), save, "loading and waking do not modify the native save");
+
+    const failed = new Runtime(game, GAME_INSTRUCTION_LIMIT, { jit }).start("HOTPATCH_TEST_ROOM_FAILURE");
+    assert.equal(failed.error, null, JSON.stringify(failed.error));
+    assert.equal(failed.input?.kind, "wait", "failed room setup still requires acknowledgement");
+    assert.ok(failed.output.some((item) => item.type === "text" && item.text === "Failed to set room info."));
+  }
 });
 
 test("translated ability HTML emits valid six-digit CSS colors", {

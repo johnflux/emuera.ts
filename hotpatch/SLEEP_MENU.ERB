@@ -5,6 +5,11 @@
 ; bottom. The commands and their numbers are the original's (USERSHOP handles them unchanged), greyed out as before
 ; while you are fainted. Dropped: the DRAWLINE rules and the blank lines that spaced the menu.
 ;-------------------------------------------------------------------------------
+@USERSHOP
+SIF RESULT == 100
+	CLEARLINE LINECOUNT
+JUMP HOTPATCH_ORIGINAL_USERSHOP
+
 @SHOW_SHOP
 #DIMS DYNAMIC sHtml
 #DIMS DYNAMIC sGray

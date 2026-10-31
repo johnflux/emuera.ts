@@ -1046,6 +1046,116 @@ test("what a character says and does in company goes into the others' histories 
   assert.deepEqual(newest(marisa).lines.map(text), ["Reimu: 「Marisa, behave.」", "「Who, me?」"]);
 });
 
+test("characters who meet away from the player may pass on news about the player, into both their histories", {
+  skip: !existsSync(GAME_ROOT),
+}, async () => {
+  const game = await loadGame();
+  await applyHotpatches(game);
+  const runtime = new Runtime(demoGame(game), GAME_INSTRUCTION_LIMIT);
+  check(runtime.start());
+  check(runtime.input("8"));
+  let snapshot = check(runtime.input("3"));
+  const settle = (next: Snapshot) => {
+    for (let i = 0; next.input?.kind === "wait" && i < 80; i++) next = check(runtime.input(""));
+    return next;
+  };
+  snapshot = settle(snapshot);
+  const reimu = history(snapshot).character;
+  const records = (runtime as unknown as { interactionHistory: { ids: string[]; person(index: number): { id: string; name: string } | undefined } }).interactionHistory;
+  const marisa = records.ids.map((_, i) => records.person(i)).find((person) => person && /Marisa/.test(person.name))!;
+  const text = (line: { runs?: { text: string }[]; text: string }) => line.runs ? line.runs.map((run) => run.text).join("") : line.text;
+  runtime.chatMessage(reimu.id, "*steals Reimu's offering box money*");
+  runtime.characterTool(reimu.id, "say", { text: "Hey! Give that back!" });
+  assert.equal(check(runtime.refresh()).gossip, undefined, "together with the player is not gossip");
+  // Both walk off to the same place, away from the player.
+  const scene = runtime.characterTool(reimu.id, "describe_scene", {}).result as { me: { location: string }; placesOnThisMap: string[] };
+  const elsewhere = scene.placesOnThisMap.find((place) => place !== scene.me.location)!;
+  runtime.characterTool(reimu.id, "move_to", { destination: elsewhere });
+  runtime.characterTool(marisa.id, "move_to", { destination: elsewhere });
+  snapshot = settle(check(runtime.refresh()));
+  const pair = snapshot.gossip?.find((item) => item.teller.id === reimu.id);
+  assert.ok(pair, JSON.stringify(snapshot.gossip));
+  assert.equal(pair!.listener.id, marisa.id);
+  assert.equal(typeof pair!.place, "string");
+  assert.match(String(runtime.characterTool(reimu.id, "say", { text: "Hi" }, true).result.error), /not available/, "only tell is speech when aside");
+  assert.match(String(runtime.characterTool(reimu.id, "tell", { person: "Marisa", text: "x" }).result.error), /not available/, "tell is only for asides");
+  assert.deepEqual(runtime.characterTool(reimu.id, "tell", { person: "Marisa", text: "「The player stole my offerings!」" }, true).result, { told: "Marisa" });
+  runtime.characterTool(marisa.id, "change_feelings", { favor: -5, reason: "stealing from Reimu" }, true);
+  runtime.characterTool(marisa.id, "tell", { person: "Reimu", text: "No way, ze!" }, true);
+  const shared = runtime.encounterHistory(marisa).entries[0]!;
+  assert.equal(shared.action.id, "gossip");
+  assert.match(shared.action.label, /talked about the player \(the player was not there\)/);
+  assert.deepEqual(shared.lines.map(text).map((line) => line.replace(/^(\S+: )change_feelings.*/, "$1change_feelings")),
+    ["Reimu: 「The player stole my offerings!」", "Marisa: change_feelings", "Marisa: 「No way, ze!」"]);
+  assert.equal(runtime.encounterHistory(reimu).entries[0]!.id, shared.id, "the same event is in Reimu's history");
+  assert.equal(check(runtime.refresh()).gossip, undefined, "staying together is not a new meeting");
+});
+
+test("a character's memory goes with her history and the save, and is due again once the history moves on and a day passes", {
+  skip: !existsSync(GAME_ROOT),
+}, async () => {
+  const game = await loadGame();
+  await applyHotpatches(game);
+  const runtime = new Runtime(demoGame(game), GAME_INSTRUCTION_LIMIT);
+  check(runtime.start());
+  check(runtime.input("8"));
+  let snapshot = check(runtime.input("2"));
+  for (let i = 0; snapshot.input?.kind === "wait" && i < 40; i++) snapshot = check(runtime.input(""));
+  const reimu = history(snapshot).character;
+  const internals = runtime as unknown as { globals: { get(n: string, i: unknown[], c: unknown): unknown; set(n: string, i: unknown[], v: unknown, c: unknown): void };
+    context(g: unknown): unknown; interactionHistory: { checkpoint(save: string, bytes: Buffer): void; restore(save: string, bytes: Buffer): void } };
+  const nextDay = () => {
+    const context = internals.context(internals.globals);
+    internals.globals.set("DAY", [], (internals.globals.get("DAY", [], context) as bigint) + 1n, context);
+    let next = check(runtime.refresh());
+    for (let i = 0; next.input?.kind === "wait" && i < 40; i++) next = check(runtime.input(""));
+    return next;
+  };
+  runtime.chatMessage(reimu.id, "Hello");
+  runtime.characterTool(reimu.id, "say", { text: "Hi." });
+  assert.equal(check(runtime.refresh()).memoriesDue, undefined, "only a new day brings memories up to date");
+  snapshot = nextDay();
+  assert.ok(snapshot.memoriesDue?.some((person) => person.id === reimu.id), JSON.stringify(snapshot.memoriesDue));
+  const head = runtime.encounterHistory(reimu).entries[0]!;
+  const memory = runtime.rememberCharacter(reimu.id, "The player greeted me politely.", head.id)!;
+  assert.equal(memory.day, head.after.day);
+  assert.equal(runtime.encounterHistory(reimu).memory?.text, "The player greeted me politely.");
+  assert.ok(!nextDay().memoriesDue?.some((person) => person.id === reimu.id), "nothing new since her memory");
+  assert.throws(() => runtime.rememberCharacter(reimu.id, "x", "00000000-0000-4000-8000-000000000000"), /not in this character's history/);
+  // The memory is kept with the save, like the rest of the history.
+  internals.interactionHistory.checkpoint("test", Buffer.from("save"));
+  runtime.rememberCharacter(reimu.id, "", null);
+  assert.equal(runtime.encounterHistory(reimu).memory, undefined);
+  internals.interactionHistory.restore("test", Buffer.from("save"));
+  assert.equal(runtime.encounterHistory(reimu).memory?.text, "The player greeted me politely.");
+});
+
+test("memory and gossip prompts ask only for what happened, in the character's own words", async () => {
+  const { gossipPrompt, memoryMessages, GOSSIP_TOOLS, LISTENER_TOOLS } = await import("../web/llm.js");
+  const { historyContext, sinceMemory } = await import("../web/interaction-history.js");
+  const reimu = { id: "a", name: "Reimu", number: "1" }, marisa = { id: "b", name: "Marisa", number: "2" };
+  const names = (list: { function: { name: string } }[]) => list.map((tool) => tool.function.name);
+  assert.deepEqual(names(GOSSIP_TOOLS), ["get_character_info", "find_characters", "tell"]);
+  assert.deepEqual(names(LISTENER_TOOLS), ["change_feelings", "change_mark", "tell"]);
+  const teller = gossipPrompt({ character: reimu, other: marisa, place: "the Shrine", gameTitle: "eraTW" });
+  assert.match(teller, /The player is not there/);
+  assert.match(teller, /never anything that is not in the history/);
+  const listener = gossipPrompt({ character: marisa, other: reimu, place: "the Shrine", gameTitle: "eraTW", told: "He stole!" });
+  assert.match(listener, /Reimu just told Marisa this about the player: 「He stole!」/);
+  assert.match(listener, /hearsay counts for less/);
+  const [system, user] = memoryMessages({ character: reimu, gameTitle: "eraTW", previous: "Old note.", since: "New stuff." });
+  assert.match(system!.content, /first person/);
+  assert.match(system!.content, /Never invent events/);
+  assert.match(user!.content, /previous memory:\nOld note\.[\s\S]*New stuff\./);
+  const entry = (id: string) => ({ id, action: { id: "chat", label: "Conversation" }, participants: [reimu], lines: [], choices: [],
+    before: { day: "1", time: ["0", "0", "0", "0", "0"], location: "1", locationName: "Shrine", affection: "0", trust: "0" },
+    after: { day: "1", time: ["0", "0", "0", "0", "0"], location: "1", locationName: "Shrine", affection: "0", trust: "0" } });
+  const full = { character: reimu, entries: [entry("new"), entry("old")], notice: "", limit: 2,
+    memory: { text: "I remember.", covers: "old", day: "1", time: ["600", "0", "0", "0", "0"] } };
+  assert.deepEqual(sinceMemory(full).entries.map((item: { id: string }) => item.id), ["new"]);
+  assert.match(historyContext(full, 10000), /Reimu's own memory of the player .*as of Day 1, 10:00.*\nI remember\./);
+});
+
 test("pushing the player down uses eraTW's forced pushdown when the room is redrawn", {
   skip: !existsSync(GAME_ROOT),
 }, async () => {

@@ -1,0 +1,62 @@
+; Preserve room initialization, but do not pause on its successful confirmation.
+@ROOMSETTING
+#DIM DYNAMIC R_ID
+#DIM DYNAMIC 私室候補
+私室候補 = 0
+SUMIKOMI_ROOM = 0
+VARSET PRIVATEROOM
+FOR LOCAL, 1, CHARANUM
+	IF CFLAG:LOCAL:神社在住 && !CFLAG:LOCAL:出禁
+		PRIVATEROOM:(CFLAG:LOCAL:本来の初期位置 ? CFLAG:LOCAL:本来の初期位置 % 100 # CFLAG:LOCAL:初期位置 % 100) = LOCAL
+		SIF CFLAG:LOCAL:大家候補
+			私室候補 ++
+	ENDIF
+NEXT
+TRYCCALLFORM ROOMSETTING_{MAIN_MAP}
+	PRINTFORML %GET_MAPNAME(MAIN_MAP)%'s room info has been set.
+	IF FLAG:住み込みキャラ && SUMIKOMI_ROOM
+		R_ID = SUMIKOMI_ROOM % 100
+		ROOMDATA:R_ID |= 場所_ワンルーム
+	ENDIF
+	FOR LOCAL, 1, 100
+		IF CFLAG:MASTER:初期位置 % 100 == LOCAL
+			ROOMDATA:LOCAL |= 場所_布団
+			ROOMDATA:LOCAL |= 場所_勉強
+			ROOMDATA:LOCAL |= 場所_プライベート
+			ROOMDATA:LOCAL &= ~場所_飲食
+		ENDIF
+		IF ROOMDATA:LOCAL & 場所_ワンルーム
+			ROOMDATA:LOCAL |= 場所_布団
+			ROOMDATA:LOCAL |= 場所_屋内
+			ROOMDATA:LOCAL |= 場所_厨房
+			ROOMDATA:LOCAL |= 場所_勉強
+			ROOMDATA:LOCAL |= 場所_休憩
+			ROOMDATA:LOCAL |= 場所_飲食
+			ROOMDATA:LOCAL |= 場所_プライベート
+			ROOMDATA:LOCAL |= 場所_炬燵
+			ROOMDATA:LOCAL &= ~場所_過疎
+		ENDIF
+		IF ROOMDATA:LOCAL & 場所_布団
+			ROOMDATA:LOCAL |= 場所_休憩
+		ENDIF
+		IF ROOMDATA:LOCAL & 場所_洋室
+			ROOMDATA:LOCAL |= 場所_屋内
+		ENDIF
+		IF ROOMDATA:LOCAL & 場所_厨房
+			ROOMDATA:LOCAL |= 場所_つまみ食い
+		ENDIF
+		R_ID = LOCAL + MAIN_MAP * 100
+		SIF LOCK:R_ID && !PRIVATEROOM:LOCAL
+			LOCK:R_ID = 0
+	NEXT
+	CALL GRAPH_WALK_ALL_PATHS()
+CATCH
+	PRINTFORMW Failed to set room info.
+ENDCATCH
+IF (ゲーム開始処理中 || ゲーム引き継ぎ処理中) || !デフォルト初期位置 || 引っ越し
+	IF 私室候補
+		CALL 引っ越し初期位置設定
+	ELSE
+		CALL デフォルト引っ越し
+	ENDIF
+ENDIF

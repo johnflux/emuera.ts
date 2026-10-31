@@ -27,6 +27,8 @@ export interface ToolOutcome {
   action?: { kind: "say" | "act"; text: string } | { kind: "move"; destination: number } | { kind: "command"; command: number };
   /** Whether game state or the room will change, so the main screen needs redrawing afterwards. */
   changed: boolean;
+  /** Words said to another character away from the player (`tell`), for the interaction history. */
+  told?: { listener: number; text: string };
 }
 
 /** Per-call limits, roughly the largest change a single player command makes. */
@@ -101,6 +103,7 @@ export function runCharacterTool(host: ToolHost, self: number, id: string, name:
       case "move_to": return tools.move(args);
       case "push_down_player": return tools.pushDown();
       case "describe_scene": return tools.scene();
+      case "tell": return tools.tell(args);
       default: throw new ToolError(`Unknown tool: ${name}`);
     }
   } catch (error) {
@@ -605,6 +608,17 @@ class CharacterTools {
     if (target.id === from) throw new ToolError(`You are already at ${target.name}`);
     return { result: { from: this.place(from), to: target.name, note: "The move happens in the room once the conversation pauses" },
       action: { kind: "move", destination: target.id }, changed: true };
+  }
+  /** Says something to another character in the same place, away from the player; only the two of them hear it. */
+  tell(args: Record<string, unknown>): ToolOutcome {
+    const text = typeof args.text === "string" ? unquoteSpeech(args.text.replace(/\s+/g, " ")).slice(0, 600) : "";
+    if (!text) throw new ToolError("text is required");
+    const listener = this.character(args.person ?? args.character, -1);
+    if (listener < 0) throw new ToolError("person is required");
+    if (listener === this.self || listener === this.master) throw new ToolError("Tell another character, not yourself or the player");
+    if (this.asleep(listener)) throw new ToolError(`${this.name(listener)} is asleep`);
+    if (this.location(listener) !== this.location(this.self)) throw new ToolError(`${this.name(listener)} is not here`);
+    return { result: { told: this.name(listener) }, changed: false, told: { listener, text } };
   }
   pushDown(): ToolOutcome {
     if (this.self !== Number(this.host.read("TARGET"))) throw new ToolError("Only the character the player is currently with can push them down");

@@ -125,6 +125,8 @@
         <label for="llm-instructions">Extra instructions</label>
         <textarea id="llm-instructions" name="instructions" rows="3" placeholder="Optional, e.g. &quot;Reply in Japanese.&quot;"></textarea>
         <label class="llm-config-check"><input name="encounters" type="checkbox"><span>Characters you run into may speak up on their own (asks the LLM each time you meet someone; needs tools)</span></label>
+        <label class="llm-config-check"><input name="memories" type="checkbox"><span>Characters keep a memory of you (asks the LLM at the start of each day to sum up each character's history, which is then sent with every prompt)</span></label>
+        <label class="llm-config-check"><input name="gossip" type="checkbox"><span>Characters gossip about you (when two meet away from you, one may pass on news about you, which can change how the other feels; needs tools)</span></label>
       </div>
       <p class="llm-config-status" role="status"></p>
       <div class="confirm-actions">

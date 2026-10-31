@@ -96,7 +96,21 @@ export function historyContext(history, limit) {
     ? `Interaction history between the player and ${name}, oldest first${omitted ? ` (${omitted} older interactions omitted)` : ""}. `
       + `Lines starting with someone else's name ("Name: ...") are what that person said or did where ${name} could hear and see it:`
     : `There is no interaction history between the player and ${name} yet.`;
-  return [situation, heading, blocks.join("\n\n")].filter(Boolean).join("\n\n");
+  const memory = history.memory?.text
+    ? `${name}'s own memory of the player and what happened (her notes as of ${clock(history.memory)}; the history below may repeat some of it):\n${history.memory.text}`
+    : "";
+  return [situation, memory, heading, blocks.join("\n\n")].filter(Boolean).join("\n\n");
+}
+
+/**
+ * The part of a history a character's memory does not take in yet (the entries after `memory.covers`), for writing the
+ * next one; the whole history if the memory is missing or covers an event no longer in it.
+ */
+export function sinceMemory(history) {
+  const covers = history.memory?.covers;
+  const at = covers ? history.entries.findIndex((entry) => entry.id === covers) : -1;
+  const { memory, ...rest } = history;
+  return at < 0 ? rest : { ...rest, entries: history.entries.slice(0, at) };
 }
 
 // Set by the page so history text gets the same on-device translation as the game screen.
@@ -383,6 +397,84 @@ function voiceEditor(chat, character) {
   return { section, load };
 }
 
+/**
+ * The character's memory (her own summary of the history, sent with every prompt), editable: the LLM writes it at the
+ * start of each day, or now with "Write now", and the player can change and save it.
+ */
+function memoryEditor(chat, character, loadAll) {
+  const section = element("details", "era-llm-voice");
+  const summary = element("summary", "", "Character memory");
+  const note = element("p", "era-history-note");
+  const wrapper = element("label", "era-llm-voice-field");
+  const textarea = element("textarea");
+  textarea.rows = 8;
+  wrapper.append(element("span", "", "What she remembers of the player"), textarea);
+  const save = element("button", "", "Save");
+  const write = element("button", "", "Write now");
+  const clear = element("button", "", "Clear");
+  for (const button of [save, write, clear]) button.type = "button";
+  const status = element("span", "era-history-note");
+  const actions = element("div", "era-llm-voice-actions");
+  actions.append(save, write, clear, status);
+  section.append(summary, note, wrapper, actions);
+  let history = null, covers = null, loading = null;
+  const show = () => {
+    const memory = history.memory;
+    textarea.value = memory?.text ?? "";
+    covers = memory?.covers ?? history.entries[0]?.id ?? null;
+    summary.textContent = `Character memory${memory ? ` (as of ${clock(memory)})` : " (none yet)"}`;
+    note.textContent = memory
+      ? `Sent with every prompt for ${character.name}. It is rewritten at the start of each day from this and what happened since.`
+      : `${character.name} has no memory yet. One is written at the start of each new day, or now with Write now.`;
+  };
+  const load = () => loading ??= loadAll().then((result) => { history = result; show(); }, (error) => {
+    loading = null;
+    note.textContent = `Could not load the memory: ${error.message}`;
+  });
+  const busy = (on) => { save.disabled = write.disabled = clear.disabled = on; };
+  const store = async (text, at) => {
+    status.textContent = "Saving…";
+    const { memory } = await chat.remember(text, at);
+    history = { ...history, memory: memory ?? undefined };
+    show();
+    status.textContent = text ? "Saved." : "Cleared.";
+  };
+  save.addEventListener("click", async () => {
+    if (!history) return;
+    busy(true);
+    // A memory edited by hand takes in the history up to now, like one written by the LLM.
+    try { await store(textarea.value.trim(), history.entries[0]?.id ?? null); }
+    catch (error) { status.textContent = `Could not save: ${error.message}`; }
+    finally { busy(false); }
+  });
+  clear.addEventListener("click", async () => {
+    if (!history) return;
+    busy(true);
+    try { await store("", covers); }
+    catch (error) { status.textContent = `Could not clear: ${error.message}`; }
+    finally { busy(false); }
+  });
+  write.addEventListener("click", async () => {
+    if (!activeLlm()) {
+      document.dispatchEvent(new Event("era-llm-configure"));
+      return;
+    }
+    busy(true);
+    status.textContent = `${character.name} is thinking back…`;
+    try {
+      loading = null;
+      history = await loadAll();
+      const memory = await chat.writeMemory(history);
+      if (!memory) status.textContent = history.memory ? "Nothing new since the last memory." : `Nothing has happened with ${character.name} yet.`;
+      else await store(memory.text, memory.covers);
+    } catch (error) { status.textContent = `Could not write the memory: ${error.message}`; }
+    finally { busy(false); }
+  });
+  textarea.addEventListener("input", () => { status.textContent = "Unsaved changes."; });
+  section.addEventListener("toggle", () => { if (section.open) void load(); });
+  return { section, load };
+}
+
 function toolCallText(call) {
   const args = call.function?.arguments;
   return `→ ${call.function?.name ?? "?"}(${typeof args === "string" ? args : JSON.stringify(args ?? {})})`;
@@ -434,6 +526,8 @@ function setupChat({ dialog, tabs, pane, content, history, loadAll, chat, cleanu
   const debugLogPane = element("div");
   const voice = chat.voice && chat.saveVoice ? voiceEditor(chat, character) : null;
   if (voice) debugPane.append(voice.section);
+  const memory = chat.remember && chat.writeMemory ? memoryEditor(chat, character, loadAll) : null;
+  if (memory) debugPane.append(memory.section);
   debugPane.append(debugLogPane);
   dialog.append(debugPane);
   const historyTab = element("button", "era-info-tab", "History & chat");
@@ -448,6 +542,7 @@ function setupChat({ dialog, tabs, pane, content, history, loadAll, chat, cleanu
     debugTab.setAttribute("aria-pressed", String(debug));
     if (debug) {
       void voice?.load();
+      void memory?.load();
       renderDebug(debugLogPane, log);
       debugPane.scrollTop = debugPane.scrollHeight;
     }

@@ -518,6 +518,23 @@ so the others can react to it. Each character has her own open conversation even
 line back (Edit/Retry) takes back the copies too. `historyContext` tells the model that "Name: …" lines are what
 someone else said or did.
 
+**Memories** (option "Characters keep a memory of you"). At the first command prompt of a new in-game day the
+snapshot carries `memoriesDue`: characters whose history has moved on since their memory was written (most recent
+first, at most 8). The client asks the LLM (`memoryMessages`, plain prose, first person, at most 200 words) to fold
+the entries since the old memory into it and saves it with `POST /api/character-memory {session, character, text,
+covers}`, where `covers` is the newest event it took in. A memory is kept per playthrough in the history checkpoint,
+returned as `CharacterHistory.memory`, and put at the top of every prompt by `historyContext`. The debug tab's
+"Character memory" section shows it and can edit, clear or rewrite it.
+
+**Gossip** (option "Characters gossip about you"). When two awake characters newly end up together somewhere the
+player is not, and the teller's history has moved on since she last had the chance to tell the listener, the
+snapshot carries `gossip: [{teller, listener, place}]` (at most two, closest pairs first; the first prompt after a
+start or load is only a baseline). The teller gets `gossipPrompt` with lookups and `tell`; if she tells, the listener
+gets a turn with `change_feelings`, `change_mark` and `tell`. These calls go to `/api/character-tool` with
+`aside: true`, which allows only `ASIDE_TOOLS`, and are recorded as one `gossip` event per pair ("A and B talked
+about the player (the player was not there)") in both histories but not the player's. `tell` is rejected outside
+asides.
+
 The adapter records first meetings, daily greetings,
 room encounters, conversation (300), serving tea (301), apologizing (303),
 kissing (312), pushing down (350), confessing (352), and the custom **Play a game** action. Games are captured when an `ADD_GAME<n>`

@@ -13,7 +13,7 @@ import { GAME_INSTRUCTION_LIMIT, Runtime, type BackgroundLayer, type ClientState
 import { editableVoice, FileVoiceStore, MemoryVoiceStore, type VoiceStore } from "./character-voice.js";
 import { FileGlobalStore, FileSaveStore, gameSaveDirectory, MemoryGlobalStore, MemorySaveStore, type GlobalStore, type SaveStore } from "./storage.js";
 import { patchTitleImage } from "./render-patches.js";
-import type { CharacterHistory, Encounter } from "./interaction-history.js";
+import type { CharacterHistory, Encounter, HistoryCharacter } from "./interaction-history.js";
 import { LLM_REQUEST_BYTES, LlmRequestError, proxyLlm } from "./llm.js";
 
 type BrowserSnapshot = ReturnType<typeof patchTitleImage>;
@@ -231,12 +231,19 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
     }
     json(response, { session: id, step: session?.step ?? 0, ...patched });
   }
-  /** The character a chat or encounter request is about: the one whose history is on screen, or someone just run into. */
-  function chatCharacter(session: Session, character: string): { history?: CharacterHistory; encounter?: Encounter } {
+  /**
+   * The character a chat or encounter request is about: the one whose history is on screen, someone just run into, one
+   * whose memory is due, or one of two characters gossiping (`aside`, who may only talk between themselves).
+   */
+  function chatCharacter(session: Session, character: string): { history?: CharacterHistory; encounter?: Encounter; other?: HistoryCharacter; aside?: boolean } {
     const snapshot = session.history.at(-1)?.snapshot;
     if (snapshot?.characterHistory?.character.id === character) return { history: snapshot.characterHistory };
     const encounter = snapshot?.encounters?.find((item) => item.character.id === character);
     if (encounter) return { encounter };
+    const due = snapshot?.memoriesDue?.find((item) => item.id === character);
+    if (due) return { other: due };
+    const gossip = snapshot?.gossip?.flatMap((item) => [item.teller, item.listener]).find((item) => item.id === character);
+    if (gossip) return { other: gossip, aside: true };
     throw new HttpError(409, "The selected character has changed; reopen history on the current screen");
   }
   const demo = demoGame(defaultEntry().game);
@@ -401,9 +408,9 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
         const session = sessions.get(data.session);
         if (!session) throw new HttpError(404, "Session expired or does not exist; start a new run");
         if (data.step !== session.step) throw new HttpError(409, "This run has moved on; reopen history on the current screen");
-        const { history, encounter } = chatCharacter(session, data.character);
+        const { history, encounter, other } = chatCharacter(session, data.character);
         session.used = Date.now();
-        json(response, history ? session.runtime.fullCharacterHistory(history) : session.runtime.encounterHistory(encounter!.character));
+        json(response, history ? session.runtime.fullCharacterHistory(history) : session.runtime.encounterHistory(encounter?.character ?? other!));
         return;
       }
       if (request.method === "POST" && url.pathname === "/api/character-tool") {
@@ -415,9 +422,26 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
         const session = sessions.get(data.session);
         if (!session) throw new HttpError(404, "Session expired or does not exist; start a new run");
         if (data.step !== session.step) throw new HttpError(409, "This run has moved on; reopen history on the current screen");
-        chatCharacter(session, data.character);
+        const { aside } = chatCharacter(session, data.character);
         session.used = Date.now();
-        try { json(response, session.runtime.characterTool(data.character, data.name, (data.arguments ?? {}) as Record<string, unknown>)); }
+        try { json(response, session.runtime.characterTool(data.character, data.name, (data.arguments ?? {}) as Record<string, unknown>, aside || data.aside === true)); }
+        catch (error) {
+          if (!(error instanceof EraError)) throw error;
+          throw new HttpError(409, error.message);
+        }
+        return;
+      }
+      if (request.method === "POST" && url.pathname === "/api/character-memory") {
+        // A character's memory, written by the LLM in the background or edited in the debug tab. The game may have moved
+        // on since it was written; it still takes in exactly the history up to `covers`.
+        const data = await body(request);
+        if (typeof data.session !== "string" || typeof data.character !== "string" || typeof data.text !== "string"
+          || (data.covers !== null && typeof data.covers !== "string"))
+          throw new HttpError(400, "Expected session, character, text and covers (an event id or null)");
+        const session = sessions.get(data.session);
+        if (!session) throw new HttpError(404, "Session expired or does not exist; start a new run");
+        session.used = Date.now();
+        try { json(response, { memory: session.runtime.rememberCharacter(data.character, data.text, data.covers as string | null) ?? null }); }
         catch (error) {
           if (!(error instanceof EraError)) throw error;
           throw new HttpError(409, error.message);

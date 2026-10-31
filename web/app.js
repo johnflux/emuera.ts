@@ -2,7 +2,7 @@ import { createTranslation, protectMapTranslation } from "./translate.js";
 import { createLibrary } from "./library.js";
 import { setHistoryTranslator, setupCharacterHistory } from "./interaction-history.js";
 import { activeLlm, PROVIDERS, setupLlmConfig } from "./llm.js";
-import { encountersEnabled, runEncounters } from "./encounters.js";
+import { encountersEnabled, gossipEnabled, memoriesEnabled, runEncounters, runGossip, runMemories, writeMemory } from "./encounters.js";
 
 const terminal = document.querySelector("#terminal");
 const status = document.querySelector("#status");
@@ -1957,6 +1957,8 @@ async function renderSnapshot(snapshot, advanceScreen) {
         undo: (lines) => api("/api/character-chat/undo", { session, step, character: snapshot.characterHistory.character.id, lines }),
         voice: () => api("/api/character-voice", { session, step, character: snapshot.characterHistory.character.id }),
         saveVoice: (voice) => api("/api/character-voice/save", { session, character: snapshot.characterHistory.character.id, voice }),
+        remember: (text, covers) => api("/api/character-memory", { session, character: snapshot.characterHistory.character.id, text, covers }),
+        writeMemory: (history, signal) => writeMemory({ llm: activeLlm(), history, gameId: runGame ?? runMode, gameTitle: gameTitle(runGame), signal }),
         refresh: refreshScreen });
   }
   await prepareMapPictures();
@@ -1969,7 +1971,8 @@ async function renderSnapshot(snapshot, advanceScreen) {
   session = snapshot.session;
   input = snapshot.input;
   if (snapshot.step !== undefined) step = snapshot.step;
-  pendingEncounters = snapshot.encounters?.length ? { session, step, encounters: snapshot.encounters } : null;
+  pendingEncounters = snapshot.encounters?.length || snapshot.gossip?.length || snapshot.memoriesDue?.length
+    ? { session, step, encounters: snapshot.encounters ?? [], gossip: snapshot.gossip ?? [], memories: snapshot.memoriesDue ?? [] } : null;
   rememberRun();
   if (snapshot.error) {
     const { file, line: sourceLine, message: reason, trace = [], context } = snapshot.error;
@@ -2257,26 +2260,36 @@ async function submit(value, selectedChoice = null) {
   }
 }
 /**
- * After the player runs into characters (and the game's own intro for them is shown), lets each one say or do something
- * through the LLM, then redraws the room once to show it. Sending new input cancels it.
+ * After the command screen is shown, lets the LLM play the characters in the background: those the player ran into
+ * (after the game's own intro for them) may say or do something, then the room is redrawn once to show it; characters
+ * who met elsewhere may pass on news about the player; and on a new day, memories are brought up to date. Sending new
+ * input cancels it.
  */
 async function reactToEncounters() {
   const pendingRun = pendingEncounters;
   pendingEncounters = null;
-  if (!pendingRun || pendingRun.session !== session || pendingRun.step !== step || busy || !input || !encountersEnabled()) return;
+  if (!pendingRun || pendingRun.session !== session || pendingRun.step !== step || busy || !input) return;
+  const encounters = encountersEnabled() ? pendingRun.encounters : [];
+  const gossip = gossipEnabled() ? pendingRun.gossip : [];
+  const memories = memoriesEnabled() ? pendingRun.memories : [];
+  if (!encounters.length && !gossip.length && !memories.length) return;
   const controller = new AbortController();
   encounterRun = controller;
   const { session: id, step: at } = pendingRun;
   let changed = false, shown = "";
+  const common = { gameId: runGame ?? runMode, gameTitle: gameTitle(runGame), signal: controller.signal,
+    onStatus: (text) => { if (!controller.signal.aborted) message(shown = text); } };
+  const history = (character) => api("/api/character-history", { session: id, step: at, character });
   try {
-    changed = await runEncounters({
-      encounters: pendingRun.encounters, gameId: runGame ?? runMode, gameTitle: gameTitle(runGame), signal: controller.signal,
-      game: {
-        history: (character) => api("/api/character-history", { session: id, step: at, character }),
-        runTool: (character, name, args) => api("/api/character-tool", { session: id, step: at, character, name, arguments: args }),
-      },
-      onStatus: (text) => { if (!controller.signal.aborted) message(shown = text); },
-    });
+    if (encounters.length) changed = await runEncounters({ ...common, encounters, game: {
+      history, runTool: (character, name, args) => api("/api/character-tool", { session: id, step: at, character, name, arguments: args }),
+    } });
+    if (gossip.length) await runGossip({ ...common, gossip, game: {
+      history, runTool: (character, name, args) => api("/api/character-tool", { session: id, step: at, character, name, arguments: args, aside: true }),
+    } });
+    if (memories.length) await runMemories({ ...common, characters: memories, game: {
+      history, remember: (character, text, covers) => api("/api/character-memory", { session: id, character, text, covers }),
+    } });
   } finally { if (encounterRun === controller) encounterRun = null; }
   if (controller.signal.aborted || session !== id || step !== at) return;
   if (status.textContent === shown) message("");

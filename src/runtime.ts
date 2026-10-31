@@ -20,7 +20,7 @@ import { readNativeSave, writeNativeSave, type NativeSave, type SavedContainers,
 import { fixHistoryHtml, SHARP_METHODS, supportedSharpCall, translateHistoryDate } from "./plugin-compat.js";
 import { regexCharacterClasses, regexGroupOrder, replaceRegex } from "./regex.js";
 import { decodePicture, encodePicture, InvalidGraphicsImage, pictureColor, resourceColor } from "./graphics.js";
-import { TwInteractionHistory, type CharacterHistory, type Encounter, type HistoryCharacter } from "./interaction-history.js";
+import { TwInteractionHistory, type CharacterHistory, type Encounter, type Gossip, type HistoryCharacter, type Memory } from "./interaction-history.js";
 import { runCharacterTool, toolCallSummary, unquoteSpeech, type CharacterAction } from "./character-tools.js";
 import { characterVoice, MemoryVoiceStore, type CharacterVoice, type EditableVoice, type VoiceStore } from "./character-voice.js";
 
@@ -116,6 +116,8 @@ export interface InputRequest {
   sleep?: boolean;
 }
 type Yield = { output: Output } | { input: InputRequest };
+/** What characters may do when talking among themselves away from the player (see characterTool). */
+const ASIDE_TOOLS = new Set(["describe_scene", "get_character_info", "find_characters", "change_feelings", "change_mark", "tell"]);
 export interface Snapshot {
   status: "waiting" | "halted" | "error";
   output: Output[];
@@ -127,6 +129,10 @@ export interface Snapshot {
   characterHistory?: CharacterHistory;
   /** At a command prompt: characters the player has just run into (eraTW), for the LLM to have them speak up. */
   encounters?: Encounter[];
+  /** At the first command prompt of a day: characters whose memory should be brought up to date. */
+  memoriesDue?: HistoryCharacter[];
+  /** At a command prompt: characters who just met away from the player, one with news about the player for the other. */
+  gossip?: Gossip[];
   /** Debug mode: text for Emuera's debug window since the previous snapshot; `debugClear` (DEBUGCLEAR) empties it first. */
   debug?: string;
   debugClear?: boolean;
@@ -451,6 +457,8 @@ export class Runtime {
   private ahead: { snapshot: Snapshot } | { error: unknown } | null = null;
   /** Who the player ran into, found at the command prompt and passed on with its snapshot. */
   private encounters: Encounter[] | undefined;
+  private memoriesDue: HistoryCharacter[] | undefined;
+  private gossip: Gossip[] | undefined;
   private stainDefault: bigint[];
   private maxShopItem: number;
   private printCPerLine: number;
@@ -842,6 +850,8 @@ export class Runtime {
     const request: InputRequest = { kind: "integer" };
     this.trainRequest = request;
     this.encounters = this.interactionHistory?.encounters();
+    this.memoriesDue = this.interactionHistory?.memoriesDue();
+    this.gossip = this.interactionHistory?.gossip();
     let value: string;
     try { value = yield { input: request }; }
     finally { this.trainRequest = undefined; }
@@ -891,13 +901,18 @@ export class Runtime {
     this.timed = undefined;
     return this.advance(REFRESH);
   }
-  /** Runs an LLM tool for a character in the current interaction history; see character-tools.ts. */
-  characterTool(character: string, name: string, args: Record<string, unknown>): { result: Record<string, unknown>; changed: boolean } {
+  /**
+   * Runs an LLM tool for a character in the current interaction history; see character-tools.ts. `aside` is for talk
+   * between characters away from the player: only lookups, feelings and `tell` are allowed, and what she says or how her
+   * feelings change goes into the event the two of them share rather than a conversation with the player.
+   */
+  characterTool(character: string, name: string, args: Record<string, unknown>, aside = false): { result: Record<string, unknown>; changed: boolean } {
     const history = this.interactionHistory;
     if (!history) throw new EraError("Character tools are unavailable for this game");
     if (this.ahead || !this.pending || this.pending !== this.trainRequest) throw new EraError("The game is not waiting for a command; character tools can only run there");
     const self = history.indexOf(character);
     if (self < 0) throw new EraError("That character is no longer in the game");
+    if (aside ? !ASIDE_TOOLS.has(name) : name === "tell") return { result: { error: `${name} is not available now` }, changed: false };
     this.steps = 0;
     const read = (variable: string, indices: Value[] = []) => this.globals.get(variable, indices.map(literal), this.context(this.globals));
     const outcome = runCharacterTool({
@@ -910,6 +925,14 @@ export class Runtime {
       queued: () => this.characterActions,
       voice: (intimate) => this.characterVoice(self, intimate),
     }, self, character, name, args);
+    if (aside) {
+      if (outcome.told) history.gossipLine(self, outcome.told.listener, this.heardLine(self, "say", { text: outcome.told.text }, {})!);
+      else if (!outcome.result.error && (name === "change_feelings" || name === "change_mark")) {
+        const who = String(this.globals.get("CALLNAME", [literal(BigInt(self))], this.context(this.globals)));
+        history.gossipAside(self, [{ text: `${who}: `, color: this.display.foreground }, ...this.toolLine(self, name, args, outcome.result)]);
+      }
+      return { result: outcome.result, changed: outcome.changed };
+    }
     if (outcome.action) this.characterActions.push({ ...outcome.action, character } as CharacterAction);
     if (name !== "describe_scene")
       history.chat(character, { speaker: character, runs: this.toolLine(self, name, args, outcome.result) }, this.heardLine(self, name, args, outcome.result));
@@ -1023,6 +1046,11 @@ export class Runtime {
     const parts = message.trim().split(/(\*[^*]+\*)/).map((part) => part.trim()).filter(Boolean)
       .map((part) => part.startsWith("*") ? part : `"${part.replace(/^["“「]+|["”」]+$/g, "")}"`);
     history.chat(character, { speaker: null, runs: [{ text: parts.join(" "), color: this.display.foreground }] });
+  }
+  /** Sets a character's memory (her own summary of her history up to `covers`); empty text clears it. */
+  rememberCharacter(character: string, text: string, covers: string | null): Memory | undefined {
+    if (!this.interactionHistory) throw new EraError("Interaction history is unavailable for this game");
+    return this.interactionHistory.remember(character, text, covers);
   }
   /** Takes back the last lines of the conversation in the chat window (for trying a message again). */
   unchat(character: string, count: number): void { this.chatHistory().unchat(character, count); }
@@ -3037,6 +3065,10 @@ export class Runtime {
     if (history) snapshot.characterHistory = history;
     if (this.encounters?.length && snapshot.input && snapshot.input === this.trainRequest) snapshot.encounters = this.encounters;
     this.encounters = undefined;
+    if (this.memoriesDue?.length && snapshot.input && snapshot.input === this.trainRequest) snapshot.memoriesDue = this.memoriesDue;
+    this.memoriesDue = undefined;
+    if (this.gossip?.length && snapshot.input && snapshot.input === this.trainRequest) snapshot.gossip = this.gossip;
+    this.gossip = undefined;
     if (this.debugClear) snapshot.debugClear = true;
     if (this.debugText) snapshot.debug = this.debugText;
     this.debugText = "";

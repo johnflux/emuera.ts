@@ -65,6 +65,8 @@ export const TOOLS = [
     { command: who("A name from availableCommands, e.g. \"Kiss\"") }, ["command"]),
   fn("end_scene", "During an intimate scene: stop it now, because the player wants to or you do. The game plays out the "
     + "ending; the conversation ends with this call, so make it last."),
+  fn("tell", "Say something to another character who is here with you, away from the player; only the two of you hear it.",
+    { person: who("Their name"), text: who("What you say to them, without quotation marks") }, ["person", "text"]),
 ];
 /** Tools that hand the moment over to the game to play out; the conversation stops once one succeeds. */
 const HANDOVER = new Set(["player_attempts", "scene_action", "end_scene"]);
@@ -78,6 +80,10 @@ export const SCENE_TOOLS = tools("get_character_info", "find_characters", "chang
 /** When the player and a character run into each other: she may react, but nothing is asked of her yet. */
 export const ENCOUNTER_TOOLS = tools("get_character_info", "find_characters", "change_feelings", "change_mark", "change_mood",
   "say", "act", "move_to");
+/** Meeting another character away from the player, with news about the player to pass on (or not). */
+export const GOSSIP_TOOLS = tools("get_character_info", "find_characters", "tell");
+/** Being told something about the player by another character: it may change her feelings, and she may answer. */
+export const LISTENER_TOOLS = tools("change_feelings", "change_mark", "tell");
 /** The toolset for the moment described by describe_scene. */
 export const toolsFor = (scene) => scene?.intimateScene ? SCENE_TOOLS : CHAT_TOOLS;
 
@@ -89,7 +95,7 @@ export const PROVIDERS = {
   local: { label: "Local (OpenAI-compatible)", endpoint: "http://127.0.0.1:11434/v1", model: "", jsonMode: false, tools: true,
     hint: "Any OpenAI-compatible server. Ollama: http://127.0.0.1:11434/v1 · LM Studio: http://127.0.0.1:1234/v1 · llama.cpp: http://127.0.0.1:8080/v1. The key is usually not needed." },
 };
-const DEFAULTS = { provider: "openai", temperature: 0.8, historyChars: 24000, instructions: "", encounters: true };
+const DEFAULTS = { provider: "openai", temperature: 0.8, historyChars: 24000, instructions: "", encounters: true, memories: true, gossip: true };
 
 export function loadLlmConfig() {
   let saved = {};
@@ -288,6 +294,66 @@ export function encounterMessage({ character, encounter, scene }) {
 }
 
 /**
+ * The system prompt for two characters meeting away from the player: the teller decides whether to pass on news about
+ * the player; the listener (once told) decides whether it changes her feelings, and may answer.
+ */
+export function gossipPrompt({ character, other, place, gameTitle, instructions, scene, told }) {
+  const name = character.name, them = other.name;
+  return [
+    `You are role-playing as ${name}, a character in the text adventure game "${gameTitle}". ${name} has just run into `
+      + `${them} at ${place}. The player is not there and will not hear this. Reply in English.`,
+    `Talk only through tool calls: tell is how ${name} speaks to ${them}. Any other text is ignored; when ${name} has `
+      + `finished, or has nothing to say, reply with just DONE.`,
+    ...(scene?.voice?.examples?.length ? [`Speak the way ${name} does in the example lines below: the same formality, `
+      + `vocabulary and verbal tics, and refer to ${name}self exactly as in the examples.`] : []),
+    `The interaction history below is everything ${name} knows of the player: what happened between them, and what `
+      + `${name} saw, overheard or was told.`,
+    ...(told ? [
+      `${them} just told ${name} this about the player: 「${told}」`,
+      `Does it change how ${name} feels about the player? Weigh how much ${name} trusts ${them}'s word, ${name}'s `
+        + `personality and ${name}'s own experience of the player. If it does, call change_feelings toward the player in `
+        + `proportion: hearsay counts for less than experience, typically favor ±1-15 and trust ±1-5. Something `
+        + `outrageous done to someone ${name} loves may also earn a hate mark (change_mark). ${name} may answer ${them} `
+        + `with one tell. Otherwise reply DONE.`,
+    ] : [
+      `Does ${name} tell ${them} anything about the player? Only something notable that actually happened in the history `
+        + `(sweet, rude, scandalous, worrying or funny), or ${name}'s strong opinion of the player, and only if ${name} `
+        + `would share it with ${them} given ${name}'s personality and their relationship (friends share more; a secret `
+        + `or something embarrassing to ${name} may stay unsaid). Not things ${them} was there for or was already told, `
+        + `as the history shows, and never anything that is not in the history.`,
+      `If so, call tell once (person: ${them}) with what ${name} says, one to three sentences in ${name}'s voice. `
+        + `Otherwise reply DONE; usually there is nothing worth mentioning.`,
+    ]),
+    instructions?.trim() ? `Additional instructions:\n${instructions.trim()}` : "",
+  ].filter(Boolean).join("\n");
+}
+
+/** Messages asking for a character's updated memory: her previous memory and what has happened since. */
+export function memoryMessages({ character, gameTitle, previous, since }) {
+  const name = character.name;
+  return [
+    { role: "system", content: [
+      `You keep the memory of ${name}, a character in the text adventure game "${gameTitle}". Write what ${name} `
+        + `remembers of the player and how ${name} feels about them now, as ${name} would remember it: first person, `
+        + `in English, plain prose without lists or headings, at most 200 words.`,
+      `Keep what matters for how ${name} treats the player from now on: who the player is to ${name}, notable events `
+        + `(first meetings, gifts, kindness, rudeness, fights, apologies, intimacy, promises, and what ${name} heard `
+        + `about the player from others), how ${name} feels and why, and anything left unresolved. Leave out small talk `
+        + `and game mechanics (numbers, tool calls). Combine the previous memory with what happened since; where they `
+        + `differ, the newer wins.`,
+      `Use only what the previous memory and the history below say. Never invent events, places, gifts, backstory or `
+        + `feelings that are not there: if little has happened, the memory is short (a sentence or two is fine).`,
+      `Reply with the memory text only.`,
+    ].join("\n") },
+    { role: "user", content: [
+      previous ? `${name}'s previous memory:\n${previous}` : `${name} has no memory of the player written down yet.`,
+      since,
+      `Write ${name}'s memory now.`,
+    ].join("\n\n") },
+  ];
+}
+
+/**
  * Messages for the chat completion: instructions, the interaction history (which includes the conversation so far:
  * speech in 「」, actions as narration and tool calls summarised) and the scene as context, then the new message.
  */
@@ -377,7 +443,7 @@ export function textReplyCalls(text) {
   return calls;
 }
 
-const SPOKEN = new Set(["say", "act"]);
+const SPOKEN = new Set(["say", "act", "tell"]);
 const spoken = (tool) => SPOKEN.has(tool.name) && !tool.result?.error && typeof tool.arguments?.text === "string";
 /** The reply a model gives when it has finished; it may also end a reply that wrote its calls out as text. */
 const DONE = /(?:^|\n)\W*DONE\W*$/;
@@ -389,7 +455,7 @@ const DONE = /(?:^|\n)\W*DONE\W*$/;
  * which ends it. Returns the final text and the tool calls made, in order.
  */
 export async function converse({ llm, messages, temperature, log, signal, runTool, onTool, toolset = CHAT_TOOLS,
-  spokenLimit = SPOKEN_LIMIT }) {
+  spokenLimit = SPOKEN_LIMIT, textReply = textReplyCalls }) {
   const useTools = !!runTool && llm.tools !== false;
   const tools = [];
   const attempted = () => handedOver(tools);
@@ -411,7 +477,7 @@ export async function converse({ llm, messages, temperature, log, signal, runToo
       // Weaker models sometimes write the calls out instead of making them, or just write the reply; run those as if
       // they had been called. A written reply is the whole reply, so nothing more is asked.
       let written = textToolCalls(text, toolset);
-      if (!written.length) { written = textReplyCalls(text); finished = true; }
+      if (!written.length) { written = textReply(text); finished = true; }
       calls = written.map(({ name, args }, index) => ({
         id: `text${round}_${index}`, type: "function", function: { name, arguments: JSON.stringify(args) } }));
     }
@@ -441,7 +507,7 @@ export async function converse({ llm, messages, temperature, log, signal, runToo
     }
     // The player's attempt or a scene command is the game's to play out, so the conversation stops there.
     // Once the character has said all it may, there is nothing left to ask for.
-    const saidAll = tools.filter((tool) => tool.name === "say" && spoken(tool)).length >= spokenLimit;
+    const saidAll = ["say", "tell"].some((name) => tools.filter((tool) => tool.name === name && spoken(tool)).length >= spokenLimit);
     if (overran || saidAll || attempted() || finished) return done();
   }
 }
@@ -532,7 +598,7 @@ export function setupLlmConfig(dialog) {
     const temperature = fields.temperature.value === "" ? undefined : Number(fields.temperature.value);
     const historyChars = Math.max(1000, Math.round(Number(fields.historyChars.value) || DEFAULTS.historyChars));
     draft = { ...draft, provider: shown, temperature, historyChars, instructions: fields.instructions.value,
-      encounters: fields.encounters.checked };
+      encounters: fields.encounters.checked, memories: fields.memories.checked, gossip: fields.gossip.checked };
     saveLlmConfig(draft);
   });
   // Keys typed here are not game input.
@@ -550,6 +616,8 @@ export function setupLlmConfig(dialog) {
     fields.historyChars.value = draft.historyChars;
     fields.instructions.value = draft.instructions;
     fields.encounters.checked = draft.encounters !== false;
+    fields.memories.checked = draft.memories !== false;
+    fields.gossip.checked = draft.gossip !== false;
     dialog.showModal();
   };
 }
