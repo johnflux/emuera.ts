@@ -111,39 +111,63 @@
       </div>
     </form>
   </dialog>
-  <dialog id="llm-config" class="confirm llm-config" aria-labelledby="llm-config-title">
+  <dialog id="llm-config" class="confirm llm-config" aria-labelledby="llm-config-title" aria-describedby="llm-config-description">
     <form method="dialog">
-      <h2 id="llm-config-title">LLM</h2>
-      <p>Lets characters reply to your messages in their Interaction History. Sending a message sends that character's interaction history to the provider. These settings, including the API key, are stored unencrypted in this browser only.</p>
-      <div class="llm-config-fields">
-        <label for="llm-provider">Provider</label>
-        <select id="llm-provider" name="provider">
-          <option value="openai">OpenAI</option>
-          <option value="openrouter">OpenRouter</option>
-          <option value="local">Local (OpenAI-compatible)</option>
-        </select>
-        <label for="llm-endpoint">API base URL</label>
-        <span class="llm-config-row"><input id="llm-endpoint" name="endpoint" type="url" required spellcheck="false"><button type="button" class="llm-reset-endpoint">Default</button></span>
-        <p class="llm-config-hint"></p>
-        <label for="llm-key">API key</label>
-        <input id="llm-key" name="apiKey" type="password" autocomplete="off" spellcheck="false">
-        <label for="llm-model">Model</label>
-        <span class="llm-config-row"><input id="llm-model" name="model" list="llm-models" required spellcheck="false"><button type="button" class="llm-load-models">Load models</button></span>
-        <datalist id="llm-models"></datalist>
-        <label class="llm-config-check"><input name="jsonMode" type="checkbox"><span>Request JSON output (<code>response_format</code>)</span></label>
-        <label class="llm-config-check"><input name="tools" type="checkbox"><span>Let the character act in the game with tools (the model must support tool calling)</span></label>
-        <label for="llm-temperature">Temperature</label>
-        <input id="llm-temperature" name="temperature" type="number" min="0" max="2" step="0.1">
-        <label for="llm-history-chars">History sent</label>
-        <span class="llm-config-row"><input id="llm-history-chars" name="historyChars" type="number" min="1000" step="1000"> characters (oldest dropped first)</span>
-        <label for="llm-instructions">Extra instructions</label>
-        <textarea id="llm-instructions" name="instructions" rows="3" placeholder="Optional, e.g. &quot;Reply in Japanese.&quot;"></textarea>
-        <label class="llm-config-check"><input name="encounters" type="checkbox"><span>Characters you run into may speak up on their own (asks the LLM each time you meet someone; needs tools)</span></label>
-        <label class="llm-config-check"><input name="memories" type="checkbox"><span>Characters keep a memory of you (asks the LLM at the start of each day to sum up each character's history, which is then sent with every prompt)</span></label>
-        <label class="llm-config-check"><input name="gossip" type="checkbox"><span>Characters gossip about you (when two meet away from you, one may pass on news about you, which can change how the other feels; needs tools)</span></label>
+      <div class="llm-config-body">
+        <header class="llm-config-header">
+          <span class="llm-config-eyebrow">Interaction History</span>
+          <h2 id="llm-config-title">LLM configuration</h2>
+          <p id="llm-config-description">Choose how characters reply to your messages in their Interaction History.</p>
+        </header>
+        <p class="llm-config-privacy"><strong>Before connecting</strong> Sending a message sends that character's interaction history to the provider. These settings, including the API key, are stored unencrypted in this browser only.</p>
+        <fieldset class="llm-config-section">
+          <legend>Provider connection</legend>
+          <div class="llm-config-fields">
+            <label for="llm-provider">Provider</label>
+            <select id="llm-provider" name="provider">
+              <option value="openai">OpenAI</option>
+              <option value="openrouter">OpenRouter</option>
+              <option value="local">Local (OpenAI-compatible)</option>
+            </select>
+            <label for="llm-endpoint">API base URL</label>
+            <span class="llm-config-row"><input id="llm-endpoint" name="endpoint" type="url" required spellcheck="false" aria-describedby="llm-config-hint"><button type="button" class="llm-reset-endpoint">Default</button></span>
+            <p id="llm-config-hint" class="llm-config-hint" aria-live="polite"></p>
+            <label for="llm-key">API key</label>
+            <input id="llm-key" name="apiKey" type="password" autocomplete="off" spellcheck="false" aria-describedby="llm-config-hint">
+            <label for="llm-model">Model</label>
+            <span class="llm-config-row"><input id="llm-model" name="model" list="llm-models" required spellcheck="false" aria-describedby="llm-model-help"><button type="button" class="llm-load-models">Load models</button></span>
+            <datalist id="llm-models"></datalist>
+            <p id="llm-model-help" class="llm-config-hint">Enter a model ID or load the provider's model list. Loading models does not verify chat or tool support.</p>
+          </div>
+          <div class="llm-config-feedback">
+            <span class="llm-config-eyebrow">Model discovery status</span>
+            <p class="llm-config-status" role="status" aria-live="polite" aria-atomic="true"></p>
+            <p class="llm-config-status-help">Use Load models to check the available models. Save applies your settings without testing a chat request.</p>
+          </div>
+        </fieldset>
+        <fieldset class="llm-config-section">
+          <legend>Response settings</legend>
+          <div class="llm-config-fields">
+            <label class="llm-config-check"><input name="jsonMode" type="checkbox"><span>Request JSON output (<code>response_format</code>)</span></label>
+            <label class="llm-config-check"><input name="tools" type="checkbox"><span>Let the character act in the game with tools (the model must support tool calling)</span></label>
+            <label for="llm-temperature">Temperature</label>
+            <input id="llm-temperature" name="temperature" type="number" min="0" max="2" step="0.1">
+            <label for="llm-history-chars">History sent</label>
+            <span class="llm-config-row"><input id="llm-history-chars" name="historyChars" type="number" min="1000" step="1000"><span class="llm-config-unit">characters (oldest dropped first)</span></span>
+            <label for="llm-instructions">Extra instructions</label>
+            <textarea id="llm-instructions" name="instructions" rows="3" placeholder="Optional, e.g. &quot;Reply in Japanese.&quot;"></textarea>
+          </div>
+        </fieldset>
+        <fieldset class="llm-config-section">
+          <legend>Character behavior</legend>
+          <div class="llm-config-fields">
+            <label class="llm-config-check"><input name="encounters" type="checkbox"><span>Characters you run into may speak up on their own (asks the LLM each time you meet someone; needs tools)</span></label>
+            <label class="llm-config-check"><input name="memories" type="checkbox"><span>Characters keep a memory of you (asks the LLM at the start of each day to sum up each character's history, which is then sent with every prompt)</span></label>
+            <label class="llm-config-check"><input name="gossip" type="checkbox"><span>Characters gossip about you (when two meet away from you, one may pass on news about you, which can change how the other feels; needs tools)</span></label>
+          </div>
+        </fieldset>
       </div>
-      <p class="llm-config-status" role="status"></p>
-      <div class="confirm-actions">
+      <div class="confirm-actions llm-config-actions">
         <button value="cancel" formnovalidate>Cancel</button>
         <button value="save">Save</button>
       </div>

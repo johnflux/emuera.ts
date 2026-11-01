@@ -76,8 +76,9 @@ The eraTW launch screen retains the original TW title artwork with responsive
 sizing and no image filters or glow, alongside matching in-game panels. Setup fits
 its content rather than reserving a full-height dialog; editors and save lists
 remain scrollable within the viewport.
-The wake-up menu fills the terminal's available width and height, retaining
-scrolling on smaller screens. Its Home card aligns the room and area names
+The wake-up menu and main screen fill the terminal's available width and height,
+accounting for the terminal's 16 px top padding, and retain scrolling on smaller
+screens. The Home card aligns the room and area names
 beside the location pin, with spacing above the area and home controls.
 Loading no longer pauses on the successful room-setup confirmation; room
 initialization and failure prompts remain intact. Selecting Wake Up clears the

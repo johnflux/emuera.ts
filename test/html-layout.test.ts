@@ -11,6 +11,84 @@ test("terminal hides only the horizontal scrollbar without disabling overflow or
   assert.match(css, /#terminal > \* \{[^}]*min-width: var\(--logical-width, 0\);/);
 });
 
+test("settings panel uses a responsive two-column form without clipping its controls", async () => {
+  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  assert.match(css, /#settings \{[^}]*max-height: min\(60vh, 480px\);[^}]*overflow: auto;/);
+  assert.match(css, /#settings-form \{[^}]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/);
+  assert.match(css, /@media \(max-width: 600px\).*#settings-form \{ grid-template-columns: minmax\(0, 1fr\); \}/);
+  assert.match(css, /#settings-form input\[type="text"\] \{[^}]*width: 100%;[^}]*min-width: 0;/);
+});
+
+test("main and wakeup screens fill the terminal height including its top padding", async () => {
+  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  assert.match(css, /#terminal:has\(\.screen\.is-active \.era-main\), #terminal:has\(\.screen\.is-active \.era-shop\) \{ container-type: size; \}/);
+  assert.match(css, /#terminal:has\(\.screen\.is-active :is\(\.era-main, \.era-shop\)\) > \.screen\.is-active \{ min-width: 0; \}/);
+  assert.match(css, /\.screen\.is-active :is\(\.era-main, \.era-shop\) \{ min-height: calc\(100cqh \+ 8px\); \}/);
+  assert.match(css, /\.era-main \{[^}]*margin: 4px 0;/);
+  assert.match(css, /\.era-shop \{[^}]*margin: 4px 0;/);
+});
+
+test("LLM configuration keeps provider controls in a responsive scrollable dialog with clear setup status", async () => {
+  const [html, css] = await Promise.all([
+    readFile(new URL("../web/index.html", import.meta.url), "utf8"),
+    readFile(new URL("../web/style.css", import.meta.url), "utf8"),
+  ]);
+  const elements = (node: DefaultTreeAdapterMap["node"]): DefaultTreeAdapterMap["element"][] => {
+    const children = "childNodes" in node ? node.childNodes.flatMap(elements) : [];
+    return "tagName" in node ? [node, ...children] : children;
+  };
+  const attr = (node: DefaultTreeAdapterMap["element"], name: string) => node.attrs.find((attribute) => attribute.name === name)?.value;
+  const dialog = elements(parseFragment(html)).find((node) => attr(node, "id") === "llm-config")!;
+  const nodes = elements(dialog);
+  const byId = (id: string) => nodes.find((node) => attr(node, "id") === id)!;
+  const hasClass = (node: DefaultTreeAdapterMap["element"], name: string) => attr(node, "class")?.split(" ").includes(name);
+  assert.equal(dialog.tagName, "dialog");
+  assert.equal(attr(dialog, "aria-labelledby"), "llm-config-title");
+  assert.equal(attr(dialog, "aria-describedby"), "llm-config-description");
+  assert.ok(byId("llm-config-title"));
+  assert.ok(byId("llm-config-description"));
+  const form = nodes.find((node) => node.tagName === "form")!;
+  assert.equal(attr(form, "method"), "dialog");
+  const controls = nodes.filter((node) => ["input", "select", "textarea"].includes(node.tagName));
+  assert.deepEqual(controls.map((node) => attr(node, "name")), [
+    "provider", "endpoint", "apiKey", "model", "jsonMode", "tools",
+    "temperature", "historyChars", "instructions", "encounters", "memories", "gossip",
+  ]);
+  assert.deepEqual(elements(byId("llm-provider")).filter((node) => node.tagName === "option").map((node) => attr(node, "value")), ["openai", "openrouter", "local"]);
+  for (const id of ["llm-endpoint", "llm-model"]) assert.equal(attr(byId(id), "required"), "");
+  assert.equal(attr(byId("llm-endpoint"), "type"), "url");
+  assert.equal(attr(byId("llm-key"), "type"), "password");
+  assert.equal(attr(byId("llm-key"), "autocomplete"), "off");
+  assert.equal(attr(byId("llm-key"), "required"), undefined, "local providers still allow an optional key");
+  assert.equal(attr(byId("llm-model"), "list"), "llm-models");
+  assert.equal(byId("llm-models").tagName, "datalist");
+  for (const id of ["llm-provider", "llm-endpoint", "llm-key", "llm-model", "llm-temperature", "llm-history-chars", "llm-instructions"]) {
+    assert.ok(nodes.some((node) => node.tagName === "label" && attr(node, "for") === id));
+  }
+  const buttons = nodes.filter((node) => node.tagName === "button");
+  assert.equal(attr(buttons.find((node) => hasClass(node, "llm-reset-endpoint"))!, "type"), "button");
+  assert.equal(attr(buttons.find((node) => hasClass(node, "llm-load-models"))!, "type"), "button");
+  assert.equal(attr(buttons.find((node) => attr(node, "value") === "cancel")!, "formnovalidate"), "");
+  assert.ok(buttons.some((node) => attr(node, "value") === "save"));
+  assert.equal(nodes.filter((node) => node.tagName === "fieldset").length, 3);
+  const status = nodes.find((node) => hasClass(node, "llm-config-status"))!;
+  assert.equal(attr(status, "role"), "status");
+  assert.equal(attr(status, "aria-atomic"), "true");
+  assert.equal(attr(byId("llm-config-hint"), "aria-live"), "polite");
+  assert.equal(attr(byId("llm-endpoint"), "aria-describedby"), "llm-config-hint");
+  assert.match(html, /including the API key, are stored unencrypted in this browser only/);
+  assert.match(html, /Loading models does not verify chat or tool support/);
+  assert.match(css, /\.llm-config \{[^}]*max-height: calc\(100dvh - 32px\);[^}]*overflow: auto;/);
+  assert.match(css, /\.llm-config > form \{[^}]*max-height: inherit;/);
+  assert.match(css, /\.llm-config-body \{[^}]*min-height: 0;[^}]*overflow: auto;/);
+  assert.match(css, /\.llm-config-actions \{[^}]*flex-shrink: 0;/);
+  assert.match(css, /\.llm-config-fields \{[^}]*grid-template-columns: minmax\(0, 130px\) minmax\(0, 1fr\);/);
+  assert.match(css, /@media \(max-width: 600px\) \{[^]*?\.llm-config-fields \{ grid-template-columns: minmax\(0, 1fr\);/);
+  assert.match(css, /\.llm-config-row \{[^}]*flex-wrap: wrap;[^}]*min-width: 0;/);
+  assert.match(css, /\.llm-config-fields input[^}]*min-width: 0;/);
+  assert.match(css, /\.llm-config :is\(input, select, textarea, button\):focus-visible \{ outline: 2px solid #69c9b5;/);
+});
+
 test("action headers reserve filter-row height without preventing wrapping", async () => {
   const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
   assert.match(css, /\.era-actions-header \{[^}]*flex-wrap: wrap;/);
@@ -429,7 +507,7 @@ test("character history renders literal text and local controls without game inp
       find((node) => node.tag === "form").listeners.get("submit")!(localEvent);
       await settled();
     };
-    const shown = () => nodes(chatDialog).filter((node) => node.className === "era-history-text").map((node) => node.children.filter((child) => child.tag === "span" && !child.className).map((child) => child.textContent).join(""));
+    const shown = () => nodes(chatDialog).filter((node) => node.className.split(/\s+/).includes("era-history-text")).map((node) => node.children.filter((child) => child.tag === "span" && !child.className).map((child) => child.textContent).join(""));
     return { chatDialog, find, textarea, say, shown, text: () => nodes(chatDialog).map((node) => node.textContent).join("\n") };
   };
   let game = fakeGame();

@@ -195,17 +195,24 @@ a { color: #8ddaff; }
 .debug-header-actions { display: flex; gap: 6px; }
 .debug-header button { font-size: 11px; padding: 2px 8px; }
 #debug-log { flex: 1; min-height: 3em; margin: 0; padding: 6px 8px; overflow: auto; white-space: pre-wrap; }
-#settings { border: 1px solid #444; padding: 16px; margin: 20px 20px 0; font-size: 13px; color: #fff; background: #090909; font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace; }
-#settings h2 { font-size: 16px; margin-top: 0; }
-#settings-form { display: grid; grid-template-columns: max-content; gap: 10px; }
-#settings-form label { display: flex; gap: 10px; align-items: center; justify-content: space-between; }
-#settings-form input[type="text"] { background: #101010; border: 1px solid #555; padding: 3px 6px; width: 16em; }
-#settings-form input[type="color"] { background: none; border: 1px solid #555; padding: 0; width: 3em; height: 1.6em; }
+#settings { width: min(720px, calc(100% - 40px)); max-height: min(60vh, 480px); flex-shrink: 0; overflow: auto; align-self: center; border: 1px solid #294656; border-radius: 9px; padding: 18px 20px 20px; margin: 16px 20px 0; font-size: 13px; color: #dce8ed; background: radial-gradient(ellipse at 100% 0, #16364366, transparent 55%), #09131b; box-shadow: 0 12px 36px #0008; font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace; }
+#settings h2 { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; color: #e9f5f7; font-size: 17px; letter-spacing: .03em; }
+#settings h2::before { content: ""; width: 3px; height: 18px; border-radius: 3px; background: #69c9b5; box-shadow: 0 0 12px #69c9b566; }
+#settings > p { margin: 0 0 16px; color: #99adba; font-size: 12px; line-height: 1.6; }
+#settings code { color: #b6d6d3; }
+#settings-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+#settings-form label { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; min-width: 0; padding: 10px 12px; border: 1px solid #203845; border-radius: 6px; background: #10212b99; color: #b9cbd2; }
+#settings-form label:has(input[type="text"]) { grid-column: 1 / -1; grid-template-columns: minmax(0, 1fr); gap: 7px; }
+#settings-form input[type="text"] { width: 100%; min-width: 0; padding: 7px 9px; border: 1px solid #36515e; border-radius: 4px; background: #08131a; color: #e0edf3; }
+#settings-form input[type="color"] { width: 42px; height: 32px; padding: 3px; border: 1px solid #36515e; border-radius: 5px; background: #08131a; cursor: pointer; }
+#settings-form input:focus-visible { outline: 2px solid #69c9b5; outline-offset: 2px; }
+#settings-reset { grid-column: 1 / -1; justify-self: start; margin-top: 3px; padding: 7px 11px; border: 1px solid #365a6c; border-radius: 5px; background: #142c38; color: #9bd5ed; font-size: 12px; }
+#settings-reset:hover:enabled, #settings-reset:focus-visible { border-color: #69c9b5; background: #183a43; color: #d7f4ed; }
 #input-form { order: 1; flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding: 0 20px; font-size: var(--font-size); line-height: var(--line-height, 1.25); }
 #input-form[hidden] { display: none; }
 #command { flex: 1; min-width: 0; background: transparent; border: 0; padding: 0; line-height: inherit; outline: none; }
 #submit { font-size: 12px; padding: 2px 8px; }
-@media (max-width: 600px) { header, #terminal, #input-form { padding-left: 10px; padding-right: 10px; } #compatibility, #debug-output, #settings { margin-left: 10px; margin-right: 10px; } .mode { display: none; } }
+@media (max-width: 600px) { header, #terminal, #input-form { padding-left: 10px; padding-right: 10px; } #compatibility, #debug-output, #settings { margin-left: 10px; margin-right: 10px; } #settings { width: calc(100% - 20px); padding: 15px; } #settings-form { grid-template-columns: minmax(0, 1fr); } #settings-form label:has(input[type="text"]) { grid-column: auto; } #settings-reset { grid-column: auto; } .mode { display: none; } }
 /* Hotpatch sections (hotpatch/*.ERB): one HTML_PRINT, so one logical line, laid out as a block. */
 /* Lines are at least the game's logical width; sections wrap to the visible terminal instead. */
 .line .era-section { display: block; max-width: 100cqi; white-space: normal; margin: 2px 0 4px; }
@@ -237,6 +244,9 @@ a { color: #8ddaff; }
   grid-template-columns: minmax(32ch, 36ch) minmax(0, 1fr) minmax(32ch, 36ch);
   grid-template-rows: auto auto auto 1fr auto;
   grid-template-areas: "header header header" "center center right" "left actions menu" "left counters menu" "last last last"; }
+#terminal:has(.screen.is-active .era-main), #terminal:has(.screen.is-active .era-shop) { container-type: size; }
+#terminal:has(.screen.is-active :is(.era-main, .era-shop)) > .screen.is-active { min-width: 0; }
+.screen.is-active :is(.era-main, .era-shop) { min-height: calc(100cqh + 8px); }
 .era-main > * { min-width: 0; align-self: start; }
 .era-main > .line { grid-column: 1 / -1; }
 .era-main-header { grid-area: header; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; padding: 8px 12px; border: 1px solid #2c3640; border-radius: 10px; background: linear-gradient(90deg, #12181e, #0d1014); }
@@ -1003,12 +1013,10 @@ main:has(.screen.is-active .era-launch) { padding: 0; background: #000; }
 .era-main:has(.era-stopped) .era-main-header::before { z-index: 1; }
 .era-main:has(.era-stopped) .era-main-when { color: #cfe6f5; }
 /* Sleep menu (hotpatch/SLEEP_MENU.ERB): the main screen's header and cards; you | home, then the menu | system, the tip. */
-#terminal:has(.screen.is-active .era-shop) { container-type: size; }
-#terminal:has(.screen.is-active .era-shop) > .screen.is-active { min-width: 0; }
 .era-shop { display: grid; gap: 10px; width: 100cqi; max-width: 100cqi; margin: 4px 0; white-space: normal;
   grid-template-columns: minmax(32ch, 38ch) minmax(0, 1fr) minmax(32ch, 44ch);
   grid-template-areas: "header header header" "player menu system" "home menu system" "tip tip tip"; }
-.screen.is-active .era-shop { min-height: calc(100cqh - 8px); grid-template-rows: auto auto 1fr auto; }
+.screen.is-active .era-shop { grid-template-rows: auto auto 1fr auto; }
 .era-shop > * { min-width: 0; }
 .era-shop > .line { grid-column: 1 / -1; }
 .era-shop > .era-shop-player { grid-area: player; }
@@ -1097,14 +1105,47 @@ main:has(.screen.is-active .era-launch) { padding: 0; background: #000; }
 .era-travel-time.era-travel-slower { color: #7c98e8; }
 .line button.choice.era-move-dest.era-travel-danger, .era-travel-danger .era-travel-time { color: #e07070; }
 .menu-state { color: #8a8a8a; font-size: 11px; }
-.llm-config { max-width: min(620px, calc(100vw - 32px)); }
-.llm-config-fields { display: grid; grid-template-columns: max-content 1fr; gap: 8px 12px; align-items: center; margin-bottom: 12px; }
-.llm-config-fields input:not([type="checkbox"]), .llm-config-fields select, .llm-config-fields textarea { box-sizing: border-box; width: 100%; padding: 4px 6px; border: 1px solid #555; border-radius: 4px; background: #101010; color: #ddd; font: inherit; }
-.llm-config-fields textarea { resize: vertical; }
-.llm-config-row { display: flex; gap: 6px; align-items: center; }
-.llm-config-row input { flex: 1; }
-.llm-config-row input[type="number"] { flex: 0 0 8em; }
-.llm-config-row button { white-space: nowrap; border-radius: 4px; padding: 3px 10px; }
-.confirm p.llm-config-hint { grid-column: 2; margin: -4px 0 0; font-size: 12px; color: #8a8a8a; }
-.llm-config-check { grid-column: 2; display: flex; gap: 6px; align-items: center; }
-.confirm p.llm-config-status { min-height: 1.2em; margin: 0 0 12px; color: #9ab3c3; }
+.llm-config { width: min(720px, calc(100vw - 32px)); max-width: none; max-height: calc(100dvh - 32px); padding: 0; overflow: auto; border: 1px solid #365a60; border-radius: 12px; background: radial-gradient(ellipse at 100% 0, #163d4266, transparent 55%), #09131b; color: #dce8ed; box-shadow: 0 18px 60px #000c; }
+.llm-config::backdrop { background: #020b10cc; }
+.llm-config > form { display: flex; flex-direction: column; max-height: inherit; min-height: 0; }
+.llm-config-body { min-height: 0; padding: 22px; overflow: auto; overscroll-behavior: contain; scrollbar-color: #365a60 #09131b; }
+.llm-config-header { display: block; height: auto; padding: 0 0 0 12px; margin-bottom: 18px; border: 0; border-left: 3px solid #69c9b5; background: none; }
+.llm-config-eyebrow { color: #8bd5c3; font-size: 10px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; }
+.llm-config h2 { margin: 5px 0 8px; color: #e9f5f7; font-size: 22px; letter-spacing: .02em; }
+.llm-config-header p { margin: 0; color: #a9bec7; font-size: 13px; }
+.confirm p.llm-config-privacy { padding: 12px 14px; border: 1px solid #5a5140; border-radius: 7px; background: #302a1b66; color: #c9bd9f; font-size: 12px; line-height: 1.6; }
+.llm-config-privacy strong { display: block; margin-bottom: 4px; color: #e4d3a9; }
+.llm-config-section { min-width: 0; margin: 0 0 16px; padding: 14px; border: 1px solid #294650; border-radius: 8px; background: #10212b77; }
+.llm-config-section:last-child { margin-bottom: 0; }
+.llm-config-section legend { padding: 0 7px; color: #b8e4d9; font-size: 13px; font-weight: 600; }
+.llm-config-fields { display: grid; grid-template-columns: minmax(0, 130px) minmax(0, 1fr); gap: 10px 14px; align-items: center; }
+.llm-config-fields > label:not(.llm-config-check) { color: #b9cbd2; font-size: 12px; }
+.llm-config-fields input:not([type="checkbox"]), .llm-config-fields select, .llm-config-fields textarea { box-sizing: border-box; width: 100%; min-width: 0; padding: 8px 9px; border: 1px solid #36515e; border-radius: 5px; background: #08131a; color: #e0edf3; font: inherit; }
+.llm-config-fields textarea { resize: vertical; min-height: 5em; }
+.llm-config :is(input, select, textarea, button):focus-visible { outline: 2px solid #69c9b5; outline-offset: 2px; }
+.llm-config-row { display: flex; flex-wrap: wrap; min-width: 0; gap: 8px; align-items: center; }
+.llm-config-row input { flex: 1 1 10em; }
+.llm-config-row input[type="number"] { flex: 1 1 6em; max-width: 8em; }
+.llm-config button { padding: 8px 12px; border: 1px solid #365a60; border-radius: 5px; background: #142c38; color: #b8e4d9; font-size: 12px; }
+.llm-config button:hover:enabled { border-color: #69c9b5; background: #183a43; color: #e1f7ef; }
+.llm-config-row button { flex-shrink: 0; white-space: nowrap; }
+.confirm p.llm-config-hint { grid-column: 2; margin: -3px 0 2px; color: #99b5c1; font-size: 12px; overflow-wrap: anywhere; }
+.llm-config-check { grid-column: 1 / -1; display: flex; gap: 10px; align-items: flex-start; min-width: 0; padding: 10px 12px; border: 1px solid #294650; border-radius: 6px; background: #08131a66; color: #b9cbd2; font-size: 12px; line-height: 1.6; }
+.llm-config-check input { flex-shrink: 0; margin: 3px 0 0; accent-color: #69c9b5; }
+.llm-config-check span { min-width: 0; overflow-wrap: anywhere; }
+.llm-config-unit { flex: 1 1 10em; color: #99b5c1; font-size: 12px; }
+.llm-config-feedback { margin-top: 14px; padding: 12px; border: 1px solid #365a60; border-radius: 6px; background: #0a1b22; }
+.confirm p.llm-config-status { margin: 7px 0 0; color: #c2e7df; font-size: 12px; overflow-wrap: anywhere; }
+.llm-config-status:empty { display: none; }
+.confirm p.llm-config-status-help { margin: 6px 0 0; color: #99b5c1; font-size: 11px; }
+.llm-config-actions { flex-shrink: 0; padding: 14px 22px; border-top: 1px solid #294650; background: #0b1921; }
+.llm-config-actions button[value="save"] { border-color: #69c9b5; background: #69c9b5; color: #071c19; font-weight: 600; }
+.llm-config-actions button[value="save"]:hover:enabled { background: #91e1cb; color: #071c19; }
+@media (max-width: 600px) {
+  .llm-config { width: calc(100vw - 20px); max-height: calc(100dvh - 20px); }
+  .llm-config-body { padding: 16px; }
+  .llm-config-section { padding: 12px; }
+  .llm-config-fields { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .confirm p.llm-config-hint, .llm-config-check { grid-column: 1; }
+  .llm-config-actions { padding: 12px 16px; }
+}
