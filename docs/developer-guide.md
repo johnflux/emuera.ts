@@ -192,6 +192,25 @@ Other pages cover click-to-continue dialogue and a `PRINTC` command grid. Item 8
 itself straight into its main screen in prepared situations (alone, one person, two, a crowd, time stopped with
 and without company, a sleeping partner, exhaustion), for iterating on the main-screen hotpatches.
 
+The eraTW GUI shows a clock-lock and expanding icy shockwave when time freezes,
+and a warm clock-release burst when it resumes. A header badge and cool rim remain
+while time is frozen. These nonblocking effects follow the runtime snapshot's
+`timeStopped` flag, not button clicks, so automatic resumption works too.
+Restoring a run shows only its final state without replaying old bursts; starting
+another run clears the effects. Reduced-motion mode uses a static announcement
+instead of the animated burst. The `TIME_EFFECTS.ERB` hotpatch omits the generic
+freeze/resume narration and its click-to-continue wait, so these transitions
+return directly to gameplay. Other command messages, warnings, character
+reactions and their waits are preserved, and native saves are unchanged.
+The icy tint, frost overlay, clock filter and portrait fading interpolate over
+900 ms in both directions using an inherited `--era-freeze` CSS property on the
+terminal, so replacing rendered scene nodes does not restart the transition.
+Restore/reset and reduced-motion mode apply the state immediately.
+The formatted last command is delivered as `lastCommand` only at the eraTW
+command prompt and appears in the command input's placeholder instead hmof a
+terminal line. It disappears while typing; input defaults take precedence, and
+dialogue waits and unrelated screens clear the hint.
+
 ## Run
 
 Requires Node.js 22.6+ and npm. Run from the repository root:

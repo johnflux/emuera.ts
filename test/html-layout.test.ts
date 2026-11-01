@@ -4,6 +4,50 @@ import { test } from "node:test";
 import { runInNewContext } from "node:vm";
 import { parseFragment, type DefaultTreeAdapterMap } from "parse5";
 
+test("action headers reserve filter-row height without preventing wrapping", async () => {
+  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  assert.match(css, /\.era-actions-header \{[^}]*flex-wrap: wrap;/);
+  assert.match(css, /\.era-actions-header \{[^}]*align-items: center;/);
+  assert.match(css, /\.era-actions-header \{[^}]*min-height: max\(22px, calc\(1lh \+ 6px\)\);/);
+});
+
+test("last command is a placeholder, never input data, and defaults and waits take precedence", async () => {
+  const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
+  const updateControls = source.slice(source.indexOf("function updateControls("), source.indexOf("function screen("));
+  const field = { value: "", placeholder: "", disabled: false, title: "" };
+  const element = { classList: { toggle() {} }, setAttribute() {} };
+  const context = {
+    terminal: { ...element, querySelectorAll: () => [] },
+    command: field, send: { ...element, disabled: false, textContent: "" },
+    document: { querySelector: () => ({ hidden: false }) },
+    startButtons: [], restartButton: element,
+    busy: false, expiring: false,
+    input: { kind: "integer", defaultValue: undefined as string | undefined },
+    lastCommand: "Last Command: Time Stop",
+  };
+  const update = () => runInNewContext(`${updateControls}\nupdateControls();`, context);
+  update();
+  assert.equal(field.placeholder, "Last Command: Time Stop");
+  assert.equal(field.value, "", "the hint cannot be accidentally submitted");
+  field.value = "312";
+  update();
+  assert.equal(field.value, "312", "typing survives UI refreshes; the browser hides its placeholder");
+  context.input.defaultValue = "7";
+  update();
+  assert.equal(field.placeholder, 'Enter for "7"');
+  context.input.kind = "wait";
+  update();
+  assert.equal(field.placeholder, "");
+  context.input.kind = "integer";
+  context.input.defaultValue = undefined;
+  context.lastCommand = "";
+  update();
+  assert.equal(field.placeholder, "", "new screens clear old hints");
+  assert.match(source, /lastCommand = snapshot\.lastCommand \?\? "";/);
+  const patch = await readFile(new URL("../hotpatch/MAIN_SCREEN_COMMANDS.ERB", import.meta.url), "utf8");
+  assert.doesNotMatch(patch, /PRINTFORML <Last (?:Training )?Command:/);
+});
+
 test("header identifies the running game and preserves demo and debug labels", async () => {
   const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
   const showReport = source.slice(source.indexOf("function showReport("), source.indexOf("function terminalColumns("));

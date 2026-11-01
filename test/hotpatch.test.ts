@@ -20,6 +20,89 @@ async function withPatchDir(files: Record<string, string>, body: (dir: string) =
   }
 }
 
+test("time transitions skip generic narration and waits without suppressing other effects", async () => {
+  const patch = readFileSync(new URL("../hotpatch/TIME_EFFECTS.ERB", import.meta.url), "utf8");
+  const root = new URL("../GAMES/anon-tw-anon-tw_eng-modding/ERB/", import.meta.url);
+  const resumeSource = readFileSync(new URL("時間停止解除.ERB", root), "utf8");
+  const resumeAnnouncement = resumeSource.slice(resumeSource.indexOf('SIF !LS_RESTRICTION("Resume time print")'),
+    resumeSource.indexOf("追い出し = 0"));
+  for (const jit of [false, true]) {
+    const game = emptyGame();
+    game.names.set("TFLAG", new Map([["TRAIN_MESSAGE_CALLED", 100]]));
+    game.names.set("TEQUIP", new Map([["乳首吸い", 1], ["胸揉み", 2], ["BALL_LICKING", 3]]));
+    game.names.set("CFLAG", new Map([["うふふ", 1]]));
+    indexScript(game, `@SYSTEM_TITLE
+ADDVOIDCHARA
+MASTER = 0
+TARGET = 0
+PLAYER = 0
+SELECTCOM = 355
+CALL COM355
+TCVAR:0:22 = 1
+CALL TRAIN_MESSAGE
+PRINTFORML Frozen: {FLAG:70}, called: {TFLAG:TRAIN_MESSAGE_CALLED}, effects: {FLAG:1}, counters: {FLAG:2}
+INPUT
+FLAG:70 = 0
+${resumeAnnouncement}
+PRINTFORML Resumed: {FLAG:70}
+INPUT
+PRINTFORMW Resume warning remains.
+PRINTFORMW Character reaction remains.
+TFLAG:TRAIN_MESSAGE_CALLED = 0
+SELECTCOM = 300
+CALL TRAIN_MESSAGE
+PRINTFORML Other restriction: {LS_RESTRICTION("Other", 7, 9)}, args: {FLAG:3}, {FLAG:4}
+QUIT
+@TRAIN_MESSAGE
+@COM355
+FLAG:70 = 1
+SETBGCOLOR 0x123456
+RETURN 1
+@MESSAGE_COM355
+PRINTL Freeze narration must not appear.
+@MESSAGE_COM300
+PRINTL Ordinary command message.
+@DATUI_BOTTOM_LATE(ARG, ARG:1)
+FLAG:1 += 1
+@カウンター呼び出し処理
+FLAG:2 += 1
+@SET_KOJO_COLOR
+@LS_RESTRICTION(ARGS, ARG:0, ARG:1)
+#FUNCTION
+FLAG:3 = ARG:0
+FLAG:4 = ARG:1
+RETURNF 42`, "<time-transition-test>");
+    await withPatchDir({ "TIME_EFFECTS.ERB": patch }, async (dir) => {
+      assert.deepEqual(await applyHotpatches(game, dir), ["COM355", "TRAIN_MESSAGE", "LS_RESTRICTION"]);
+    });
+    const runtime = new Runtime(game, undefined, { jit });
+    const frozen = runtime.start();
+    assert.equal(frozen.error, null, JSON.stringify(frozen.error));
+    assert.equal(frozen.input?.kind, "integer", "freeze returns directly to gameplay input");
+    assert.deepEqual(frozen.output.filter((item) => item.type === "text").map((item) => item.text),
+      ["Frozen: 1, called: 1, effects: 1, counters: 1"]);
+    assert.ok(frozen.output.every((item) => !("style" in item) || item.style.background === "#000000"));
+    const resumed = runtime.input("0");
+    assert.equal(resumed.error, null, JSON.stringify(resumed.error));
+    assert.equal(resumed.input?.kind, "integer", "resume returns directly to gameplay input");
+    assert.deepEqual(resumed.output.filter((item) => item.type === "text").map((item) => item.text), ["Resumed: 0"]);
+    const warning = runtime.input("0");
+    assert.equal(warning.input?.kind, "wait");
+    assert.ok(warning.output.some((item) => item.type === "text" && item.text === "Resume warning remains."));
+    const reaction = runtime.input("");
+    assert.equal(reaction.input?.kind, "wait");
+    assert.ok(reaction.output.some((item) => item.type === "text" && item.text === "Character reaction remains."));
+    const other = runtime.input("");
+    assert.equal(other.error, null, JSON.stringify(other.error));
+    assert.equal(other.input?.kind, "wait", "ordinary command PRINTW remains");
+    assert.ok(other.output.some((item) => item.type === "text" && item.text === "Ordinary command message."));
+    const finished = runtime.input("");
+    assert.equal(finished.error, null, JSON.stringify(finished.error));
+    assert.equal(finished.status, "halted");
+    assert.ok(finished.output.some((item) => item.type === "text" && item.text === "Other restriction: 42, args: 7, 9"));
+  }
+});
+
 test("hotpatches replace game routines and may add HOTPATCH_ helpers", async () => {
   const game = emptyGame("<memory>");
   indexScript(game, "@SYSTEM_TITLE\nCALL SHOW\nQUIT\n@SHOW\nPRINTL original", "GAME.ERB");
@@ -268,6 +351,13 @@ test("main screen hotpatch opens and closes its panel boxes in balance", {
   const step = (value: string) => {
     markup = [];
     snapshot = runtime.input(value);
+    if (value === "355" || value === "999") {
+      assert.notEqual(snapshot.input?.kind, "wait", `${value} has no generic transition pause: ${
+        snapshot.output.flatMap((item) => "text" in item ? [item.text] : []).join("\n")}`);
+      assert.ok(!snapshot.output.some((item) => item.type === "text" &&
+        (item.text === "You let time resume." || /ＷＡＲＵＤＯ|ＳＴＯＰ・ＴＩＭＥ/.test(item.text))),
+      `${value} uses animation instead of generic narration`);
+    }
     for (let guard = 0; ; guard++) {
       assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
       for (const item of snapshot.output) if (item.type === "html") markup.push(item.text);
@@ -280,6 +370,16 @@ test("main screen hotpatch opens and closes its panel boxes in balance", {
   const screens: string[][] = [];
   for (const value of ["100", "355", "999"]) {
     step(value);
+    assert.ok(!snapshot.output.some((item) => item.type === "text" && /<Last (Training )?Command:/.test(item.text)),
+      "last-command hint does not occupy a terminal line");
+    if (value === "355") assert.equal(snapshot.lastCommand, "Last Command: Time Stop");
+    if (value === "355") {
+      assert.ok(!snapshot.output.some((item) => item.type === "text" && /^-{3,}$/.test(item.text)),
+        "freeze has no legacy dashed separator");
+      assert.ok(snapshot.output.every((item) => !("style" in item) || item.style.background === "#000000"),
+        `freeze uses GUI frost rather than a flat blue output background: ${
+          [...new Set(snapshot.output.flatMap((item) => "style" in item ? [item.style.background] : []))].join(",")}`);
+    }
     screens.push(markup);
   }
   for (const [index, screen] of screens.entries()) {

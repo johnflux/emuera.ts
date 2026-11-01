@@ -5,6 +5,42 @@ import { activeLlm, PROVIDERS, setupLlmConfig } from "./llm.js";
 import { encountersEnabled, gossipEnabled, memoriesEnabled, runEncounters, runGossip, runMemories, writeMemory } from "./encounters.js";
 
 const terminal = document.querySelector("#terminal");
+const timeEffect = document.querySelector("#time-effect");
+const timeState = document.querySelector("#time-state");
+let timeStopped = null;
+let timeEffectTimer = null;
+let lastCommand = "";
+function clearTimeEffect() {
+  clearTimeout(timeEffectTimer);
+  timeEffectTimer = null;
+  timeEffect.hidden = true;
+  timeEffect.classList.remove("is-freezing", "is-resuming");
+}
+function showTimeState(stopped, fresh = false) {
+  terminal.classList.toggle("is-time-restoring", fresh || timeStopped === null || typeof stopped !== "boolean");
+  terminal.style.setProperty("--era-freeze", stopped === true ? "1" : "0");
+  if (typeof stopped !== "boolean") {
+    clearTimeEffect();
+    timeStopped = null;
+    timeState.hidden = true;
+    document.body.classList.remove("is-time-frozen");
+    return;
+  }
+  const changed = timeStopped !== null && timeStopped !== stopped;
+  timeStopped = stopped;
+  timeState.hidden = !stopped;
+  document.body.classList.toggle("is-time-frozen", stopped);
+  if (fresh) clearTimeEffect();
+  if (!changed || fresh) return;
+  clearTimeEffect();
+  document.querySelector("#time-effect-title").textContent = stopped ? "TIME FROZEN" : "TIME RESUMED";
+  document.querySelector("#time-effect-detail").textContent = stopped ? "The world holds its breath" : "The world moves again";
+  timeEffect.hidden = false;
+  // Restart the burst even if two transitions arrive before the previous effect ends.
+  void timeEffect.offsetWidth;
+  timeEffect.classList.add(stopped ? "is-freezing" : "is-resuming");
+  timeEffectTimer = setTimeout(clearTimeEffect, 1800);
+}
 const status = document.querySelector("#status");
 const command = document.querySelector("#command");
 const send = document.querySelector("#submit");
@@ -278,7 +314,8 @@ function updateControls() {
   startButtons.forEach((button) => { button.setAttribute("aria-disabled", String(busy)); });
   restartButton.setAttribute("aria-disabled", String(busy));
   document.querySelector("#input-form").hidden = !input || input.kind === "mousekey";
-  command.placeholder = input?.defaultValue !== undefined && input.kind !== "wait" ? `Enter for ${JSON.stringify(input.defaultValue)}` : "";
+  command.placeholder = input?.kind === "wait" ? "" : input?.defaultValue !== undefined
+    ? `Enter for ${JSON.stringify(input.defaultValue)}` : input ? lastCommand : "";
   terminal.querySelectorAll("button.choice").forEach((button) => {
     const value = input?.kind === "integer" && /^-?\d+$/.test(button.dataset.value) ? BigInt(button.dataset.value).toString() : button.dataset.value;
     button.disabled = !button.closest(".screen.is-active") || button.classList.contains("is-stale") || (busy && !expiring) || !input || input.kind === "wait" || !!input.blocking
@@ -1653,6 +1690,7 @@ async function renderSteps(steps, fresh = false, keepFocus = false, toBottom = f
     markMapLabels();
     translation.translateTree(terminal);
     terminal.removeAttribute("aria-busy");
+    showTimeState(steps.at(-1)?.snapshot.timeStopped, fresh);
     updateControls();
     if (followBottom) terminal.scrollTop = terminal.scrollHeight;
     else terminal.scrollTop = scrollTop;
@@ -1803,6 +1841,7 @@ function useAudioSettings(settings) {
 }
 /** advanceScreen: true after a submitted input (retires the screen), "continue" after a click-to-continue wait. */
 async function renderSnapshot(snapshot, advanceScreen) {
+  lastCommand = snapshot.lastCommand ?? "";
   if (snapshot.animationTimer !== undefined) animationInterval = snapshot.animationTimer ?? undefined;
   hideTooltip();
   document.title = snapshot.title || "Emuera.ts";
@@ -2113,6 +2152,8 @@ async function terminalReady() {
 /** Clears the run's client state before a new or resumed run is shown. */
 function resetRun() {
   resetAudio();
+  lastCommand = "";
+  showTimeState(undefined);
   continueQueued = false;
   skipRequested = false;
   encounterRun?.abort();

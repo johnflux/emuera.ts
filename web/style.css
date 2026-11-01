@@ -1,4 +1,8 @@
 @font-face { font-family: "BIZ UD Gothic"; src: url("/fonts/BIZUDGothic-Regular.ttf") format("truetype"); font-weight: 400; font-style: normal; font-display: block; }
+@property --era-freeze { syntax: "<number>"; inherits: true; initial-value: 0; }
+#terminal { transition: --era-freeze 900ms ease-in-out; }
+#terminal.is-time-restoring { transition: none; }
+@media (prefers-reduced-motion: reduce) { #terminal { transition: none; } }
 :root { color-scheme: dark; --font-size: 16px; --terminal-font: "BIZ UD Gothic", "MS Gothic", "ＭＳ ゴシック", monospace; --terminal-foreground: #c0c0c0; --terminal-background: #000; --selection-color: #ff0; }
 * { box-sizing: border-box; }
 html, body, #terminal, #game-tooltip, #compatibility, #debug-log, .library, .era-sheet-body, .era-occupant-list, .era-move-map { overscroll-behavior-x: none; }
@@ -10,6 +14,32 @@ header { flex-shrink: 0; position: relative; z-index: 5; display: flex; align-it
 .brand-ts { color: #8ddaff; font-weight: 500; }
 .mode { flex-shrink: 1; min-width: 0; max-width: 40vw; padding: 1px 7px; border: 1px solid #3a4a55; border-radius: 9px; color: #8ddaff; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: .06em; }
 .mode[hidden] { display: none; }
+.time-state { flex-shrink: 0; padding: 3px 8px; border: 1px solid #9bdcff88; border-radius: 12px; color: #d4f2ff; background: #153448; box-shadow: 0 0 12px #82ccff33; font-size: 10px; letter-spacing: .06em; }
+.time-state::before { content: "❄"; margin-right: 5px; }
+.time-state[hidden], .time-effect[hidden] { display: none; }
+.time-effect { --time-glow: #a8e6ff; position: fixed; inset: 40px 0 0; z-index: 6; display: grid; place-items: center; overflow: hidden; pointer-events: none; color: var(--time-glow); background: radial-gradient(ellipse at center, #12324c88, transparent 70%); animation: time-effect-fade 1.8s both; }
+.time-effect.is-resuming { --time-glow: #ffd18c; background: radial-gradient(ellipse at center, #66391666, transparent 70%); }
+.time-burst { display: grid; justify-items: center; gap: 10px; padding: 24px; text-align: center; text-shadow: 0 2px 6px #000, 0 0 24px currentColor; animation: time-burst-in 1.8s both; }
+.time-burst strong { font-family: ui-sans-serif, system-ui, sans-serif; font-size: clamp(24px, 5vw, 52px); letter-spacing: .16em; }
+.time-burst > span { font-size: clamp(11px, 2vw, 15px); color: #fff; letter-spacing: .08em; }
+.time-dial { width: clamp(130px, 24vmin, 240px); fill: none; stroke: currentColor; stroke-width: 2; filter: drop-shadow(0 0 12px var(--time-glow)); }
+.time-dial-orbit { stroke-dasharray: 100 12 8 12; transform-origin: center; animation: time-orbit-lock 1.4s cubic-bezier(.12,.8,.2,1) both; }
+.time-dial-ticks { stroke-width: 9; stroke-dasharray: 2 34.13; }
+.time-dial-hands { stroke-width: 4; stroke-linecap: round; transform-origin: center; animation: time-hands-lock 1.3s cubic-bezier(.08,.85,.2,1) both; }
+.is-resuming .time-dial-hands { animation: time-hands-release 1.8s ease-in both; }
+.time-shockwave { position: absolute; width: 30vmin; aspect-ratio: 1; border: 3px solid var(--time-glow); border-radius: 50%; box-shadow: 0 0 30px var(--time-glow), inset 0 0 30px var(--time-glow); animation: time-shockwave 1.5s ease-out both; }
+.is-time-frozen main { box-shadow: inset 0 0 55px #83ceff22; }
+@keyframes time-effect-fade { 0% { opacity: 0; } 12%, 65% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes time-burst-in { 0% { transform: scale(.8); filter: blur(5px); } 20%, 75% { transform: scale(1); filter: blur(0); } 100% { transform: scale(1.06); } }
+@keyframes time-shockwave { from { transform: scale(.3); opacity: .8; } to { transform: scale(8); opacity: 0; } }
+@keyframes time-orbit-lock { from { transform: rotate(-140deg); } to { transform: rotate(0); } }
+@keyframes time-hands-lock { from { transform: rotate(-300deg); } to { transform: rotate(0); } }
+@keyframes time-hands-release { to { transform: rotate(540deg); } }
+@media (max-width: 600px) { .time-state { font-size: 9px; padding: 2px 5px; } .time-state::before { display: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .time-effect, .time-burst, .time-dial-orbit, .time-dial-hands, .is-resuming .time-dial-hands { animation: none; }
+  .time-shockwave { display: none; }
+}
 #status { flex: 1; min-width: 0; margin: 0; color: #9a9a9a; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 header::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; opacity: 0; background: linear-gradient(90deg, transparent, #8ddaff, #ffd34d, transparent) 0 0 / 40% 100% no-repeat; transition: opacity 200ms; animation: busy-sweep 1.1s linear infinite paused; }
 /* Busy indicators fade in slowly (ease-in), so a short step barely shows them, and fade out quickly. */
@@ -748,7 +778,7 @@ main:has(.screen.is-active .era-launch) { padding: 0; background: #000; }
 /* The time-stop layer is a flat translucent square of Emuera's background colour, which would show as a box on the
    card's gradient; fading the picture by the same amount (its alpha is 35%) gives the intended dimming. */
 .era-portrait .sprite[data-src="時間停止"] { display: none; }
-.era-portrait:has(.sprite[data-src="時間停止"]) .sprite { opacity: .65; }
+.era-portrait .sprite { opacity: calc(1 - .35 * var(--era-freeze)); }
 .era-character-info { min-width: 0; width: 100%; max-width: 400px; align-self: stretch; display: grid; grid-template-rows: auto 1fr; }
 .era-character-info > .line:has(.era-info-title) { flex: none; }
 .era-info-tabs { display: flex; align-items: stretch; gap: 0; flex-wrap: wrap; }
@@ -895,7 +925,7 @@ main:has(.screen.is-active .era-launch) { padding: 0; background: #000; }
 .era-bar.era-low .era-bar-value { color: #ff0; }
 .era-bar.era-critical .era-bar-value { color: #f55; }
 /* Actions: each group's PRINTC items flow as chips; the whole chip is clickable. */
-.era-actions-header { flex-wrap: wrap; justify-content: space-between; }
+.era-actions-header { flex-wrap: wrap; justify-content: space-between; align-items: center; min-height: max(22px, calc(1lh + 6px)); }
 .era-main .era-actions-header::after { order: 1; min-width: 2ch; }
 .era-actions-header > .era-toggles { order: 2; justify-content: flex-end; margin-left: auto; }
 .era-actions-group { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin: 6px 0 2px; }
@@ -956,17 +986,18 @@ main:has(.screen.is-active .era-launch) { padding: 0; background: #000; }
    drain from meters and other people, and the clock ices up with a snowflake on it. You stay in colour. */
 .era-main:has(.era-stopped) :is(.era-card, .era-main-header) { position: relative; border-color: #7fb4e0aa;
   background: linear-gradient(160deg, #152440, #0c1326 60%, #101c34); box-shadow: inset 0 0 22px #a8dcff1f, 0 0 10px #7fc4ff14; }
-.era-main:has(.era-stopped) :is(.era-card, .era-main-header)::before { content: ""; position: absolute; inset: 0; z-index: 0; border-radius: inherit; pointer-events: none;
+.era-main :is(.era-card, .era-main-header)::before { content: ""; position: absolute; inset: 0; z-index: 0; border-radius: inherit; pointer-events: none; opacity: var(--era-freeze);
   background: radial-gradient(circle at 0 0, #e4f6ff30, transparent 26%), radial-gradient(circle at 100% 0, #e4f6ff1c, transparent 18%),
     radial-gradient(circle at 100% 100%, #e4f6ff26, transparent 22%), radial-gradient(circle at 0 100%, #e4f6ff14, transparent 16%),
     repeating-linear-gradient(60deg, #ffffff06 0 1px, transparent 1px 13px), repeating-linear-gradient(-60deg, #ffffff05 0 1px, transparent 1px 17px); }
-.era-main:has(.era-stopped) :is(.era-card, .era-main-header) > * { position: relative; z-index: 1; }
+.era-main :is(.era-card, .era-main-header) { position: relative; }
+.era-main :is(.era-card, .era-main-header) > * { position: relative; z-index: 1; }
 .era-main:has(.era-stopped) .era-card-title { color: #bfe6ff; text-shadow: 0 0 6px #9fd8ff66; }
-.era-main:has(.era-stopped) :is(.era-character, .era-stats, .era-occupants) .era-meter > span { filter: saturate(.3) brightness(1.15); }
+.era-main :is(.era-character, .era-stats, .era-occupants) .era-meter > span { filter: saturate(calc(1 - .7 * var(--era-freeze))) brightness(calc(1 + .15 * var(--era-freeze))); }
 .era-main:has(.era-stopped) .era-clock { position: relative; border-radius: 50%; box-shadow: 0 0 0 3px #bfe6ff55, 0 0 18px #9fd8ffaa; }
-.era-main:has(.era-stopped) .era-clock :is(img, canvas) { filter: grayscale(1) sepia(.4) hue-rotate(170deg) saturate(2.2) brightness(1.05); }
+.era-main .era-clock :is(img, canvas) { filter: grayscale(var(--era-freeze)) sepia(calc(.4 * var(--era-freeze))) hue-rotate(calc(170deg * var(--era-freeze))) saturate(calc(1 + 1.2 * var(--era-freeze))) brightness(calc(1 + .05 * var(--era-freeze))); }
 .era-main:has(.era-stopped) .era-clock::after { content: "❄"; position: absolute; right: -6px; bottom: -4px; color: #e4f6ff; font-size: 22px; line-height: 1; text-shadow: 0 0 6px #9fd8ff; }
-.era-main:has(.era-stopped) .era-sky { filter: grayscale(.8) sepia(.25) hue-rotate(170deg) saturate(1.5) brightness(.8); }
+.era-main .era-sky { filter: grayscale(calc(.8 * var(--era-freeze))) sepia(calc(.25 * var(--era-freeze))) hue-rotate(calc(170deg * var(--era-freeze))) saturate(calc(1 + .5 * var(--era-freeze))) brightness(calc(1 - .2 * var(--era-freeze))); }
 .era-main:has(.era-stopped) .era-sky * { animation-play-state: paused; }
 .era-main:has(.era-stopped) .era-main-header::before { z-index: 1; }
 .era-main:has(.era-stopped) .era-main-when { color: #cfe6f5; }

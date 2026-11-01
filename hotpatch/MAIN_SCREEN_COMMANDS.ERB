@@ -477,11 +477,6 @@ IF INRANGE(PREVCOM, 270, 299)
 	CALL KOJO_MESSAGE_SEND("COM", 0, TARGET, PREVCOM - 270)
 	STR:0 '= RESULTS
 ENDIF
-IF PREVCOM >= 0 && PREVCOM < 300
-	PRINTFORML <Last Training Command: %STR:0%%COND_STR("(助手)", TFLAG:150)%>
-ELSE
-	PRINTFORML <Last Command: %STR:0%>
-ENDIF
 HTML_PRINT "<era-close>"
 HTML_PRINT "<era-close>" ; the era-main layout
 CALL FORCE_COMMAND() ;Custom code, force any commands set through nForceCommand.

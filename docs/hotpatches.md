@@ -39,6 +39,34 @@ distinct from the brown and red toggles, including while time is stopped.
 The stats panel keeps its existing width: meter tracks flex around the actual
 numeric values and projected gem gains rather than reserving fixed-width slots.
 
+[`TIME_EFFECTS.ERB`](../hotpatch/TIME_EFFECTS.ERB) lets the GUI animation announce
+time freezing and resuming without the generic narration or an extra click.
+`TRAIN_MESSAGE` skips only the freeze command's separator, message and `PRINTW`;
+its state bookkeeping, equipment effects and counter reactions remain intact.
+The `LS_RESTRICTION` wrapper returns true only for `"Resume time print"` to skip
+the resume routine's announcement and `PRINTFORMW`, delegating every other query
+and its arguments to the original routine. Resume warnings, aftereffects and
+character dialogue are not suppressed.
+The eraTW runtime also omits the interpreter's default end-of-command wait for
+command 355 when this hotpatch is loaded; other commands retain that fallback.
+The freeze wrapper restores the default output background after executing the
+original command, replacing its flat blue backdrop with the animated GUI frost.
+Its source-check dashed separator is omitted from delivered output without
+changing source processing or the interpreter's logical line count.
+The main-screen redraw also keeps the default background while frozen instead
+of reapplying the legacy blue tint.
+Frozen scene filters and portrait fading ease in and out over 900 ms, while
+restoring a run and reduced-motion mode apply them immediately. The main-screen
+last-command label is now the command input's placeholder rather than an extra
+output line; its game-computed name (including training and assistant labels)
+is preserved without putting hint text into the submitted input.
+Action-group headers reserve at least 22 px even when no filter buttons are
+visible, and center their contents vertically rather than sharing a baseline
+with filter buttons, so the title stays in place as filters disappear.
+The reserved height also covers one text line plus the buttons' 6 px vertical
+padding, accounting for font-size changes and fractional font metrics.
+They can still grow to accommodate wrapped filters on narrow screens.
+
 The eraTW launch screen retains the original TW title artwork with responsive
 sizing and no image filters or glow, alongside matching in-game panels. Setup fits
 its content rather than reserving a full-height dialog; editors and save lists

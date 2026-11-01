@@ -126,6 +126,10 @@ export interface Snapshot {
   title: string;
   /** The TARGET character index, so the client can mark that character's picture. */
   target: number;
+  /** eraTW's actual frozen-time state, including automatic resumption and loaded saves. */
+  timeStopped?: boolean;
+  /** eraTW's formatted last-command hint, only at its command prompt. */
+  lastCommand?: string;
   characterHistory?: CharacterHistory;
   /** At a command prompt: characters the player has just run into (eraTW), for the LLM to have them speak up. */
   encounters?: Encounter[];
@@ -1297,7 +1301,17 @@ export class Runtime {
         this.interactionHistory?.finish();
         return yield* this.commandEnded();
       }
-      yield* this.system("SOURCE_CHECK", true);
+      const animatedTime = this.interactionHistory && this.game.routines.has("HOTPATCH_ORIGINAL_LS_RESTRICTION");
+      const source = this.system("SOURCE_CHECK", true);
+      let sourceStep = source.next();
+      while (!sourceStep.done) {
+        const event = sourceStep.value;
+        // Preserve source processing and logical lines, but omit the old freeze transcript separator.
+        if (animatedTime && this.number("SELECTCOM") === 355n &&
+          "output" in event && event.output.type === "text" && event.output.text === "-".repeat(this.columns))
+          sourceStep = source.next();
+        else sourceStep = source.next(yield event);
+      }
       this.globals.clear("SOURCE", this.context(this.globals));
       const waits = this.waits;
       yield* this.trainPhase("EVENTCOMEND", false);
@@ -1305,7 +1319,8 @@ export class Runtime {
       this.interactionHistory?.finish();
       if (next !== undefined) { this.setNumber("SELECTCOM", next); continue; }
       if (yield* this.commandEnded()) return true;
-      if (this.waits === waits) yield { input: { kind: "wait" } };
+      // The eraTW presentation hotpatch replaces the freeze announcement with a nonblocking GUI burst.
+      if (this.waits === waits && !(animatedTime && this.number("SELECTCOM") === 355n)) yield { input: { kind: "wait" } };
       return false;
     }
   }
@@ -3121,6 +3136,14 @@ export class Runtime {
   }
   /** Adds the debug window text gathered since the last snapshot. */
   private withDebug(snapshot: Snapshot): Snapshot {
+    if (this.interactionHistory)
+      snapshot.timeStopped = this.globals.get("FLAG", [literal(70n)], this.context(this.globals)) !== 0n;
+    if (this.interactionHistory && snapshot.input && snapshot.input === this.trainRequest && this.number("PREVCOM") >= 0n) {
+      const training = this.number("PREVCOM") < 300n;
+      const assistant = training && this.globals.get("TFLAG", [literal(150n)], this.context(this.globals)) !== 0n;
+      snapshot.lastCommand = `Last ${training ? "Training " : ""}Command: ${
+        text(this.globals.get("STR", [literal(0n)], this.context(this.globals)))}${assistant ? "(助手)" : ""}`;
+    }
     if (snapshot.status === "halted") this.interactionHistory?.finish();
     if (snapshot.status === "error") this.interactionHistory?.cancel();
     const history = snapshot.output.some((item) => item.type === "html" && item.text === "<div class='era-interaction-history'></div>")

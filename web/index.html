@@ -12,6 +12,7 @@
   <header>
     <h1 class="brand"><span class="brand-mark" aria-hidden="true">壱</span><span>Emuera<span class="brand-ts">.ts</span></span></h1>
     <span id="mode" class="mode" hidden></span>
+    <span id="time-state" class="time-state" role="status" hidden>Time frozen</span>
     <span id="activity" class="activity" hidden></span>
     <p id="status" role="status">Select a game.</p>
     <button id="library-toggle" class="library-toggle" hidden>Game library</button>
@@ -57,6 +58,19 @@
     </footer>
   </section>
   <main>
+    <div id="time-effect" class="time-effect" aria-hidden="true" hidden>
+      <div class="time-shockwave"></div>
+      <div class="time-burst">
+        <svg class="time-dial" viewBox="0 0 200 200">
+          <circle class="time-dial-orbit" cx="100" cy="100" r="94"/>
+          <circle cx="100" cy="100" r="78"/>
+          <circle class="time-dial-ticks" cx="100" cy="100" r="69"/>
+          <g class="time-dial-hands"><path d="M100 52V100L132 119"/><circle cx="100" cy="100" r="4"/></g>
+        </svg>
+        <strong id="time-effect-title"></strong>
+        <span id="time-effect-detail"></span>
+      </div>
+    </div>
     <div id="cbg-back" class="cbg-layer" aria-hidden="true"></div>
     <div id="cbg-front" class="cbg-layer" aria-hidden="true"></div>
     <section id="terminal" lang="ja" role="log" aria-label="Interpreter output" tabindex="0">
