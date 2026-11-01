@@ -28,10 +28,71 @@ hotpatch only changes presentation. The one exception is
 
 The main-screen and wake-up clocks use a crisp, minimalist vector dial instead
 of the game's five-minute sprite frames. The minute hand shows the exact game
-minute and the hour hand advances between hours. The 72 px dial has muted hour
-marks, a teal minute hand, a dark luminous night palette and an icy time-stop
+minute and the hour hand advances between hours. The approximately 123 px dial has
+warm ivory enamel, serif Arabic numerals, a fine 60-mark minute track, concentric
+engraved rings and tapered bronze hands. Minute marks are longer and heavier, with all twelve hour marks
+emphasized and the four quarter-hour marks strongest. The artwork's translucent
+insets supply the textured glass sheen over the live dial and enamel backgrounds,
+replacing the separate CSS glaze.
+The clock retains its dark brown and gold night
+palette and an icy time-stop
 palette. Its tooltip and accessible name give the 24-hour time; the wake-up
 clock uses `TIME:3`, while the main clock uses `TIME`. Neither runs in real time.
+The supplied combined gold pocket-watch and plaque artwork is bundled unchanged as
+[`web/clock-frame.png`](../web/clock-frame.png) (825 × 509 px).
+The aligned hover artwork is [`web/clock-frame-hover.png`](../web/clock-frame-hover.png).
+Both cleaned-up assets are bundled unchanged, preserving their supplied
+transparency and subtle inset texture without additional opacity processing.
+Mouse hover and keyboard focus on an enabled control fade the additive hover
+layer above the normal artwork over 220 ms; leaving fades it back out.
+The toolbar overhang mirrors the current layer opacity throughout the fade.
+Reduced-motion preferences disable the fade.
+The complete artwork scales proportionally in a responsive 420 × 259 px footprint.
+The live dial and enamel backgrounds sit behind the transparent insets; button
+text and the TSP gauge remain above the sheen.
+The watch sits beside the header's time control, with its crown extending above
+the scenic panel. The sky remains clipped to the panel's rounded corners.
+The dial's oval is fitted to the hover asset's inset: center
+(243.45, 288.30), radii 120.15 / 122.49 px, minor axis at 20.71 degrees.
+A measured affine transform fits the bezel while retaining an 8-degree
+rotation of the numerals and hands.
+The crown can also draw over the app toolbar: a non-interactive, accessibility-
+hidden frame overlay repeats only the part clipped above the terminal viewport.
+It follows scrolling, resizing and frost transitions, disappears when the scenic
+header scrolls away, and stays hidden while the toolbar menu or a game dialog is
+open. The terminal itself keeps its normal clipping and scrolling.
+The watch and Wake Up / Time Stop / Resume control share an `era-watch-control`
+group so they stay together when the header wraps. The artwork supplies the
+ornate frame, chain and existing watch/plaque overlap; no separate CSS rim is
+painted. The real button occupies the plaque inset with pale lettering.
+A non-interactive layer behind the plaque provides dark teal Time Stop,
+warm brown Wake Up and violet Resume enamel; the metal conceals its edges.
+The former plaque mask is no longer needed. Unavailable controls use charcoal
+and muted text.
+The watch has a -60 px right margin and retains its -44 px top margin.
+A -16 px bottom margin restores the shorter header footprint without resizing
+the artwork or clipping its overflow.
+With area artwork, the scenic header instead has a fixed height of the artwork
+height plus 2 px. The watch/control is absolutely positioned at top -32 px and
+right -37 px with a 300 px width and no reserved right gutter. The scenic
+control retains the full 1.15em label size and shifts its text, gauge and hitbox
+6 px left to center them within the plaque. The active scenic
+main/shop screen disables horizontal terminal scrolling while retaining vertical
+scrolling; other screens keep their existing overflow behavior. Long date/location
+text can scroll within its panel rather than stretching the header.
+The plaque's enlarged hitbox spans 37.5% of
+the artwork width and 31% of its height; labels use 1.15em text. Hovering or
+keyboard-focusing an enabled control brightens its enamel background as well
+as fading in the hover artwork.
+The button's transparent `::before` hit area extends 8 px above and below its
+visual bounds. Adjust the first value in `inset: -8px 0` to change that extension
+without moving the text or gauge.
+The TSP gauge and all original command numbers and availability rules remain intact.
+Decorative layers ignore pointer input, and keyboard focus has
+an explicit outline. Resume uses frosted metal and violet lettering, a single
+heading with no subtitle, and the existing TSP gauge. Its tooltip describes
+resuming time and notes when time was stopped while teasing.
+Only the dial changes palette at night; stopped time also frosts the bronze.
 The browser renders `<div class='era-clock' data-minutes='…'>` as this dial,
 accepting only safe integer minutes; game HTML cannot supply arbitrary SVG.
 

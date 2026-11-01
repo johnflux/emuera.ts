@@ -1462,15 +1462,60 @@ function layoutHtmlPositions() {
   }
 }
 let htmlPositionsFrame = 0;
+const clockOverhang = document.createElement("div");
+clockOverhang.className = "clock-overhang";
+clockOverhang.setAttribute("aria-hidden", "true");
+clockOverhang.hidden = true;
+document.body.append(clockOverhang);
+function layoutClockOverhang() {
+  const clock = terminal.querySelector(".screen.is-active .era-main-header .era-clock");
+  if (!clock || terminal.querySelector(".era-dialog:popover-open")) {
+    clockOverhang.hidden = true;
+    return;
+  }
+  const box = clock.getBoundingClientRect(), viewport = terminal.getBoundingClientRect();
+  const header = clock.closest(".era-main-header").getBoundingClientRect();
+  const visible = Math.max(0, Math.min(box.height, viewport.top - box.top));
+  clockOverhang.hidden = visible === 0 || header.top < viewport.top
+    || box.right <= viewport.left || box.left >= viewport.right;
+  if (clockOverhang.hidden) return;
+  Object.assign(clockOverhang.style, {
+    left: `${box.left}px`, top: `${box.top}px`, width: `${box.width}px`, height: `${box.height}px`,
+    clipPath: `inset(0 ${Math.max(0, box.right - viewport.right)}px ${box.height - visible}px ${Math.max(0, viewport.left - box.left)}px)`,
+    filter: getComputedStyle(clock, "::before").filter,
+    backgroundImage: getComputedStyle(clock, "::before").backgroundImage,
+  });
+  clockOverhang.style.setProperty("--clock-hover-opacity", getComputedStyle(clock, "::after").opacity);
+  if (clock.getAnimations({ subtree: true }).some((animation) => animation.playState === "running"))
+    scheduleHtmlPositions();
+}
 function scheduleHtmlPositions() {
   if (htmlPositionsFrame) return;
   htmlPositionsFrame = requestAnimationFrame(() => {
     htmlPositionsFrame = 0;
     layoutHtmlPositions();
+    layoutClockOverhang();
+    if (clockOverhangTransition) scheduleHtmlPositions();
   });
 }
+let clockOverhangTransition = false;
+terminal.addEventListener("transitionrun", (event) => {
+  if (event.target !== terminal || event.propertyName !== "--era-freeze") return;
+  clockOverhangTransition = true;
+  scheduleHtmlPositions();
+});
+for (const name of ["transitionend", "transitioncancel"]) terminal.addEventListener(name, (event) => {
+  if (event.target !== terminal || event.propertyName !== "--era-freeze") return;
+  clockOverhangTransition = false;
+  scheduleHtmlPositions();
+});
+document.addEventListener("scroll", scheduleHtmlPositions, true);
+window.addEventListener("resize", scheduleHtmlPositions);
+for (const name of ["pointerover", "pointerout", "focusin", "focusout"]) terminal.addEventListener(name, scheduleHtmlPositions);
 // Both on-device translation and browser page translators can change widths after rendering.
-new MutationObserver(scheduleHtmlPositions).observe(terminal, { childList: true, characterData: true, subtree: true });
+new MutationObserver(scheduleHtmlPositions).observe(terminal, {
+  childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ["class"],
+});
 /**
  * Hotpatch extension (not Emuera HTML): era-* classes are styled by style.css; other class names are ignored so
  * game markup can't pick up the client's own classes.
@@ -1492,18 +1537,29 @@ function clock(node) {
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("viewBox", "0 0 72 72");
   svg.setAttribute("aria-hidden", "true");
-  const shape = (tag, attributes) => {
+  const shape = (tag, attributes, text = "") => {
     const part = document.createElementNS("http://www.w3.org/2000/svg", tag);
     for (const [name, value] of Object.entries(attributes)) part.setAttribute(name, String(value));
+    part.textContent = text;
     svg.append(part);
   };
-  shape("circle", { class: "era-clock-face", cx: 36, cy: 36, r: 34 });
-  for (let tick = 0; tick < 12; tick++)
-    shape("line", { class: tick % 3 === 0 ? "era-clock-tick era-clock-quarter" : "era-clock-tick",
-      x1: 36, y1: tick % 3 === 0 ? 9 : 11, x2: 36, y2: 14, transform: `rotate(${tick * 30} 36 36)` });
-  shape("line", { class: "era-clock-hour", x1: 36, y1: 36, x2: 36, y2: 21, transform: `rotate(${minutes % 720 / 2} 36 36)` });
-  shape("line", { class: "era-clock-minute", x1: 36, y1: 40, x2: 36, y2: 15, transform: `rotate(${minutes % 60 * 6} 36 36)` });
-  shape("circle", { class: "era-clock-pin", cx: 36, cy: 36, r: 2.5 });
+  shape("circle", { class: "era-clock-face", cx: 36, cy: 36, r: 36 });
+  shape("circle", { class: "era-clock-track", cx: 36, cy: 36, r: 31 });
+  shape("circle", { class: "era-clock-inner-ring", cx: 36, cy: 36, r: 18 });
+  for (let tick = 0; tick < 60; tick++)
+    shape("line", { class: `era-clock-tick${tick % 5 === 0 ? " era-clock-hour-mark" : ""}${tick % 15 === 0 ? " era-clock-quarter" : ""}`,
+      x1: 36, y1: 4.5, x2: 36, y2: tick % 5 === 0 ? 8.5 : 7, transform: `rotate(${tick * 6} 36 36)` });
+  for (let hour = 1; hour <= 12; hour++) {
+    const angle = hour * Math.PI / 6;
+    shape("text", { class: "era-clock-numeral", x: 36 + Math.sin(angle) * 24,
+      y: 36 - Math.cos(angle) * 24 + 2.5 }, String(hour));
+  }
+  shape("text", { class: "era-clock-signature", x: 36, y: 48 }, "ERA");
+  shape("path", { class: "era-clock-hour", d: "M36 17 L38.4 23 L37 25 L37 34 L38.5 37 L36 41 L33.5 37 L35 34 L35 25 L33.6 23 Z",
+    transform: `rotate(${minutes % 720 / 2} 36 36)` });
+  shape("path", { class: "era-clock-minute", d: "M36 9 L37.6 15 L36.7 18 L36.7 34 L37.4 37 L36 43 L34.6 37 L35.3 34 L35.3 18 L34.4 15 Z",
+    transform: `rotate(${minutes % 60 * 6} 36 36)` });
+  shape("circle", { class: "era-clock-pin", cx: 36, cy: 36, r: 1.8 });
   element.append(svg);
   return element;
 }

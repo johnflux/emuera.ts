@@ -608,6 +608,8 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
         "/": "index.html", "/app.js": "app.js", "/translate.js": "translate.js", "/interaction-history.js": "interaction-history.js", "/llm.js": "llm.js", "/encounters.js": "encounters.js", "/style.css": "style.css",
         "/library.js": "library.js", "/library.css": "library.css",
         "/title/new-game.webp": "title/new-game.webp", "/title/load-game.webp": "title/load-game.webp",
+        "/clock-frame.png": "clock-frame.png",
+        "/clock-frame-hover.png": "clock-frame-hover.png",
         "/fonts/BIZUDGothic-Regular.ttf": "fonts/BIZUDGothic-Regular.ttf",
         "/fonts/OFL.txt": "fonts/OFL.txt",
       };

@@ -413,6 +413,11 @@ test("main screen hotpatch opens and closes its panel boxes in balance", {
     assert.ok(screen.some((text) => text.includes("era-timestop-button")), `screen ${index} has the time stop control`);
     const html = screen.join("");
     assert.match(html, /<div class='era-clock' data-minutes='\d+'><\/div>/);
+    assert.match(html, /<era-open class='era-watch-control'>.*class='era-clock'.*era-timestop-button/);
+    if (index === 1) {
+      assert.match(html, /value='999' class='era-timestop-button era-stopped' title='Resume time'>Resume<span class='era-timestop-gauge'>/);
+      assert.doesNotMatch(html, /Resume Time|Time is stopped/);
+    }
     assert.doesNotMatch(html, /<div class='era-clock'><img/);
     assert.equal((html.match(/value='805'/g) ?? []).length, 1, "inventory has exactly one entry point");
     assert.match(html, /era-player-actions'><button value='805' class='era-player-control era-inventory-button'/, "inventory is on the player card");

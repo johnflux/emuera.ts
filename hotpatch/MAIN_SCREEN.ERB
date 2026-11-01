@@ -128,7 +128,6 @@ ENDIF
 HTML_PRINT "<era-open class='era-layout era-main'>"
 HTML_PRINT "<era-open class='era-main-header'>"
 CALL HOTPATCH_SKY(天気非表示)
-HTML_PRINT @"<div class='era-clock' data-minutes='{TIME}'></div>"
 HTML_PRINT "<era-open class='era-main-when'>"
 CALL INFO_TIME_WATCH
 SIF !天気非表示
@@ -137,7 +136,10 @@ CALL INFO_現在の気温
 PRINTPLAIN
 CALL HOTPATCH_SITUATION
 HTML_PRINT "<era-close>"
+HTML_PRINT "<era-open class='era-watch-control'>"
+HTML_PRINT @"<div class='era-clock' data-minutes='{TIME}'></div>"
 CALL HOTPATCH_TIMESTOP
+HTML_PRINT "<era-close>"
 HTML_PRINT "<era-close>"
 
 VARSET LOCAL
@@ -692,7 +694,7 @@ ENDIF
 PRINTL
 
 ;-------------------------------------------------------------------------------
-; INFO_TIMESTOP as a large button: Time Stop [355] or Resume Time [999], unavailable when the original says so,
+; INFO_TIMESTOP as a large button: Time Stop [355] or Resume [999], unavailable when the original says so,
 ; with the TSP meter. The cheat [2000] and hypnosis [666] buttons follow it.
 ;-------------------------------------------------------------------------------
 @HOTPATCH_TIMESTOP
@@ -713,9 +715,9 @@ IF MAXBASE:MASTER:TSP
 			sButton '= "<button value='355' class='era-timestop-button'>Time Stop" + sGauge + "</button>"
 		ENDIF
 	ELSEIF CFLAG:うふふ
-		sButton '= "<button value='999' class='era-timestop-button era-stopped'>Resume Time<span class='era-sub'>Stopped while teasing</span>" + sGauge + "</button>"
+		sButton '= "<button value='999' class='era-timestop-button era-stopped' title='Resume time (stopped while teasing)'>Resume" + sGauge + "</button>"
 	ELSE
-		sButton '= "<button value='999' class='era-timestop-button era-stopped'>Resume Time<span class='era-sub'>Time is stopped</span>" + sGauge + "</button>"
+		sButton '= "<button value='999' class='era-timestop-button era-stopped' title='Resume time'>Resume" + sGauge + "</button>"
 	ENDIF
 	sHtml '= sButton
 ENDIF

@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import { runInNewContext } from "node:vm";
 import { parseFragment, type DefaultTreeAdapterMap } from "parse5";
+import { createCanvas, loadImage } from "@napi-rs/canvas";
 
 test("vector clock draws exact game minutes, wraps days and rejects invalid input", async () => {
   const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
@@ -11,6 +12,8 @@ test("vector clock draws exact game minutes, wraps days and rejects invalid inpu
     attributes = new Map<string, string>();
     children: Element[] = [];
     tooltip = "";
+    className = "";
+    textContent = "";
     constructor(readonly tag: string) {}
     setAttribute(name: string, value: string) { this.attributes.set(name, value); }
     append(child: Element) { this.children.push(child); }
@@ -33,9 +36,22 @@ test("vector clock draws exact game minutes, wraps days and rejects invalid inpu
     const svg = element.children[0]!;
     assert.equal(svg.attributes.get("viewBox"), "0 0 72 72");
     assert.equal(svg.attributes.get("aria-hidden"), "true");
+    assert.equal(element.children.length, 1, "the artwork supplies the glass sheen");
     const parts = svg.children;
-    assert.equal(parts.filter((part) => part.attributes.get("class")?.includes("era-clock-tick")).length, 12);
+    assert.equal(parts.filter((part) => part.attributes.get("class")?.includes("era-clock-tick")).length, 60);
     assert.equal(parts.filter((part) => part.attributes.get("class")?.includes("era-clock-quarter")).length, 4);
+    assert.equal(parts.filter((part) => part.attributes.get("class")?.includes("era-clock-hour-mark")).length, 12);
+    for (const part of parts.filter((part) => part.attributes.get("class")?.includes("era-clock-tick"))) {
+      assert.equal(part.attributes.get("y1"), "4.5");
+      assert.equal(part.attributes.get("y2"), part.attributes.get("class")!.includes("era-clock-hour-mark") ? "8.5" : "7");
+    }
+    assert.deepEqual(parts.filter((part) => part.attributes.get("class") === "era-clock-numeral").map((part) => part.textContent),
+      Array.from({ length: 12 }, (_, index) => String(index + 1)));
+    for (const hand of ["era-clock-hour", "era-clock-minute"]) {
+      const part = parts.find((part) => part.attributes.get("class") === hand)!;
+      assert.equal(part.tag, "path");
+      assert.match(part.attributes.get("d")!, /Z$/);
+    }
     assert.equal(parts.find((part) => part.attributes.get("class") === "era-clock-hour")!.attributes.get("transform"), `rotate(${hour} 36 36)`);
     assert.equal(parts.find((part) => part.attributes.get("class") === "era-clock-minute")!.attributes.get("transform"), `rotate(${minute} 36 36)`);
   }
@@ -44,9 +60,139 @@ test("vector clock draws exact game minutes, wraps days and rejects invalid inpu
     assert.throws(() => draw(value), /Unsupported clock minutes:/);
   assert.match(source, /node\.tagName === "DIV" && node\.classList\.contains\("era-clock"\) && node\.hasAttribute\("data-minutes"\)\) element = clock\(node\)/);
   const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
-  assert.match(css, /\.era-main-header \.era-clock \{[^}]*width: 72px; height: 72px;/);
-  assert.match(css, /:has\(\.era-sky-night\) \.era-clock \{[^}]*--clock-face: #18252e;/);
+  assert.match(css, /\.era-main-header \.era-clock \{[^}]*position: absolute; inset: 0; width: 100%; height: 100%;/);
+  assert.match(css, /\.era-main-header \{[^}]*overflow: visible;/);
+  assert.match(css, /\.era-sky \{[^}]*overflow: hidden; border-radius: inherit;/);
+  assert.match(css, /\.era-main-header > \.era-main-when \{ order: 0; flex: 1 1 24ch;/);
+  assert.match(css, /\.era-main-header > \.era-watch-control \{[^}]*width: 420px; max-width: 100%; aspect-ratio: 825 \/ 509;/);
+  assert.match(css, /\.era-watch-control > \.line \{ position: static; z-index: auto;/);
+  assert.match(css, /\.era-watch-control \.era-timestop-button \{ position: relative; z-index: 2; \}/);
+  assert.match(css, /\.era-watch-control \.era-clock > svg \{ z-index: 0; \}/);
+  assert.match(css, /\.era-watch-control > \.line:has\(\.era-timestop-button\) \{[^}]*left: 49%; top: 40\.5%; width: 37\.5%; height: 31%;/);
+  assert.match(css, /\.era-clock > svg \{[^}]*left: 13\.9383%; top: 31\.4034%; width: 31\.1414%; height: 50\.4748%;/);
+  assert.match(css, /\.era-clock > svg \{[^}]*transform: matrix\(\.992769, -\.00638, -\.00638, 1\.007231, 0, 0\) rotate\(8deg\); transform-origin: center;/);
+  assert.match(css, /\.era-watch-control \.line button.choice.era-timestop-button, \.era-watch-control \.era-timestop-button \{[^}]*border: 0;[^}]*background: transparent; box-shadow: none;/);
+  assert.match(css, /\.era-clock-tick \{[^}]*stroke-width: \.75;/);
+  assert.match(css, /\.era-clock-hour-mark \{[^}]*stroke-width: 1\.15;/);
+  assert.match(css, /\.era-clock::before \{[^}]*pointer-events: none;[^}]*background: url\("\.\/clock-frame\.png"\)/);
+  const frame = await readFile(new URL("../web/clock-frame.png", import.meta.url));
+  assert.equal(frame.readUInt32BE(16), 825);
+  assert.equal(frame.readUInt32BE(20), 509);
+  assert.match(css, /\.era-main-header \.era-clock \{ --clock-face: #f4e6cc;/);
+  assert.match(css, /\.era-clock-numeral \{[^}]*font-family: Georgia, "Times New Roman", serif;/);
+  assert.match(css, /:has\(\.era-sky-night\) \.era-clock \{[^}]*--clock-face: #211e1b;/);
   assert.match(css, /\.era-main:has\(\.era-stopped\) \.era-clock \{[^}]*--clock-face: #e2f2fc;/);
+});
+
+test("hover artwork is an additive layer that fades above the normal frame", async () => {
+  const image = await loadImage(new URL("../web/clock-frame-hover.png", import.meta.url).pathname);
+  assert.equal(image.width, 825);
+  assert.equal(image.height, 509);
+  const canvas = createCanvas(image.width, image.height), context = canvas.getContext("2d");
+  context.drawImage(image, 0, 0);
+  const pixels = context.getImageData(0, 0, image.width, image.height).data;
+  const alpha = (x: number, y: number) => pixels[(y * image.width + x) * 4 + 3]!;
+  assert.equal(alpha(0, 0), 0, "outer transparency");
+  assert.equal(alpha(270, 100), 0, "normal crown remains visible below the hover layer");
+  assert.ok(alpha(244, 288) <= 1, "hover layer leaves the dial center effectively transparent");
+  const levels = new Set<number>();
+  for (let y = 250; y < 320; y++) for (let x = 450; x < 650; x++) {
+    assert.ok(alpha(x, y) <= 85, `no opaque white in plaque at ${x}, ${y}`);
+    levels.add(alpha(x, y));
+  }
+  assert.ok(levels.size > 3, "texture keeps varying opacity rather than a flat fill");
+  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  assert.match(css, /\.era-main-header > \.era-watch-control \{[^}]*margin-right: -60px; margin-top: -44px; margin-bottom: -16px;/);
+  assert.match(css, /\.era-watch-control > \.line:has\(\.era-timestop-button\) \{[^}]*left: 49%; top: 40\.5%; width: 37\.5%; height: 31%;/);
+  assert.match(css, /\.era-watch-control::after \{[^}]*left: 45%; top: 40\.5%; width: 41\.5%; height: 31%; z-index: 0; pointer-events: none; background:/);
+  assert.match(css, /\.era-watch-control:has\(\.era-timestop-button:enabled:is\(:hover, :focus-visible\)\)::after \{ filter: brightness\(1\.35\); \}/);
+  assert.match(css, /\.era-watch-control \.line button\.choice\.era-timestop-button,[^}]*font-size: 1\.15em;/);
+  assert.match(css, /\.era-clock::after, \.clock-overhang::after \{[^}]*background: url\("\.\/clock-frame-hover\.png"\)[^}]*opacity: 0; transition: opacity 220ms ease-in-out;/);
+  assert.match(css, /\.era-watch-control:has\(\.era-timestop-button:enabled:is\(:hover, :focus-visible\)\) \.era-clock::after \{ opacity: 1; \}/);
+  assert.match(css, /@media \(prefers-reduced-motion: reduce\) \{ \.era-clock::after \{ transition: none; \} \}/);
+  for (const state of ["era-wake-button", "era-stopped", "era-unavailable"])
+    assert.ok(css.includes(`.era-watch-control:has(.${state}`), `${state} has an enamel palette`);
+});
+
+test("clock oval fits the transparent artwork's inset within six asset pixels", async () => {
+  const image = await loadImage(new URL("../web/clock-frame.png", import.meta.url).pathname);
+  const canvas = createCanvas(image.width, image.height), context = canvas.getContext("2d");
+  context.drawImage(image, 0, 0);
+  const pixels = context.getImageData(0, 0, image.width, image.height).data;
+  const errors: number[] = [];
+  for (let tick = 0; tick < 72; tick++) {
+    const angle = tick * Math.PI / 36, rotation = 20.710179 * Math.PI / 180;
+    const expected = 1 / Math.hypot(Math.cos(angle - rotation) / 120.151788, Math.sin(angle - rotation) / 122.491704);
+    let boundary: number | undefined;
+    for (let radius = 90; radius < 145; radius += .25) {
+      const x = Math.round(243.449539 + Math.cos(angle) * radius);
+      const y = Math.round(288.301681 + Math.sin(angle) * radius);
+      const offset = (y * image.width + x) * 4;
+      const colorRange = Math.max(pixels[offset]!, pixels[offset + 1]!, pixels[offset + 2]!)
+        - Math.min(pixels[offset]!, pixels[offset + 1]!, pixels[offset + 2]!);
+      if (pixels[offset + 3]! > 100 && colorRange > 50) { boundary = radius; break; }
+    }
+    assert.notEqual(boundary, undefined, `frame boundary exists at angle ${tick * 5}`);
+    errors.push(Math.abs(expected - boundary!));
+  }
+  assert.ok(Math.max(...errors) < 6, `maximum deviation: ${Math.max(...errors)} px`);
+  assert.ok(errors.reduce((sum, value) => sum + value, 0) / errors.length < 2, "mean deviation below two asset pixels");
+});
+
+test("watch crown overlays the toolbar without escaping horizontally or lingering after scrolling", async () => {
+  const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
+  const routine = source.slice(source.indexOf("function layoutClockOverhang("), source.indexOf("function scheduleHtmlPositions("));
+  const viewport = { left: 20, right: 855, top: 40 };
+  const box = { left: 450, right: 654, top: 32, width: 204, height: 153.3 };
+  const header = { top: 48 };
+  const overlay = { hidden: true, style: {} as Record<string, string> };
+  Object.assign(overlay.style, { setProperty: (name: string, value: string) => { overlay.style[name] = value; } });
+  let present = true, dialog = false;
+  const clock = { getBoundingClientRect: () => box, closest: () => ({ getBoundingClientRect: () => header }), getAnimations: () => [] };
+  const update = () => runInNewContext(`${routine}\nlayoutClockOverhang();`, {
+    terminal: { querySelector: (selector: string) => selector.includes("era-dialog") ? dialog : present ? clock : null,
+      getBoundingClientRect: () => viewport },
+    clockOverhang: overlay, getComputedStyle: () => ({ filter: "frost-filter", backgroundImage: 'url("clock-frame.png")', opacity: ".5" }),
+  });
+  update();
+  assert.equal(overlay.hidden, false);
+  assert.equal(overlay.style.top, "32px");
+  assert.equal(overlay.style.clipPath, "inset(0 0px 145.3px 0px)");
+  assert.equal(overlay.style.filter, "frost-filter");
+  assert.equal(overlay.style.backgroundImage, 'url("clock-frame.png")');
+  assert.equal(overlay.style["--clock-hover-opacity"], ".5", "overhang mirrors the partially faded layer");
+  box.left = 10; box.right = 214;
+  update();
+  assert.equal(overlay.style.clipPath, "inset(0 0px 145.3px 10px)");
+  box.left = 700; box.right = 904;
+  update();
+  assert.equal(overlay.style.clipPath, "inset(0 49px 145.3px 0px)");
+  header.top = 39;
+  update();
+  assert.equal(overlay.hidden, true, "scrolling the header out cannot draw the whole watch over the toolbar");
+  header.top = 48; box.top = 41;
+  update();
+  assert.equal(overlay.hidden, true, "no overlay without an overhang");
+  box.top = 32; dialog = true;
+  update();
+  assert.equal(overlay.hidden, true, "game dialogs suppress the crown");
+  dialog = false; present = false;
+  update();
+  assert.equal(overlay.hidden, true, "leaving the main/wake-up screen removes the crown");
+  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  assert.match(css, /\.clock-overhang \{ position: fixed; z-index: 6; pointer-events: none;/);
+  assert.match(css, /body:has\(\.menu-panel:not\(\[hidden\]\)\) \.clock-overhang \{ visibility: hidden; \}/);
+  assert.match(source, /clockOverhang\.setAttribute\("aria-hidden", "true"\)/);
+});
+
+test("area artwork fixes the header height and prevents horizontal scrolling from the overhanging watch", async () => {
+  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  assert.match(css, /\.era-main-header:has\(\.era-area-art\) \{ height: calc\(var\(--area-art-height, 150px\) \+ 2px\); min-height: 0; max-height:[^}]*container-type: size; overflow: clip; overflow-clip-margin: 32px;/);
+  assert.match(css, /\.era-main-header:has\(\.era-area-art\) > \.era-watch-control \{ position: absolute; top: -32px; right: -37px; margin: 0; width: 300px; container-type: inline-size;/);
+  assert.match(css, /\.era-main-header:has\(\.era-area-art\) \.era-watch-control \.era-timestop-button \{ padding: 2px clamp\(2px, 2cqw, 12px\); transform: translateX\(-6px\); \}/);
+  assert.match(css, /#terminal:has\(\.screen\.is-active :is\(\.era-main, \.era-shop\) \.era-main-header \.era-area-art\) \{ overflow-x: hidden; \}/);
+  assert.match(css, /\.era-watch-control button\.era-timestop-button::before \{ content: ""; position: absolute; inset: -8px 0; \}/);
+  assert.match(css, /\.era-main-header:has\(\.era-area-art\) > \.era-main-when \{[^}]*max-height: 100%; overflow: auto;/);
 });
 
 test("terminal hides only the horizontal scrollbar without disabling overflow or logical width", async () => {

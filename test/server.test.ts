@@ -339,6 +339,18 @@ test("HTTP UI, isolated sessions, real image bytes, sprite metadata, errors and 
       assert.equal(bytes.subarray(8, 12).toString(), "WEBP");
     }
     assert.equal((await fetch(base + "/title/unknown.webp")).status, 404);
+    const clockFrame = await fetch(base + "/clock-frame.png");
+    assert.equal(clockFrame.status, 200);
+    assert.equal(clockFrame.headers.get("content-type"), "image/png");
+    const frameBytes = Buffer.from(await clockFrame.arrayBuffer());
+    assert.equal(frameBytes.readUInt32BE(16), 825);
+    assert.equal(frameBytes.readUInt32BE(20), 509);
+    const hoverFrame = await fetch(base + "/clock-frame-hover.png");
+    assert.equal(hoverFrame.status, 200);
+    assert.equal(hoverFrame.headers.get("content-type"), "image/png");
+    const hoverBytes = Buffer.from(await hoverFrame.arrayBuffer());
+    assert.equal(hoverBytes.readUInt32BE(16), 825);
+    assert.equal(hoverBytes.readUInt32BE(20), 509);
     for (const season of ["spring", "summer", "autumn", "winter"]) {
       const decoration = await fetch(base + `/decoration/deco_corner_flower_${season}.png`);
       assert.equal(decoration.status, 200);

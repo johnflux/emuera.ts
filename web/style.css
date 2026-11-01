@@ -253,24 +253,53 @@ a { color: #8ddaff; }
 .era-main-when { flex: 1 1 32ch; min-width: 0; }
 /* The header's backdrop (HOTPATCH_SKY): sky for the hour, weather over it, the season's land along the bottom; under a
    roof the sky is dimmer, underground there is none. The text sits on a translucent panel to stay readable. */
-.era-main-header { position: relative; overflow: hidden; isolation: isolate; }
+.era-main-header { position: relative; overflow: visible; isolation: isolate; }
 .era-main-header > * { position: relative; z-index: 1; }
 .era-main-header > .line:has(.era-sky), .era-main-header > .line > span:has(> .era-sky) { display: contents; }
 .era-sky { position: absolute; inset: 0; z-index: 0; overflow: hidden; border-radius: inherit; pointer-events: none; background: #0d1014; }
-.era-main-header > .era-main-when { flex: 0 1 auto; padding: 6px 12px; border-radius: 8px; background: #0a0e1428; box-shadow: 0 0 0 1px #ffffff14; backdrop-filter: blur(3px); }
-.era-main-header > .era-main-when + * { margin-left: auto; }
-.era-main-header .era-clock { --clock-face: #f3f5f4; --clock-rim: #ffffffaa; --clock-ink: #26333c; --clock-tick: #9aa8ad; --clock-accent: #188c83; width: 72px; height: 72px; border-radius: 50%; box-shadow: 0 0 0 1px #0a0e1444, 0 3px 12px #0005; }
-.era-clock > svg { display: block; width: 100%; height: 100%; overflow: visible; }
-.era-clock-face { fill: var(--clock-face); stroke: var(--clock-rim); stroke-width: 2; }
-.era-clock-tick { stroke: var(--clock-tick); stroke-width: 1; stroke-linecap: round; }
-.era-clock-quarter { stroke: var(--clock-ink); stroke-width: 1.5; }
-.era-clock-hour { stroke: var(--clock-ink); stroke-width: 3; stroke-linecap: round; }
-.era-clock-minute { stroke: var(--clock-accent); stroke-width: 2; stroke-linecap: round; }
-.era-clock-pin { fill: var(--clock-accent); stroke: var(--clock-face); stroke-width: 1; }
+.era-main-header > .era-main-when { order: 0; flex: 1 1 24ch; padding: 6px 12px; border-radius: 8px; background: #0a0e1428; backdrop-filter: blur(3px); }
+.era-main-header > .era-watch-control { order: 1; margin-left: auto; margin-right: -60px; margin-top: -44px; margin-bottom: -16px; width: 420px; max-width: 100%; aspect-ratio: 825 / 509; flex: 0 0 auto; min-width: 0; isolation: isolate; }
+.era-watch-control > .line:has(.era-clock) { position: static; }
+.era-watch-control > .line { position: static; z-index: auto; min-width: 0; }
+.era-watch-control > .line:has(.era-timestop-button) { position: absolute; left: 49%; top: 40.5%; width: 37.5%; height: 31%; z-index: 2; }
+.era-watch-control .era-timestop { height: 100%; gap: 4px; }
+.era-watch-control .era-timestop > .era-timestop-button { flex: 0 0 100%; }
+.era-watch-control .era-timestop-button { position: relative; z-index: 2; }
+.era-watch-control .era-clock { pointer-events: none; }
+.era-watch-control .era-clock > svg { z-index: 0; }
+.era-main-header .era-clock { --clock-face: #f4e6cc; --clock-rim: #b68a50; --clock-ink: #38271e; --clock-tick: #9b784f; --clock-accent: #76502e; position: absolute; inset: 0; width: 100%; height: 100%; }
+/* The aligned 825 x 509 normal/hover artwork supplies its own glass texture over the live dial. */
+.era-clock > svg { position: absolute; left: 13.9383%; top: 31.4034%; width: 31.1414%; height: 50.4748%; display: block; overflow: visible; transform: matrix(.992769, -.00638, -.00638, 1.007231, 0, 0) rotate(8deg); transform-origin: center; }
+.era-clock::before { content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none; background: url("./clock-frame.png") center / 100% 100% no-repeat; filter: drop-shadow(0 2px 3px #0006); }
+.era-clock::after, .clock-overhang::after { content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none; background: url("./clock-frame-hover.png") center / 100% 100% no-repeat; opacity: 0; transition: opacity 220ms ease-in-out; }
+.era-watch-control:has(.era-timestop-button:enabled:is(:hover, :focus-visible)) .era-clock::after { opacity: 1; }
+.clock-overhang::after { opacity: var(--clock-hover-opacity, 0); transition: none; }
+@media (prefers-reduced-motion: reduce) { .era-clock::after { transition: none; } }
+/* Paint enamel behind the transparent plaque and let the metal artwork conceal its edges. */
+.era-watch-control::after { content: ""; position: absolute; left: 45%; top: 40.5%; width: 41.5%; height: 31%; z-index: 0; pointer-events: none; background: radial-gradient(ellipse at 50% 0, #29414a, #101c24 75%); }
+.era-watch-control:has(.era-wake-button)::after { background: radial-gradient(ellipse at 68% 43%, #3a3023, #191c20 75%); }
+.era-watch-control:has(.era-stopped)::after { background: radial-gradient(ellipse at 68% 43%, #3a2c4b, #1b182b 75%); }
+.era-watch-control:has(.era-unavailable.era-timestop-button)::after { background: #191919; }
+.era-watch-control:has(.era-timestop-button:enabled:is(:hover, :focus-visible))::after { filter: brightness(1.35); }
+/* Only the crown above the scroll viewport is repeated here, so game output remains clipped and scrollable. */
+.clock-overhang { position: fixed; z-index: 6; pointer-events: none; background: url("./clock-frame.png") center / 100% 100% no-repeat; }
+.clock-overhang[hidden] { display: none; }
+body:has(.menu-panel:not([hidden])) .clock-overhang { visibility: hidden; }
+.era-clock-face { fill: var(--clock-face); }
+.era-clock-track { fill: none; stroke: var(--clock-tick); stroke-width: .35; }
+.era-clock-inner-ring { fill: none; stroke: var(--clock-tick); stroke-width: .3; opacity: .4; }
+.era-clock-tick { stroke: var(--clock-accent); stroke-width: .75; stroke-linecap: round; }
+.era-clock-hour-mark { stroke: var(--clock-ink); stroke-width: 1.15; }
+.era-clock-quarter { stroke-width: 1.5; }
+.era-clock-numeral { fill: var(--clock-ink); font-family: Georgia, "Times New Roman", serif; font-size: 8px; font-weight: bold; text-anchor: middle; }
+.era-clock-signature { fill: var(--clock-tick); font-family: Georgia, "Times New Roman", serif; font-size: 3px; letter-spacing: 1px; text-anchor: middle; }
+.era-clock-hour { fill: var(--clock-ink); stroke: var(--clock-accent); stroke-width: .35; stroke-linejoin: round; }
+.era-clock-minute { fill: var(--clock-accent); stroke: var(--clock-ink); stroke-width: .3; stroke-linejoin: round; }
+.era-clock-pin { fill: var(--clock-rim); stroke: var(--clock-ink); stroke-width: .6; }
 .era-clock .sprite-clip { filter: url(#era-clock-dial); }
 /* Legacy sprite clocks retain their filters; the hotpatched vector dial uses its own palette. */
 :is(.era-main, .era-shop):not(:has(.era-stopped)) .era-main-header:has(.era-sky-night) .era-clock .sprite-clip { filter: url(#era-radium); }
-:is(.era-main, .era-shop):not(:has(.era-stopped)) .era-main-header:has(.era-sky-night) .era-clock { --clock-face: #18252e; --clock-rim: #647d8988; --clock-ink: #dbeee7; --clock-tick: #758e94; --clock-accent: #87e6bb; box-shadow: 0 0 0 1px #0a0e1466, 0 0 12px #87e6bb22, 0 3px 12px #0005; }
+:is(.era-main, .era-shop):not(:has(.era-stopped)) .era-main-header:has(.era-sky-night) .era-clock { --clock-face: #211e1b; --clock-rim: #b68a50; --clock-ink: #efdec0; --clock-tick: #a58a62; --clock-accent: #d7b375; }
 .era-sky-view, .era-sky-orb, .era-sky-clouds, .era-sky-landmark, .era-sky-fall, .era-sky-land { position: absolute; display: block; }
 .era-sky-view { inset: 0; overflow: hidden; }
 .era-sky-clouds, .era-sky-fall { inset: 0; }
@@ -348,8 +377,12 @@ a { color: #8ddaff; }
 .era-underground .era-sky-landmark { --landmark-tint: ; left: 0; right: 0; width: auto; background-size: auto 100%; background-position: right bottom; }
 /* Area pictures (web/areas/<map id>-<name>/<season>-<day|night>-<left|middle|right>.png, chosen by app.js): pixel art
    at one art pixel per CSS pixel, scaled nearest-neighbour; the ends over the middle repeated along the header, which
-   grows to their height. Day pictures at night are dimmed as above; night pictures are not. */
-:is(.era-main, .era-shop) .era-main-header:has(.era-area-art) { min-height: calc(var(--area-art-height, 0px) + 2px); }
+   stays at their height. Day pictures at night are dimmed as above; night pictures are not. */
+:is(.era-main, .era-shop) .era-main-header:has(.era-area-art) { height: calc(var(--area-art-height, 150px) + 2px); min-height: 0; max-height: calc(var(--area-art-height, 150px) + 2px); container-type: size; overflow: clip; overflow-clip-margin: 32px; }
+:is(.era-main, .era-shop) .era-main-header:has(.era-area-art) > .era-watch-control { position: absolute; top: -32px; right: -37px; margin: 0; width: 300px; container-type: inline-size; }
+#terminal:has(.screen.is-active :is(.era-main, .era-shop) .era-main-header .era-area-art) { overflow-x: hidden; }
+:is(.era-main, .era-shop) .era-main-header:has(.era-area-art) .era-watch-control .era-timestop-button { padding: 2px clamp(2px, 2cqw, 12px); transform: translateX(-6px); }
+:is(.era-main, .era-shop) .era-main-header:has(.era-area-art) > .era-main-when { flex: 0 1 40%; max-width: 40%; max-height: 100%; overflow: auto; }
 .era-sky.era-area-art .era-sky-landmark { left: 0; right: 0; bottom: 0; width: auto; height: 100%; image-rendering: pixelated; -webkit-mask: none; mask: none;
   background: var(--area-left, none) left bottom / auto no-repeat, var(--area-right, none) right bottom / auto no-repeat, var(--area-middle) left bottom / auto repeat-x;
   filter: var(--landmark-tint, ); }
@@ -685,9 +718,9 @@ main:has(.screen.is-active .era-launch) { padding: 0; background: #000; }
 .era-clock { line-height: 0; }
 /* Time stop: the big control. */
 .era-timestop { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
-.line button.choice.era-timestop-button, .era-timestop-button { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; min-width: 18ch; padding: 8px 18px 7px; border: 2px solid #3aa8d8; border-radius: 10px; background: linear-gradient(#173445aa, #0f2230ee); color: #bfeaff; font-weight: bold; font-size: 1.15em; letter-spacing: .05em; cursor: pointer; }
+.line button.choice.era-timestop-button, .era-timestop-button { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; min-width: 18ch; max-width: 100%; padding: 12px 24px 12px 38px; border: 5px solid #bd8850; border-radius: 48px; background: radial-gradient(ellipse at top, #29414a, #101c24 75%); color: #cceeea; box-shadow: inset 0 0 0 2px #382114, inset 0 0 0 4px #e2b97888, 0 0 0 1px #f4c581, 0 0 0 3px #624126, 0 3px 8px #0008; font-weight: bold; font-size: 1.15em; letter-spacing: .05em; cursor: pointer; text-shadow: 0 1px 2px #000; }
 .era-timestop-button { -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
-.line button.choice.era-timestop-button.era-stopped { border-color: #c070ff; background: linear-gradient(#3a1d52, #24123a); color: #f0d8ff; box-shadow: 0 0 14px #b060ff66; }
+.line button.choice.era-timestop-button.era-stopped { border-color: #a8c7d2; background: radial-gradient(ellipse at top, #3a2c4b, #1b182b 75%); color: #f0d8ff; box-shadow: inset 0 0 0 2px #304552, inset 0 0 0 4px #d4eaff88, 0 0 0 1px #e1f4ff, 0 0 0 3px #43566a, 0 0 14px #b060ff66; }
 .era-timestop-button .era-sub { margin: 2px 0 0; font-size: .7em; font-weight: normal; letter-spacing: 0; color: inherit; opacity: .75; }
 .era-timestop-gauge { display: flex; flex-direction: column; align-items: stretch; gap: 3px; align-self: stretch; margin-top: 6px; }
 .era-timestop-gauge .era-meter { width: 100%; height: 5px; border-radius: 3px; background: #0006; overflow: hidden; }
@@ -696,7 +729,8 @@ main:has(.screen.is-active .era-launch) { padding: 0; background: #000; }
 .era-stopped .era-timestop-gauge .era-meter > span { background: #e0b0ff; box-shadow: 0 0 6px #d090ff; }
 .era-unavailable .era-timestop-gauge .era-meter > span { background: #666; }
 .era-timestop-button.era-unavailable { border-color: #444; background: #191919; color: #777; cursor: default; }
-.screen.is-active .line button.choice.era-timestop-button:enabled:is(:hover, :focus-visible) { filter: brightness(1.25); }
+.screen.is-active .line button.choice.era-timestop-button:enabled:is(:hover, :focus-visible) { filter: brightness(1.15); }
+.screen.is-active .line button.choice.era-timestop-button:focus-visible { outline: 2px solid #ffe0a2; outline-offset: 4px; }
 .era-timestop .interactive-label, .era-bars .interactive-label, .era-player-status .interactive-label, .era-occupants .interactive-label, .era-toggles .interactive-label, .era-character .interactive-label { text-decoration-line: none; }
 /* Chips and toggles. */
 .line button.choice:is(.era-chip-button, .era-toggle, .era-star), .era-chip-button { display: inline-block; padding: 1px 9px; border: 1px solid #39434c; border-radius: 999px; background: #182027; color: #c9d4dc; cursor: pointer; }
@@ -1012,9 +1046,10 @@ main:has(.screen.is-active .era-launch) { padding: 0; background: #000; }
 .era-main :is(.era-card, .era-main-header) > * { position: relative; z-index: 1; }
 .era-main:has(.era-stopped) .era-card-title { color: #bfe6ff; text-shadow: 0 0 6px #9fd8ff66; }
 .era-main :is(.era-character, .era-stats, .era-occupants) .era-meter > span { filter: saturate(calc(1 - .7 * var(--era-freeze))) brightness(calc(1 + .15 * var(--era-freeze))); }
-.era-main:has(.era-stopped) .era-clock { --clock-face: #e2f2fc; --clock-rim: #bfe6ff; --clock-ink: #40677f; --clock-tick: #8cb4ce; --clock-accent: #3288b8; position: relative; border-radius: 50%; box-shadow: 0 0 0 3px #bfe6ff55, 0 0 18px #9fd8ffaa; }
+.era-main:has(.era-stopped) .era-clock { --clock-face: #e2f2fc; --clock-rim: #bfe6ff; --clock-ink: #40677f; --clock-tick: #8cb4ce; --clock-accent: #3288b8; }
+.era-main .era-clock::before, .era-main .era-clock::after { filter: grayscale(calc(.7 * var(--era-freeze))) sepia(calc(.4 * var(--era-freeze))) hue-rotate(calc(170deg * var(--era-freeze))) drop-shadow(0 2px 3px #0006) drop-shadow(0 0 6px rgb(159 216 255 / calc(.6 * var(--era-freeze)))); }
 .era-main .era-clock :is(img, canvas) { filter: grayscale(var(--era-freeze)) sepia(calc(.4 * var(--era-freeze))) hue-rotate(calc(170deg * var(--era-freeze))) saturate(calc(1 + 1.2 * var(--era-freeze))) brightness(calc(1 + .05 * var(--era-freeze))); }
-.era-main:has(.era-stopped) .era-clock::after { content: "❄"; position: absolute; right: -6px; bottom: -4px; color: #e4f6ff; font-size: 22px; line-height: 1; text-shadow: 0 0 6px #9fd8ff; }
+.era-main:has(.era-stopped) .era-clock::after { content: "❄"; position: absolute; z-index: 4; left: 43%; top: 78%; color: #e4f6ff; font-size: 22px; line-height: 1; text-shadow: 0 0 6px #9fd8ff; }
 .era-main .era-sky { filter: grayscale(calc(.8 * var(--era-freeze))) sepia(calc(.25 * var(--era-freeze))) hue-rotate(calc(170deg * var(--era-freeze))) saturate(calc(1 + .5 * var(--era-freeze))) brightness(calc(1 - .2 * var(--era-freeze))); }
 .era-main:has(.era-stopped) .era-sky * { animation-play-state: paused; }
 .era-main:has(.era-stopped) .era-main-header::before { z-index: 1; }
@@ -1035,8 +1070,21 @@ main:has(.screen.is-active .era-launch) { padding: 0; background: #000; }
 .era-shop-wake { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; margin-top: 4px; }
 .era-shop-wake .era-status-label { margin-right: 0; }
 .era-shop-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.era-shop .era-main-header > .era-main-when + * { margin-left: auto; }
-.line button.choice.era-timestop-button.era-wake-button { border-color: #e8b860; background: linear-gradient(#4a3618, #2c200e); color: #ffe8b8; box-shadow: 0 0 14px #ffb84a44; }
+.line button.choice.era-timestop-button.era-wake-button { border-color: #bd8850; background: radial-gradient(ellipse at top, #3a3023, #191c20 75%); color: #ffe8b8; }
+@media (max-width: 600px) {
+  .era-main-header > .era-watch-control { max-width: 100%; }
+}
+/* Labels are real controls over the artwork's plaque, not a second painted frame. */
+.era-watch-control .line button.choice.era-timestop-button, .era-watch-control .era-timestop-button { min-width: 0; width: 100%; height: 100%; padding: 2px 12px; border: 0; border-radius: 24px; background: transparent; box-shadow: none; color: #cceeea; text-shadow: 0 1px 2px #000; letter-spacing: 0; font-size: 1.15em; backdrop-filter: none; -webkit-backdrop-filter: none; }
+.era-watch-control .line button.choice.era-timestop-button.era-wake-button { color: #ffe8b8; }
+.era-watch-control .line button.choice.era-timestop-button.era-stopped { color: #f0d8ff; background: transparent; }
+.era-watch-control .era-timestop-button.era-unavailable { color: #999; background: transparent; }
+.era-watch-control .era-timestop-button .era-sub { font-size: .65em; margin-top: 1px; }
+.era-watch-control .era-timestop-gauge { margin-top: 4px; gap: 2px; }
+.era-watch-control .era-timestop-tsp { font-size: .65em; opacity: 1; }
+.era-watch-control .era-timestop-gauge .era-meter { background: #0006; }
+.era-watch-control .era-timestop-button:enabled:is(:hover, :focus-visible) { background: transparent; filter: none; }
+.era-watch-control button.era-timestop-button::before { content: ""; position: absolute; inset: -14px -16px; }
 @container (max-width: 1100px) {
   .era-shop { grid-template-columns: minmax(32ch, 40ch) minmax(0, 1fr); grid-template-areas: "header header" "player menu" "home menu" "system system" "tip tip"; }
   .screen.is-active .era-shop { grid-template-rows: auto auto 1fr auto auto; }
