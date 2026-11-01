@@ -117,6 +117,29 @@ test("hotpatches replace game routines and may add HOTPATCH_ helpers", async () 
   assert.equal(output, "patched");
 });
 
+test("main and wake-up clock hotpatches pass their exact time in one logical line", () => {
+  for (const jit of [false, true]) {
+    for (const [file, minutes, title] of [
+      ["MAIN_SCREEN.ERB", 367, ""], ["SLEEP_MENU.ERB", 1439, " title='Waking time'"],
+    ] as const) {
+      const patch = readFileSync(new URL(`../hotpatch/${file}`, import.meta.url), "utf8");
+      const instruction = patch.split("\n").find((line) => line.includes("class='era-clock'"))!;
+      const game = emptyGame();
+      indexScript(game, `@SYSTEM_TITLE
+TIME = 367
+TIME:3 = 1439
+${instruction}
+PRINTFORML Lines: {LINECOUNT}, times: {TIME}, {TIME:3}
+QUIT`, "<clock-test>");
+      const snapshot = new Runtime(game, undefined, { jit }).start();
+      assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
+      const markup = snapshot.output.flatMap((item) => item.type === "html" ? [item.text] : []);
+      assert.deepEqual(markup, [`<div class='era-clock' data-minutes='${minutes}'${title}></div>`]);
+      assert.ok(snapshot.output.some((item) => item.type === "text" && item.text === "Lines: 1, times: 367, 1439"));
+    }
+  }
+});
+
 test("hotpatches reject new routines that are not named HOTPATCH_*", async () => {
   const game = emptyGame("<memory>");
   indexScript(game, "@SYSTEM_TITLE\nQUIT", "GAME.ERB");
@@ -389,6 +412,8 @@ test("main screen hotpatch opens and closes its panel boxes in balance", {
     assert.equal(opens, closes, `screen ${index} closes every box`);
     assert.ok(screen.some((text) => text.includes("era-timestop-button")), `screen ${index} has the time stop control`);
     const html = screen.join("");
+    assert.match(html, /<div class='era-clock' data-minutes='\d+'><\/div>/);
+    assert.doesNotMatch(html, /<div class='era-clock'><img/);
     assert.equal((html.match(/value='805'/g) ?? []).length, 1, "inventory has exactly one entry point");
     assert.match(html, /era-player-actions'><button value='805' class='era-player-control era-inventory-button'/, "inventory is on the player card");
     assert.match(html, /era-settings'>.*value='-9200' class='era-toggle[^']*' aria-pressed='(?:true|false)'/, "the guard is a settings toggle in Go & Manage");

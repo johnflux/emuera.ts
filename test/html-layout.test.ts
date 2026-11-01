@@ -4,6 +4,51 @@ import { test } from "node:test";
 import { runInNewContext } from "node:vm";
 import { parseFragment, type DefaultTreeAdapterMap } from "parse5";
 
+test("vector clock draws exact game minutes, wraps days and rejects invalid input", async () => {
+  const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
+  const routine = source.slice(source.indexOf("function clock("), source.indexOf("/** Hotpatch extension: <meter"));
+  class Element {
+    attributes = new Map<string, string>();
+    children: Element[] = [];
+    tooltip = "";
+    constructor(readonly tag: string) {}
+    setAttribute(name: string, value: string) { this.attributes.set(name, value); }
+    append(child: Element) { this.children.push(child); }
+  }
+  const draw = (value: string | null, title: string | null = null): Element => runInNewContext(`${routine}\nclock(node);`, {
+    node: { getAttribute: (name: string) => name === "data-minutes" ? value : title },
+    document: { createElement: (tag: string) => new Element(tag),
+      createElementNS: (_namespace: string, tag: string) => new Element(tag) },
+    describe: (element: Element, text: string) => { element.tooltip = text; },
+  });
+  for (const [minutes, time, hour, minute] of [
+    [0, "00:00", 0, 0], [367, "06:07", 183.5, 42], [719, "11:59", 359.5, 354],
+    [720, "12:00", 0, 0], [1439, "23:59", 359.5, 354], [1440, "00:00", 0, 0],
+    [1807, "06:07", 183.5, 42], [-1, "23:59", 359.5, 354],
+  ] as const) {
+    const element = draw(String(minutes));
+    assert.equal(element.attributes.get("role"), "img");
+    assert.equal(element.attributes.get("aria-label"), `Game time: ${time}`);
+    assert.equal(element.tooltip, `Game time: ${time}`);
+    const svg = element.children[0]!;
+    assert.equal(svg.attributes.get("viewBox"), "0 0 72 72");
+    assert.equal(svg.attributes.get("aria-hidden"), "true");
+    const parts = svg.children;
+    assert.equal(parts.filter((part) => part.attributes.get("class")?.includes("era-clock-tick")).length, 12);
+    assert.equal(parts.filter((part) => part.attributes.get("class")?.includes("era-clock-quarter")).length, 4);
+    assert.equal(parts.find((part) => part.attributes.get("class") === "era-clock-hour")!.attributes.get("transform"), `rotate(${hour} 36 36)`);
+    assert.equal(parts.find((part) => part.attributes.get("class") === "era-clock-minute")!.attributes.get("transform"), `rotate(${minute} 36 36)`);
+  }
+  assert.equal(draw("367", "Waking time").attributes.get("aria-label"), "Waking time: 06:07");
+  for (const value of [null, "", "NaN", "Infinity", "1.5", "12px", "9007199254740992"])
+    assert.throws(() => draw(value), /Unsupported clock minutes:/);
+  assert.match(source, /node\.tagName === "DIV" && node\.classList\.contains\("era-clock"\) && node\.hasAttribute\("data-minutes"\)\) element = clock\(node\)/);
+  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  assert.match(css, /\.era-main-header \.era-clock \{[^}]*width: 72px; height: 72px;/);
+  assert.match(css, /:has\(\.era-sky-night\) \.era-clock \{[^}]*--clock-face: #18252e;/);
+  assert.match(css, /\.era-main:has\(\.era-stopped\) \.era-clock \{[^}]*--clock-face: #e2f2fc;/);
+});
+
 test("terminal hides only the horizontal scrollbar without disabling overflow or logical width", async () => {
   const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
   assert.match(css, /#terminal::-webkit-scrollbar \{ height: 0; \}/);

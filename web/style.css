@@ -259,11 +259,18 @@ a { color: #8ddaff; }
 .era-sky { position: absolute; inset: 0; z-index: 0; overflow: hidden; border-radius: inherit; pointer-events: none; background: #0d1014; }
 .era-main-header > .era-main-when { flex: 0 1 auto; padding: 6px 12px; border-radius: 8px; background: #0a0e1428; box-shadow: 0 0 0 1px #ffffff14; backdrop-filter: blur(3px); }
 .era-main-header > .era-main-when + * { margin-left: auto; }
-.era-main-header .era-clock { border-radius: 50%; box-shadow: 0 0 0 3px #0a0e1466, 0 2px 8px #0008; }
+.era-main-header .era-clock { --clock-face: #f3f5f4; --clock-rim: #ffffffaa; --clock-ink: #26333c; --clock-tick: #9aa8ad; --clock-accent: #188c83; width: 72px; height: 72px; border-radius: 50%; box-shadow: 0 0 0 1px #0a0e1444, 0 3px 12px #0005; }
+.era-clock > svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.era-clock-face { fill: var(--clock-face); stroke: var(--clock-rim); stroke-width: 2; }
+.era-clock-tick { stroke: var(--clock-tick); stroke-width: 1; stroke-linecap: round; }
+.era-clock-quarter { stroke: var(--clock-ink); stroke-width: 1.5; }
+.era-clock-hour { stroke: var(--clock-ink); stroke-width: 3; stroke-linecap: round; }
+.era-clock-minute { stroke: var(--clock-accent); stroke-width: 2; stroke-linecap: round; }
+.era-clock-pin { fill: var(--clock-accent); stroke: var(--clock-face); stroke-width: 1; }
 .era-clock .sprite-clip { filter: url(#era-clock-dial); }
-/* At night the clock is a dark dial with glow-in-the-dark numbers and hands (the era-radium SVG filter); frozen time keeps its icy look. */
+/* Legacy sprite clocks retain their filters; the hotpatched vector dial uses its own palette. */
 :is(.era-main, .era-shop):not(:has(.era-stopped)) .era-main-header:has(.era-sky-night) .era-clock .sprite-clip { filter: url(#era-radium); }
-:is(.era-main, .era-shop):not(:has(.era-stopped)) .era-main-header:has(.era-sky-night) .era-clock { box-shadow: 0 0 0 3px #0a0e1466, 0 0 10px #8aff6e33, 0 2px 8px #0008; }
+:is(.era-main, .era-shop):not(:has(.era-stopped)) .era-main-header:has(.era-sky-night) .era-clock { --clock-face: #18252e; --clock-rim: #647d8988; --clock-ink: #dbeee7; --clock-tick: #758e94; --clock-accent: #87e6bb; box-shadow: 0 0 0 1px #0a0e1466, 0 0 12px #87e6bb22, 0 3px 12px #0005; }
 .era-sky-view, .era-sky-orb, .era-sky-clouds, .era-sky-landmark, .era-sky-fall, .era-sky-land { position: absolute; display: block; }
 .era-sky-view { inset: 0; overflow: hidden; }
 .era-sky-clouds, .era-sky-fall { inset: 0; }
@@ -1005,7 +1012,7 @@ main:has(.screen.is-active .era-launch) { padding: 0; background: #000; }
 .era-main :is(.era-card, .era-main-header) > * { position: relative; z-index: 1; }
 .era-main:has(.era-stopped) .era-card-title { color: #bfe6ff; text-shadow: 0 0 6px #9fd8ff66; }
 .era-main :is(.era-character, .era-stats, .era-occupants) .era-meter > span { filter: saturate(calc(1 - .7 * var(--era-freeze))) brightness(calc(1 + .15 * var(--era-freeze))); }
-.era-main:has(.era-stopped) .era-clock { position: relative; border-radius: 50%; box-shadow: 0 0 0 3px #bfe6ff55, 0 0 18px #9fd8ffaa; }
+.era-main:has(.era-stopped) .era-clock { --clock-face: #e2f2fc; --clock-rim: #bfe6ff; --clock-ink: #40677f; --clock-tick: #8cb4ce; --clock-accent: #3288b8; position: relative; border-radius: 50%; box-shadow: 0 0 0 3px #bfe6ff55, 0 0 18px #9fd8ffaa; }
 .era-main .era-clock :is(img, canvas) { filter: grayscale(var(--era-freeze)) sepia(calc(.4 * var(--era-freeze))) hue-rotate(calc(170deg * var(--era-freeze))) saturate(calc(1 + 1.2 * var(--era-freeze))) brightness(calc(1 + .05 * var(--era-freeze))); }
 .era-main:has(.era-stopped) .era-clock::after { content: "❄"; position: absolute; right: -6px; bottom: -4px; color: #e4f6ff; font-size: 22px; line-height: 1; text-shadow: 0 0 6px #9fd8ff; }
 .era-main .era-sky { filter: grayscale(calc(.8 * var(--era-freeze))) sepia(calc(.25 * var(--era-freeze))) hue-rotate(calc(170deg * var(--era-freeze))) saturate(calc(1 + .5 * var(--era-freeze))) brightness(calc(1 - .2 * var(--era-freeze))); }

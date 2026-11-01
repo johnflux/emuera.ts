@@ -1478,6 +1478,35 @@ new MutationObserver(scheduleHtmlPositions).observe(terminal, { childList: true,
 function applyClasses(element, node) {
   for (const name of (node.getAttribute("class") ?? "").split(/\s+/)) if (/^era-[a-z0-9-]+$/.test(name)) element.classList.add(name);
 }
+/** Hotpatch extension: an era-clock's data-minutes is game time, not a wall-clock timer. */
+function clock(node) {
+  const value = node.getAttribute("data-minutes");
+  if (!/^-?\d+$/.test(value ?? "") || !Number.isSafeInteger(Number(value)))
+    throw new Error(`Unsupported clock minutes: ${value}`);
+  const minutes = ((Number(value) % 1440) + 1440) % 1440;
+  const label = `${node.getAttribute("title") || "Game time"}: ${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+  const element = document.createElement("div");
+  element.setAttribute("role", "img");
+  element.setAttribute("aria-label", label);
+  describe(element, label);
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 72 72");
+  svg.setAttribute("aria-hidden", "true");
+  const shape = (tag, attributes) => {
+    const part = document.createElementNS("http://www.w3.org/2000/svg", tag);
+    for (const [name, value] of Object.entries(attributes)) part.setAttribute(name, String(value));
+    svg.append(part);
+  };
+  shape("circle", { class: "era-clock-face", cx: 36, cy: 36, r: 34 });
+  for (let tick = 0; tick < 12; tick++)
+    shape("line", { class: tick % 3 === 0 ? "era-clock-tick era-clock-quarter" : "era-clock-tick",
+      x1: 36, y1: tick % 3 === 0 ? 9 : 11, x2: 36, y2: 14, transform: `rotate(${tick * 30} 36 36)` });
+  shape("line", { class: "era-clock-hour", x1: 36, y1: 36, x2: 36, y2: 21, transform: `rotate(${minutes % 720 / 2} 36 36)` });
+  shape("line", { class: "era-clock-minute", x1: 36, y1: 40, x2: 36, y2: 15, transform: `rotate(${minutes % 60 * 6} 36 36)` });
+  shape("circle", { class: "era-clock-pin", cx: 36, cy: 36, r: 2.5 });
+  element.append(svg);
+  return element;
+}
 /** Hotpatch extension: <meter value max [min]> is a bar filled to (value - min) / (max - min). */
 function meter(node) {
   const number = (name, fallback) => {
@@ -1576,6 +1605,7 @@ async function renderHtml(markup, parent, sprites) {
       } else throw new Error(`Unsupported HTML shape: ${type} ${node.getAttribute("param")}`);
     }
     else if (node.tagName === "METER") element = meter(node);
+    else if (node.tagName === "DIV" && node.classList.contains("era-clock") && node.hasAttribute("data-minutes")) element = clock(node);
     else if (node.tagName === "DIV" && subareaAttributes.some((name) => node.hasAttribute(name))) element = subarea(node, scale = columnScale());
     else if (node.tagName === "BUTTON") {
       const value = node.getAttribute("value");
