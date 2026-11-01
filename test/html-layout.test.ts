@@ -23,7 +23,7 @@ test("main and wakeup screens fill the terminal height including its top padding
   const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
   assert.match(css, /#terminal:has\(\.screen\.is-active \.era-main\), #terminal:has\(\.screen\.is-active \.era-shop\) \{ container-type: size; \}/);
   assert.match(css, /#terminal:has\(\.screen\.is-active :is\(\.era-main, \.era-shop\)\) > \.screen\.is-active \{ min-width: 0; \}/);
-  assert.match(css, /\.screen\.is-active :is\(\.era-main, \.era-shop\) \{ min-height: calc\(100cqh \+ 8px\); \}/);
+  assert.match(css, /\.screen\.is-active :is\(\.era-main, \.era-shop\) \{ min-height: calc\(100cqh \+ 4px\); \}/);
   assert.match(css, /\.era-main \{[^}]*margin: 4px 0;/);
   assert.match(css, /\.era-shop \{[^}]*margin: 4px 0;/);
 });
