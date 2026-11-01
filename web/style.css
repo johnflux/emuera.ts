@@ -92,6 +92,7 @@ main { position: relative; flex: 1; min-height: 0; display: flex; flex-direction
 #terminal, #input-form { font-family: var(--terminal-font); }
 /* main has no right padding: the scrollbar takes its place, and the output keeps a 20px margin like the left one. */
 #terminal { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 16px max(6px, calc(20px - var(--scrollbar-width, 0px))) 0 20px; font-size: var(--font-size); line-height: var(--line-height, 1.25); overflow: auto; scrollbar-gutter: stable; container-type: inline-size; }
+#terminal::-webkit-scrollbar { height: 0; }
 /* CBGSETG/CBGSETSPRITE pictures: positioned over the terminal's visible box by placeBackground() in app.js. */
 #terminal { position: relative; z-index: 1; }
 .cbg-layer { position: absolute; overflow: hidden; pointer-events: none; }

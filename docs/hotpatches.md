@@ -66,6 +66,11 @@ with filter buttons, so the title stays in place as filters disappear.
 The reserved height also covers one text line plus the buttons' 6 px vertical
 padding, accounting for font-size changes and fractional font metrics.
 They can still grow to accommodate wrapped filters on narrow screens.
+The terminal hides its horizontal scrollbar in Chromium/Electron and Safari
+without disabling horizontal scrolling. Trackpad gestures and Shift+wheel can
+still reach overflow content; the vertical scrollbar and configured logical
+width remain unchanged. Browsers without WebKit scrollbar styling retain their
+normal scrollbar.
 
 The eraTW launch screen retains the original TW title artwork with responsive
 sizing and no image filters or glow, alongside matching in-game panels. Setup fits

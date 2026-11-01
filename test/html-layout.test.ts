@@ -4,6 +4,13 @@ import { test } from "node:test";
 import { runInNewContext } from "node:vm";
 import { parseFragment, type DefaultTreeAdapterMap } from "parse5";
 
+test("terminal hides only the horizontal scrollbar without disabling overflow or logical width", async () => {
+  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  assert.match(css, /#terminal::-webkit-scrollbar \{ height: 0; \}/);
+  assert.match(css, /#terminal \{[^}]*overflow: auto;/);
+  assert.match(css, /#terminal > \* \{[^}]*min-width: var\(--logical-width, 0\);/);
+});
+
 test("action headers reserve filter-row height without preventing wrapping", async () => {
   const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
   assert.match(css, /\.era-actions-header \{[^}]*flex-wrap: wrap;/);
