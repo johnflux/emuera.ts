@@ -3,7 +3,7 @@
 ; half of MAIN_SCREEN.ERB's panel layout, which it closes. The command rules are copied unchanged; the display:
 ; - the actions card: the filter toggles as chips, the commands grouped by number range instead of line breaks
 ;   (those a filter controls tinted like its toggle), the custom (9000+) commands, and the time stop/mischief/sleeping commands, moved up from the menu;
-; - the "Go & Manage" card with the menu commands and the settings buttons of QOL_EXTRA_COMMAND_BUTTONS as chips.
+; - management commands and settings, merged into the player card by the browser.
 ; Dropped: the [Commands] collapse toggle [3002] (always expanded) and the line-filling "=" padding.
 ;-------------------------------------------------------------------------------
 @HOTPATCH_HAS_ALCOHOL()
@@ -283,8 +283,7 @@ HTML_PRINT "<era-close>"
 ;自動実行中なら下記表示をスキップ
 SIF !TFLAG:100
 	GOTO SKIP
-HTML_PRINT "<era-open class='era-card era-main-menu'>"
-HTML_PRINT "<div class='era-card-title'>Go &amp; Manage</div>"
+HTML_PRINT "<era-open class='era-player-management'>"
 IF nSelfCareCount
 	HTML_PRINT "<era-open class='era-actions-group era-self-care'>"
 	HTML_PRINT "<div class='era-actions-title'>Look after yourself</div>"
@@ -433,6 +432,7 @@ SIF !GETBIT(FLAG:USERCOMフィルタ, 14) & AT_HOME(MASTER) && !CFLAG:うふふ 
 	PRINTC Auto-Clean[996]
 RESETCOLOR
 
+HTML_PRINT @"<span class='era-guard-control'><button value='-9200' class='era-guard-toggle' aria-pressed='%(FLAG:押し倒し ? "true" # "false")%' title='When on, someone only pushes you down if they are stronger than you (fighting ability and build, with shyness, seduction and forwardness); otherwise they just hug you. When off, anyone in the mood can push you down.'>Pushdown Guard</button></span>"
 PRINTL
 ;custom, moved to its own line due to length
 IF CAN_DATE(TARGET)
@@ -687,8 +687,6 @@ RETURNF @"<button value='{nValue}' class='era-toggle%sClass%%(nOn ? " era-on" # 
 #DIMS DYNAMIC sHtml
 #DIMS DYNAMIC sMoan
 sHtml '= "<button value='809' class='era-chip-button'>Config</button>"
-sHtml += "<button value='-9201' class='era-chip-button'>Auto Items</button>"
-sHtml += HOTPATCH_TOGGLE("Pushdown Guard", -9200, FLAG:押し倒し, "", "When on, someone only pushes you down if they are stronger than you (fighting ability and build, with shyness, seduction and forwardness); otherwise they just hug you. When off, anyone in the mood can push you down.")
 IF TARGET > 0 && TARGET != MASTER && (CFLAG:MASTER:うふふ || CFLAG:TARGET:うふふ || CFLAG:MASTER:イタズラ || CFLAG:TARGET:イタズラ || FLAG:70 || FREE_USE_ACTIVE())
 	sHtml += HOTPATCH_TOGGLE("Automatic Condom", 838, FLAG:自動ゴム)
 	SELECTCASE CFLAG:オート喘ぎ

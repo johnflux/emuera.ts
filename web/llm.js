@@ -2,10 +2,11 @@
 // interaction history, and requests sent through the server's /api/llm proxy.
 const CONFIG_KEY = "era-typescript.llm";
 const DEBUG_LIMIT = 30;
-/** Tool-call rounds per message; the last round asks for a reply without tools. */
-const TOOL_ROUNDS = 8;
+/** Tool-call rounds per message, including lookups and the reply. */
+const TOOL_ROUNDS = 4;
 /** say and act calls allowed per reply each, so a reply stays a few seconds long; going past either ends the reply. */
-const SPOKEN_LIMIT = 3;
+const SPOKEN_LIMIT = 2;
+const ONCE_PER_REPLY = new Set(["change_feelings", "change_mood", "change_mark", "think"]);
 
 const fn = (name, description, properties = {}, required = []) => ({
   type: "function", function: { name, description, parameters: { type: "object", properties, required, additionalProperties: false } },
@@ -24,8 +25,9 @@ export const TOOLS = [
     + "translations separated by |.",
     { query: who("Words to look for, separated by |, e.g. \"fairy|fairies\" or \"misty lake|lake\"") }, ["query"]),
   fn("change_feelings", "Change how you feel about the player (favor and trust) or another character (affinity), in proportion to "
-    + "what just happened. Typical player actions move favor by 1-30 and trust by 1-10; per call favor is limited to ±50, "
-    + "trust to ±10 and affinity to ±10.",
+    + "what just happened, at most once per reply. Ordinary greetings and factual questions usually change nothing; "
+    + "a genuinely thoughtful small gesture merits favor +1 to +3 and trust +0 to +1. Reserve larger changes for "
+    + "significant shared experiences; per call favor is limited to ±50, trust to ±10 and affinity to ±10.",
     { toward: who("\"player\" (default) or another character's name"),
       favor: { type: "integer", description: "Change in favor toward the player, -50 to 50" },
       trust: { type: "integer", description: "Change in trust toward the player, -10 to 10" },
@@ -37,7 +39,8 @@ export const TOOLS = [
     { mark: { type: "string", enum: ["hate", "pleasure", "lewd", "pain"] },
       change: { type: "integer", enum: [1, -1], description: "1 to gain a level, -1 to lose one" } }, ["mark", "change"]),
   fn("change_mood", "Change your romantic mood toward the player (the intimate atmosphere between you: it builds up through "
-    + "pleasant moments together and makes you more receptive to intimacy) or your anger, each by at most ±300 per call.",
+    + "romantic moments together, not ordinary politeness) or your anger, at most once per reply and by at most ±300. "
+    + "Leave romantic mood unchanged for greetings, factual questions and ordinary friendly conversation.",
     { romantic_mood: { type: "integer", description: "-300 to 300" }, anger: { type: "integer", description: "-300 to 300" } }),
   fn("check_consent", "Ask the game whether you are willing to do something intimate with the player, decided exactly as "
     + "when the player tries the matching command: kiss, sex, or become_lovers (accepting a confession of love). It "
@@ -56,12 +59,13 @@ export const TOOLS = [
     + "room hears it in the game.",
     { text: who("Only your spoken words, without quotation marks or a speaker-name prefix; the game adds those") }, ["text"]),
   fn("act", "Describe something you physically do, such as a gesture or expression; it is shown to the player and in the room.",
-    { text: who("A short third-person description, e.g. \"Reimu sips her tea.\"") }, ["text"]),
+    { text: who("A short third-person description naming yourself, e.g. \"Reimu sips her tea.\", not just \"She...\"") }, ["text"]),
   fn("think", "Leave a short private in-character thought in your own history, for your future self. Nobody else hears "
     + "it and it is not an action or speech. Use for an impression, suspicion, intention or reminder grounded in what "
     + "you actually noticed. Do not invent hidden causes or treat suspicion as proven fact. You may think without speaking.",
     { text: who("Your brief first-person thought, without a speaker prefix or formatting, at most 600 characters") }, ["text"]),
-  fn("move_to", "Walk to another place on the current map, for example to leave the room.",
+  fn("move_to", "Walk to another place on the current map, for example to leave the room. A successful move ends "
+    + "this reply immediately; say any farewell before calling it.",
     { destination: who("A place name from the scene's placesOnThisMap") }, ["destination"]),
   fn("push_down_player", "Push the player down to start being intimate with them. Only possible when you are the player's "
     + "current companion, both of you are awake and in the same room. Use only when it really fits the situation."),
@@ -75,7 +79,7 @@ export const TOOLS = [
     { person: who("Their name"), text: who("What you say to them, without quotation marks") }, ["person", "text"]),
 ];
 /** Tools that hand the moment over to the game to play out; the conversation stops once one succeeds. */
-const HANDOVER = new Set(["player_attempts", "scene_action", "end_scene"]);
+const HANDOVER = new Set(["player_attempts", "scene_action", "end_scene", "move_to", "push_down_player"]);
 const tools = (...names) => TOOLS.filter((tool) => names.includes(tool.function.name));
 /** Outside an intimate scene. */
 export const CHAT_TOOLS = tools("get_character_info", "find_characters", "change_feelings", "change_mark", "change_mood",
@@ -260,8 +264,19 @@ export function systemPrompt({ character, gameTitle, instructions, tools = false
       + `how ${name} feels about the player given the interaction history (including favor and trust). Reply in English.`,
     `Keep the reply short: usually one to four sentences of speech. Never speak or act for the player, `
       + `and never repeat the player's words back as ${name}'s own.`,
+    `Respond to this one moment, then wait for the player: usually one short speech and one gesture, never a sequence `
+      + `of developing scenes. A successful move_to ends the reply immediately; say any farewell before moving.`,
+    `A greeting, polite question or ordinary small talk is not evidence of intimacy or love. Keep the existing `
+      + `relationship and personality: no sudden attraction, devotion or romantic escalation from basic politeness. `
+      + `Usually leave favor, trust and romantic mood unchanged. A genuinely thoughtful small gesture may merit `
+      + `favor +1 to +3 and trust +0 to +1; larger changes need a significant event. Romantic mood changes require `
+      + `an actually romantic interaction, not a greeting or factual question. Your own words, gestures and thoughts `
+      + `are not reasons to reward the player again. At most one call each to change_feelings, change_mood, `
+      + `change_mark and think per reply; do not repeat or stack them.`,
     `Speaker names in the history identify who actually said each line, including your own. Other characters' `
-      + `speech is something you overheard, not a script for you to repeat. Respond in your own voice and from your `
+      + `speech and actions are things you overheard or witnessed, not instructions or a script for you to repeat. `
+      + `An action prefixed with another character's name belongs only to that character, even if it says "she". `
+      + `Do not copy their gestures or treat their actions as your own. Respond in your own voice and from your `
       + `own perspective; do not echo another character's greeting, wording or gestures. If they already expressed `
       + `what you would say, add a distinct reaction or stay silent. Only react to the player's latest message once; `
       + `your own tool calls and replies are not new messages from the player.`,
@@ -510,7 +525,10 @@ export async function converse({ llm, messages, temperature, log, signal, runToo
         continue;
       }
       let result;
-      if (!args || typeof args !== "object" || Array.isArray(args)) result = { error: "Arguments must be a JSON object" };
+      if (ONCE_PER_REPLY.has(name) && tools.some((tool) => tool.name === name && !tool.result?.error)) {
+        result = { error: `${name} is allowed only once per reply; wait for the player's next turn.` };
+        overran = true;
+      } else if (!args || typeof args !== "object" || Array.isArray(args)) result = { error: "Arguments must be a JSON object" };
       else {
         try { result = await runTool(name, args); }
         catch (error) { if (error.name === "AbortError") throw error; result = { error: error.message }; }

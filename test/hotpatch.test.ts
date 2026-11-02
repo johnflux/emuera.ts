@@ -140,6 +140,42 @@ QUIT`, "<clock-test>");
   }
 });
 
+test("sky hotpatch passes exact game minutes without changing time or weather classes", () => {
+  const patch = readFileSync(new URL("../hotpatch/MAIN_SCREEN.ERB", import.meta.url), "utf8");
+  const routine = patch.slice(patch.indexOf("@HOTPATCH_SKY("), patch.indexOf("@HOTPATCH_SITUATION\n"));
+  for (const jit of [false, true]) {
+    for (const [minutes, phase] of [[240, "dawn"], [367, "morning"], [720, "day"], [1080, "evening"], [1439, "night"], [1807, "morning"]] as const) {
+      const game = emptyGame();
+      game.names.set("FLAG", new Map([["異常気象", 1]]));
+      game.names.set("CFLAG", new Map([["現在位置", 1]]));
+      indexScript(game, `@SYSTEM_TITLE
+ADDVOIDCHARA
+MASTER = 0
+TIME = ${minutes}
+TIME:5 = 7
+DAY:2 = 1
+DAY:3 = 15
+CALL HOTPATCH_SKY(0)
+PRINTFORML Time: {TIME}
+QUIT
+${routine}
+@HOTPATCH_AREA
+#FUNCTION
+RETURNF 0
+@OUTROOF(ARG)
+#FUNCTION
+RETURNF 1`, "<sky-test>");
+      const snapshot = new Runtime(game, undefined, { jit }).start();
+      assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
+      const markup = snapshot.output.flatMap((item) => item.type === "html" ? [item.text] : []);
+      assert.equal(markup.length, 1);
+      assert.match(markup[0]!, new RegExp(`class='era-sky era-sky-${phase} era-weather-fog era-season-spring era-area-0' data-minutes='${minutes}'`));
+      assert.match(markup[0]!, /data-season='1' data-day='15'/);
+      assert.ok(snapshot.output.some((item) => item.type === "text" && item.text === `Time: ${minutes}`));
+    }
+  }
+});
+
 test("hotpatches reject new routines that are not named HOTPATCH_*", async () => {
   const game = emptyGame("<memory>");
   indexScript(game, "@SYSTEM_TITLE\nQUIT", "GAME.ERB");
@@ -421,8 +457,8 @@ test("main screen hotpatch opens and closes its panel boxes in balance", {
     assert.doesNotMatch(html, /<div class='era-clock'><img/);
     assert.equal((html.match(/value='805'/g) ?? []).length, 1, "inventory has exactly one entry point");
     assert.match(html, /era-player-actions'><button value='805' class='era-player-control era-inventory-button'/, "inventory is on the player card");
-    assert.match(html, /era-settings'>.*value='-9200' class='era-toggle[^']*' aria-pressed='(?:true|false)'/, "the guard is a settings toggle in Go & Manage");
-    assert.doesNotMatch(html, /era-player-toggles|era-guard-toggle/);
+    assert.match(html, /era-player-management'>.*value='-9200' class='era-guard-toggle' aria-pressed='(?:true|false)'/, "the guard is a player management control");
+    assert.doesNotMatch(html, /era-player-toggles|Go &amp; Manage|Auto Items/);
   }
   assert.ok(screens[1]!.some((text) => /era-stopped'[^>]*value='999'|value='999'[^>]*era-stopped/.test(text)), "time stop switches to Resume Time");
   step("805");
@@ -547,7 +583,7 @@ QUIT`, "<settings-test>");
     const snapshot = new Runtime(game, GAME_INSTRUCTION_LIMIT).start();
     assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
     const html = snapshot.output.flatMap((item) => item.type === "html" ? [item.text] : []).join("");
-    assert.match(html, new RegExp(`value='-9200' class='era-toggle${mode % 2 ? " era-on" : ""}' aria-pressed='${Boolean(mode % 2)}'`));
+    assert.doesNotMatch(html, /Pushdown Guard|Auto Items/, "guard is with management actions; Auto Items is in Inventory");
     assert.match(html, /title='Standing: Prefer standing versions/);
     assert.match(html, /title='Auto-moan: [^']+Cycles this character through No, Yes and Yes \(Ahegao\)/);
     assert.match(html, /Automatic Condom/);
@@ -749,6 +785,8 @@ test("room lineup renders every portrait and preserves target selection", {
     assert.doesNotMatch(html, /era-selected/, "selection uses only the existing sprite highlight, not an occupant highlight");
     assert.ok(html.indexOf("era-character") < html.indexOf("era-occupant-list"));
     assert.match(html, /era-room-stage/, "the lineup is inside a room stage");
+    assert.doesNotMatch(html, /era-interaction-history/, "history is in the bottom chat, not Character Info");
+    if (count) assert.ok(snapshot.characterHistory, "main-screen output supplies the bottom chat's history");
     assert.doesNotMatch(html, /era-room-shrine|\/rooms\//, "the room has no illustrated background");
     assert.doesNotMatch(html, />Room Occupants</, "the room itself replaces the occupant-list heading");
     if (!count) {
@@ -757,8 +795,11 @@ test("room lineup renders every portrait and preserves target selection", {
       continue;
     }
     const labels = [...html.matchAll(/<button value='(\d+)' class='era-occupant-label' aria-pressed='(true|false)'/g)];
-    assert.match(html, /era-info-title'>Character Info</);
+    assert.doesNotMatch(html, /era-info-tabs|era-info-title|Go &amp; Manage/);
     assert.match(html, /value='-9300' class='era-info-more'/, "More opens details for the selected character");
+    assert.match(html, /<era-open class='era-info-summary'><button value='-9300'/, "See more is beside the character name");
+    assert.match(html, /value='-9200' class='era-guard-toggle' aria-pressed='false'/);
+    assert.doesNotMatch(html, /Auto Items/);
     assert.match(html, /<era-open class='era-info-body'>/);
     assert.match(html, /era-info-face/, "the details identify the selected person");
     assert.match(html, /<era-open class='era-info-head'>/);
@@ -874,6 +915,7 @@ WAIT`, "<inventory-test>");
   assert.match(html, /2 item types/);
   assert.equal((html.match(/class='era-inventory-item'/g) ?? []).length, 2);
   assert.match(html, /value='3020'/);
+  assert.match(html, /value='-9201' class='era-chip-button'>Auto Items</);
   assert.match(html, /era-inventory-footer'><span class='era-inventory-filter'><\/span>/);
   assert.match(html, /class='era-inventory-count'>2 item types</);
   assert.match(html, /class='era-inventory-item' title='Protects from the elements/);
@@ -896,6 +938,11 @@ WAIT`, "<inventory-test>");
   assert.match(mods.output.flatMap((item) => "text" in item ? [item.text] : []).join(""), /Umbrella/i);
   html = markup(runtime.input("889"));
   assert.match(html, /2 item types/);
+  const automatic = runtime.input("-9201");
+  assert.equal(automatic.error, null, JSON.stringify(automatic.error));
+  assert.match(automatic.output.flatMap((item) => "text" in item ? [item.text] : []).join(""), /Choose which items to use/);
+  html = markup(runtime.input("-1"));
+  assert.match(html, /2 item types/, "closing Auto Items returns to the current inventory");
   html = markup(runtime.input("-1"));
   assert.match(html, /Invalid Input/);
   const snapshot = runtime.input("999");

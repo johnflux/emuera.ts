@@ -408,14 +408,18 @@ straight into the interaction history as a "Conversation" event
 (`POST /api/character-chat` records the player's message, character tool calls
 record themselves). The player's words are in "quotes" with `*actions*` kept as
 written, the character's speech is in 「」 in its eraTW dialogue colour
-(`SET_KOJO_COLOR`), its actions are plain narration, and any other tool call is a
+(`SET_KOJO_COLOR`), its actions are explicitly actor-prefixed (`Reimu: She waves.`)
+in both her own history and the copies witnesses hear, and any other tool call is a
 line summarising it (`toolCallSummary` in `src/character-tools.ts`): the call
 in dim grey, the outcome in lighter grey, such as
 `change_feelings(favor +10) (gift) → favor 3 → 13` or
 `check_consent(kiss) → −50 (trust) − 200 (base) − 30 (reserved) − 20 (never kissed) = −300 (Reimu firmly refuses). Will also firmly refuse: sex or becoming lovers`
 (the character is named, never "you").
 A consent answer is green (willing), amber (gives in) or red (refuses), as are
-failures and hate marks. `check_consent`'s `why` is that same sum (feelings'
+failures and hate marks. Displayed speech normalizes straight/curly quotation
+marks to 「」; speaker labels are neutral and player lines are lavender.
+This also applies after on-device history translation, without changing saved text.
+`check_consent`'s `why` is that same sum (feelings'
 parts less what it takes, equal to the margin), prefixed for the model with
 "Reimu's feelings, less what it takes:". Like any
 history line, each has text runs with a colour (hex or a colour name) taken when
@@ -428,7 +432,17 @@ parsed leniently (code fences, `<think>` blocks and plain text are tolerated)
 and recorded through `say` and `act`. With **Allow tool calls** enabled
 (per provider, on by default) the model can also call game tools defined in
 `web/llm.js` and executed by `src/character-tools.ts` through
-`POST /api/character-tool`. Before each message the client fetches
+`POST /api/character-tool`. Replies are limited to four tool rounds and two
+calls each to say/act (background encounters may impose a lower limit).
+Each reply allows only one successful call each to change_feelings, change_mood,
+change_mark and think; attempts to repeat one return an explicit tool error and
+end the turn after the current batch. A successful move_to, push_down_player,
+player_attempts, scene_action or end_scene stops immediately, skipping any later
+calls in the batch. Failed calls do not trigger this handover.
+Prompts ask for one brief moment, no romantic escalation from ordinary politeness,
+usually no stat changes for small talk, and only tiny changes for a genuinely
+thoughtful gesture. Significant events can still justify larger changes.
+Before each message the client fetches
 `describe_scene` (the time, the character, the player, who else is in the room
 with this character's feelings toward them, and the places on the map) and sends
 it as context. The scene also carries the character's `voice` (`src/character-voice.ts`): her kojo's introduction

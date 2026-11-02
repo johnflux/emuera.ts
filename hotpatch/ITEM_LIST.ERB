@@ -19,7 +19,7 @@ DO
 	FOR nIndex, 0, VARSIZE("sCategory")
 		sTabs += @"<button value='{3000 + nIndex}' class='era-sheet-subpage%(nView == 0 && nIndex == nCategory ? " era-current" # "")%'>%sCategoryName:nIndex%</button>"
 	NEXT
-	sHeader += @"<div class='era-sheet-subpages era-inventory-tabs'>%sTabs%</div><div class='era-inventory-tools'><button value='777' class='era-chip-button%(nView == 2 ? " era-current" # "")%'>Item mods</button></div>"
+	sHeader += @"<div class='era-sheet-subpages era-inventory-tabs'>%sTabs%</div><div class='era-inventory-tools'><button value='777' class='era-chip-button%(nView == 2 ? " era-current" # "")%'>Item mods</button><button value='-9201' class='era-chip-button'>Auto Items</button></div>"
 	HTML_PRINT sHeader + "</div>"
 	HTML_PRINT "<era-open class='era-inventory-body'>"
 	SELECTCASE nView
@@ -62,6 +62,8 @@ DO
 		RETURN
 	CASE 777
 		nView = 2
+	CASE -9201
+		CALL QOL_AUTO_ITEMS
 	CASE 889
 		nView = 0
 	CASE 3000 TO 3020

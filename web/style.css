@@ -237,13 +237,11 @@ a { color: #8ddaff; }
 .era-box { --terminal-background: transparent; }
 .era-box .line, .era-box .output-text { background-color: transparent; }
 .era-box .line .era-section { margin: 0; }
-/* Main screen (hotpatch/MAIN_SCREEN*.ERB): header, then the room lineup and character details | you
-   (with a minimum height, so the screen keeps its shape when nobody is around), then the target's stats | actions |
-   menu. During a session the counters take a row under the actions, which then no longer reach down. */
+/* Main screen: room, actions and history beside the player/menu/stats sidebar. */
 .era-main { display: grid; gap: 10px; max-width: 100cqi; margin: 4px 0; white-space: normal;
-  grid-template-columns: minmax(32ch, 36ch) minmax(0, 1fr) minmax(32ch, 36ch);
-  grid-template-rows: auto auto auto 1fr auto;
-  grid-template-areas: "header header header" "center center right" "left actions menu" "left counters menu" "last last last"; }
+  grid-template-columns: minmax(0, 1fr) minmax(32ch, 36ch);
+  grid-template-rows: auto auto 1fr auto auto;
+  grid-template-areas: "header header" "center sidebar" "actions sidebar" "counters sidebar" "last last"; }
 #terminal:has(.screen.is-active .era-main), #terminal:has(.screen.is-active .era-shop) { container-type: size; }
 #terminal:has(.screen.is-active :is(.era-main, .era-shop)) > .screen.is-active { min-width: 0; }
 .screen.is-active :is(.era-main, .era-shop) { min-height: calc(100cqh + 4px); }
@@ -303,19 +301,23 @@ body:has(.menu-panel:not([hidden])) .clock-overhang { visibility: hidden; }
 .era-sky-view, .era-sky-orb, .era-sky-clouds, .era-sky-landmark, .era-sky-fall, .era-sky-land { position: absolute; display: block; }
 .era-sky-view { inset: 0; overflow: hidden; }
 .era-sky-clouds, .era-sky-fall { inset: 0; }
-.era-sky-dawn .era-sky-view { background: linear-gradient(#1f2c55, #7a4e7c 55%, #f0956a); }
-.era-sky-morning .era-sky-view { background: linear-gradient(#4f8fd0, #9fd0f0 70%, #f4e2b8); }
-.era-sky-day .era-sky-view { background: linear-gradient(#2f78c4, #79b8e8); }
-.era-sky-evening .era-sky-view { background: linear-gradient(#2c2a5c, #a24a6e 50%, #f08a3c); }
-.era-sky-night .era-sky-view { background: radial-gradient(1px 1px at 62% 22%, #fff, transparent), radial-gradient(1px 1px at 74% 58%, #fffc, transparent),
-  radial-gradient(1.5px 1.5px at 83% 30%, #fff, transparent), radial-gradient(1px 1px at 91% 66%, #fffa, transparent), radial-gradient(1px 1px at 55% 70%, #fff8, transparent),
-  radial-gradient(1px 1px at 68% 12%, #fffb, transparent), radial-gradient(1.5px 1.5px at 96% 18%, #fff, transparent), linear-gradient(#060a1c, #18234a); }
-/* Sun or moon: high at midday, low in the morning and evening, a crescent at night. */
-.era-sky-orb { top: 12px; right: 24%; width: 30px; height: 30px; border-radius: 50%; background: radial-gradient(#fffbe0, #ffe27a 55%, #ffc94a); box-shadow: 0 0 22px 8px #ffe07a88; }
-.era-sky-dawn .era-sky-orb { top: 62%; right: 34%; background: radial-gradient(#fff2d8, #ffb27a); box-shadow: 0 0 26px 10px #ff9a6a77; }
-.era-sky-morning .era-sky-orb { top: 34%; right: 30%; }
-.era-sky-evening .era-sky-orb { top: 58%; right: 16%; width: 36px; height: 36px; background: radial-gradient(#ffe0b0, #ff8a3a); box-shadow: 0 0 30px 12px #ff7a3a88; }
-.era-sky-night .era-sky-orb { top: 14px; right: 20%; width: 24px; height: 24px; background: transparent; box-shadow: inset -7px 3px 0 0 #f4f0d0, 0 0 14px 2px #f4f0d033; }
+:is(.era-sky-dawn, .era-sky-morning, .era-sky-day, .era-sky-evening) .era-sky-view {
+  background: radial-gradient(ellipse at calc(100% - var(--sky-orb-right) - 15px) 110px, color-mix(in srgb, #ffad6680 var(--sky-warmth, 0%), transparent), transparent 60%),
+    linear-gradient(color-mix(in srgb, #2f78c4, #493b76 var(--sky-warmth, 0%)), color-mix(in srgb, #79b8e8, #d4728c var(--sky-warmth, 0%)) 55%, color-mix(in srgb, #c5e5f5, #ffc083 var(--sky-warmth, 0%))); }
+.era-sky-night .era-sky-view { background: linear-gradient(#060a1c, #18234a); }
+.era-sky-view::before { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: var(--sky-darkness, 0);
+  background: radial-gradient(1px 1px at 8% 18%, #fff, transparent), radial-gradient(1px 1px at 27% 56%, #d7e5ffcc, transparent),
+    radial-gradient(1.5px 1.5px at 43% 12%, #fff, transparent), radial-gradient(1px 1px at 65% 35%, #fff9, transparent),
+    radial-gradient(1px 1px at 87% 68%, #fff, transparent), radial-gradient(1.5px 1.5px at 96% 8%, #ffe6c8cc, transparent);
+  background-size: 173px 97px; }
+:is(.era-sky-dawn, .era-sky-evening) .era-sky-view::before {
+  background: linear-gradient(#060a1c, #18234a); }
+/* Keep clear of the right-hand scenery when space permits, but never push the orb off a narrow header. */
+.era-sky-view { --sky-orb-right: clamp(10px, max(450px, calc(450px + (70% - 450px) * var(--sky-orbit, .5))), max(10px, calc(100% - 40px))); }
+.era-sky-orb { top: min(var(--sky-orb-top, 10px), max(0px, calc(100% - 30px))); right: var(--sky-orb-right); width: 30px; height: 30px; border-radius: 50%;
+  background: radial-gradient(#fffbe0, color-mix(in srgb, #ffe27a, #ffb27a var(--sky-warmth, 0%)) 55%, color-mix(in srgb, #ffc94a, #ff783a var(--sky-warmth, 0%)));
+  box-shadow: 0 0 26px 10px color-mix(in srgb, #ffe07a88, #ff7a3a99 var(--sky-warmth, 0%)); }
+.era-sky-moon .era-sky-orb { width: 24px; height: 24px; background: transparent; box-shadow: inset -7px 3px 0 0 #f4f0d0, 0 0 14px 2px #f4f0d033; }
 /* Weather: clouds dim or hide the sky, rain and snow fall. */
 .era-weather-fair .era-sky-clouds { background: radial-gradient(40px 12px at 70% 38%, #ffffffb0, transparent), radial-gradient(56px 14px at 86% 62%, #ffffff90, transparent), radial-gradient(34px 10px at 58% 72%, #ffffff70, transparent); }
 .era-sky-night.era-weather-fair .era-sky-clouds { opacity: .25; }
@@ -325,6 +327,9 @@ body:has(.menu-panel:not([hidden])) .clock-overhang { visibility: hidden; }
 :is(.era-weather-rain, .era-weather-storm) .era-sky-clouds { background: radial-gradient(120px 26px at 70% 22%, #4a525acc, transparent), linear-gradient(#3a424bdd, #2a3036bb); }
 :is(.era-weather-snow, .era-weather-blizzard) .era-sky-clouds { background: linear-gradient(#9aa6b2aa, #c8d2dc88); }
 .era-weather-fog .era-sky-clouds { background: repeating-linear-gradient(#e6ecf000 0 6px, #e6ecf055 10px, #e6ecf000 16px), linear-gradient(#b8c2ca99, #d8dee499); }
+.era-weather-fog .era-sky-view::after { content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  background: repeating-linear-gradient(0deg, #e6ecf000 0 18px, #e6ecf055 24px, #e6ecf000 36px), linear-gradient(#cbd4dc55, #d8dee499); }
+.era-weather-fog.era-underground .era-sky-view::after { display: none; }
 .era-weather-rain .era-sky-fall { background: repeating-linear-gradient(105deg, transparent 0 9px, #b8d0f055 9px 10px); background-size: 40px 40px; animation: era-fall 0.7s linear infinite; }
 .era-weather-storm .era-sky-fall { background: repeating-linear-gradient(110deg, transparent 0 5px, #c8dcff77 5px 6px); background-size: 30px 30px; animation: era-fall 0.45s linear infinite, era-lightning 7s steps(1) infinite; }
 .era-weather-snow .era-sky-fall { background: radial-gradient(1.5px 1.5px at 20% 30%, #fff, transparent), radial-gradient(2px 2px at 60% 70%, #fffd, transparent), radial-gradient(1.5px 1.5px at 85% 15%, #fffc, transparent);
@@ -381,7 +386,7 @@ body:has(.menu-panel:not([hidden])) .clock-overhang { visibility: hidden; }
 :is(.era-main, .era-shop) .era-main-header:has(.era-area-art) { height: calc(var(--area-art-height, 150px) + 2px); min-height: 0; max-height: calc(var(--area-art-height, 150px) + 2px); container-type: size; overflow: clip; overflow-clip-margin: 32px; }
 :is(.era-main, .era-shop) .era-main-header:has(.era-area-art) > .era-watch-control { position: absolute; top: -32px; right: -37px; margin: 0; width: 300px; container-type: inline-size; }
 #terminal:has(.screen.is-active :is(.era-main, .era-shop) .era-main-header .era-area-art) { overflow-x: hidden; }
-:is(.era-main, .era-shop) .era-main-header:has(.era-area-art) .era-watch-control .era-timestop-button { padding: 2px clamp(2px, 2cqw, 12px); transform: translateX(-6px); }
+:is(.era-main, .era-shop) .era-main-header:has(.era-area-art) .era-watch-control .era-timestop-button { padding: 2px clamp(2px, 2cqw, 12px); transform: translateX(-5px); }
 :is(.era-main, .era-shop) .era-main-header:has(.era-area-art) > .era-main-when { flex: 0 1 40%; max-width: 40%; max-height: 100%; overflow: auto; }
 .era-sky.era-area-art .era-sky-landmark { left: 0; right: 0; bottom: 0; width: auto; height: 100%; image-rendering: pixelated; -webkit-mask: none; mask: none;
   background: var(--area-left, none) left bottom / auto no-repeat, var(--area-right, none) right bottom / auto no-repeat, var(--area-middle) left bottom / auto repeat-x;
@@ -390,32 +395,32 @@ body:has(.menu-panel:not([hidden])) .clock-overhang { visibility: hidden; }
 .era-sky.era-area-art-night .era-sky-landmark { --landmark-tint: ; }
 .era-main-left { grid-area: left; display: flex; flex-direction: column; gap: 10px; }
 .era-main > :is(.era-main-center, .era-main-right, .era-main-left) { align-self: stretch; display: flex; flex-direction: column; }
-.era-main > :is(.era-main-actions, .era-main-menu) { align-self: stretch; }
-.era-main:not(:has(> .era-counters)) > .era-main-actions { grid-row-end: span 2; }
-/* Nobody selected, so no stats: the actions take their column too. */
-.era-main:not(:has(.era-stats)) > .era-main-left { display: none; }
-.era-main:not(:has(.era-stats)) > .era-main-actions { grid-column: 1 / 3; }
-.era-main-left > .era-stats { flex: 1 0 auto; }
+.era-main-sidebar { grid-area: sidebar; align-self: stretch; display: flex; flex-direction: column; gap: 10px; }
+.era-main-sidebar > :is(.era-main-right, .era-main-left) { display: flex; flex-direction: column; }
+.era-main-sidebar > .era-main-right { flex: 1; }
+.era-main-sidebar > .era-main-left { flex: none; }
+.era-main-sidebar > .era-main-left:not(:has(.era-stats)) { display: none; }
+.era-main-left > .era-stats { flex: none; }
 /* PRINTed cards sit in a line and a span; letting those wrappers go lets the card itself fill the column. */
 .era-occupant-list > .line:has(.era-occupant), .era-occupant-list > .line > span:has(> .era-occupant),
 .era-occupant-list > .line:has(.era-alone-message), .era-occupant-list > .line > span:has(> .era-alone-message) { display: contents; }
 :is(.era-main-center, .era-main-right) > .era-card { flex: 1 0 auto; }
-.era-main-center > .era-card { min-height: 290px; }
 .era-main-center { grid-area: center; }
 .era-main-right { grid-area: right; }
 .era-main-actions { grid-area: actions; }
+.era-main > .era-main-actions { align-self: stretch; }
 .era-counters { grid-area: counters; }
-.era-main-menu { grid-area: menu; }
 .era-main-last { grid-area: last; color: #888; }
-@container (max-width: 1100px) {
-  .era-main { grid-template-columns: minmax(40ch, 44ch) minmax(0, 1fr); grid-template-rows: none;
-    grid-template-areas: "header header" "center center" "left actions" "right menu" "counters counters" "last last"; }
-  .era-main:not(:has(> .era-counters)) > .era-main-actions { grid-row-end: auto; }
+@container (min-width: 761px) {
+  .era-main:not(:has(.era-counters)) {
+    grid-template-rows: auto auto 1fr auto;
+    grid-template-areas: "header header" "center sidebar" "actions sidebar" "last last";
+  }
+  .era-main:has(.era-main-chat) { grid-template-rows: auto 1fr auto auto auto; }
+  .era-main:has(.era-main-chat):not(:has(.era-counters)) { grid-template-rows: auto 1fr auto auto; }
 }
 @container (max-width: 760px) {
-  .era-main { grid-template-columns: minmax(0, 1fr); grid-template-areas: "header" "center" "actions" "left" "right" "menu" "counters" "last"; }
-  .era-main-center > .era-card { min-height: 0; }
-  .era-main:not(:has(.era-stats)) > .era-main-actions { grid-column: 1; }
+  .era-main { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-template-areas: "header" "center" "actions" "sidebar" "counters" "last"; }
 }
 .era-card { padding: 8px 10px; border: 1px solid #2a3138; border-radius: 10px; background: #111518; }
 .line .era-card { display: block; }
@@ -434,8 +439,8 @@ body:has(.menu-panel:not([hidden])) .clock-overhang { visibility: hidden; }
   opacity: .14; pointer-events: none; }
 .era-sub { margin-left: 1.75ch; color: #888; font-weight: normal; font-size: .85em; }
 .era-funds { margin-left: auto; color: #ffd866; font-weight: normal; font-variant-numeric: tabular-nums; cursor: help; }
-.era-card-title button.era-see-more { align-self: center; padding: 1px 9px; border: 1px solid #2f4a63; border-radius: 999px; color: #8fc8ff; font-size: .8em; font-weight: normal; }
-.era-card-title button.era-see-more:enabled:hover { border-color: #8fc8ff; }
+.era-main .line button.choice:is(.era-see-more, .era-info-more) { align-self: center; padding: 0 2px; border: 0; border-radius: 0; background: transparent; color: #8fc8ff; font-size: .8em; font-weight: normal; white-space: nowrap; }
+.era-main .line button.choice:is(.era-see-more, .era-info-more):enabled:is(:hover, :focus-visible) { background: transparent; color: #d7eff8; text-decoration: underline; }
 /* Dialogs (era-dialog boxes) are shown by app.js as popovers in the top layer while their screen is active. */
 .era-dialog:popover-open { display: flex; flex-direction: column; width: min(calc(var(--logical-width, 1200px) + 64px), calc(100vw - 48px)); height: calc(100dvh - 48px); margin: auto; padding: 0;
   overflow: hidden; border: 1px solid #2f4a63; border-radius: 12px; background: #0b0e11; color: var(--terminal-foreground); box-shadow: 0 12px 48px #000; }
@@ -464,11 +469,12 @@ body:has(.menu-panel:not([hidden])) .clock-overhang { visibility: hidden; }
 .line button.choice.era-sheet-subpage.era-current { border-color: #2f6060; background: #102a2c; color: #66ffff; }
 .era-sheet-bars { display: grid; grid-template-columns: repeat(2, 44ch); column-gap: 6ch; row-gap: 2px; margin: 4px 0 6px 2ch; }
 .era-sheet-bars .era-bar { grid-template-columns: 4ch minmax(0, 1fr) 13ch; }
-.era-player-actions { display: flex; margin-top: 12px; padding-top: 10px; border-top: 1px solid #20506a; }
-.era-main .era-player .line button.choice.era-player-control { display: inline-flex; align-items: center; gap: 14px; padding: 7px 12px; border: 1px solid #294957; border-radius: 7px; background: linear-gradient(135deg, #16303c99, #0d202b99); color: #b7d5e2; font-size: .9em; line-height: 1.2; }
+.era-main .era-player { display: flex; flex-direction: column; }
+.era-player > * { flex-shrink: 0; }
+.era-player > .line:has(.era-player-actions) { margin-top: auto; }
+.era-player-actions { display: flex; margin-top: auto; padding-top: 10px; }
+.era-main .era-player .line button.choice.era-player-control { display: inline-flex; align-items: center; gap: 14px; width: 100%; }
 .era-player-control .interactive-label { text-decoration: none; }
-.era-main .era-player .line button.choice.era-player-control:enabled:is(:hover, :focus-visible) { border-color: #5da8bf; background: #193744; color: #e2f5ff; }
-.era-main .era-player .line button.choice.era-player-control:focus-visible { outline: 2px solid #7ccce3; outline-offset: 3px; }
 .era-control-arrow { margin-left: auto; color: #71b8cd; font-size: 1.3em; line-height: .8; }
 .era-player-effects { display: flex; flex-wrap: wrap; gap: 4px 8px; margin-top: 10px; font-size: .8em; line-height: 1.4; }
 .era-player-effects > .era-status-label { font-size: .85em; letter-spacing: .06em; text-transform: uppercase; }
@@ -789,18 +795,27 @@ main:has(.screen.is-active .era-launch) { padding: 0; background: #000; }
 .era-character { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 400px); gap: 10px; align-items: stretch; }
 .era-character > :is(.line, .era-scene) { grid-column: 1 / -1; }
 .era-main-center > .era-character { padding: 6px; }
-.era-room-stage { position: relative; isolation: isolate; display: flex; flex-direction: column; min-width: 0; min-height: 300px; padding: 3px 4px 0; overflow: hidden; border-radius: 3px; background: radial-gradient(ellipse at 50% 95%, #28415166, transparent 70%), linear-gradient(#0b1c27, #101c25); }
+.era-character:has(.era-main-chat) { grid-template-rows: auto 1fr; }
+@container (max-width: 1100px) {
+  .era-character:has(.era-main-chat) { grid-template-rows: auto auto 1fr; }
+}
+.era-room-stage { position: relative; isolation: isolate; display: flex; flex-direction: column; align-self: stretch; min-width: 0; width: 100%; padding: 3px 4px 0; overflow: hidden; border-radius: 3px; background: radial-gradient(ellipse at 50% 95%, #28415166, transparent 70%), linear-gradient(#0b1c27, #101c25); }
 .era-room-stage > .line:has(.era-place) { flex: none; }
 .era-room-stage .era-place { margin-bottom: 8px; }
 .era-room-stage .era-place-name { font-size: 1.15em; letter-spacing: 0; }
 .era-room-stage .era-place-name .era-sub { margin-left: 1.5ch; }
-.era-room-stage .era-scene { margin: 0 4px -6px 4px; padding: 6px 9px; border-left: 2px solid #41829b; font-size: .9em; font-style: normal; }
-.era-room-stage > .era-occupants { display: flex; flex: 1; flex-direction: column; }
-.era-room-stage .era-occupant-list { flex: 1; align-items: flex-end; padding: 0 4px 6px; }
-.era-room-stage .era-occupant-list:has(.era-alone-message) { align-items: stretch; padding-top: 8px; }
-.era-room-stage .era-occupant { padding: 0 2px; gap: 0; }
+.era-room-stage .era-scene { position: absolute; top: 2em; left: 8px; right: 8px; z-index: 2; margin: 0; padding: 6px 9px; border-left: 2px solid #41829b; font-size: .9em; font-style: normal; pointer-events: none; text-shadow: 0 1px 3px #000; }
+.era-room-stage > .era-occupants { display: flex; flex: none; flex-direction: column; margin-top: auto; }
+.era-room-stage .era-occupant-list { flex: none; height: 216px; align-items: flex-end; padding: 0 4px; overflow-y: hidden; }
+.era-room-stage .era-occupant-list:has(.era-alone-message) { align-items: stretch; }
+.era-room-stage .era-occupant { position: relative; padding: 0 2px; gap: 0; }
+.era-room-stage .era-occupant > .line:has(.era-occupant-label), .era-room-stage .era-occupant > .era-occupant-text { position: absolute; bottom: 4px; left: 2px; right: 2px; z-index: 1; width: auto; }
+.era-room-stage .line button.choice.era-occupant-label { padding: 1px 4px; border: 0; border-radius: 0; background: transparent; text-shadow: 0 1px 3px #000, 0 0 5px #000; }
+.screen.is-active .era-room-stage .line button.choice.era-occupant-label:enabled:is(:hover, :focus-visible) { background: transparent; text-decoration: underline; }
+.era-room-stage .era-occupant-state { color: #c1ccd3; text-shadow: 0 1px 3px #000, 0 0 5px #000; }
 .era-room-stage .era-occupant:has(.era-portrait) { flex-basis: auto; min-width: 180px; width: max-content; }
 .era-room-stage .era-occupant-caged { flex-basis: 110px; gap: 6px; padding-bottom: 5px; font-size: .85em; }
+.era-room-stage .era-occupant-caged > .era-occupant-text { position: static; }
 /* Nobody to show: a placeholder silhouette in the middle of the card, the room's look text under it. */
 .era-character.era-alone { display: flex; flex-direction: column; align-items: stretch; }
 .era-alone-message { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 16px 12px; text-align: center; }
@@ -831,22 +846,14 @@ main:has(.screen.is-active .era-launch) { padding: 0; background: #000; }
    card's gradient; fading the picture by the same amount (its alpha is 35%) gives the intended dimming. */
 .era-portrait .sprite[data-src="時間停止"] { display: none; }
 .era-portrait .sprite { opacity: calc(1 - .35 * var(--era-freeze)); }
-.era-character-info { min-width: 0; width: 100%; max-width: 400px; align-self: stretch; display: grid; grid-template-rows: auto 1fr; }
-.era-character-info > .line:has(.era-info-title) { flex: none; }
-.era-info-tabs { display: flex; align-items: stretch; gap: 0; flex-wrap: wrap; }
+.era-character-info { min-width: 0; width: 100%; max-width: 400px; align-self: stretch; display: flex; flex-direction: column; }
 .era-info-tab { padding: 7px 12px; border: 1px solid #28485b; border-bottom: 0; border-radius: 5px 5px 0 0; background: #0c1b27; color: #91adbd; font: inherit; font-size: .9em; cursor: pointer; }
 .era-info-tab[aria-pressed="true"] { border-color: #3c9bb7; background: linear-gradient(#16394b, #0b202e); color: #b7dbea; }
-.era-character-info .era-info-body[hidden] { display: flex !important; visibility: hidden; pointer-events: none; }
-.era-interaction-history[hidden] { display: none !important; }
-.era-character-info > .era-info-body, .era-character-info > .line:has(.era-interaction-history) { grid-row: 2; grid-column: 1; }
-/* The history overlay must not intercept clicks on Character Info while hidden. */
-.era-character-info > .line:has(.era-interaction-history) { position: relative; min-height: 0; contain: size; overflow: hidden; pointer-events: none; }
-.era-character-info .era-interaction-history { position: absolute; inset: 0; margin-top: 0; border-radius: 0 5px 5px 5px; min-height: 0; overflow: auto; pointer-events: auto; }
-.era-character-info .era-history-body { max-height: none; overflow: visible; }
 .era-history-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px; }
 .era-history-toolbar button { font: inherit; color: #b7dbea; background: #16394b; border: 1px solid #3c9bb7; border-radius: 4px; padding: 5px 10px; cursor: pointer; }
 /* Stays in the top right corner while the history scrolls under it. */
-.era-history-more { float: right; position: sticky; top: 0; z-index: 1; margin: 0 0 0 6px; padding: 2px 8px; border: 0; border-radius: 0 0 0 5px; background: #05111b; color: #b7dbea; font: inherit; line-height: var(--era-history-line); cursor: pointer; }
+.era-history-more-overlay { position: sticky; top: 0; height: 0; z-index: 1; }
+.era-history-more { position: absolute; top: 0; right: 0; margin: 0; padding: 2px 8px; border: 0; border-radius: 0 0 0 5px; background: #05111b; color: #b7dbea; font: inherit; line-height: var(--era-history-line); cursor: pointer; }
 .era-history-more:is(:hover, :focus-visible) { text-decoration: underline; }
 .era-history-dialog { width: min(calc(var(--logical-width, 1200px) + 64px), calc(100vw - 48px)); height: calc(100dvh - 48px); max-width: none; max-height: none; box-sizing: border-box; padding: 12px; border: 1px solid #3c9bb7; border-radius: 6px; background: #0b1c28; color: #d7eff8; }
 .era-history-dialog::backdrop { background: #000000b0; }
@@ -872,6 +879,14 @@ main:has(.screen.is-active .era-launch) { padding: 0; background: #000; }
 .era-llm-composer-actions { display: flex; gap: 8px; align-items: center; margin-top: 6px; font-size: .85em; }
 .era-llm-composer-actions button { padding: 2px 8px; }
 .era-llm-state { flex: 1; color: #9ab3c3; }
+.era-main-chat { grid-column: 1 / -1; align-self: stretch; display: flex; flex-direction: column; min-width: 0; min-height: calc(5 * 14px * 1.25 + 26px); }
+.era-main-chat > .era-history-pane { flex: 1; min-height: 0; contain: size; overflow: auto; }
+.era-main-chat .era-history-body { max-height: none; }
+.screen:not(.is-active) .era-main-chat { display: none; }
+@container (min-width: 761px) and (max-width: 1100px) {
+  .era-character { grid-template-columns: minmax(0, 1fr); }
+  .era-character-info { max-width: none; }
+}
 .era-llm-debug { padding: 0 10px 8px; font-size: .85em; }
 .era-llm-debug-entry { margin: 6px 0; padding: 4px 8px; border: 1px solid #28485b; border-radius: 4px; }
 .era-llm-debug-entry > summary { cursor: pointer; }
@@ -894,17 +909,15 @@ main:has(.screen.is-active .era-launch) { padding: 0; background: #000; }
 .era-llm-voice-actions button { font: inherit; color: #b7dbea; background: #16394b; border: 1px solid #3c9bb7; border-radius: 4px; padding: 2px 10px; cursor: pointer; }
 .era-llm-voice-actions button:disabled { opacity: .5; cursor: default; }
 .era-history-dialog .era-history-body { max-height: none; overflow: visible; }
-.era-main .era-info-title { display: inline-flex; margin: 0; padding: 7px 12px; border: 1px solid #3c9bb7; border-bottom: 0; border-radius: 5px 5px 0 0; background: linear-gradient(#16394b, #0b202e); font-size: .9em; font-weight: normal; }
-.era-main .line button.choice.era-info-more { align-self: stretch; padding: 7px 14px; border: 1px solid #28485b; border-bottom: 0; border-radius: 5px 5px 0 0; background: #0c1b27; color: #91adbd; font-size: .9em; }
-.era-main .line button.choice.era-info-more:enabled:is(:hover, :focus-visible) { border-color: #5da8bf; background: #173442; color: #d7eff8; }
-.era-info-body { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 12px; border: 1px solid #24526b; border-radius: 0 5px 5px 5px; background: #05111bd9; }
-.era-info-body > :not(.era-history-preview-space) { flex-shrink: 0; }
+.era-info-body { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 12px 4px 4px; border: 0; border-radius: 0 5px 5px 5px; background: #05111bd9; }
+.era-info-body > * { flex-shrink: 0; }
 .era-info-head { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 10px; align-items: start; margin-bottom: 10px; }
 .era-info-head > .line:has(.era-info-face), .era-info-head > .line > span:has(> .era-info-face) { display: contents; }
-.era-info-face { width: 76px; height: 76px; overflow: hidden; border: 1px solid #3b6274; border-radius: 5px; background: #142a36; line-height: 0; }
+.era-info-face { width: 76px; height: 76px; overflow: visible; border: 1px solid #3b6274; border-radius: 5px; background: #142a36; line-height: 0; }
 .era-info-summary { min-width: 0; }
+.era-info-summary > .line:has(.era-info-more) { float: right; min-height: 0; margin-left: 8px; }
 .era-info-face .sprite { height: auto; }
-.era-info-face .sprite-clip { position: relative; display: block; }
+.era-info-face .sprite-clip { position: relative; display: block; transform: scale(1.1); transform-origin: center bottom; }
 .era-info-body .era-character-state { line-height: 1.15; }
 .era-info-body .era-race { margin-left: 0; }
 .era-info-body .era-character-state > .line:not(.era-marker) > :first-child:not(:has(.era-character-kind)) { font-size: 1.15em; }
@@ -913,28 +926,20 @@ main:has(.screen.is-active .era-launch) { padding: 0; background: #000; }
 .era-info-body .era-fact { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: .5ch; }
 .era-info-body .era-fact-label { margin-right: 0; }
 .era-character-blurb { margin: 8px 0 12px; color: #a7bbc8; font-size: .9em; line-height: 1.35; }
-.era-info-body .era-look { margin-top: 14px; font-size: .9em; }
-.era-info-body.era-info-with-preview { padding-top: 6px; padding-bottom: 6px; }
-.era-info-with-preview .era-look { margin-top: 0; }
-.era-history-preview-space { position: relative; flex: 1 1 0; min-height: 0; margin-top: 4px; }
-.era-history-preview { position: absolute; inset: auto 0 0; display: block; width: 100%; height: 100%; height: calc(round(down, max(0px, 100% - 8px), 1lh) + 8px); box-sizing: border-box; overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; padding: 4px; border: 0; border-radius: 4px; background: rgba(140, 190, 220, .05); color: #a7bbc8; text-align: left; font: inherit; font-size: .8em; line-height: 1.25; cursor: pointer; }
-.era-history-preview-viewport { position: absolute; inset: 4px; overflow: hidden; }
-.era-history-preview-content { position: absolute; bottom: 0; left: 0; width: 100%; }
-.era-history-preview:focus-visible { outline: 1px solid #5da8bf; outline-offset: 1px; }
-.era-interaction-history { margin-top: 8px; border: 1px solid #24526b; border-radius: 5px; background: #05111bd9; }
-.era-interaction-history:empty { display: none; }
-.era-interaction-history summary { cursor: pointer; padding: 8px; color: #b7dbea; overflow-wrap: anywhere; }
-/* Every line in the history, whatever kind (headings, notes, speech, narration), has the same font and height as the preview. */
-.era-interaction-history, .era-history-dialog { --era-history-size: .8rem; --era-history-line: 1.25; }
-.era-interaction-history > summary { font-size: var(--era-history-size); line-height: var(--era-history-line); }
-.era-history-body { max-height: 22rem; overflow: auto; padding: 0 10px 8px; font-size: var(--era-history-size); line-height: var(--era-history-line); }
+.era-info-body .era-look { margin-top: auto; font: inherit; }
+.era-info-body .era-look .line:not(.era-marker) { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.era-info-body .era-look .output-text { font: inherit; }
+.era-info-body > .line:has(> .output-text.is-empty:only-child) { display: none; }
+/* Keep headings, notes, speech and narration at the same size. */
+.era-history-dialog, .era-main-chat { --era-history-size: .8rem; --era-history-line: 1.25; }
+.era-main-chat { --era-history-size: 14px; }
+.era-history-body { max-height: 22rem; overflow: auto; padding: 0; font-size: var(--era-history-size); line-height: var(--era-history-line); }
 .era-history-body :is(p, summary, em, span) { font: inherit; line-height: inherit; }
 .era-history-body p { margin: 0; }
 .era-history-note { color: #9ab3c3; }
 .era-history-notice { color: #efca8a; }
 .era-history-entry { border: 0; padding: 0; }
-.era-history-entry > summary { margin: 0; padding: 0; color: #b7dbea; list-style: none; }
-.era-history-entry > summary::-webkit-details-marker { display: none; }
+.era-history-heading { color: #9ab3c3; }
 .era-history-text { white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
 @container (max-width: 760px) {
   .era-character { grid-template-columns: minmax(0, 1fr); row-gap: 10px; }
@@ -981,21 +986,24 @@ main:has(.screen.is-active .era-launch) { padding: 0; background: #000; }
 .era-main .era-actions-header::after { order: 1; min-width: 2ch; }
 .era-actions-header > .era-toggles { order: 2; justify-content: flex-end; margin-left: auto; }
 .era-actions-group { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin: 6px 0 2px; }
+.era-main-actions { display: flex; flex-wrap: wrap; align-content: flex-start; align-items: flex-start; gap: 0 16px; }
+.era-main-actions > .line { flex-basis: 100%; }
+.era-main-actions > .era-actions-group { flex: 0 1 auto; width: max-content; min-width: 0; max-width: 100%; }
 .era-actions-group > .line { display: contents; }
 .era-actions-group .output-text.is-empty { display: none; }
 .era-actions-group:not(:has(button.choice)) { display: none; }
 .era-actions-group > .line > span:has(> .era-actions-title) { flex-basis: 100%; }
 .era-actions-title { color: #8a949c; font-size: .85em; text-transform: uppercase; letter-spacing: .06em; }
-.era-actions-group .print-cell { position: relative; white-space: normal; padding: 2px 10px; border: 1px solid #333c44; border-radius: 8px; background: #182027; }
+.era-actions-group :is(.print-cell, .era-guard-control) { position: relative; white-space: normal; padding: 2px 10px; border: 1px solid #333c44; border-radius: 8px; background: #182027; }
 .era-actions-group .print-cell .choice { margin-left: .75ch; color: #6c7780 !important; font-size: .8em; }
 .era-actions-group .print-cell .choice::after { content: ""; position: absolute; inset: 0; }
 .era-actions-group .print-cell .interactive-label { text-decoration-line: none; }
-.screen.is-active .era-actions-group .print-cell:has(.choice:enabled:is(:hover, :focus-visible)) { border-color: #8ddaff; background: #1e2a33; }
-.era-main-menu .era-actions-group { margin-top: 0; }
+.screen.is-active .era-actions-group :is(.print-cell, .era-guard-control):has(.choice:enabled:is(:hover, :focus-visible)) { border-color: #8ddaff; background: #1e2a33; }
+.era-player-management .era-actions-group { margin-top: 0; }
 .era-main .era-actions-group { gap: 7px 9px; margin-top: 10px; }
 .era-main .era-actions-title { color: #7dd8ed; letter-spacing: .08em; }
 .era-main .era-actions-title::before { content: ""; display: inline-block; margin-right: 1ch; border: 4px solid transparent; border-left-color: #65bddb; }
-.era-main .era-actions-group .print-cell { padding: 6px 12px; border-color: #35566d; border-radius: 4px; background: linear-gradient(#102330, #0b1822); }
+.era-main .era-actions-group :is(.print-cell, .era-guard-control) { padding: 6px 12px; border-color: #35566d; border-radius: 4px; background: linear-gradient(#102330, #0b1822); }
 .era-main .era-kind-chores .print-cell { border-color: #397756; background: linear-gradient(#102b23, #0a1c17); }
 .era-main .era-kind-petting .print-cell { border-color: #70415b; background: linear-gradient(#2b1d2b, #1d1420); }
 .era-main .era-kind-dialogue .print-cell { border-color: #3c6189; background: linear-gradient(#162b40, #0d1d30); }
@@ -1004,11 +1012,26 @@ main:has(.screen.is-active .era-launch) { padding: 0; background: #000; }
 .era-main .era-kind-sm .print-cell { border-color: #a44f52; background: linear-gradient(#381c21, #251316); }
 .era-main .era-kind-service .print-cell { border-color: #eee18d; background: linear-gradient(#36351f, #252518); }
 .era-main .line button.choice:is(.era-toggle, .era-chip-button, .era-star) { border-radius: 4px; padding: 2px 10px; }
-.era-main-menu .era-actions-group .print-cell { display: block; flex: 1 1 100%; }
-.era-main-menu .era-actions-group .print-cell:nth-child(-n+2) { flex-basis: calc(50% - 9px); }
-.era-main-menu .era-settings { display: flex; flex-wrap: wrap; gap: 6px; }
-.era-main-menu .era-settings > .line { display: contents; }
-.era-main-menu .era-settings .era-chip-button { min-width: 12ch; text-align: center; }
+.era-player-management { margin-top: 8px; }
+.era-main .era-player-management .era-actions-group { gap: 6px; margin: 0 0 6px; }
+.era-player-management .era-actions-group span:has(> .era-guard-control) { display: contents; }
+.era-player-management .era-actions-group :is(.print-cell, .era-guard-control) { display: block; flex: 1 1 100%; }
+.era-player-management .era-actions-group .print-cell:nth-child(-n+2) { flex-basis: calc(50% - 9px); }
+.era-player-management .era-settings { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 0; padding-top: 0; border-top: 0; }
+.era-player-management .era-settings > .line { display: contents; }
+.era-player-management .era-settings .era-chip-button { min-width: 12ch; text-align: center; }
+.era-main .era-player :is(.print-cell, .era-guard-control),
+.era-main .era-player .line button.choice:is(.era-player-control, .era-chip-button, .era-toggle) { padding: 6px 10px; border: 1px solid #35566d; border-radius: 4px; background: linear-gradient(#102330, #0b1822); color: #b7d5e2; font: inherit; line-height: 1.25; text-align: left; }
+.era-main .era-player .line button.choice:is(.era-chip-button, .era-toggle) { flex: 1 1 100%; min-width: 0; width: 100%; }
+.screen.is-active .era-player :is(.print-cell, .era-guard-control):has(.choice:enabled:is(:hover, :focus-visible)),
+.screen.is-active .era-player .line button.choice:is(.era-player-control, .era-chip-button, .era-toggle):enabled:is(:hover, :focus-visible) { border-color: #78bdd6; background: #193744; color: #e2f5ff; }
+.era-player :is(.print-cell, .era-guard-control):has(.choice:focus-visible),
+.era-player .line button.choice:is(.era-player-control, .era-chip-button, .era-toggle):focus-visible { outline: 2px solid #7ccce3; outline-offset: 2px; }
+.era-main .era-player .line button.choice.era-toggle.era-on { border-color: #5090ff; background: #102b40; color: #d7eff8; }
+.era-player-management .era-guard-control:has(.era-guard-toggle[aria-pressed="true"]) { border-color: #5090ff; background: #102b40; }
+.era-player-management .era-guard-control button.choice.era-guard-toggle { margin: 0; color: inherit; font-size: inherit; }
+.era-guard-control .interactive-label { text-decoration: none; }
+.era-guard-control .choice::after { content: ""; position: absolute; inset: 0; }
 /* Filter kinds (HOTPATCH_ACTION_KIND): a filter toggle and the actions it shows share a tint. */
 .era-actions-group > .era-kind, .era-kind > .line { display: contents; }
 .era-kind-petting .print-cell { border-color: #6a3456; background: #2a1824; }

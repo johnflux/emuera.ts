@@ -165,7 +165,6 @@ IF TARGET > 0
 	CALL HOTPATCH_OCCUPANTS
 	HTML_PRINT "<era-close>"
 	HTML_PRINT "<era-open class='era-character-info'>"
-	HTML_PRINT @"<div class='era-info-tabs'><div class='era-card-title era-info-title'>Character Info</div><button value='-9300' class='era-info-more' title='More about %HOTPATCH_ATTRIBUTE(HTML_ESCAPE(CALLNAME:TARGET))%'>More...</button></div>"
 	HTML_PRINT "<era-open class='era-info-body'>"
 	CALL HOTPATCH_TARGET_SITUATION(FLAG:TARGETの情報表示モード)
 	CALL HOTPATCH_BASE(TARGET)
@@ -179,7 +178,6 @@ IF TARGET > 0
 	CALL HOTPATCH_LOOK
 	HTML_PRINT "<era-close>"
 	HTML_PRINT "<era-close>"
-	HTML_PRINT "<div class='era-interaction-history'></div>"
 	HTML_PRINT "<era-close>"
 	HTML_PRINT "<era-close>"
 ELSE
@@ -430,6 +428,7 @@ HTML_PRINT "<era-open class='era-info-head'>"
 CALL HOTPATCH_FACE(TARGET, 74)
 HTML_PRINT @"<div class='era-info-face'>%RESULTS%</div>"
 HTML_PRINT "<era-open class='era-info-summary'>"
+HTML_PRINT @"<button value='-9300' class='era-info-more' title='More about %HOTPATCH_ATTRIBUTE(HTML_ESCAPE(CALLNAME:TARGET))%'>See more</button>"
 HTML_PRINT "<era-open class='era-character-state'>"
 CALL SHOW_EQUIP_2
 ;Species after the name (the game's own race text and description, as in its talent list).
@@ -792,7 +791,7 @@ ELSEIF !OUTROOF(CFLAG:MASTER:現在位置)
 ENDIF
 SIF HOTPATCH_AREA() >= 0
 	sClass += @" era-area-{HOTPATCH_AREA()}"
-HTML_PRINT @"<div class='era-sky %sClass%'><span class='era-sky-view'><span class='era-sky-orb'></span><span class='era-sky-clouds'></span><span class='era-sky-landmark'></span><span class='era-sky-fall'></span><span class='era-sky-land'></span></span></div>"
+HTML_PRINT @"<div class='era-sky %sClass%' data-minutes='{TIME}' data-season='{LIMIT(DAY:2, 1, 4)}' data-day='{LIMIT(DAY:3, 1, 31)}'><span class='era-sky-view'><span class='era-sky-orb'></span><span class='era-sky-clouds'></span><span class='era-sky-landmark'></span><span class='era-sky-fall'></span><span class='era-sky-land'></span></span></div>"
 
 ;-------------------------------------------------------------------------------
 ; QOL_INFO_SITUATION for the header without your own state, which moved to your card (HOTPATCH_PLAYER_STATUS):
@@ -830,7 +829,7 @@ CALL QOL_AUTOMATIC_HTML_LINEBREAK(HTML_POPPRINTINGSTR(),MAXWIDTH() - nClockChara
 ; Your own state as a plain "Status" line under your meters (not chips, so it doesn't read as buttons): arousal
 ; (INFO_SHOW_BOKKI), hunger and bath (HUNGER, BATHED, in their colours), sleepiness and sleep resistance (from
 ; QOL_INFO_SITUATION) and your body stains (STAIN_INFO, which replaces the Body Stains [801] command).
-; Pushdown Guard, Have a Meal and Relax in the Bath are in Go & Manage.
+; Pushdown Guard, Have a Meal and Relax in the Bath are on the player card.
 ;-------------------------------------------------------------------------------
 @HOTPATCH_PLAYER_STATUS
 #DIMS DYNAMIC sHtml
@@ -846,10 +845,10 @@ IF HAS_PENIS(MASTER)
 ENDIF
 RESETCOLOR
 sText '= HUNGER(MASTER)
-sHtml += HOTPATCH_STATUS_ITEM(sText, GETCOLOR(), (sText == "Can eat" ? "Hungry: you can eat again (Have a Meal, in Go &amp; Manage, when you have a dish)" # "Hunger: you ate recently"))
+sHtml += HOTPATCH_STATUS_ITEM(sText, GETCOLOR(), (sText == "Can eat" ? "Hungry: you can eat again (Have a Meal, on the player card, when you have a dish)" # "Hunger: you ate recently"))
 RESETCOLOR
 sText '= BATHED(MASTER)
-sHtml += HOTPATCH_STATUS_ITEM(sText, GETCOLOR(), (sText == "Can bathe" ? "It has been a while since your last bath (Relax in the Bath, in Go &amp; Manage, where there is one)" # "Since your last bath"))
+sHtml += HOTPATCH_STATUS_ITEM(sText, GETCOLOR(), (sText == "Can bathe" ? "It has been a while since your last bath (Relax in the Bath, on the player card, where there is one)" # "Since your last bath"))
 RESETCOLOR
 IF CFLAG:MASTER:デート中 != MAIN_MAP && CFLAG:MASTER:現在位置 != OMANEKIBEYA()
 	SELECTCASE NEMUKE()

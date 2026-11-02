@@ -1080,8 +1080,7 @@ export class Runtime {
   /** How a character's tool call reads in the interaction history: speech in 「」, actions as narration, other calls summarised. */
   private toolLine(index: number, name: string, args: Record<string, unknown>, result: Record<string, unknown>): ColoredText[] {
     const said = typeof args.text === "string" ? args.text.trim() : "";
-    if (!result.error && said && name === "say") return this.heardLine(index, name, args, result)!;
-    if (!result.error && said && name === "act") return [{ text: said, color: this.display.foreground }];
+    if (!result.error && said && (name === "say" || name === "act")) return this.heardLine(index, name, args, result)!;
     const tones = { call: TOOL_CALL, good: TOOL_GOOD, bad: TOOL_BAD, uneasy: TOOL_UNEASY };
     const read = (variable: string) => String(this.globals.get(variable, [literal(BigInt(index))], this.context(this.globals)));
     return toolCallSummary(read("CALLNAME") || read("NAME"), name, args, result).map((part) => ({ text: part.text, color: part.tone ? tones[part.tone] : TOOL_COLOR }));
@@ -1096,7 +1095,7 @@ export class Runtime {
     const who = String(this.globals.get("CALLNAME", [literal(BigInt(index))], this.context(this.globals))) || "Someone";
     const plain = (text: string): ColoredText => ({ text, color: this.display.foreground });
     if (name === "say" && said) return [plain(`${who}: `), { text: `「${unquoteSpeech(said)}」`, color: this.kojoColor(index) }];
-    if (name === "act" && said) return [plain(said.toLowerCase().startsWith(who.toLowerCase()) ? said : `${who}: ${said}`)];
+    if (name === "act" && said) return [plain(said.toLowerCase().startsWith(`${who.toLowerCase()}:`) ? said : `${who}: ${said}`)];
     if (name === "move_to" && typeof result.to === "string") return [plain(`${who} leaves for ${result.to}.`)];
     return undefined;
   }
@@ -3146,7 +3145,7 @@ export class Runtime {
     }
     if (snapshot.status === "halted") this.interactionHistory?.finish();
     if (snapshot.status === "error") this.interactionHistory?.cancel();
-    const history = snapshot.output.some((item) => item.type === "html" && item.text === "<div class='era-interaction-history'></div>")
+    const history = snapshot.output.some((item) => item.type === "html" && item.text === "<era-open class='era-layout era-main'>")
       ? this.interactionHistory?.selected() : undefined;
     if (history) snapshot.characterHistory = history;
     if (this.encounters?.length && snapshot.input && snapshot.input === this.trainRequest) snapshot.encounters = this.encounters;

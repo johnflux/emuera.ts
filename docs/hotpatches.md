@@ -384,22 +384,21 @@ Keep opens and closes balanced on every path, including early `RETURN`s.
 
 ## Patches
 
-Below the selected character's **Character Info**, a history placeholder is filled
-by the browser with the latest 20 recorded interactions. Its expand/collapse
-controls are local UI controls, not ERB command buttons; inspecting history does
-not advance the game. The placeholder is one logical HTML line, so `CLEARLINE`
-continues to remove it with the rest of the screen. See
+The browser adds the selected character's latest 20 recorded interactions below
+the main action groups, separate from Character Info. Inspecting this history
+does not advance the game. Main-screen output supplies the selected history
+metadata without printing a placeholder in Character Info. See
 [character interaction history](developer-guide.md#eratw-character-interaction-history)
 for the initial command coverage, capture semantics, and save checkpoints.
 
-On the main screen, **More...** beside Character Info opens the same room-wide
+On the main screen, **See more** beside the character's name opens the same room-wide
 character sheet as the player's **See more**, but starts on the selected
 character without changing the target. `CHARA_SHEET.ERB` also replaces
 `@Add_Custom_USERCOM` to handle this presentation-only entry [-9300]; its other
 custom-command handling is unchanged. `@TARGET_LIST_STATE` accepts an optional
 character to focus and still defaults to the player. The player panel's Inventory
-uses a softly bordered control. Pushdown Guard is a toggle chip in **Go & Manage**,
-beside the other settings, with its existing explanation and pressed state.
+uses a softly bordered control. Pushdown Guard is a rectangular management
+control on the player card, like Auto-Clean, with its explanation and pressed state.
 Standing explains the preference for supported standing positions (and the
 location fallback); Auto-moan explains its three per-character modes and scripted
 dialogue fallback. Time Stop keeps its translucent background and
@@ -423,8 +422,8 @@ for every multi-character list, including short lists with individual tabs.
 | `ITEM_LIST.ERB` | `@QoL_AllItemSort` (called by `@SHOW_ALLITEM`) | Inventory [805] opens in the same modal system as the character sheet, with category tabs and a compact, responsive list of item names and quantities. Hover or focus an item for its description. A search box inside the footer filters names instantly, case-insensitively and entirely client-side, with a matching-item count and an explicit empty state. The filter persists across category and item-mod views until the dialog closes; clear the textbox to reset it, or select All to search every category. The browser creates the textbox in an `era-inventory-filter` placeholder, without expanding the game HTML allowlist. Return, Escape and backdrop clicks close it; category IDs [3000–3020], Item mods [777], Back to items [889] and Return [999] remain available. The Inventory button is on the player card, retaining the existing command-filter bit 4 visibility rule. |
 | `INTIMACY_COMMANDS.ERB` | `@COM_ABLE312` (Kiss), `@COM_ABLE352` (Confess), `@COM350` (Push Down) | **Gameplay change.** The originals with the closeness (`TCVAR:MASTER:馴れ合い`) gate removed, so the player can try a kiss or a confession without small talk first; the commands' own consent checks then decide, and a rejection applies the game's usual penalties (antipathy, anger, hate marks). The other gates (sleep, work, the kiss cooldown, stamina, one confession a day, spineless) are kept. Used by the LLM chat's `player_attempts`; typing 312 or 352 works too, and the buttons show under the Petting filter. Push Down with others in the room (a group attempt, as the target list is everyone present) asks each person who has not consented before for their own answer first: a refusal plays out with its reaction and penalties and ends the attempt, and only if nobody refuses does the group's objection ("some of them still oppose the idea of having an orgy") stop it. Originally the group check came first, so the person never reacted. |
 | `INFO_PALAM.ERB` | `@SHOW_INFO_PALAM` | Palam as a wrapping grid: short name, level, meter, value against the next level's threshold (`1234/2500`, abbreviated as `23.4k/30.0k`) and gain. Zero values are dimmed and the highlighted Palams use the game's yellow. The tooltip shows the full name, a short description of what the Palam is (`HOTPATCH_PALAM_ABOUT`), value, level, "Next level at …" and gems. The collapse toggle and the bars/numbers toggle are dropped. |
-| `MAIN_SCREEN.ERB` | `@SHOW_STATUS` | The main screen as panels (`era-main` layout). A header whose backdrop is the sky for the hour, weather and season (`HOTPATCH_SKY`: CSS gradients, clouds, rain/snow, hills; dimmer under a roof, none underground) with the area in front (`HOTPATCH_AREA`, the map the place is on): a pixel-art panorama for the season and time of day where there is one (see [Area pictures](#area-pictures)), otherwise one SVG landmark per area in `web/areas/`, drawn blocky through the `era-pixelate` SVG filter in `web/index.html` so it matches the pixel font, e.g. the torii and hall for Hakurei Shrine, bamboo for the Bamboo Forest, the clock tower for the Scarlet Devil Mansion) with a minimalist vector clock (exact-minute hands, teal accent; a dark luminous dial at night), the date on a translucent panel and a large **Time Stop** / **Resume Time** button with the TSP gauge built in; a room card titled with the place (name with its area after it in grey, e.g. "Player's Back Room Hakurei Shrine", furniture, cleanliness) and the room's chatter under it (others' talk, the radio, room descriptions). The occupants stand left to right as borderless sprites beside the selected character's details (at most 400px wide), with the target's Palam below the room card. Each occupant has their name in the game's mood colours (blue asleep, pink in heat, orange drunk, aqua happy, red sullen), favour and state, followed by relationship, Hate Mark and Mad/Sad/Sullen/Happy tags when applicable (`HOTPATCH_FEELINGS`, in the character list's words and colours). Click a sprite or name to select them; a bottom highlight and glow mark the selected person. Portrait layers stack in one place, preserving the game's hover expression and fading the time-stop tint rather than showing its flat square. The selected character's details show their name (card-title blue unless the game colours it for their mood), species (`PRINT_GET_RACE`, with `RACE_INFO` on hover), favour/trust/children/fertility and feelings, anger when nonzero, sleep state, Sta/Ene/Mood/Composure meters and look text (clothes and what is happening to them; LOOK_AT without its picture and toggles). When nobody else is there, a single placeholder and movement hint fill the room stage; each row of cards shares one height. A player card has a "See more" button [803] (the character sheet, below) and your funds in its title (charisma and bullet money in the tooltip), your race and body size on a small grey line under it (`HOTPATCH_PLAYER_KIND`: the sheet's race talents, e.g. "Human", and the size talent, "Normal size" when there is none, highlighted otherwise, e.g. "Inchling" after the mallet), Stamina/Energy/Vigor meters, a plain "Status:" line (arousal Soft/Hard/Erection!!, hunger and bath such as "Can eat", "Can bathe", sleepiness, and your body stains such as "Hands: Semen", from STAIN_INFO; the target's stains are on a "Stains:" line in their card), compact special-effect badges and responsive gauges (`PLAYER_SPECIAL.ERB`). Pushdown Guard is in Go & Manage. The game logic before the display (target refresh, events) is kept verbatim. |
-| `MAIN_SCREEN_COMMANDS.ERB` | `@SHOW_USERCOM` | The commands as chips grouped under "Interact with *target*" (Talk & Touch, Advances, Activities, Outing, More and the situational "While time is stopped" group) with the command filters as toggles colour-matched to their commands (petting pink, chores green, dialogue blue), each shown only when flipping it would change the listed actions (it tries each flag and restores it) and a ★ Stalk button (follow the target, only with a target), and a "Go & Manage" card for movement, management and settings, starting with "Look after yourself" (Have a Meal and Relax in the Bath, taken out of Activities; Dirtiness/Body Stains [801] is dropped, as the stains are shown on the cards; Abilities [803] and Abilities (Master) [804] are dropped for the player card's "See more", though both numbers still work); the condom/moan/standing settings only during a session, mischief, free use or stopped time. Closes the `era-main` layout. While time is stopped the whole screen freezes: frosted cards, desaturated meters (portraits stay in colour, faded by the game's time-stop tint layer), an iced clock. Each toggle's tooltip is one line saying what it shows, e.g. "Petting: Show touching actions she may not welcome (pink)" (the chip is lit when on). The show/hide toggles for the status and commands (3001–3003), the Display Image / Display Settings options and the line padding are dropped. |
+| `MAIN_SCREEN.ERB` | `@SHOW_STATUS` | The main screen as panels (`era-main` layout). A header whose backdrop is the sky for the hour, weather and season (`HOTPATCH_SKY`: CSS gradients, clouds, rain/snow, hills; dimmer under a roof, none underground) with the area in front (`HOTPATCH_AREA`, the map the place is on): a pixel-art panorama for the season and time of day where there is one (see [Area pictures](#area-pictures)), otherwise one SVG landmark per area in `web/areas/`, drawn blocky through the `era-pixelate` SVG filter in `web/index.html` so it matches the pixel font, e.g. the torii and hall for Hakurei Shrine, bamboo for the Bamboo Forest, the clock tower for the Scarlet Devil Mansion) with a minimalist vector clock (exact-minute hands, teal accent; a dark luminous dial at night), the date on a translucent panel and a large **Time Stop** / **Resume Time** button with the TSP gauge built in; a room card titled with the place (name with its area after it in grey, e.g. "Player's Back Room Hakurei Shrine", furniture, cleanliness) and the room's chatter under it (others' talk, the radio, room descriptions). The occupants stand left to right as borderless sprites beside the selected character's details (at most 400px wide), with the target's Palam in the right sidebar. Each occupant has their name in the game's mood colours (blue asleep, pink in heat, orange drunk, aqua happy, red sullen), favour and state, followed by relationship, Hate Mark and Mad/Sad/Sullen/Happy tags when applicable (`HOTPATCH_FEELINGS`, in the character list's words and colours). Click a sprite or name to select them; a bottom highlight and glow mark the selected person. Portrait layers stack in one place, preserving the game's hover expression and fading the time-stop tint rather than showing its flat square. The selected character's details show their name (card-title blue unless the game colours it for their mood), species (`PRINT_GET_RACE`, with `RACE_INFO` on hover), favour/trust/children/fertility and feelings, anger when nonzero, sleep state, Sta/Ene/Mood/Composure meters and look text (clothes and what is happening to them; LOOK_AT without its picture and toggles). When nobody else is there, a single placeholder and movement hint fill the room stage; each row of cards shares one height. A player card has a "See more" button [803] (the character sheet, below) and your funds in its title (charisma and bullet money in the tooltip), your race and body size on a small grey line under it (`HOTPATCH_PLAYER_KIND`: the sheet's race talents, e.g. "Human", and the size talent, "Normal size" when there is none, highlighted otherwise, e.g. "Inchling" after the mallet), Stamina/Energy/Vigor meters, a plain "Status:" line (arousal Soft/Hard/Erection!!, hunger and bath such as "Can eat", "Can bathe", sleepiness, and your body stains such as "Hands: Semen", from STAIN_INFO; the target's stains are on a "Stains:" line in their card), compact special-effect badges and responsive gauges (`PLAYER_SPECIAL.ERB`). Management controls, including Pushdown Guard, are merged into Player. The game logic before the display (target refresh, events) is kept verbatim. |
+| `MAIN_SCREEN_COMMANDS.ERB` | `@SHOW_USERCOM` | The commands as chips grouped under "Interact with *target*" (Talk & Touch, Advances, Activities, Outing, More and the situational "While time is stopped" group) with the command filters as toggles colour-matched to their commands (petting pink, chores green, dialogue blue), each shown only when flipping it would change the listed actions (it tries each flag and restores it) and a ★ Stalk button (follow the target, only with a target), and movement, management and settings controls merged into Player, starting with "Look after yourself" (Have a Meal and Relax in the Bath, taken out of Activities; Dirtiness/Body Stains [801] is dropped, as the stains are shown on the cards; Abilities [803] and Abilities (Master) [804] are dropped for the player card's "See more", though both numbers still work); the condom/moan/standing settings only during a session, mischief, free use or stopped time. Closes the `era-main` layout. While time is stopped the whole screen freezes: frosted cards, desaturated meters (portraits stay in colour, faded by the game's time-stop tint layer), an iced clock. Each toggle's tooltip is one line saying what it shows, e.g. "Petting: Show touching actions she may not welcome (pink)" (the chip is lit when on). The show/hide toggles for the status and commands (3001–3003), the Display Image / Display Settings options and the line padding are dropped. |
 | `MAIN_SCREEN_LOOK.ERB` | — | `HOTPATCH_SCENE` and `HOTPATCH_LOOK` split `@LOOK_AT` for the main screen: the room's chatter (ANOTHERTARGET_TALK, 情景描写) goes under the place title, and a verbatim copy of the clothes part goes in the character card, without the [Look] toggle, Display Image/Settings, the picture and the blank padding. `@LOOK_AT` itself is unchanged for its other callers. |
 | `CHARA_SHEET.ERB` | `@SINGLE_CHARA_STATE_TR`, `@LIST_CHARA_STATE_TR`, `@TARGET_LIST_STATE`, `@BASIC_STATE`, `@SHOW_FALL_STATE_REV_REQUIREMENTS_TR`, `@CHARA_STATE_TR`, `@PRINT_ABL_MOD` | The character status screens (Abilities [803]/[804] and "See more" on the main screen, Abilities [101] on the sleep menu, and the other callers) as an `era-dialog` popup. Its header has the people as tabs (you first, then the room's occupants, each switched with one click) or, for long lists such as the sleep menu's whole roster, ‹ › arrows around the name and "3 / 165", plus a × close button; then the pages as tabs (Clothes & Abilities, Exp & Gems, Personal Info, Preferences, Body, Falling Conditions, or Skill Acquisition for you, and Character Settings where the game offers it). The game's `CHARA_STATE_TR` page scrolls in the body, and the Choose/Return buttons of the final check before starting stay in a footer. The input loops are the original's. `@TARGET_LIST_STATE` opens on you rather than on the target. `@BASIC_STATE`, the top of every page, is verbatim except for the Sta/Ene/Drunk/Vig/TSP bars, which the game prints with uneven spacing: they are the main screen's meters in a two-column grid, with value / maximum (aqua when buffed, yellow when debuffed, as in the game); the heavy rule it opens with is hidden in the dialog, under the header's border. `@SHOW_FALL_STATE_REV_REQUIREMENTS_TR` (Falling Conditions / Skill Acquisition) prints its page buttons (Body Parts, Skill Acquisition, …, [3500 + n]) as sub-tabs above the list instead of a row under it. `@CHARA_STATE_TR` and `@PRINT_ABL_MOD` (only the sheet calls them) tidy the Clothes & Abilities page: "Unmeasured" and the Abilities table get the Clothing labels' indent, and Personality the blank line above it that the other sections have (its rows stay one column further left, in `PRINT_STATE_TALENT_TR`). |
 | `ROOMSETTING.ERB` | `@ROOMSETTING` | Original room initialization without the successful confirmation's wait. Failure prompts and home selection remain unchanged. |
@@ -442,19 +441,32 @@ carried, no duplicate cage entry is added.
 
 The room occupants and selected character's details share one room card, split
 into a scene on the left and a **Character Info** panel on the right. The scene
-holds the place title, translucent room-chatter panel and centered character
+holds the place title, overlaid room-chatter panel and centered character
 lineup, with no redundant "Room Occupants" heading. Occupants stand left to right
-as borderless, layered sprites with dark nameplates underneath. Click a sprite
+as borderless, layered sprites with names and status text overlaid at their feet,
+without nameplate borders or backgrounds. Favor, requests and other useful status
+text remain visible without adding height below the images. Click a sprite
 or name to select them; only the sprite has the existing cyan bottom highlight
 and soft glow (no second highlight around the occupant), while the selected
-nameplate has a cyan edge. Other sprites are slightly muted. The cage entry is
-smaller than a standing character. Crowds scroll horizontally, keeping the
-selected person visible. The room stage has a 300px minimum height; the lineup
-fills the available height and bottom-aligns its occupants.
+name is tinted blue. Other sprites are slightly muted. The cage entry is
+smaller than a standing character, with its picture above (not behind) its text.
+Crowds scroll horizontally, keeping the selected person visible. The lineup
+stays exactly 216px high, including when empty, and bottom-aligns its occupants.
+The room stage stretches to match the Character Info column without reserving
+an additional minimum height; any spare space goes above the bottom-aligned
+lineup.
+Room chatter is absolutely positioned near the top of the scene so it does not
+push the sprites down or intercept clicks.
 The details column is at most 400px wide, with a face
-portrait and the existing character facts, meters and clothing; below 760px it
-sits under the scene. The **Character Info** heading is not a nonfunctional tab.
-The portrait and summary use a top-aligned two-column header. Body size appears
+portrait and the existing character facts, meters and clothing; at narrower widths
+it sits under the scene. There is no tab heading; **See more** sits to the right
+of the character's name and uses the same borderless text style as the player's.
+The portrait and summary use a top-aligned two-column header. The face frame
+remains 76px square, with its picture scaled up 10% from the bottom center so it
+escapes the top of the frame. Empty status lines and extra spacing above clothing
+are hidden. Clothing uses the surrounding font, sits at the bottom of the info
+body, and truncates long rows with an ellipsis; hovering shows the full text.
+Body size appears
 beside the selected character's race, using the same labels and unusual-size
 highlight as the player panel. An unlabeled size is shown as "Adult"; only the
 player panel's size has the mallet tooltip. Favor/Trust and
@@ -466,15 +478,26 @@ titles stay absent; longer scripted biographies are not executed on redraw.
 An empty room shows one centered "Nobody else is here" message and a movement
 hint, not a second "Just you" entry. A visible cage entry is not treated as empty.
 Portrait hover expressions, effect layers, time-stop fading and the game's
-image settings are preserved. The target's Palam remains below the room card.
+image settings are preserved. The target's Stats and Player form
+one right-hand column, with Stats above Player beside the room and actions. On narrow screens
+this sidebar stacks below the main content.
+Stats stays at its natural content height; Player absorbs spare sidebar height,
+with its controls grouped toward the bottom.
 
 The room stage uses a neutral gradient with no background illustration.
 The main-screen cards use dark navy backgrounds, thin cyan borders and compact
 corners; action groups have cyan headings and larger rectangular controls.
+Interaction groups wrap side by side at their natural width, without expanding
+to distribute spare horizontal space.
 Whitespace-only text spans are hidden within action groups so legacy printed
 spacers do not take up empty option slots.
 The action toggles are right-aligned, following the title's divider line.
-Go & Manage omits Change Partner [802], since clicking a person in the lineup
+Management controls are merged into Player, with Pushdown Guard styled like the
+Auto-Clean control. Auto Items is inside Inventory and returns there when closed.
+Player controls, including Inventory and Config, share the same rectangular
+shape, spacing and hover/focus treatment. Inventory keeps its arrow, active
+settings remain highlighted, and See more stays a borderless text link.
+The management controls omit Change Partner [802], since clicking a person in the lineup
 selects the same target; entering 802 still opens the game's original picker.
 The player and interaction panels have bottom-right seasonal flower decorations
 from `web/decoration/deco_corner_flower_<season>.png` at 14% opacity, selected
@@ -482,6 +505,47 @@ from the header's current game season. The artwork sits behind the content and
 does not intercept clicks; the room scene and dense stats panel stay undecorated.
 These styles are scoped to the main screen, leaving dialogs and other menus
 unchanged.
+Character Info has no panel border and uses reduced side and bottom padding.
+When no counter panel is present, its grid row is omitted so gaps between
+the main panels remain a consistent 10px.
+
+When a character is selected, the room panel shows their
+interaction history in 14px text, without dialog tabs or a separate composer.
+It spans the room panel beneath the portraits and Character Info, without a
+second card border. Actions remain in their own panel below the room.
+A floating top-right more... button opens the full interaction history dialog.
+This inline view hides only the "Narration to Player: " label, keeping the
+narration itself visible. The full dialog and LLM context retain the label.
+The history body has no extra padding, and the sticky more... button overlays
+the top-right corner without reserving space or narrowing the text.
+LLM speech and actions, including overheard
+lines from other characters, never receive the game's "Narration to Player"
+prefix. LLM actions instead carry an explicit actor prefix in the speaker's own
+history and in witnesses' copies, so pronouns such as "she" are unambiguous in
+LLM context. Older conversation actions are also attributed when the speaker is
+known. The inline history scrolls to the bottom on load, new lines and layout
+changes.
+Each history heading fits the day/time, action, location and people on one line
+(wrapping only when needed), without a collapse control. Consecutive entries
+with the same day, room and people share a heading; underlying events, timestamps
+and LLM context retain their individual action records.
+Spoken quotation marks are displayed as 「」, including on-device translations.
+Speaker names use a neutral colour rather than inheriting the script's speech
+colour; the player's own lines use the existing lavender.
+History reserves at least five lines of space with an internal scrollbar for
+longer histories. When a character is present, history absorbs spare vertical
+space while the interaction options stay at their natural height. When alone,
+the actions panel fills the spare vertical space beside Player on multi-column layouts.
+Absent counter rows are removed entirely so Actions and Player share
+the same bottom edge when alone.
+The existing command field accepts integer command numbers (including negative
+menu codes) as game commands; other nonblank text goes to the selected character's
+LLM. This routing applies only to the main integer-command prompt, not name,
+save, single-character or other game prompts, and clicked choices remain game
+input. LLM settings remain in the interpreter menu. Sending loads full history
+for context; game-changing replies refresh the room after the turn. Leaving the
+screen cancels any in-flight inline request. Character Info has no history tab
+or conversation preview.
 
 To iterate on the main screen, use the conformance demo's item 8 (Menu → Conformance demo, then `8`): it initializes the game's talent maps and starts the
 game with the hotpatches already on its main screen, alone, with one, two or six people, with time stopped (alone or
@@ -515,6 +579,16 @@ The browser shows them at one art pixel per CSS pixel, scaled nearest-neighbour 
 the header grows to their height. Dawn and night use the `night` pictures, or the `day` ones dimmed when there are
 none; an evening dims the day pictures slightly. An area or season with no pictures falls back to its SVG landmark.
 The server lists the files at `/api/areas`; the client reads that list once per page load.
+
+`HOTPATCH_SKY` includes the exact game minute, season and day in `data-minutes`, `data-season` and `data-day`.
+The browser approximates sunrise and sunset at latitude 36 N, with solar noon at 12:00. Each 31-day game season
+maps to a quarter of the solar year, starting spring around March 1. Summer has longer days and winter shorter
+ones, changing gradually each day; a 30-minute twilight blends the warm sky into night. These are artwork-only
+times, not changes to game schedules. The sun peaks at `top: 10px` above the `93px` horizon; the moon follows
+an overnight arc. A repeating field of small, varied stars covers the whole night sky behind weather and scenery.
+The orb stays at least 450px from the right-hand scenery when the header is wide enough and clamps inside narrow
+headers. Sunrise and sunset blend the sky and sun into peach, pink and violet. Weather still obscures the orb,
+fog covers the whole panorama, and underground locations hide the weather and orb.
 
 ### Map pictures
 

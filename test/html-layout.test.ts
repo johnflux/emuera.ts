@@ -189,10 +189,76 @@ test("area artwork fixes the header height and prevents horizontal scrolling fro
   const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
   assert.match(css, /\.era-main-header:has\(\.era-area-art\) \{ height: calc\(var\(--area-art-height, 150px\) \+ 2px\); min-height: 0; max-height:[^}]*container-type: size; overflow: clip; overflow-clip-margin: 32px;/);
   assert.match(css, /\.era-main-header:has\(\.era-area-art\) > \.era-watch-control \{ position: absolute; top: -32px; right: -37px; margin: 0; width: 300px; container-type: inline-size;/);
-  assert.match(css, /\.era-main-header:has\(\.era-area-art\) \.era-watch-control \.era-timestop-button \{ padding: 2px clamp\(2px, 2cqw, 12px\); transform: translateX\(-6px\); \}/);
+  assert.match(css, /\.era-main-header:has\(\.era-area-art\) \.era-watch-control \.era-timestop-button \{ padding: 2px clamp\(2px, 2cqw, 12px\); transform: translateX\(-5px\); \}/);
   assert.match(css, /#terminal:has\(\.screen\.is-active :is\(\.era-main, \.era-shop\) \.era-main-header \.era-area-art\) \{ overflow-x: hidden; \}/);
   assert.match(css, /\.era-watch-control button\.era-timestop-button::before \{ content: ""; position: absolute; inset: -8px 0; \}/);
   assert.match(css, /\.era-main-header:has\(\.era-area-art\) > \.era-main-when \{[^}]*max-height: 100%; overflow: auto;/);
+});
+
+test("sky follows exact game minutes with a bounded arc and warm sunrise and sunset", async () => {
+  const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
+  const routine = source.slice(source.indexOf("function sky("), source.indexOf("/** Hotpatch extension: an era-clock"));
+  const draw = (value: string | null, season = 1, day = 15): Map<string, string> => {
+    const properties = new Map<string, string>();
+    runInNewContext(`${routine}\nsky(node, element);`, {
+      node: { getAttribute: (name: string) => name === "data-season" ? String(season) : name === "data-day" ? String(day) : value },
+      element: {
+        style: { setProperty: (name: string, value: string) => properties.set(name, value) },
+        classList: { remove: () => {}, add: (phase: string) => properties.set("phase", phase),
+          toggle: (_name: string, moon: boolean) => properties.set("moon", String(moon)) },
+      },
+    });
+    return properties;
+  };
+  assert.ok(Math.abs(Number(draw("720").get("--sky-orbit")) - .5) < 1e-12);
+  assert.equal(draw("720").get("--sky-orb-top"), "10px");
+  assert.equal(draw("720").get("--sky-warmth"), "0%");
+  for (let minutes = 0; minutes < 1440; minutes++) {
+    const properties = draw(String(minutes));
+    const top = Number.parseFloat(properties.get("--sky-orb-top")!);
+    const progress = Number(properties.get("--sky-orbit"));
+    assert.ok(top >= 10 && top <= 93, `on-screen vertical position at minute ${minutes}`);
+    assert.ok(progress >= 0 && progress <= 1, `bounded orbit at minute ${minutes}`);
+  }
+  assert.equal(draw("240").get("moon"), "true", "4am is still night in spring");
+  assert.equal(draw("330", 2).get("moon"), "false", "summer sunrise before 5:30");
+  assert.equal(draw("390", 4).get("moon"), "true", "winter sunrise after 6:30");
+  assert.equal(draw("1110", 2).get("moon"), "false", "summer sunset after 18:30");
+  assert.equal(draw("1050", 4).get("moon"), "true", "winter sunset before 17:30");
+  for (const season of [1, 2, 3, 4]) {
+    const sunrise = Array.from({ length: 240 }, (_, index) => 240 + index)
+      .find((minute) => draw(String(minute), season).get("moon") === "false")!;
+    const sunset = Array.from({ length: 240 }, (_, index) => 960 + index)
+      .find((minute) => draw(String(minute), season).get("moon") === "true")!;
+    assert.ok(sunrise >= 270 && sunrise <= 435, "plausible sunrise at 36 N");
+    assert.ok(sunset >= 1005 && sunset <= 1170, "plausible sunset at 36 N");
+    assert.equal(draw(String(sunrise - 15), season).get("phase"), "era-sky-dawn");
+    assert.equal(draw(String(sunset + 15), season).get("phase"), "era-sky-evening");
+    assert.equal(draw(String(sunset + 31), season).get("phase"), "era-sky-night");
+  }
+  assert.notEqual(draw("360", 1, 1).get("--sky-orb-top"), draw("360", 1, 31).get("--sky-orb-top"), "day within season changes the arc");
+  assert.ok(Number.parseFloat(draw("1080").get("--sky-warmth")!) > 0, "warm evening");
+  assert.notEqual(draw("361").get("--sky-orb-top"), draw("360").get("--sky-orb-top"), "minute precision");
+  assert.deepEqual(draw("1800"), draw("360"), "wrap days");
+  assert.deepEqual(draw("-1"), draw("1439"), "wrap negative time");
+  for (const value of [null, "", "NaN", "Infinity", "1.5", "12px", "9007199254740992"])
+    assert.throws(() => draw(value), /Unsupported sky minutes:/);
+  for (const [season, day] of [[0, 1], [5, 1], [1, 0], [1, 32], [1.5, 1]])
+    assert.throws(() => draw("720", season, day), /Unsupported sky date:/);
+  assert.match(source, /element\.classList\.contains\("era-sky"\) && node\.hasAttribute\("data-minutes"\)\) sky\(node, element\)/);
+  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  assert.match(css, /--sky-orb-right: clamp\(10px, max\(450px,[^;]*max\(10px, calc\(100% - 40px\)\)\)/);
+  assert.match(css, /\.era-sky-orb \{ top: min\(var\(--sky-orb-top, 10px\), max\(0px, calc\(100% - 30px\)\)\); right: var\(--sky-orb-right\);/);
+  assert.match(css, /linear-gradient\(color-mix\(in srgb, #2f78c4, #493b76 var\(--sky-warmth, 0%\)\)/);
+  assert.match(css, /\.era-sky-moon \.era-sky-orb \{[^}]*background: transparent;[^}]*inset -7px 3px/);
+  assert.match(css, /\.era-sky-view::before \{[^}]*opacity: var\(--sky-darkness, 0\);[^}]*background-size: 173px 97px;/);
+  assert.match(css, /\.era-underground \.era-sky-view > :not\(\.era-sky-landmark\) \{ display: none; \}/);
+});
+
+test("fog overlays the full top image but stays hidden underground", async () => {
+  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  assert.match(css, /\.era-weather-fog \.era-sky-view::after \{ content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none;[^}]*background:/);
+  assert.match(css, /\.era-weather-fog\.era-underground \.era-sky-view::after \{ display: none; \}/);
 });
 
 test("terminal hides only the horizontal scrollbar without disabling overflow or logical width", async () => {
@@ -292,8 +358,10 @@ test("last command is a placeholder, never input data, and defaults and waits ta
   const updateControls = source.slice(source.indexOf("function updateControls("), source.indexOf("function screen("));
   const field = { value: "", placeholder: "", disabled: false, title: "" };
   const element = { classList: { toggle() {} }, setAttribute() {} };
+  let chatHost: object | null = null;
+  const routing = source.slice(source.indexOf("function mainChatInput("), source.indexOf("async function submit("));
   const context = {
-    terminal: { ...element, querySelectorAll: () => [] },
+    terminal: { ...element, querySelectorAll: () => [], querySelector: () => chatHost },
     command: field, send: { ...element, disabled: false, textContent: "" },
     document: { querySelector: () => ({ hidden: false }) },
     startButtons: [], restartButton: element,
@@ -301,7 +369,7 @@ test("last command is a placeholder, never input data, and defaults and waits ta
     input: { kind: "integer", defaultValue: undefined as string | undefined },
     lastCommand: "Last Command: Time Stop",
   };
-  const update = () => runInNewContext(`${updateControls}\nupdateControls();`, context);
+  const update = () => runInNewContext(`${routing}\n${updateControls}\nupdateControls();`, context);
   update();
   assert.equal(field.placeholder, "Last Command: Time Stop");
   assert.equal(field.value, "", "the hint cannot be accidentally submitted");
@@ -319,6 +387,13 @@ test("last command is a placeholder, never input data, and defaults and waits ta
   context.lastCommand = "";
   update();
   assert.equal(field.placeholder, "", "new screens clear old hints");
+  chatHost = {};
+  update();
+  assert.equal(field.placeholder, "Command number, or say something…");
+  assert.match(field.title, /command number.*text to speak/);
+  context.input.kind = "string";
+  update();
+  assert.equal(field.title, "Enter text", "game text prompts keep their original meaning");
   assert.match(source, /lastCommand = snapshot\.lastCommand \?\? "";/);
   const patch = await readFile(new URL("../hotpatch/MAIN_SCREEN_COMMANDS.ERB", import.meta.url), "utf8");
   assert.doesNotMatch(patch, /PRINTFORML <Last (?:Training )?Command:/);
@@ -364,6 +439,74 @@ test("active title fills the terminal below the visible interpreter header", asy
   assert.match(css, /body:has\(\.screen\.is-active \.era-launch\) #input-form \{ display: none; \}/);
 });
 
+test("room overlays reserve no layout height and chat follows every responsive main layout", async () => {
+  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  assert.match(css, /\.era-room-stage \.era-scene \{[^}]*position: absolute;[^}]*top: 2em;[^}]*pointer-events: none;/);
+  assert.match(css, /\.era-room-stage \.era-occupant > \.line:has\(\.era-occupant-label\)[^{]*\{[^}]*position: absolute;[^}]*bottom: 4px;/);
+  assert.match(css, /\.era-room-stage \.line button\.choice\.era-occupant-label \{[^}]*border: 0;[^}]*background: transparent;/);
+  assert.ok(css.includes('"center sidebar" "actions sidebar" "counters sidebar"'));
+  assert.ok(css.includes('"center" "actions" "sidebar"'));
+  assert.match(css, /\.era-main-chat \{ grid-column: 1 \/ -1;/);
+  assert.doesNotMatch(css, /"chat sidebar"|"chat"/);
+  assert.match(css, /\.era-room-stage \.era-occupant-list \{[^}]*flex: none;[^}]*height: 216px;/);
+  assert.match(css, /\.era-room-stage \.era-occupant-caged > \.era-occupant-text \{ position: static; \}/);
+  assert.doesNotMatch(css, /\.era-room-stage \{[^}]*min-height:/);
+  assert.doesNotMatch(css, /era-history-preview|era-info-with-preview/);
+  assert.match(css, /\.era-room-stage > \.era-occupants \{[^}]*margin-top: auto;/);
+  assert.match(css, /\.era-info-face \{[^}]*width: 76px; height: 76px; overflow: visible;/);
+  assert.match(css, /\.era-info-body \{[^}]*padding: 12px 4px 4px; border: 0;/);
+  assert.match(css, /\.era-main-header:has\(\.era-area-art\) \.era-watch-control \.era-timestop-button \{[^}]*transform: translateX\(-5px\);/);
+  assert.match(css, /\.era-main:not\(:has\(\.era-counters\)\) \{\s*grid-template-rows: auto auto 1fr auto;\s*grid-template-areas: "header header" "center sidebar" "actions sidebar" "last last";/);
+  assert.match(css, /\.era-info-face \.sprite-clip \{[^}]*scale\(1\.1\);[^}]*transform-origin: center bottom;/);
+  assert.match(css, /\.era-info-body \.era-look \{ margin-top: auto; font: inherit;/);
+  assert.match(css, /\.era-main-chat \{[^}]*align-self: stretch;[^}]*min-height: calc\(5 \* 14px \* 1\.25 \+ 26px\);/);
+  assert.match(css, /\.era-main-chat \{ --era-history-size: 14px; \}/);
+  assert.match(css, /\.era-history-body \{[^}]*padding: 0;/);
+  assert.match(css, /\.era-history-more-overlay \{ position: sticky; top: 0; height: 0;/);
+  assert.match(css, /\.era-history-more \{ position: absolute; top: 0; right: 0;/);
+  assert.match(css, /\.era-main-chat > \.era-history-pane \{[^}]*contain: size; overflow: auto;/);
+  assert.match(css, /\.era-main-actions \{ display: flex; flex-wrap: wrap;/);
+  assert.match(css, /\.era-main-actions > \.era-actions-group \{ flex: 0 1 auto;/);
+  assert.match(css, /\.era-main > \.era-main-actions \{ align-self: stretch; \}/);
+  assert.match(css, /\.era-main:has\(\.era-main-chat\) \{ grid-template-rows: auto 1fr auto auto auto; \}/);
+  assert.match(css, /\.era-main:has\(\.era-main-chat\):not\(:has\(\.era-counters\)\) \{ grid-template-rows: auto 1fr auto auto; \}/);
+  assert.match(css, /\.era-character:has\(\.era-main-chat\) \{ grid-template-rows: auto 1fr; \}/);
+  assert.match(css, /\.era-player-management \.era-actions-group span:has\(> \.era-guard-control\) \{ display: contents; \}/);
+  assert.match(css, /\.era-player-management \.era-actions-group :is\(\.print-cell, \.era-guard-control\) \{ display: block; flex: 1 1 100%; \}/);
+  assert.match(css, /button\.choice:is\(\.era-see-more, \.era-info-more\) \{[^}]*border: 0; border-radius: 0;/);
+  assert.match(css, /\.era-main-sidebar > \.era-main-right \{ flex: 1; \}/);
+  assert.match(css, /\.era-main-sidebar > \.era-main-left \{ flex: none; \}/);
+  assert.match(css, /\.era-main-left > \.era-stats \{ flex: none; \}/);
+  assert.match(css, /\.era-player-actions \{[^}]*margin-top: auto;/);
+  assert.match(css, /\.era-main \.era-player :is\(\.print-cell, \.era-guard-control\),\s*\.era-main \.era-player \.line button\.choice:is\(\.era-player-control, \.era-chip-button, \.era-toggle\) \{[^}]*padding: 6px 10px;[^}]*border-radius: 4px;/);
+  const patch = await readFile(new URL("../hotpatch/MAIN_SCREEN.ERB", import.meta.url), "utf8");
+  assert.doesNotMatch(patch, /era-interaction-history/);
+  assert.doesNotMatch(patch, /era-info-tabs|era-info-title/);
+  const app = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
+  assert.match(app, /for \(const selector of \["\.era-main-left", "\.era-main-right"\]\)/,
+    "character Stats precedes Player in sidebar reading and display order");
+});
+
+test("shared main-screen input routes text to chat without changing other game prompts", async () => {
+  const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
+  const start = source.indexOf("function mainChatInput(");
+  const end = source.indexOf("async function submit(", start);
+  const route = runInNewContext(`${source.slice(start, end)}\nroutesToCharacter`);
+  const mainRequest = { kind: "integer" };
+  for (const value of ["Hello", "*waves*", "300 hello", "1.5"]) {
+    assert.equal(route(value, null, mainRequest, {}), true, value);
+  }
+  for (const value of ["300", " 300 ", "-9300", "+300", "0", "", "  "]) {
+    assert.equal(route(value, null, mainRequest, {}), false, value);
+  }
+  for (const request of [{ kind: "string" }, { kind: "wait" }, { kind: "mousekey" },
+    { kind: "integer", singleCharacter: true }, { kind: "integer", blocking: true }, null]) {
+    assert.equal(route("Hello", null, request, {}), false);
+  }
+  assert.equal(route("Hello", {}, mainRequest, {}), false, "clicking a choice always remains game input");
+  assert.equal(route("Hello", null, mainRequest, null), false, "no selected character means no chat routing");
+});
+
 test("character history renders literal text and local controls without game input handlers", async () => {
   const source = await readFile(new URL("../web/interaction-history.js", import.meta.url), "utf8");
   class Element {
@@ -371,6 +514,7 @@ test("character history renders literal text and local controls without game inp
     textContent = "";
     className = "";
     hidden = false;
+    disabled = false;
     parentElement: Element | null = null;
     isConnected = true;
     focused = false;
@@ -399,6 +543,13 @@ test("character history renders literal text and local controls without game inp
       }
       return null;
     }
+    querySelectorAll(selector: string): Element[] {
+      return this.children.flatMap((child) => [
+        ...(selector.split(", ").some((part) => part.startsWith(".")
+          ? child.className.split(" ").includes(part.slice(1)) : child.tag === part) ? [child] : []),
+        ...child.querySelectorAll(selector),
+      ]);
+    }
     replaceWith(element: Element) {
       const siblings = this.parentElement!.children;
       siblings.splice(siblings.indexOf(this), 1, element);
@@ -424,8 +575,10 @@ test("character history renders literal text and local controls without game inp
   const sent: Record<string, any>[] = [];
   const replies: { status: number; body: unknown }[] = [];
   const documentEvents: string[] = [];
+  const observers: { callback: () => void; disconnected: boolean; observed: Element[] }[] = [];
   const module = (code: string) => code.replace(/^import [^;]+;$/gm, "").replace(/^export /gm, "");
-  const { render, setup, setTranslator } = runInNewContext(`${module(llmSource)}\n${module(source)}\n({render: renderCharacterHistory, setup: setupCharacterHistory, setTranslator: setHistoryTranslator})`, {
+  const { render, setupInline, sendInline, dispose, setTranslator } = runInNewContext(`${module(llmSource)}\n${module(source)}\n({render: renderCharacterHistory, setupInline: setupInlineChat, sendInline: sendInlineChat, dispose: disposeCharacterChats, setTranslator: setHistoryTranslator})`, {
+    speechQuotes: (await import("../web/translate.js")).speechQuotes,
     document: {
       createElement: (tag: string) => new Element(tag),
       addEventListener() {}, removeEventListener() {},
@@ -446,6 +599,13 @@ test("character history renders literal text and local controls without game inp
       return { ok: true, status: 200, json: async () => ({ ok: reply.status === 200, status: reply.status, statusText: reply.status === 200 ? "OK" : "Unauthorized", text }) };
     },
     requestAnimationFrame: (callback: () => void) => callback(),
+    ResizeObserver: class {
+      disconnected = false;
+      observed: Element[] = [];
+      constructor(public callback: () => void) { observers.push(this); }
+      observe(target: Element) { this.observed.push(target); }
+      disconnect() { this.disconnected = true; }
+    },
   });
   const context = { day: "5", time: ["600"], location: "9", locationName: "Living room", affection: "1", trust: "2" };
   const history = {
@@ -470,7 +630,7 @@ test("character history renders literal text and local controls without game inp
   assert.match(text, /Alice's interaction history \(1\)/);
   assert.match(text, /Day 5, 10:00 · Talk/);
   assert.ok(text.includes(history.entries[0]!.lines[0]!.text));
-  const metadata = all.find((node) => node.tag === "p" && node.className === "era-history-note")!;
+  const metadata = all.find((node) => node.tag === "p" && node.className === "era-history-heading")!;
   assert.equal(metadata.children.map((node) => node.textContent).join(""), "Living room · Alice");
   assert.equal(metadata.children[1]!.attributes.get("translate"), "no");
   assert.equal(metadata.children[1]!.className, "notranslate");
@@ -546,13 +706,47 @@ test("character history renders literal text and local controls without game inp
     { ...history.entries[0], action: { label: "Oldest" }, after: context },
   ] });
   const entries = nodes(ordered).filter((node) => node.className === "era-history-entry");
-  assert.match(entries[0]!.children[0]!.textContent, / · Oldest$/);
-  assert.equal(entries[0]!.open, false);
-  assert.match(entries[1]!.children[0]!.textContent, / · Newest$/);
-  assert.equal(entries[1]!.open, true);
-  assert.ok(nodes(entries[1]!).some((node) => node.textContent === "Favor+3 · Trust-1 · Hate Mark 0→1"));
-  assert.ok(!nodes(entries[0]!).some((node) => /Favor|Trust/.test(node.textContent)), "omit unchanged stats");
+  assert.equal(entries.length, 1, "consecutive interactions with the same day, room and people share a heading");
+  assert.match(entries[0]!.children[0]!.textContent, / · Oldest · $/);
+  assert.equal(entries[0]!.tag, "section", "day headings cannot collapse the history");
+  assert.ok(nodes(entries[0]!).some((node) => node.textContent === "Favor+3 · Trust-1 · Hate Mark 0→1"));
   assert.equal(history.entries[0]!.action.label, "Talk", "rendering does not reorder the source history");
+  const separated = new Element("div");
+  render(separated, { ...history, entries: [
+    { ...history.entries[0], before: { ...context, day: "6" } },
+    { ...history.entries[0], participants: [{ id: "bob", name: "Bob" }] },
+    { ...history.entries[0], before: { ...context, location: "10", locationName: "Veranda" } },
+    history.entries[0],
+  ] });
+  assert.equal(nodes(separated).filter((node) => node.className === "era-history-heading").length, 4,
+    "a new day, room or set of people starts a new heading");
+  const styled = new Element("div");
+  render(styled, { ...history, player: { id: "p", name: "Player" }, entries: [{
+    ...history.entries[0], choices: [], lines: [
+      { character: "alice", text: 'Alice: “Good morning.”', runs: [
+        { text: "Ali", color: "green" }, { text: 'ce: “Good morning.”', color: "green" },
+      ] },
+      { character: "p", text: 'Player: "Hello!"' },
+    ],
+  }] });
+  const speech = nodes(styled).filter((node) => node.className === "era-history-text");
+  assert.equal(speech[0]!.children.map((node) => node.textContent).join(""), "Alice: 「Good morning.」");
+  assert.equal(speech[0]!.children[0]!.style.color, "#bfc8ce");
+  assert.equal(speech[0]!.children.at(-1)!.style.color, "green");
+  assert.equal(speech[1]!.children.map((node) => node.textContent).join(""), "Player: 「Hello!」");
+  assert.ok(speech[1]!.children.every((node) => node.style.color === "#c5a3ff"), "player speech uses existing lavender");
+  const legacyActions = new Element("div");
+  render(legacyActions, { ...history, entries: [{ ...history.entries[0], choices: [],
+    action: { id: "chat", label: "Conversation" }, lines: [
+      { character: "alice", text: "She tilts her head." },
+      { character: "alice", text: "Alice: She adjusts her apron." },
+      { character: "alice", text: "Kana: She waves." },
+    ],
+  }] });
+  assert.deepEqual(nodes(legacyActions).filter((node) => node.className === "era-history-text")
+    .map((node) => node.children.map((child) => child.textContent).join("")),
+  ["Alice: She tilts her head.", "Alice: She adjusts her apron.", "Kana: She waves."],
+  "older actions get an actor label without duplicating or overriding explicit labels");
   for (const colored of [false, true]) {
     const compact = new Element("div");
     const content = "\n--------------------\nYou and the Robot Maid talk...\n\n \n「Nice weather.」\n---\n\n";
@@ -566,8 +760,11 @@ test("character history renders literal text and local controls without game inp
     const paragraphs = nodes(compact).filter((node) => node.className === "era-history-text");
     const dialogue = paragraphs[0]!.children.map((node) => node.textContent).join("");
     assert.equal(dialogue, "Narration to Player: You and the Robot Maid talk...\nAlice: 「Nice weather.」");
-    if (colored) assert.ok(paragraphs[0]!.children.every((node) => node.style.color === "green"));
-    const note = nodes(compact).find((node) => node.tag === "p" && node.className === "era-history-note");
+    if (colored) {
+      assert.equal(paragraphs[0]!.children.find((node) => node.textContent === "Alice: ")!.style.color, "#bfc8ce");
+      assert.equal(paragraphs[0]!.children.at(-1)!.style.color, "green");
+    }
+    const note = nodes(compact).find((node) => node.tag === "p" && node.className === "era-history-heading");
     assert.equal(note!.children.map((node) => node.textContent).join(""), "Living room · Alice");
     assert.ok(!nodes(compact).some((node) => node.textContent === "Alice's scene"));
   }
@@ -580,7 +777,10 @@ test("character history renders literal text and local controls without game inp
     }] }] });
     const dialogue = nodes(intro).filter((node) => node.className === "era-history-text")[0]!;
     assert.equal(dialogue.children.map((node) => node.textContent).join(""), "Alice: 「You serve some tea to Alice...」\nNarration to Player: Alice enjoys the tea.");
-    if (colored) assert.equal(dialogue.children[0]!.style.color, "green");
+    if (colored) {
+      assert.equal(dialogue.children[0]!.style.color, "#bfc8ce");
+      assert.equal(dialogue.children[1]!.style.color, "green");
+    }
   }
   const noticeHistory = new Element("div");
   render(noticeHistory, { ...history, entries: [{ ...history.entries[0], source: "state",
@@ -601,46 +801,34 @@ test("character history renders literal text and local controls without game inp
   assert.equal(thoughtText.children[0]!.tag, "em", "private thoughts are italic, not spoken dialogue");
   assert.equal(thoughtText.children[0]!.style.color, "green");
   assert.equal(thoughtText.children[0]!.textContent, "Alice (thought): I find this suspicious.");
-  const card = new Element("div");
-  card.className = "era-character-info";
-  const tabs = new Element("div");
-  tabs.className = "era-info-tabs";
-  const title = new Element("div");
-  title.className = "era-info-title";
-  tabs.append(title);
-  const info = new Element("div");
-  info.className = "era-info-body";
+  const overheard = new Element("div");
+  render(overheard, { ...history, entries: [{ ...history.entries[0],
+    action: { id: "chat", label: "Conversation" }, choices: [], lines: [
+      { character: "kana", text: "Kana: 「Happy New Year, Reimu!」" },
+      { character: "kana", text: "Kana waves." },
+    ],
+  }] });
+  assert.deepEqual(nodes(overheard).filter((node) => node.className === "era-history-text")
+    .map((node) => node.children.map((child) => child.textContent).join("")),
+  ["Kana: 「Happy New Year, Reimu!」", "Kana waves."], "overheard LLM speech and actions never acquire a game-narration prefix");
+  const dialogueOnly = new Element("div");
+  render(dialogueOnly, { ...history, entries: [{ ...history.entries[0], lines: [{
+    character: "alice", text: "You enter the room.\n「Hello!」\nYou sit down.",
+  }] }] }, { embedded: true, hideNarrationPrefix: true });
+  assert.equal(nodes(dialogueOnly).find((node) => node.className === "era-history-text")!.children
+    .map((node) => node.textContent).join(""), "You enter the room.\nAlice: 「Hello!」\nYou sit down.", "inline history hides only narration prefixes, not narration text");
+  const prefixedNarration = new Element("div");
+  render(prefixedNarration, { ...history, entries: [{ ...history.entries[0], lines: [{
+    character: null, text: "Narration to Player: ●You wish Alice a happy New Year.",
+    runs: [{ text: "Narration to ", color: "gray" }, { text: "Player: ●You wish Alice a happy New Year.", color: "green" }],
+  }] }] }, { embedded: true, hideNarrationPrefix: true });
+  const visibleNarration = nodes(prefixedNarration).find((node) => node.className === "era-history-text")!;
+  assert.equal(visibleNarration.children.map((node) => node.textContent).join(""), "●You wish Alice a happy New Year.");
+  assert.equal(visibleNarration.children[0]!.style.color, "green");
   const historyPanel = new Element("div");
-  card.append(tabs);
-  card.append(info);
-  card.append(historyPanel);
   let requests = 0;
-  const olderPreview = `${"Older padding.\n".repeat(10)}Oldest line.\nOlder interaction.`;
-  setup(historyPanel, { ...history, entries: [{ ...history.entries[0], lines: [{
-    character: "alice", text: "Earlier line.\nRecent line.\nLatest line.",
-    runs: [{ text: "Earlier line.\n", color: "red" }, { text: "Recent line.\nLatest line.", color: "green" }],
-  }] }, { ...history.entries[0], lines: [{ character: "alice", text: "\n---\n" }] },
-  { ...history.entries[0], lines: [{
-    character: "alice", text: olderPreview, runs: [{ text: olderPreview, color: "blue" }],
-  }] }] }, async () => { requests++; return history; });
-  assert.equal(historyPanel.hidden, true);
-  assert.equal(info.hidden, false);
+  render(historyPanel, history, { embedded: true, loadAll: async () => { requests++; return history; } });
   const localEvent = { stopPropagation() {}, preventDefault() {} };
-  const preview = info.querySelector(".era-history-preview")!;
-  const previewText = preview.querySelector(".era-history-preview-content")!;
-  assert.equal(previewText.children.map((node) => node.textContent).join(""), `${"Narration to Player: Older padding.\n".repeat(5)}Narration to Player: Oldest line.\nNarration to Player: Older interaction.\nNarration to Player: Earlier line.\nNarration to Player: Recent line.\nNarration to Player: Latest line.`);
-  assert.equal(previewText.children[0]!.style.color, "blue");
-  assert.equal(previewText.children[2]!.style.color, "red");
-  assert.equal(previewText.children[3]!.style.color, "green");
-  assert.ok(info.className.includes("era-info-with-preview"));
-  preview.listeners.get("click")!(localEvent);
-  assert.equal(historyPanel.hidden, false);
-  assert.equal(historyPanel.scrollTop, historyPanel.scrollHeight, "opening the history tab shows the newest text");
-  assert.equal(tabs.children[1]!.focused, true);
-  tabs.children[1]!.listeners.get("click")!(localEvent);
-  assert.equal(historyPanel.hidden, false);
-  assert.equal(info.hidden, true);
-  assert.equal(tabs.children[1]!.attributes.get("aria-pressed"), "true");
   const expand = nodes(historyPanel).find((node) => node.tag === "button")!;
   assert.equal(expand.textContent, "more...");
   assert.ok(!nodes(historyPanel).some((node) => /Latest \d+ interactions/.test(node.textContent)));
@@ -648,13 +836,10 @@ test("character history renders literal text and local controls without game inp
   assert.equal(requests, 1, "all history is loaded only when expanded");
   const dialog = nodes(historyPanel).find((node) => node.tag === "dialog")!;
   assert.equal(dialog.open, true);
-  assert.ok(nodes(dialog).filter((node) => node.className === "era-history-entry").every((node) => node.open));
+  assert.ok(nodes(dialog).filter((node) => node.className === "era-history-entry").every((node) => node.tag === "section"));
   dialog.listeners.get("cancel")!(localEvent);
   assert.equal(dialog.isConnected, false);
   assert.equal(expand.focused, true);
-  tabs.children[0]!.listeners.get("click")!(localEvent);
-  assert.equal(info.hidden, false);
-  assert.equal(historyPanel.hidden, true);
   const failure = new Element("div");
   render(failure, history, { loadAll: async () => { throw new Error("Session expired"); } });
   await nodes(failure).find((node) => node.tag === "button")!.listeners.get("click")!(localEvent);
@@ -729,7 +914,7 @@ test("character history renders literal text and local controls without game inp
   assert.deepEqual(prompt.at(-1), { role: "user", content: "Player: Hello there" });
   assert.equal(chat.textarea.value, "");
   assert.deepEqual(game.lines.map((line) => line.text), ['"Hello there"', "Alice waves.", "「Hi!」"]);
-  assert.deepEqual(chat.shown().slice(-3), ['Player: "Hello there"', "Narration to Player: Alice waves.", "Alice: 「Hi!」"]);
+  assert.deepEqual(chat.shown().slice(-3), ['Player: 「Hello there」', "Alice: Alice waves.", "Alice: 「Hi!」"]);
   assert.ok(!nodes(chat.chatDialog).some((node) => /era-llm-message is-|era-llm-transcript/.test(node.className)), "no separate chat transcript");
   const debugTab = chat.find((node) => node.textContent.startsWith("LLM debug"));
   assert.equal(debugTab.textContent, "LLM debug (1)");
@@ -748,10 +933,10 @@ test("character history renders literal text and local controls without game inp
   // The conversation is part of the history: a later prompt carries it as context. A failed reply is taken back.
   storage.set("era-typescript.llm", JSON.stringify({ provider: "openrouter", providers: { openrouter: { apiKey: "sk-test", model: "test/model" } } }));
   chat = await openChat(game);
-  assert.deepEqual(chat.shown().slice(-3), ['Player: "Hello there"', "Narration to Player: Alice waves.", "Alice: 「Hi!」"]);
+  assert.deepEqual(chat.shown().slice(-3), ['Player: 「Hello there」', "Alice: Alice waves.", "Alice: 「Hi!」"]);
   replies.push({ status: 401, body: { error: { message: "No auth" } } });
   await chat.say("Again");
-  assert.match(sent[1]!.payload.messages[1].content, /Conversation \(present: Alice\)\nPlayer: "Hello there"\nNarration to Player: Alice waves\.\nAlice: 「Hi!」/);
+  assert.match(sent[1]!.payload.messages[1].content, /Conversation \(present: Alice\)\nPlayer: 「Hello there」\nAlice: Alice waves\.\nAlice: 「Hi!」/);
   assert.match(chat.text(), /No reply: 401 Unauthorized: No auth/);
   assert.equal(chat.textarea.value, "Again");
   assert.equal(game.lines.length, 3, "the unanswered message is taken back");
@@ -759,7 +944,7 @@ test("character history renders literal text and local controls without game inp
   replies.push({ status: 200, body: { choices: [{ message: { content: null, tool_calls: [call("h", "say", '{"text": "Hello again!"}')] } }] } });
   replies.push({ status: 200, body: { choices: [{ message: { content: "DONE" } }] } });
   const retry = chat.find((node) => node.tag === "button" && node.textContent === "Retry");
-  assert.match(retry.parentElement!.parentElement!.textContent + retry.parentElement!.parentElement!.children.map((node) => node.textContent).join(""), /"Hello there"/);
+  assert.match(retry.parentElement!.parentElement!.textContent + retry.parentElement!.parentElement!.children.map((node) => node.textContent).join(""), /「Hello there」/);
   await retry.listeners.get("click")!(localEvent);
   await settled();
   assert.deepEqual(sent.at(-2)!.payload.messages.slice(-1), [{ role: "user", content: "Player: Hello there" }]);
@@ -812,7 +997,7 @@ test("character history renders literal text and local controls without game inp
   assert.equal(first.messages.length, 4, "earlier turns are history, not replayed messages");
   assert.deepEqual(second.messages.slice(-3).map((message: { role: string }) => message.role), ["assistant", "tool", "tool"]);
   assert.equal(JSON.stringify(second.messages.at(-2)), JSON.stringify({ role: "tool", tool_call_id: "a", name: "change_feelings", content: '{"favor":{"before":3,"after":13}}' }));
-  assert.deepEqual(chat.shown().slice(-4).map((line) => line.replace(/`.*/, "`")), ['Narration to Player: *hands over a gift* "Here is a gift"', "`", "`", "Alice: 「Thank you!」"]);
+  assert.deepEqual(chat.shown().slice(-4).map((line) => line.replace(/`.*/, "`")), ['Player: *hands over a gift* "Here is a gift"', "`", "`", "Alice: 「Thank you!」"]);
   assert.match(chat.text(), /Close this window to see what happens in the room/);
   chat.find((node) => node.textContent.startsWith("LLM debug")).listeners.get("click")!(localEvent);
   const toolDebug = nodes(chat.find((node) => node.className.includes("era-llm-debug") && node.tag === "div")).map((node) => node.textContent).join("\n");
@@ -830,7 +1015,7 @@ test("character history renders literal text and local controls without game inp
   await chat.say("Talk to me");
   await settled();
   assert.equal(sent.length, before + 1);
-  assert.deepEqual(game.lines.map((line) => line.text), ['"Talk to me"', "「Line 1.」", "「Line 2.」", "「Line 3.」"]);
+  assert.deepEqual(game.lines.map((line) => line.text), ['"Talk to me"', "「Line 1.」", "「Line 2.」"]);
   assert.match(sent.at(-1)!.payload.messages[0].content, /approximately 6 seconds.*\n.*Do not invent people, places/s);
   // Calls written out as text are run as calls.
   replies.push({ status: 200, body: { choices: [{ message: { content: 'say(text: "I like you too.")\nact(text: "Alice blushes (a little).")' } }] } });
@@ -950,6 +1135,158 @@ test("character history renders literal text and local controls without game inp
   assert.match(sceneMessage, /How the game introduces you:\nA demon from below\.\n\nExample lines you say in the game \(your voice\):\n「We think not\.」$/);
   assert.doesNotMatch(sceneMessage, /"voice"/);
   assert.equal(redrawn, 2, "the dialog closes so the game plays out the scene command");
+
+  const main = new Element("div");
+  main.className = "era-main";
+  const inlineParent = new Element("div");
+  inlineParent.className = "era-character";
+  main.append(inlineParent);
+  const inlineGame = fakeGame();
+  let inlineLoads = 0;
+  let inlineRefreshes = 0;
+  const inlineTextarea = new Element("input") as Element & { value: string };
+  const inlineOptions = { ...inlineGame, input: inlineTextarea };
+  const inputContainer = new Element("form");
+  inputContainer.append(inlineTextarea);
+  const loadInline = async () => { inlineLoads++; return inlineGame.loadAll(); };
+  setupInline(inlineParent, history, loadInline, inlineOptions);
+  setupInline(inlineParent, history, loadInline, inlineOptions);
+  assert.equal(main.querySelectorAll(".era-main-chat").length, 1, "one bottom chat per main screen");
+  assert.equal(inlineLoads, 0, "mounting the main screen does not fetch all history");
+  const inlineHost = main.querySelector(".era-main-chat")!;
+  assert.equal(inlineHost.parentElement, inlineParent, "history is embedded inside the room panel");
+  assert.equal(inlineHost.querySelectorAll("button").length, 1, "inline history has an open-dialog button");
+  assert.equal(inlineHost.querySelectorAll("textarea, form, input").length, 0, "inline history has no composer");
+  assert.ok(nodes(inlineHost).some((node) => node.textContent === "Narration."), "inline history retains game narration text");
+  assert.ok(!nodes(inlineHost).some((node) => node.textContent.includes("Narration to Player:")), "inline history hides only the narration prefix");
+  const inlinePane = inlineHost.querySelector(".era-history-pane")!;
+  inlinePane.scrollTop = 0;
+  observers[0]!.callback();
+  assert.equal(inlinePane.scrollTop, inlinePane.scrollHeight, "resizing after layout scrolls the actual history pane to the bottom");
+  await inlineHost.querySelectorAll("button")[0]!.listeners.get("click")!(localEvent);
+  const inlineDialog = nodes(inlineHost).find((node) => node.tag === "dialog")!;
+  assert.equal(inlineDialog.open, true, "inline history opens the full history dialog");
+  assert.ok(nodes(inlineDialog).some((node) => node.textContent.includes("Narration.")), "the dialog retains game narration");
+  inlineDialog.close();
+  assert.equal(inlineTextarea.parentElement, inputContainer, "chat never moves the shared command input out of its form");
+  assert.equal(inlineTextarea.focused, false, "mounting chat does not steal focus or scroll past the room");
+  const inlineSubmit = async (value: string) => {
+    inlineTextarea.value = value;
+    const result = await sendInline(inlineHost);
+    if (result?.changed) inlineRefreshes++;
+    await settled();
+  };
+  replies.push({ status: 200, body: { choices: [{ message: { content: '「Hello from the room.」' } }] } });
+  await inlineSubmit("Hello");
+  assert.ok(inlineLoads >= 3, "sending loads full history, then reloads recorded messages and replies");
+  assert.equal(inlineRefreshes, 1, "inline game changes refresh the room without closing a dialog");
+  assert.ok(nodes(inlineHost).some((node) => node.textContent.includes("Hello from the room.")));
+  assert.equal(inlineTextarea.focused, false, "shared input focus is managed by the main screen");
+  assert.ok(!nodes(inlineHost).some((node) => /Close this window/.test(node.textContent)));
+
+  // Game handoffs refresh inline instead of trying to close a non-dialog host.
+  replies.push({ status: 200, body: { choices: [{ message: { content: null, tool_calls: [
+    call("inline-attempt", "player_attempts", '{"action": "wave"}'),
+  ] } }] } });
+  await inlineSubmit("*waves*");
+  assert.equal(inlineRefreshes, 2);
+  assert.equal(inlineHost.isConnected, true);
+  dispose(main);
+  dispose(main);
+  assert.equal(observers[0]!.disconnected, true, "retiring inline history stops its layout observer");
+  const sentBeforeDisposal = sent.length;
+  await inlineSubmit("No longer active");
+  assert.equal(sent.length, sentBeforeDisposal, "retired screens cannot send more chat requests");
+  assert.equal(inlineRefreshes, 2, "disposing inline chat does not trigger a second room refresh");
+
+  const pendingMain = new Element("div");
+  pendingMain.className = "era-main";
+  const pendingParent = new Element("div");
+  pendingParent.className = "era-character";
+  pendingMain.append(pendingParent);
+  let releaseHistory!: (value: typeof history) => void;
+  setupInline(pendingParent, history, () => new Promise((resolve) => { releaseHistory = resolve; }), inlineOptions);
+  const pendingTextarea = inlineTextarea;
+  pendingTextarea.value = "Leaving before history loads";
+  const pendingRequest = sendInline(pendingMain.querySelector(".era-main-chat")!);
+  dispose(pendingMain);
+  releaseHistory(history);
+  await pendingRequest;
+  await settled();
+  assert.equal(sent.length, sentBeforeDisposal, "leaving during history loading cancels submission");
+  assert.equal(pendingTextarea.disabled, true, "async completion cannot re-enable a retired composer");
+
+  const failedMain = new Element("div");
+  failedMain.className = "era-main";
+  const failedParent = new Element("div");
+  failedParent.className = "era-character";
+  failedMain.append(failedParent);
+  setupInline(failedParent, history, async () => { throw new Error("History unavailable"); }, inlineOptions);
+  const failedTextarea = inlineTextarea;
+  failedTextarea.value = "Try again later";
+  await sendInline(failedMain.querySelector(".era-main-chat")!);
+  await settled();
+  assert.equal(sent.length, sentBeforeDisposal, "failed context loading never sends an incomplete prompt");
+  assert.equal(failedTextarea.value, "Try again later");
+  assert.ok(nodes(failedMain).some((node) => node.textContent === "No reply: History unavailable"));
+  dispose(failedMain);
+});
+
+test("history speech quotes normalize without changing apostrophes, HTML or tool arguments", async () => {
+  const { speechQuotes } = await import("../web/translate.js");
+  assert.equal(speechQuotes('"Hello!"\nRuukoto: “It’s New Year’s Day.”'), "「Hello!」\nRuukoto: 「It’s New Year’s Day.」");
+  assert.equal(speechQuotes('  "Welcome."'), "  「Welcome.」");
+  for (const text of ['<img src=x onerror="bad()">Hello.', '`say({"text":"Hello"})`',
+    'change_feelings(player, favor +2) ("a gift")', "Ruukoto: 「Already normalized.」"]) {
+    assert.equal(speechQuotes(text), text);
+  }
+});
+
+test("LLM reply boundaries stop at movement and prevent repeated emotional rewards", async () => {
+  const source = await readFile(new URL("../web/llm.js", import.meta.url), "utf8");
+  const responses: { content?: string; tool_calls?: unknown[] }[] = [];
+  let requests = 0;
+  const { converse, systemPrompt } = runInNewContext(`${source.replace(/^export /gm, "")}
+    request = async () => { countRequest(); return responses.shift(); };
+    ({ converse, systemPrompt })`, { responses, countRequest: () => { requests++; } });
+  const call = (name: string, args: Record<string, unknown> = {}) => ({
+    id: name, type: "function", function: { name, arguments: JSON.stringify(args) },
+  });
+  const run = async (failed = new Set<string>()) => {
+    const executed: string[] = [];
+    const result = await converse({
+      llm: { tools: true }, messages: [], log: [],
+      runTool: async (name: string) => {
+        executed.push(name);
+        return failed.has(name) ? { error: "Could not do that" } : { ok: true };
+      },
+    });
+    return { executed, result };
+  };
+  responses.push({ tool_calls: [call("say", { text: "See you." }), call("move_to", { destination: "Veranda" }),
+    call("say", { text: "Actually I came back." }), call("change_feelings", { favor: 50 })] });
+  assert.deepEqual((await run()).executed, ["say", "move_to"], "nothing after a successful move runs, even in the same batch");
+  assert.equal(requests, 1, "movement never asks the model for another round");
+  responses.push({ tool_calls: [call("move_to", { destination: "Missing" })] },
+    { tool_calls: [call("say", { text: "I cannot go there." })], content: "DONE" });
+  assert.deepEqual((await run(new Set(["move_to"]))).executed, ["move_to", "say"], "a failed move permits a reply");
+  for (const name of ["change_feelings", "change_mood", "change_mark", "think"]) {
+    const before = requests;
+    responses.push({ tool_calls: [call(name), call(name), call("say", { text: "Hello." })] });
+    const { executed, result } = await run();
+    assert.deepEqual(executed, [name, "say"], `${name} only runs once, without suppressing the actual reply`);
+    assert.match(result.tools[1].result.error, /only once per reply/);
+    assert.equal(requests, before + 1, "repeated state changes end the turn");
+  }
+  responses.push({ tool_calls: [call("say", { text: "One." }), call("say", { text: "Two." }), call("say", { text: "Three." })] });
+  assert.deepEqual((await run()).executed, ["say", "say"]);
+  const before = requests;
+  for (let i = 0; i < 4; i++) responses.push({ tool_calls: [call("get_character_info", { character: "Alice" })] });
+  assert.equal((await run()).executed.length, 4);
+  assert.equal(requests, before + 4, "lookup loops have a four-round ceiling");
+  const prompt = systemPrompt({ character: { name: "Alice" }, gameTitle: "eraTW", tools: true });
+  assert.match(prompt, /ordinary small talk is not evidence of intimacy or love/);
+  assert.match(prompt, /Your own words, gestures and thoughts are not reasons to reward the player again/);
 });
 
 test("crash reports render as text and copy with explicit clipboard error feedback", async () => {

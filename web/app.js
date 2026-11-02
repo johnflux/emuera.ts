@@ -1,6 +1,6 @@
 import { createTranslation, protectMapTranslation } from "./translate.js";
 import { createLibrary } from "./library.js";
-import { setHistoryTranslator, setupCharacterHistory } from "./interaction-history.js";
+import { disposeCharacterChats, sendInlineChat, setHistoryTranslator, setupInlineChat } from "./interaction-history.js";
 import { activeLlm, PROVIDERS, setupLlmConfig } from "./llm.js";
 import { encountersEnabled, gossipEnabled, memoriesEnabled, runEncounters, runGossip, runMemories, writeMemory } from "./encounters.js";
 
@@ -302,6 +302,7 @@ function endActivity() {
   activityChip.title = `Last step took ${seconds(total)}: script ${seconds(script)}, render ${seconds(total - script)}`;
 }
 function updateControls() {
+  const chatting = mainChatInput(input, terminal.querySelector(".screen.is-active .era-main-chat"));
   terminal.classList.toggle("is-waiting", !busy && input?.kind === "wait");
   // Timer refreshes keep the field enabled so typing and focus survive animation frames.
   command.disabled = (busy && !expiring) || !input || !!input.blocking;
@@ -310,12 +311,13 @@ function updateControls() {
   send.textContent = input?.kind === "wait" ? "Continue" : "Send";
   command.title = !input ? "Not waiting for input" : input.singleCharacter
     ? input.kind === "integer" ? "Type one digit (no Enter needed)" : "Type one character (no Enter needed)"
+    : chatting ? "Enter a command number, or text to speak to the selected character"
     : input.kind === "integer" ? "Enter a whole number" : input.kind === "wait" ? "Press Enter to continue" : "Enter text";
   startButtons.forEach((button) => { button.setAttribute("aria-disabled", String(busy)); });
   restartButton.setAttribute("aria-disabled", String(busy));
   document.querySelector("#input-form").hidden = !input || input.kind === "mousekey";
   command.placeholder = input?.kind === "wait" ? "" : input?.defaultValue !== undefined
-    ? `Enter for ${JSON.stringify(input.defaultValue)}` : input ? lastCommand : "";
+    ? `Enter for ${JSON.stringify(input.defaultValue)}` : chatting ? "Command number, or say something…" : input ? lastCommand : "";
   terminal.querySelectorAll("button.choice").forEach((button) => {
     const value = input?.kind === "integer" && /^-?\d+$/.test(button.dataset.value) ? BigInt(button.dataset.value).toString() : button.dataset.value;
     button.disabled = !button.closest(".screen.is-active") || button.classList.contains("is-stale") || (busy && !expiring) || !input || input.kind === "wait" || !!input.blocking
@@ -337,6 +339,7 @@ function lastOutputLine() {
 }
 function retireScreen(screen = currentScreen) {
   if (!screen) return;
+  disposeCharacterChats(screen);
   hideTooltip();
   const currentScreen = screen;
   currentScreen.classList.replace("is-active", "is-history");
@@ -1523,6 +1526,40 @@ new MutationObserver(scheduleHtmlPositions).observe(terminal, {
 function applyClasses(element, node) {
   for (const name of (node.getAttribute("class") ?? "").split(/\s+/)) if (/^era-[a-z0-9-]+$/.test(name)) element.classList.add(name);
 }
+/** Approximate solar time at 36 N; each 31-day game season spans a quarter of the solar year. */
+function sky(node, element) {
+  const value = node.getAttribute("data-minutes");
+  if (!/^-?\d+$/.test(value ?? "") || !Number.isSafeInteger(Number(value)))
+    throw new Error(`Unsupported sky minutes: ${value}`);
+  const minutes = ((Number(value) % 1440) + 1440) % 1440;
+  const season = Number(node.getAttribute("data-season")), day = Number(node.getAttribute("data-day"));
+  if (!Number.isInteger(season) || season < 1 || season > 4 || !Number.isInteger(day) || day < 1 || day > 31)
+    throw new Error(`Unsupported sky date: ${season}/${day}`);
+  const radians = Math.PI / 180;
+  const yearDay = 59 + ((season - 1) + (day - 1) / 31) * 365 / 4;
+  const declination = 23.44 * radians * Math.sin(2 * Math.PI * (yearDay - 80) / 365);
+  const hourAngle = Math.acos((Math.sin(-.833 * radians) - Math.sin(36 * radians) * Math.sin(declination))
+    / (Math.cos(36 * radians) * Math.cos(declination)));
+  const halfDay = hourAngle * 720 / Math.PI;
+  const sunrise = 720 - halfDay, sunset = 720 + halfDay;
+  const night = minutes < sunrise || minutes >= sunset;
+  const twilight = 30;
+  const daylight = Math.max(0, Math.min(1, (minutes - sunrise) / (sunset - sunrise)));
+  const progress = night ? ((minutes - sunset + 1440) % 1440) / (1440 - 2 * halfDay) : daylight;
+  const elevation = Math.sin(progress * Math.PI);
+  const warmth = night ? 0 : Math.max(0, 1 - elevation * 1.6);
+  const phase = minutes < sunrise - twilight || minutes >= sunset + twilight ? "night"
+    : minutes < sunrise + twilight ? "dawn" : minutes >= sunset - twilight ? "evening"
+    : minutes < 600 ? "morning" : "day";
+  element.classList.remove("era-sky-dawn", "era-sky-morning", "era-sky-day", "era-sky-evening", "era-sky-night");
+  element.classList.add(`era-sky-${phase}`);
+  element.classList.toggle("era-sky-moon", night);
+  element.style.setProperty("--sky-orbit", String(progress));
+  element.style.setProperty("--sky-orb-top", `${93 - 83 * elevation}px`);
+  element.style.setProperty("--sky-warmth", `${night && phase !== "night" ? 100 : warmth * 100}%`);
+  element.style.setProperty("--sky-darkness", String(night ? Math.min(1, Math.min(Math.abs(minutes - sunrise), Math.abs(minutes - sunset)) / twilight) : 0));
+  return element;
+}
 /** Hotpatch extension: an era-clock's data-minutes is game time, not a wall-clock timer. */
 function clock(node) {
   const value = node.getAttribute("data-minutes");
@@ -1696,6 +1733,7 @@ async function renderHtml(markup, parent, sprites) {
       element.dataset.htmlPosition = String(sizeAttribute(position, 0, scale ?? imageScale()));
     }
     applyClasses(element, node);
+    if (node.tagName === "DIV" && element.classList.contains("era-sky") && node.hasAttribute("data-minutes")) sky(node, element);
     if (element.matches(".era-occupant-label, .era-guard-toggle, .era-setup-choice"))
       element.setAttribute("aria-pressed", String(node.getAttribute("aria-pressed") === "true"));
     if (element.matches(".era-setup-choice, .era-setup-step, .era-setup-trait"))
@@ -1722,6 +1760,7 @@ function render(snapshot, advanceScreen = false, fresh = false, keepFocus = fals
 }
 /** Renders steps in order and shows the result at once; several steps rebuild a reloaded run's output. */
 async function renderSteps(steps, fresh = false, keepFocus = false, toBottom = fresh) {
+  if (fresh) disposeCharacterChats(terminal);
   const clickingThrough = input?.kind === "wait";
   const setup = terminal.querySelector(".screen.is-active .era-setup:not(.era-setup-editor)");
   const setupTab = setup?.querySelector(".era-start-tabs .era-current")?.dataset.value;
@@ -2072,11 +2111,12 @@ async function renderSnapshot(snapshot, advanceScreen) {
     continuedScreens = [];
   }
   markTarget(snapshot.target);
+  for (const main of outputRoot.querySelectorAll(".screen.is-active .era-main")) setupMainSidebar(main);
   if (snapshot.characterHistory) {
-    for (const parent of outputRoot.querySelectorAll(".screen.is-active .era-interaction-history:empty"))
-      setupCharacterHistory(parent, snapshot.characterHistory, () => api("/api/character-history", {
+    for (const parent of outputRoot.querySelectorAll(".screen.is-active .era-main:not(:has(.era-main-chat))"))
+      setupInlineChat(parent, snapshot.characterHistory, () => api("/api/character-history", {
         session, step, character: snapshot.characterHistory.character.id,
-      }), { gameId: runGame ?? runMode, gameTitle: gameTitle(runGame),
+      }), { input: command, gameId: runGame ?? runMode, gameTitle: gameTitle(runGame),
         runTool: (name, args) => api("/api/character-tool", { session, step, character: snapshot.characterHistory.character.id, name, arguments: args }),
         record: (text) => api("/api/character-chat", { session, step, character: snapshot.characterHistory.character.id, text }),
         undo: (lines) => api("/api/character-chat/undo", { session, step, character: snapshot.characterHistory.character.id, lines }),
@@ -2334,10 +2374,56 @@ function staleTab(error) {
   setTimeout(() => { void resume(id).then((ok) => { if (ok) message("This run was continued in another tab; caught up with it."); }); });
   return true;
 }
+function setupMainSidebar(main) {
+  if (main.querySelector(".era-main-sidebar")) return;
+  const sidebar = document.createElement("div");
+  sidebar.className = "era-main-sidebar";
+  const player = main.querySelector(".era-player");
+  const management = main.querySelector(".era-player-management");
+  if (player && management) player.append(management);
+  for (const selector of [".era-main-left", ".era-main-right"]) {
+    const panel = main.querySelector(selector);
+    if (panel) sidebar.append(panel);
+  }
+  main.append(sidebar);
+  for (const line of main.querySelectorAll(".era-info-body .era-look > .line:not(.era-marker)"))
+    line.title = line.textContent.trim();
+}
+
+function mainChatInput(request, host) {
+  return !!host && request?.kind === "integer" && !request.singleCharacter && !request.blocking;
+}
+
+function routesToCharacter(value, selectedChoice, request, host) {
+  return !selectedChoice && mainChatInput(request, host) && value.trim() !== "" && !/^[+-]?\d+$/.test(value.trim());
+}
+
 async function submit(value, selectedChoice = null) {
   // Input made while an animation frame is loading is sent once that frame is shown.
   if (expiring) { queuedSubmit = { value, choice: selectedChoice?.dataset.value }; return; }
   if (busy || !input || input.blocking) return;
+  const chat = terminal.querySelector(".screen.is-active .era-main-chat");
+  if (routesToCharacter(value, selectedChoice, input, chat)) {
+    hideTooltip();
+    encounterRun?.abort();
+    busy = true;
+    beginActivity();
+    updateControls();
+    let result;
+    try {
+      result = await sendInlineChat(chat);
+      activityResponded();
+    } catch (error) {
+      message(`Could not chat: ${error.message}`, true);
+    } finally {
+      busy = false;
+      endActivity();
+      updateControls();
+      if (input) command.focus({ preventScroll: true });
+    }
+    if (result?.changed) await refreshScreen();
+    return;
+  }
   const numberFields = [...terminal.querySelectorAll(".screen.is-active .era-setup-number-input")];
   if (numberFields.some((field) => !field.reportValidity())) return;
   const numberEdits = numberFields.filter((field) => field.value !== field.defaultValue)

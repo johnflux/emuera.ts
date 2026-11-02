@@ -1,7 +1,49 @@
 import { activeLlm, buildMessages, converse, debugLog, handedOver, loadLlmConfig, parseReply, PROVIDERS, systemPrompt, TOOLS, toolsFor } from "./llm.js";
+import { speechQuotes } from "./translate.js";
 
 let expanded = true;
-let selectedTab = "info";
+const inlineChats = new WeakMap();
+
+export function disposeCharacterChats(root) {
+  for (const host of root.querySelectorAll(".era-main-chat")) inlineChats.get(host)?.dispose();
+}
+
+export function sendInlineChat(host) {
+  const controller = inlineChats.get(host);
+  if (!controller) throw new Error("The selected character's chat is no longer available.");
+  return controller.send();
+}
+
+export function setupInlineChat(parent, history, loadAll, chat) {
+  const main = parent.closest(".era-main");
+  if (!main || !chat || main.querySelector(".era-main-chat")) return;
+  const room = main.querySelector(".era-character");
+  if (!room) throw new Error("The selected character's room panel is unavailable.");
+  const host = element("section", "era-main-chat");
+  host.setAttribute("aria-label", `Chat with ${history.character.name}`);
+  const pane = element("div", "era-history-pane");
+  const content = element("div");
+  pane.append(content);
+  host.append(pane);
+  room.append(host);
+  const cleanup = [];
+  const controller = setupChat({ dialog: host, pane, content, history, loadAll, chat, cleanup, inline: true });
+  const observer = new ResizeObserver(() => scrollHistoryToBottom(content));
+  observer.observe(pane);
+  observer.observe(content);
+  cleanup.push(() => observer.disconnect());
+  let disposed = false;
+  inlineChats.set(host, {
+    send: controller.send,
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      for (const done of cleanup) done();
+    },
+  });
+  for (const type of ["click", "pointerdown", "keydown", "contextmenu"])
+    host.addEventListener(type, (event) => event.stopPropagation());
+}
 
 function scrollHistoryToBottom(parent) {
   requestAnimationFrame(() => {
@@ -18,13 +60,14 @@ function clock(context) {
   return `Day ${context.day}, ${hour}:${minute}`;
 }
 
-function compactRuns(runs, entry, speaker, playerName = "Player", narrationName = playerName) {
+function compactRuns(runs, entry, speaker, playerName = "Player", narrationName = playerName, hideNarrationPrefix = false) {
   const content = runs.map((run) => run.text).join("");
+  const quoted = speechQuotes(content);
   const result = [];
-  const append = (text, color) => {
+  const append = (text, color, speaker = false) => {
     const last = result.at(-1);
-    if (last && last.color === color) last.text += text;
-    else result.push({ text, color });
+    if (last && last.color === color && !!last.speaker === speaker) last.text += text;
+    else result.push({ text, color, ...(speaker ? { speaker: true } : {}) });
   };
   for (const match of content.matchAll(/[^\r\n]+/g)) {
     if (!match[0].trim() || /^-{3,}$/.test(match[0].trim())) continue;
@@ -39,36 +82,53 @@ function compactRuns(runs, entry, speaker, playerName = "Player", narrationName 
     if (roomIntro || teaIntro) continue;
     const legacyNarration = [playerName, ...entry.participants.map((person) => person.name)]
       .map((name) => `${name} (narration): `).find((prefix) => line.startsWith(prefix));
-    const start = match.index + match[0].length - match[0].trimStart().length + (legacyNarration?.length ?? 0);
+    let start = match.index + match[0].length - match[0].trimStart().length + (legacyNarration?.length ?? 0);
     const end = match.index + match[0].trimEnd().length;
-    if (result.length) append("\n", result.at(-1).color);
-    const attributed = entry.participants.some((person) =>
-      line.startsWith(`${person.name}:`) || line.startsWith(`${person.name} (thought):`));
+    const attributed = [playerName, ...entry.participants.map((person) => person.name)].some((name) =>
+      line.startsWith(`${name}:`) || line.startsWith(`${name} (thought):`));
     const narration = `Narration to ${narrationName}: `;
     const tool = TOOLS.some(({ function: fn }) => line.startsWith(`${fn.name}(`));
+    const conversation = entry.action.id === "chat" || entry.action.id === "gossip";
     let prefix = speaker && /^["“「]/.test(line) ? `${speaker}: `
-      : attributed || tool || /^["“「`]/.test(line) || line.startsWith(narration) ? "" : narration;
+      : conversation || attributed || tool || /^["“「`]/.test(line) || line.startsWith(narration) ? "" : narration;
+    if (conversation && speaker && !prefix && !attributed && !tool && !line.startsWith("`")
+      && !line.startsWith(narration) && !/^[^:\n]+:\s/.test(line)) prefix = `${speaker}: `;
+    if (hideNarrationPrefix && narrationName === playerName) {
+      if (prefix === narration) prefix = "";
+      if (line.startsWith(narration)) start += narration.length;
+    }
+    if (result.length) append("\n", result.at(-1).color);
+    const nameLength = quoted.slice(start, end).match(/^[^:\n]+:\s*(?=「)/)?.[0].length ?? 0;
     let offset = 0;
     for (const run of runs) {
-      const text = run.text.slice(Math.max(0, start - offset), Math.max(0, end - offset));
+      const from = Math.max(start, offset), to = Math.min(end, offset + run.text.length);
+      const text = quoted.slice(from, Math.max(from, to));
       offset += run.text.length;
       if (text) {
-        if (prefix) { append(prefix, run.color); prefix = ""; }
-        append(text, run.color);
+        if (prefix) {
+          const label = prefix === `${speaker}: `;
+          append(prefix, label ? undefined : run.color, label);
+          prefix = "";
+        }
+        const labelEnd = Math.min(to, start + nameLength);
+        if (labelEnd > from) append(quoted.slice(from, labelEnd), undefined, true);
+        if (to > Math.max(from, labelEnd)) append(quoted.slice(Math.max(from, labelEnd), to), run.color);
       }
     }
   }
   return result;
 }
 
-function attributedRuns(line, entry, player) {
+function attributedRuns(line, entry, player, hideNarrationPrefix = false) {
   const speaker = entry.participants.find((person) => person.id === line.character)?.name
     ?? (entry.action.id === "chat" && line.character === null ? player?.name ?? "Player" : undefined);
   const reaction = entry.source === "state" && entry.action.id === "reaction";
   const narrationName = reaction ? speaker : player?.name;
+  const isPlayer = line.character === player?.id || (entry.action.id === "chat" && line.character === null);
   return compactRuns(line.runs ?? [{ text: line.text }], entry, speaker, player?.name ?? "Player",
-    narrationName ?? player?.name ?? "Player")
-    .map((run) => line.thought ? { ...run, thought: true } : reaction ? { ...run, color: "#c5a3ff" } : run);
+    narrationName ?? player?.name ?? "Player", hideNarrationPrefix)
+    .map((run) => ({ ...run, ...(line.thought ? { thought: true } : {}),
+      ...(isPlayer || reaction ? { color: "#c5a3ff" } : {}) }));
 }
 
 function changes(entry) {
@@ -144,7 +204,7 @@ export function sinceMemory(history) {
 let translate = () => {};
 export function setHistoryTranslator(translator) { translate = translator; }
 
-export function renderCharacterHistory(parent, history, { loadAll, embedded = false, expandAll = false, chat, lineTools } = {}) {
+export function renderCharacterHistory(parent, history, { loadAll, embedded = false, chat, lineTools, hideNarrationPrefix = false } = {}) {
   parent.replaceChildren();
   // Reading history must never submit a choice or advance a click-to-continue wait.
   for (const type of ["click", "pointerdown", "keydown", "contextmenu"])
@@ -164,7 +224,8 @@ export function renderCharacterHistory(parent, history, { loadAll, embedded = fa
     panel.addEventListener("toggle", () => { expanded = panel.open; });
   }
   if (loadAll) {
-    const open = text("button", "more...", panel, "era-history-more");
+    const overlay = text("div", "", panel, "era-history-more-overlay");
+    const open = text("button", "more...", overlay, "era-history-more");
     open.type = "button";
     open.setAttribute("aria-label", "View all interaction history");
     open.addEventListener("click", async () => {
@@ -186,7 +247,7 @@ export function renderCharacterHistory(parent, history, { loadAll, embedded = fa
       try {
         const all = await loadAll();
         if (!dialog.isConnected) return;
-        renderCharacterHistory(content, all, { embedded: true, expandAll: true });
+        renderCharacterHistory(content, all, { embedded: true });
         if (chat) setupChat({ dialog, tabs, pane, content, history: all, loadAll, chat, cleanup });
       } catch (error) {
         if (dialog.isConnected) content.textContent = `Could not load interaction history: ${error.message}`;
@@ -197,25 +258,28 @@ export function renderCharacterHistory(parent, history, { loadAll, embedded = fa
   body.className = "era-history-body";
   panel.append(body);
   if (!history.entries.length) text("em", "No interaction yet", body);
+  let group, item;
   for (const [index, entry] of [...history.entries].reverse().entries()) {
-    const item = document.createElement("details");
-    item.className = "era-history-entry";
-    item.open = expandAll || index === history.entries.length - 1;
-    body.append(item);
-    text("summary", `${clock(entry.before)} · ${entry.action.label}`, item);
+    const key = JSON.stringify([entry.before.day, entry.before.location,
+      entry.participants.map((person) => person.id).sort()]);
+    if (key !== group) {
+      group = key;
+      item = text("section", "", body, "era-history-entry");
+      const heading = text("p", `${clock(entry.before)} · ${entry.action.label} · `, item, "era-history-heading");
+      text("span", entry.before.locationName || `Location ${entry.before.location}`, heading);
+      const separator = text("span", " · ", heading, "notranslate");
+      separator.setAttribute("translate", "no");
+      text("span", entry.participants.map((person) => person.name).join(", "), heading);
+    }
     const lines = entry.lines.map((line, index) => ({
-      index, character: line.character, runs: attributedRuns(line, entry, history.player),
+      index, character: line.character, runs: attributedRuns(line, entry, history.player, hideNarrationPrefix),
     })).filter((line) => line.runs.length);
-    const note = text("p", "", item, "era-history-note");
-    text("span", entry.before.locationName || `Location ${entry.before.location}`, note);
-    const separator = text("span", " · ", note, "notranslate");
-    separator.setAttribute("translate", "no");
-    text("span", entry.participants.map((person) => person.name).join(", "), note);
     for (const line of lines) {
       const paragraph = text("p", "", item, "era-history-text");
       for (const run of line.runs) {
         const span = text(run.thought ? "em" : "span", run.text, paragraph);
         if (/^(?:#[0-9a-f]{3}(?:[0-9a-f]{3})?|[a-z]{1,30})$/i.test(run.color)) span.style.color = run.color;
+        if (run.speaker && run.color !== "#c5a3ff") span.style.color = "#bfc8ce";
       }
       const tools = lineTools?.(entry, line.index, index === history.entries.length - 1);
       if (tools) paragraph.append(tools);
@@ -228,81 +292,6 @@ export function renderCharacterHistory(parent, history, { loadAll, embedded = fa
   }
   translate(parent);
   scrollHistoryToBottom(parent);
-}
-
-export function setupCharacterHistory(parent, history, loadAll, chat) {
-  const card = parent.closest(".era-character-info");
-  const tabs = card?.querySelector(".era-info-tabs");
-  const title = tabs?.querySelector(".era-info-title");
-  const info = card?.querySelector(".era-info-body");
-  if (!tabs || !title || !info) {
-    renderCharacterHistory(parent, history, { loadAll, chat });
-    return;
-  }
-  renderCharacterHistory(parent, history, { loadAll, embedded: true, chat });
-  const infoTab = document.createElement("button");
-  infoTab.type = "button";
-  infoTab.className = "era-info-tab";
-  infoTab.textContent = "Character Info";
-  title.replaceWith(infoTab);
-  const historyTab = document.createElement("button");
-  historyTab.type = "button";
-  historyTab.className = "era-info-tab";
-  historyTab.textContent = "Interaction History";
-  infoTab.after(historyTab);
-  function select(name) {
-    selectedTab = name;
-    info.hidden = name !== "info";
-    parent.hidden = name !== "history";
-    infoTab.setAttribute("aria-pressed", String(name === "info"));
-    historyTab.setAttribute("aria-pressed", String(name === "history"));
-    if (name === "history") scrollHistoryToBottom(parent);
-  }
-  for (const [tab, name] of [[infoTab, "info"], [historyTab, "history"]]) {
-    for (const type of ["click", "pointerdown", "keydown", "contextmenu"])
-      tab.addEventListener(type, (event) => event.stopPropagation());
-    tab.addEventListener("click", () => select(name));
-  }
-  if (history.entries.length) {
-    const runs = [...history.entries].reverse().flatMap((entry) => entry.lines.flatMap((line) => {
-      const compact = attributedRuns(line, entry, history.player);
-      return compact.length ? [...compact, { text: "\n" }] : [];
-    }));
-    const content = runs.map((run) => run.text).join("").trimEnd();
-    const start = content.split("\n").slice(0, -10).reduce((length, line) => length + line.length + 1, 0);
-    const preview = document.createElement("button");
-    preview.type = "button";
-    preview.className = "era-history-preview";
-    preview.setAttribute("aria-label", "View recent interactions in Interaction History");
-    const previewText = document.createElement("span");
-    previewText.className = "era-history-preview-content";
-    const viewport = document.createElement("span");
-    viewport.className = "era-history-preview-viewport";
-    viewport.append(previewText);
-    preview.append(viewport);
-    let offset = 0;
-    for (const run of runs) {
-      const value = run.text.slice(Math.max(0, start - offset), Math.max(0, content.length - offset));
-      offset += run.text.length;
-      if (!value) continue;
-      const span = document.createElement(run.thought ? "em" : "span");
-      span.textContent = value;
-      if (/^(?:#[0-9a-f]{3}(?:[0-9a-f]{3})?|[a-z]{1,30})$/i.test(run.color)) span.style.color = run.color;
-      previewText.append(span);
-    }
-    if (content) {
-      for (const type of ["click", "pointerdown", "keydown", "contextmenu"])
-        preview.addEventListener(type, (event) => event.stopPropagation());
-      preview.addEventListener("click", () => { select("history"); historyTab.focus(); });
-      const space = document.createElement("div");
-      space.className = "era-history-preview-space";
-      space.append(preview);
-      info.append(space);
-      info.className += " era-info-with-preview";
-      translate(previewText);
-    }
-  }
-  select(selectedTab);
 }
 
 function element(tag, className, content) {
@@ -533,14 +522,15 @@ function typed(text) {
 }
 
 /**
- * Adds chatting with the character to the full-history dialog, plus a debug tab showing the LLM traffic. Whatever
+ * Adds chatting with the character to a history dialog or inline panel, plus a debug tab showing the LLM traffic. Whatever
  * the player and the character say and do goes straight into the interaction history, which is redrawn as it grows.
  */
-function setupChat({ dialog, tabs, pane, content, history, loadAll, chat, cleanup }) {
+function setupChat({ dialog, tabs, pane, content, history, loadAll, chat, cleanup, inline = false }) {
   const character = history.character;
   const log = debugLog(`${chat.gameId}:${character.id}`);
   let pending = null;
-  // Set once a tool changes the game; closing the dialog then redraws the room so its effects show.
+  let disposed = false;
+  // Dialogs defer room updates until close; inline chat refreshes after each turn.
   let changed = false;
 
   const form = element("form", "era-llm-composer");
@@ -548,10 +538,12 @@ function setupChat({ dialog, tabs, pane, content, history, loadAll, chat, cleanu
   const status = element("p", "era-llm-status");
   status.setAttribute("aria-live", "polite");
   status.hidden = true;
-  const textarea = element("textarea");
-  textarea.rows = 2;
-  textarea.placeholder = `Say something to ${character.name}, or *do something*… (Enter to send, Shift+Enter for a new line)`;
-  textarea.setAttribute("aria-label", `Message to ${character.name}`);
+  const textarea = inline ? chat.input : element("textarea");
+  if (!inline) {
+    textarea.rows = 2;
+    textarea.placeholder = `Say something to ${character.name}, or *do something*… (Enter to send, Shift+Enter for a new line)`;
+    textarea.setAttribute("aria-label", `Message to ${character.name}`);
+  }
   const send = element("button", "", "Send");
   send.type = "submit";
   const stop = element("button", "", "Cancel");
@@ -563,31 +555,34 @@ function setupChat({ dialog, tabs, pane, content, history, loadAll, chat, cleanu
   configure.type = "button";
   actions.append(state, configure);
   const row = element("div", "era-llm-composer-row");
-  row.append(textarea, send, stop);
+  if (!inline) row.append(textarea, send, stop);
   form.append(status, row, actions);
-  dialog.append(form);
+  if (inline) dialog.append(status);
+  else dialog.append(form);
 
   const debugPane = element("div", "era-history-pane era-llm-debug");
   debugPane.hidden = true;
   const debugLogPane = element("div");
-  const voice = chat.voice && chat.saveVoice ? voiceEditor(chat, character) : null;
+  const voice = !inline && chat.voice && chat.saveVoice ? voiceEditor(chat, character) : null;
   const cardPane = element("div", "era-history-pane era-llm-card");
   cardPane.hidden = true;
   if (voice) {
     cardPane.append(voice.section);
     dialog.append(cardPane);
   }
-  const memory = chat.remember && chat.writeMemory ? memoryEditor(chat, character, loadAll) : null;
+  const memory = !inline && chat.remember && chat.writeMemory ? memoryEditor(chat, character, loadAll) : null;
   if (memory) debugPane.append(memory.section);
   debugPane.append(debugLogPane);
-  dialog.append(debugPane);
+  if (!inline) dialog.append(debugPane);
   const historyTab = element("button", "era-info-tab", "History & chat");
   const cardTab = element("button", "era-info-tab", "Character card");
   const debugTab = element("button", "era-info-tab", "LLM debug");
   for (const tab of [historyTab, cardTab, debugTab]) tab.type = "button";
-  tabs.append(historyTab);
-  if (voice) tabs.append(cardTab);
-  tabs.append(debugTab);
+  if (!inline) {
+    tabs.append(historyTab);
+    if (voice) tabs.append(cardTab);
+    tabs.append(debugTab);
+  }
   const select = (tab) => {
     pane.hidden = tab !== "history";
     form.hidden = tab !== "history";
@@ -616,7 +611,7 @@ function setupChat({ dialog, tabs, pane, content, history, loadAll, chat, cleanu
   const showState = () => {
     const llm = activeLlm();
     state.textContent = llm ? `${PROVIDERS[llm.provider].label} · ${llm.model}` : "No LLM set up yet: choose one in LLM settings.";
-    if (changed) state.textContent += " · Close this window to see what happens in the room.";
+    if (changed && !inline) state.textContent += " · Close this window to see what happens in the room.";
   };
   const showStatus = (text, className = "era-history-note") => {
     status.textContent = text;
@@ -626,7 +621,7 @@ function setupChat({ dialog, tabs, pane, content, history, loadAll, chat, cleanu
   const onChanged = () => showState();
   document.addEventListener("era-llm-changed", onChanged);
   cleanup.push(() => document.removeEventListener("era-llm-changed", onChanged), () => pending?.abort(),
-    () => { if (changed) void chat.refresh?.(); });
+    () => { disposed = true; if (changed && !inline) void chat.refresh?.(); });
 
   /** Edit and Retry on the player's lines in the newest conversation: they take back that line and everything after it. */
   const lineTools = (entry, index, newest) => {
@@ -644,16 +639,19 @@ function setupChat({ dialog, tabs, pane, content, history, loadAll, chat, cleanu
     }
     return tools;
   };
-  const render = () => renderCharacterHistory(content, history, { embedded: true, expandAll: true, lineTools });
+  const render = () => renderCharacterHistory(content, history, {
+    embedded: true, ...(inline ? { loadAll, chat, hideNarrationPrefix: true } : { lineTools }),
+  });
   /** Redraws the history from the game, which has recorded what was just said or done. */
   const reload = async () => {
+    if (disposed) return;
     try { history = await loadAll(); }
     catch (error) { showStatus(`Could not reload the history: ${error.message}`, "era-history-notice"); }
-    if (dialog.isConnected) render();
+    if (dialog.isConnected && !disposed) render();
   };
 
   async function rewind(lines, message, resend) {
-    if (pending) return;
+    if (pending || disposed) return;
     try { await chat.undo(lines); }
     catch (error) {
       showStatus(`Could not take the message back: ${error.message}`, "era-history-notice");
@@ -667,7 +665,7 @@ function setupChat({ dialog, tabs, pane, content, history, loadAll, chat, cleanu
 
   async function submit() {
     const message = textarea.value.trim();
-    if (!message || pending) return;
+    if (!message || pending || disposed) return;
     const llm = activeLlm();
     if (!llm) {
       document.dispatchEvent(new Event("era-llm-configure"));
@@ -687,10 +685,13 @@ function setupChat({ dialog, tabs, pane, content, history, loadAll, chat, cleanu
     stop.hidden = false;
     showStatus("");
     // The history before this message is the context; the message itself is the player's turn.
-    const context = historyContext(history, config.historyChars);
     try {
+      if (inline) history = await loadAll();
+      if (disposed) return;
+      const context = historyContext(history, config.historyChars);
       // The scene is optional: the game may not be at a command screen, and the chat still works without it.
       const scene = chat.runTool ? await chat.runTool("describe_scene", {}).then(({ result }) => result && !result.error && Object.keys(result).length ? result : undefined, () => undefined) : undefined;
+      if (disposed) return;
       if (chat.record) {
         await chat.record(message);
         recorded = 1;
@@ -726,7 +727,7 @@ function setupChat({ dialog, tabs, pane, content, history, loadAll, chat, cleanu
       const thought = tools.some((tool) => tool.name === "think" && !tool.result?.error);
       showStatus(spoke || handedOver(tools) ? "" : thought ? `${character.name} kept her thoughts to herself.` : `${character.name} did not reply.`);
       // The player's attempt or a scene command plays out on the game screen, which closing redraws.
-      if (handedOver(tools)) dialog.close();
+      if (handedOver(tools) && !inline) dialog.close();
     } catch (error) {
       // A message nobody answered is taken back and returned to the box to try again.
       if (recorded === 1) {
@@ -737,24 +738,29 @@ function setupChat({ dialog, tabs, pane, content, history, loadAll, chat, cleanu
       showStatus(error.name === "AbortError" ? "" : `No reply: ${error.message}`, "era-history-notice");
     } finally {
       pending = null;
-      textarea.disabled = send.disabled = false;
+      if (!inline) textarea.disabled = send.disabled = disposed;
       send.hidden = false;
       stop.hidden = true;
       refreshDebug();
-      if (dialog.open) {
+      if (!disposed && (inline || dialog.open)) {
         render();
-        textarea.focus();
+        if (!inline) textarea.focus();
       }
     }
+    const result = { changed };
+    if (inline) changed = false;
+    return result;
   }
 
-  form.addEventListener("submit", (event) => { event.preventDefault(); void submit(); });
-  textarea.addEventListener("keydown", (event) => {
-    if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
-      event.preventDefault();
-      void submit();
-    }
-  });
+  if (!inline) {
+    form.addEventListener("submit", (event) => { event.preventDefault(); void submit(); });
+    textarea.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+        event.preventDefault();
+        void submit();
+      }
+    });
+  }
   stop.addEventListener("click", () => pending?.abort());
   configure.addEventListener("click", () => document.dispatchEvent(new Event("era-llm-configure")));
   // Keys and clicks in the composer are not game input.
@@ -764,6 +770,7 @@ function setupChat({ dialog, tabs, pane, content, history, loadAll, chat, cleanu
   showState();
   refreshDebug();
   render();
-  select("history");
-  textarea.focus();
+  if (!inline) select("history");
+  if (!inline) textarea.focus();
+  return { send: submit };
 }

@@ -95,7 +95,7 @@ GOTO AGAIN
 @SHOW_SHOP
 JUMP LOOP
 @SHOW_STATUS
-HTML_PRINT "<div class='era-interaction-history'></div>"
+HTML_PRINT "<era-open class='era-layout era-main'>"
 PRINTL Menu and status are not memories.
 @COM300
 PRINT A con
@@ -1209,9 +1209,9 @@ test("what a character says and does in company goes into the others' histories 
   runtime.characterTool(reimu.id, "act", { text: "Reimu glares at Marisa." });
   runtime.characterTool(reimu.id, "change_feelings", { favor: 5 });
   runtime.characterTool(marisa.id, "say", { text: "「Who, me?」" });
-  assert.deepEqual(newest(reimu).lines.map(text).slice(0, 3), ['Player: "Hello"', "Reimu: 「Marisa, behave.」", "Reimu glares at Marisa."]);
+  assert.deepEqual(newest(reimu).lines.map(text).slice(0, 3), ['Player: "Hello"', "Reimu: 「Marisa, behave.」", "Reimu: Reimu glares at Marisa."]);
   assert.equal(newest(reimu).lines.map(text)[4], "Marisa: 「Who, me?」", "Reimu hears Marisa");
-  assert.deepEqual(newest(marisa).lines.map(text), ['Player: "Hello"', "Reimu: 「Marisa, behave.」", "Reimu glares at Marisa.", "Marisa: 「Who, me?」"],
+  assert.deepEqual(newest(marisa).lines.map(text), ['Player: "Hello"', "Reimu: 「Marisa, behave.」", "Reimu: Reimu glares at Marisa.", "Marisa: 「Who, me?」"],
     "Marisa hears the player and Reimu, but not Reimu's private feelings");
   assert.equal(newest(marisa).target, marisa.id);
   // Taking Reimu's lines back takes back what Marisa heard of them.
@@ -1221,6 +1221,19 @@ test("what a character says and does in company goes into the others' histories 
   assert.deepEqual(newest(marisa).lines.map(text), ['Player: "Hello"', "Marisa: 「Who, me?」"]);
   runtime.unchat(reimu.id, 1);
   assert.deepEqual(newest(marisa).lines.map(text), ["Marisa: 「Who, me?」"], "undo also removes overheard player speech");
+  for (const action of ["She tilts her head slightly.", "Reimu: She adjusts her sleeves."]) {
+    runtime.characterTool(reimu.id, "act", { text: action });
+    const expected = action.startsWith("Reimu: ") ? action : `Reimu: ${action}`;
+    assert.equal(newest(reimu).lines.at(-1)!.text, expected, "the actor's own history identifies her action");
+    assert.equal(newest(marisa).lines.at(-1)!.text, expected, "witnesses receive the same explicit attribution");
+    const { historyContext } = await import("../web/interaction-history.js");
+    for (const person of [reimu, marisa]) {
+      assert.ok(historyContext(runtime.encounterHistory(person), 10000).includes(expected),
+        "both characters' LLM contexts retain the actor prefix without duplicating it");
+    }
+    runtime.unchat(reimu.id, 1);
+    assert.deepEqual(newest(marisa).lines.map(text), ["Marisa: 「Who, me?」"], "attributed actions still undo in witness histories");
+  }
   const thought = "It is strange and suspicious that Player just disappeared.";
   const othersBefore = JSON.stringify(runtime.encounterHistory(marisa));
   assert.deepEqual(runtime.characterTool(reimu.id, "think", { text: thought }),
@@ -1248,9 +1261,9 @@ test("player identity and legacy speech prefixes are explicit in LLM history wit
   const player = { id: "p", name: "Alex", number: "0" }, character = { id: "k", name: "Kana", number: "3" };
   const other = { id: "r", name: "Ruukoto", number: "2" };
   const state = { day: "1", time: ["422"], location: "1", locationName: "Living room", affection: "0", trust: "0" };
-  const entry = { id: "e", action: { id: "chat", label: "Conversation" }, participants: [player, character, other],
+  const entry = { id: "e", action: { id: 300, label: "Talk" }, participants: [player, character, other],
     before: state, after: state, choices: [], lines: [
-      { text: '"Hello both of you!"', character: null },
+      { text: '"Hello both of you!"', character: "p" },
       { text: "「Happy New Year!」\nKana adjusts her gloves.\n「Good morning.」", character: "k" },
       { text: "Ruukoto: 「Welcome!」", character: "r" },
       { text: 'You see a girl who looks like a maid, wearing a dress with an apron.\nYour eyes meet hers.\n「You look tired. I can help.」', character: "r" },
@@ -1261,7 +1274,7 @@ test("player identity and legacy speech prefixes are explicit in LLM history wit
       { text: "Kana (thought): I suspect something odd happened.", character: "k", thought: true },
     ] };
   const context = historyContext({ player, character, entries: [entry] }, 10000);
-  assert.match(context, /Alex: "Hello both of you!"/);
+  assert.match(context, /Alex: 「Hello both of you!」/);
   assert.match(context, /Kana: 「Happy New Year!」\nNarration to Alex: Kana adjusts her gloves\.\nKana: 「Good morning.」/);
   assert.match(context, /Ruukoto: 「Welcome!」/);
   assert.doesNotMatch(context, /Ruukoto: Ruukoto:/);
@@ -1271,11 +1284,17 @@ test("player identity and legacy speech prefixes are explicit in LLM history wit
   assert.match(context, /Narration to Alex: ●You wish Ruukoto a happy New Year\./);
   assert.match(context, /Narration to Alex: You wave\./);
   assert.match(context, /Ruukoto: 「You look tired\. I can help\.」/);
-  assert.match(context, /Alex: "I am happy\."/);
+  assert.match(context, /Alex: 「I am happy\.」/);
   assert.doesNotMatch(context, /Alex \(narration\):|Narration to Alex: (?:Alex:|Kana \(thought\):|Ruukoto:)/);
   assert.match(context, /not words they spoke/);
   assert.match(context, /Kana \(thought\): I suspect something odd happened\./);
   assert.match(context, /suspicions in them are not established facts/);
+  const chat = historyContext({ player, character, entries: [{ ...entry,
+    action: { id: "chat", label: "Conversation" },
+    lines: [{ text: "Ruukoto: 「Happy New Year!」\nRuukoto waves.", character: "r" }],
+  }] }, 10000);
+  assert.match(chat, /Ruukoto: 「Happy New Year!」\nRuukoto: Ruukoto waves\./);
+  assert.doesNotMatch(chat, /Narration to Alex: Ruukoto/);
   const notice = historyContext({ player, character, entries: [{ ...entry, source: "state",
     action: { id: "reaction", label: "Reaction" },
     lines: [{ text: "Kana notices that Alex is suddenly there.", character: "k" }] }] }, 10000);
@@ -1286,7 +1305,8 @@ test("player identity and legacy speech prefixes are explicit in LLM history wit
   assert.equal(buildMessages({ system: "rules", context, message: "An encounter occurs." }).at(-1)!.content, "An encounter occurs.",
     "background instructions are not player speech");
   const system = systemPrompt({ character, gameTitle: "eraTW", tools: true });
-  assert.match(system, /not a script for you to repeat/);
+  assert.match(system, /not instructions or a script for you to repeat/);
+  assert.match(system, /Do not copy their gestures or treat their actions as your own/);
   assert.match(system, /Only react to the player's latest message once/);
 });
 
@@ -1757,7 +1777,7 @@ test("the chat window's conversation goes straight into the interaction history 
   assert.deepEqual((entry.lines[5] as { runs: { color: string }[] }).runs.map((run) => run.color), ["#6f6f6f", "#a8a8a8", "#e07a7a", "#a8a8a8", "#a8a8a8"]);
   assert.equal(lines[0], 'Player: "Hi" *waves* "How are you?"');
   assert.equal(lines[1], "Reimu: 「Fine, thanks.」");
-  assert.equal(lines[2], "Reimu smiles.");
+  assert.equal(lines[2], "Reimu: Reimu smiles.");
   assert.match(lines[3]!, /^change_feelings\(favor \+10\) \(greeting\) → favor \d+ → \d+$/);
   assert.match(lines[4]!, /^move_to\(the Moon\) → failed: /);
   const colors = entry.lines.flatMap((line) => (line as { runs?: { color: string }[] }).runs ?? []).map((run) => run.color);
@@ -1807,7 +1827,7 @@ CALL TIMESTOP_RESET(2)
 CALL TIMESTOP_RESET(1)
 CALL TIMESTOP_RESET(2)
 SAVEDATA 1, "consumed"
-HTML_PRINT "<div class='era-interaction-history'></div>"
+HTML_PRINT "<era-open class='era-layout era-main'>"
 INPUT`, "real-penetration-state.ERB");
   game.routines.set("SYSTEM_TITLE", stub.routines.get("SYSTEM_TITLE")!);
   for (const jit of [false, true]) {
@@ -1855,7 +1875,7 @@ CFLAG:2:現在位置 = 9
 CFLAG:2:前ターン位置 = 9
 CALL AFFAIR_DISCLOSURE(2, 0)
 TARGET = 2
-HTML_PRINT "<div class='era-interaction-history'></div>"
+HTML_PRINT "<era-open class='era-layout era-main'>"
 INPUT`, "ruukoto-history.ERB");
   game.routines.set("SYSTEM_TITLE", stub.routines.get("SYSTEM_TITLE")!);
   const saves = new MemorySaveStore();
@@ -1880,7 +1900,7 @@ INPUT`, "ruukoto-history.ERB");
   assert.ok(event.lines.every((line) => line.character === result.character.id));
 });
 
-test("real eraTW main screen exposes a history placeholder without writing to the installed saves", {
+test("real eraTW main screen supplies bottom-chat history without a Character Info placeholder or installed-save writes", {
   skip: !existsSync(path.join(GAME_ROOT, "sav", "save00.sav")),
 }, async () => {
   const game = await loadGame();
@@ -1904,11 +1924,12 @@ CFLAG:1:睡眠 = 0`, "history-test-setup.ERB");
   snapshot = check(runtime.input("0"));
   while (snapshot.input?.kind === "wait") snapshot = check(runtime.input(""));
   snapshot = check(runtime.input("100"));
-  for (let i = 0; i < 30 && !snapshot.output.some((item) => item.type === "html" && item.text.includes("era-interaction-history")); i++) {
+  for (let i = 0; i < 30 && !snapshot.characterHistory; i++) {
     assert.equal(snapshot.input?.kind, "wait", "only acknowledge intro dialogue, never choose a command");
     snapshot = check(runtime.input(""));
   }
-  assert.ok(snapshot.output.some((item) => item.type === "html" && item.text.includes("era-interaction-history")));
+  assert.ok(snapshot.output.some((item) => item.type === "html" && item.text === "<era-open class='era-layout era-main'>"));
+  assert.ok(!snapshot.output.some((item) => item.type === "html" && item.text.includes("era-interaction-history")));
   assert.ok(snapshot.characterHistory);
   assert.match(snapshot.characterHistory.notice, /predates/);
   assert.equal(saves.list().filter((file) => file.startsWith("era-history-event-")).length, 0);

@@ -11,6 +11,11 @@ const SKIP = ".era-map-art, .era-map-picture, script, style, textarea, [translat
 // Text art drawn with box and block characters (maps printed outside the map panels).
 const ART = /[\u2500-\u257f∴]/;
 
+export function speechQuotes(text) {
+  return text.replace(/^([ \t]*(?:[^:\r\n"“「」]+:[ \t]*)?)(?:"([^"\r\n]+)"|“([^”\r\n]+)”)/gm,
+    (_, prefix, straight, curly) => `${prefix}「${straight ?? curly}」`);
+}
+
 /** Protect complete text-art rows, including labels printed in separate colored spans. */
 export function protectMapTranslation(root) {
   for (const element of root.querySelectorAll(".era-map-art, .era-map-picture, .line")) {
@@ -113,7 +118,10 @@ export function createTranslation({ onChange = () => {} } = {}) {
   function apply(node, original) {
     const [, lead, body, trail] = original.match(/^(\s*)([\s\S]*?)(\s*)$/);
     const entry = lookup(body);
-    const write = (text) => { if (originals.get(node) === original && node.data === original) node.data = lead + text + trail; };
+    const write = (text) => {
+      if (originals.get(node) === original && node.data === original)
+        node.data = lead + (node.parentElement?.closest(".era-history-text") ? speechQuotes(text) : text) + trail;
+    };
     if (entry.text !== null) write(entry.text);
     else entry.promise.then(write, () => originals.delete(node));
   }
