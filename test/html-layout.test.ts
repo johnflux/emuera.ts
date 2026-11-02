@@ -195,6 +195,30 @@ test("area artwork fixes the header height and prevents horizontal scrolling fro
   assert.match(css, /\.era-main-header:has\(\.era-area-art\) > \.era-main-when \{[^}]*max-height: 100%; overflow: auto;/);
 });
 
+test("underground ambience uses a timeless cavern palette and hides celestial and weather layers", async () => {
+  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  const cavern = css.match(/\.era-sky:is\(\.era-underground, \.era-area-9\) \{([^}]+)\}/)?.[1];
+  assert.ok(cavern);
+  for (const colour of ["#3e77734d", "#bc855538", "#141321", "#30283e", "#49505b"])
+    assert.ok(cavern.includes(colour), `cavern palette includes ${colour}`);
+  assert.doesNotMatch(cavern, /sky-warmth|sky-darkness/);
+  assert.match(css, /\.era-sky:is\(\.era-underground, \.era-area-9\) \.era-sky-view \{ background: none; \}/);
+  assert.match(css, /\.era-sky:is\(\.era-underground, \.era-area-9\) \.era-sky-view::before,\s*\.era-sky:is\(\.era-underground, \.era-area-9\) \.era-sky-view::after \{ display: none; \}/);
+  for (const selector of ["era-underground", "era-area-9"])
+    assert.ok(css.includes(`.${selector} .era-sky-view > :not(.era-sky-landmark) { display: none; }`));
+});
+
+test("Moon sky uses a lunar palette for day, twilight and night without affecting underground skies", async () => {
+  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  const day = css.match(/\.era-area-10:not\(\.era-underground\):is\(\.era-sky-dawn, \.era-sky-morning, \.era-sky-day, \.era-sky-evening\) \.era-sky-view \{([^}]+)\}/)?.[1];
+  assert.ok(day);
+  for (const colour of ["#242139", "#57506e", "#b6a8c6", "#302039", "#8b5d80", "#dfaaa8"])
+    assert.ok(day.includes(colour), `lunar palette includes ${colour}`);
+  assert.match(day, /var\(--sky-warmth, 0%\)/);
+  assert.match(css, /\.era-area-10\.era-sky-night:not\(\.era-underground\) \.era-sky-view \{\s*background: linear-gradient\(#080611, #241c3d\); \}/);
+  assert.match(css, /\.era-area-10:is\(\.era-sky-dawn, \.era-sky-evening\) \.era-sky-view::before \{\s*background: linear-gradient\(#080611, #241c3d\); \}/);
+});
+
 test("Moon location replaces only the nighttime orb and its weather glow with Earth", async () => {
   const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
   const rule = css.match(/\.era-area-10\.era-sky-moon \.era-sky-orb, \.era-area-10\.era-sky-moon \.era-sky-clouds::after \{([^}]+)\}/)?.[1];

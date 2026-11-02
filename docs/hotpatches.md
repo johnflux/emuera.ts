@@ -656,6 +656,11 @@ enclosing the cavern above the transparent interior. Four-pixel source-grid clea
 nearest-neighbour resizing produce ground-aligned 432×144px panels.
 The aligned cooler night grade retains warm lanterns and
 windows. Underground settings continue to suppress the sun, moon, clouds and precipitation.
+Underground backgrounds use a timeless violet-slate cavern gradient with muted teal mineral
+light and a restrained amber glow near the ground, rather than an outdoor sky or sunrise.
+The Underworld location always uses this ambience, including in the demo's default outdoor
+setting. Stars, celestial orbs, clouds, fog and precipitation are hidden there and in
+underground settings; the artwork's existing day/night grades remain unchanged.
 Its overlap starts at the shared 96px default and can be tuned in the artwork demo.
 
 Moon uses season-neutral artwork extracted directly from the original combined landscape sheet:
@@ -710,6 +715,10 @@ times, not changes to game schedules. The sun peaks at `top: 10px` above the `93
 an overnight arc. Its transparent crescent artwork has cool ivory shading, subtle craters and a soft
 shape-following glow, without a dark disc covering the sky. The weather glow uses the same artwork.
 From the Moon location, the nighttime orb instead uses the supplied pixel-art Earth,
+with a location-specific sky: muted indigo and silver-lavender by day, dusty rose and
+mauve twilight, and violet-black nights. Twilight blends into the same violet night
+palette; stars and weather retain their existing behaviour, and underground skies are unchanged.
+The Earth artwork is
 cropped to its globe and resized to 104×104px; its weather glow uses the same image.
 Earth's diameter is 3.7 times the 28px moon orb (103.6px), with matching weather-glow
 dimensions. Its centre follows the original moon arc without vertical clamping, allowing

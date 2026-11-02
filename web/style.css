@@ -327,6 +327,13 @@ body:has(.menu-panel:not([hidden])) .clock-overhang { visibility: hidden; }
     173px 97px, 173px 97px, 173px 97px, 173px 97px, 100% 100%; }
 :is(.era-sky-dawn, .era-sky-evening) .era-sky-view::before {
   background: linear-gradient(#060a1c, #18234a); }
+.era-area-10:not(.era-underground):is(.era-sky-dawn, .era-sky-morning, .era-sky-day, .era-sky-evening) .era-sky-view {
+  background: radial-gradient(ellipse at calc(100% - var(--sky-orb-right) - 15px) 110px, color-mix(in srgb, #e6b9ce55 var(--sky-warmth, 0%), transparent), transparent 60%),
+    linear-gradient(color-mix(in srgb, #242139, #302039 var(--sky-warmth, 0%)), color-mix(in srgb, #57506e, #8b5d80 var(--sky-warmth, 0%)) 55%, color-mix(in srgb, #b6a8c6, #dfaaa8 var(--sky-warmth, 0%))); }
+.era-area-10.era-sky-night:not(.era-underground) .era-sky-view {
+  background: linear-gradient(#080611, #241c3d); }
+.era-area-10:is(.era-sky-dawn, .era-sky-evening) .era-sky-view::before {
+  background: linear-gradient(#080611, #241c3d); }
 /* Keep clear of the right-hand scenery when space permits, but never push the orb off a narrow header. */
 .era-sky-view { --sky-orb-right: clamp(10px, max(450px, calc(450px + (70% - 450px) * var(--sky-orbit, .5))), max(10px, calc(100% - 40px))); }
 .era-sky-orb, .era-sky-clouds::after { position: absolute; top: min(var(--sky-orb-top, 10px), max(0px, calc(100% - 30px))); right: var(--sky-orb-right); width: 30px; height: 30px; border-radius: 50%;
@@ -453,9 +460,15 @@ body:has(.menu-panel:not([hidden])) .clock-overhang { visibility: hidden; }
 .era-sky-evening .era-sky-land { filter: brightness(.65) saturate(.9); }
 /* Indoors the sky is dimmer; underground there is only rock (and the area's cavern, if it has one). */
 .era-indoor .era-sky-view { filter: brightness(.7) saturate(.85); }
-.era-sky.era-underground { background: radial-gradient(60% 120% at 80% 120%, #3a2c22, transparent), linear-gradient(#1a1512, #0e0b09); }
-.era-underground .era-sky-view { background: none; }
+.era-sky:is(.era-underground, .era-area-9) {
+  background: radial-gradient(ellipse at 18% 55%, #3e77734d, transparent 65%),
+    radial-gradient(ellipse at 84% 110%, #bc855538, transparent 55%),
+    linear-gradient(#141321, #30283e 55%, #49505b); }
+.era-sky:is(.era-underground, .era-area-9) .era-sky-view { background: none; }
+.era-sky:is(.era-underground, .era-area-9) .era-sky-view::before,
+.era-sky:is(.era-underground, .era-area-9) .era-sky-view::after { display: none; }
 .era-underground .era-sky-view > :not(.era-sky-landmark) { display: none; }
+.era-area-9 .era-sky-view > :not(.era-sky-landmark) { display: none; }
 /* The area's landmark (web/areas/<map id>-<name>.svg) between the clock panel and the Time Stop button, standing on the
    land; woods repeat along the header instead. Darker at night like the land. */
 .era-sky-landmark { display: none; right: 12%; bottom: 6px; width: min(360px, 40%); height: calc(100% - 10px); background: no-repeat right bottom / contain;
