@@ -16,26 +16,95 @@ test("PNG pictures survive encoding and decoding", () => {
   assert.deepEqual(decodePng(encodePng(original)), original);
 });
 
-test("summer and autumn panoramas retain full spring foliage and transparency with distinct palettes", async () => {
+for (const [area, width] of [["1-temple", 571], ["2-village", 463]] as const)
+test(`${area} spring panoramas have aligned transparent day/night artwork and warm lights`, async () => {
+  const root = new URL(`../web/areas/${area}/`, import.meta.url);
   for (const part of ["left", "middle", "right"]) {
-    const root = new URL("../web/areas/0-shrine/", import.meta.url);
-    const spring = decodePng(await readFile(new URL(`spring-day-${part}.png`, root)));
-    const variants = [spring.data];
-    for (const season of ["summer", "autumn"]) {
-      const variant = decodePng(await readFile(new URL(`${season}-day-${part}.png`, root)));
-      assert.equal(variant.width, spring.width);
-      assert.equal(variant.height, spring.height);
-      let changed = 0, visible = 0;
-      for (let i = 0; i < spring.data.length; i += 4) {
-        assert.equal(variant.data[i + 3], spring.data[i + 3], `${season}/${part} alpha at ${i / 4}`);
-        if (!spring.data[i + 3]) continue;
-        visible++;
-        if (variant.data[i] !== spring.data[i] || variant.data[i + 1] !== spring.data[i + 1] || variant.data[i + 2] !== spring.data[i + 2]) changed++;
-      }
-      assert.ok(changed / visible > .1, `${season}/${part} visibly changes the palette`);
-      for (const previous of variants) assert.notDeepEqual(variant.data, previous);
-      variants.push(variant.data);
+    const day = decodePng(await readFile(new URL(`spring-day-${part}.png`, root)));
+    const night = decodePng(await readFile(new URL(`spring-night-${part}.png`, root)));
+    assert.equal(day.width, width);
+    assert.equal(day.height, 144);
+    assert.equal(night.width, day.width);
+    assert.equal(night.height, day.height);
+    let clear = 0, bottom = 0, dayLight = 0, nightLight = 0;
+    for (let i = 0; i < day.data.length; i += 4) {
+      assert.ok(day.data[i + 3] === 0 || day.data[i + 3] === 255, "faint alpha residue is removed");
+      assert.equal(night.data[i + 3], day.data[i + 3], "night and weather blends stay aligned");
+      if (!day.data[i + 3]) { clear++; continue; }
+      dayLight += day.data[i]! + day.data[i + 1]! + day.data[i + 2]!;
+      nightLight += night.data[i]! + night.data[i + 1]! + night.data[i + 2]!;
     }
+    assert.ok(clear / (day.width * day.height) > .3, `${part} leaves transparent sky`);
+    assert.ok(nightLight / dayLight > .2 && nightLight / dayLight < .6, `${part} legible night palette`);
+    for (let x = 0; x < day.width; x++) if (day.data[(143 * day.width + x) * 4 + 3]) bottom++;
+    assert.ok(bottom / day.width > .9, `${part} ground reaches the baseline`);
+    assert.equal(day.data[(10 * day.width + width - 30) * 4 + 3], 0);
+    const lights = area === "1-temple"
+      ? part === "right" ? [[194, 91, 217, 106], [276, 91, 299, 106]]
+        : part === "left" ? [[133, 95, 143, 103]] : []
+      : part === "right" ? [[135, 113, 143, 123], [218, 113, 225, 123], [281, 117, 296, 130]] : [];
+    for (const [left, top, right, bottom] of lights) {
+      let warm = 0;
+      for (let y = top!; y < bottom!; y++) for (let x = left!; x < right!; x++) {
+        const i = (y * night.width + x) * 4;
+        if (night.data[i + 3] && night.data[i]! > 150 && night.data[i]! > night.data[i + 2]! * 1.5) warm++;
+      }
+      assert.ok(warm > 2, `${part} warm light`);
+    }
+  }
+});
+
+test("imported summer artwork has clean sky, aligned ground and softened joins", async () => {
+  const root = new URL("../web/areas/0-shrine/", import.meta.url);
+  for (const time of ["day", "night"]) {
+    for (const [part, width] of [["left", 480], ["middle", 481], ["right", 524]] as const) {
+      const art = decodePng(await readFile(new URL(`summer-${time}-${part}.png`, root)));
+      assert.equal(art.width, width);
+      assert.equal(art.height, 144);
+      let clear = 0, bottom = 0, green = 0;
+      for (let i = 0; i < art.data.length; i += 4) {
+        const x = (i / 4) % width;
+        const tapered = part === "left" ? x >= width - 64 : part === "right" ? x < 64 : x >= width - 48;
+        if (!tapered) assert.ok(art.data[i + 3] === 0 || art.data[i + 3] === 255, "sky away from the join stays clean");
+        if (!art.data[i + 3]) { clear++; continue; }
+        if (art.data[i + 1]! > art.data[i]! * 1.15 && art.data[i + 1]! > art.data[i + 2]!) green++;
+      }
+      assert.ok(clear / (width * 144) > .3, `${time}/${part} clear sky`);
+      assert.ok(green > 500, `${time}/${part} green summer foliage`);
+      for (let x = 0; x < width; x++) if (art.data[(143 * width + x) * 4 + 3]) bottom++;
+      assert.ok(bottom / width > .9, `${time}/${part} ground reaches the baseline`);
+      assert.equal(art.data[(10 * width + 450) * 4 + 3], 0);
+      if (part !== "middle") {
+        const edge = part === "left" ? width - 1 : 0;
+        for (let y = 0; y < 144; y++) assert.equal(art.data[(y * width + edge) * 4 + 3], 0, "side joins reveal the backdrop");
+      } else {
+        let difference = 0;
+        for (let y = 0; y < 144; y++) for (let channel = 0; channel < 4; channel++)
+          difference += Math.abs(art.data[(y * width) * 4 + channel]! - art.data[(y * width + width - 1) * 4 + channel]!);
+        assert.ok(difference / (144 * 4) < 12, "tile boundary has no abrupt colour/alpha jump");
+      }
+    }
+  }
+});
+
+test("imported autumn artwork has a transparent sky, aligned ground and warm fall foliage", async () => {
+  const root = new URL("../web/areas/0-shrine/", import.meta.url);
+  for (const time of ["day", "night"]) for (const part of ["left", "middle", "right"]) {
+    const art = decodePng(await readFile(new URL(`autumn-${time}-${part}.png`, root)));
+    assert.equal(art.width, 520);
+    assert.equal(art.height, 144);
+    let clear = 0, bottom = 0, warm = 0;
+    for (let i = 0; i < art.data.length; i += 4) {
+      assert.ok(art.data[i + 3] === 0 || art.data[i + 3] === 255, "hard alpha preserves pixel edges");
+      if (!art.data[i + 3]) { clear++; continue; }
+      assert.ok(Math.min(art.data[i]!, art.data[i + 1]!, art.data[i + 2]!) < 221, "white background is removed");
+      if (art.data[i]! > art.data[i + 1]! * 1.3 && art.data[i + 1]! > art.data[i + 2]! * 1.3) warm++;
+    }
+    assert.ok(clear / (art.width * art.height) > .3, `${time}/${part} leaves room for the sky`);
+    assert.ok(warm > 300, `${time}/${part} retains orange/red leaves`);
+    for (let x = 0; x < art.width; x++) if (art.data[((143 * art.width + x) * 4) + 3]) bottom++;
+    assert.ok(bottom / art.width > .9, `${time}/${part} ground reaches the baseline`);
+    assert.equal(art.data[(10 * art.width + 400) * 4 + 3], 0);
   }
 });
 
@@ -86,16 +155,16 @@ test("shrine night panoramas preserve each season's geometry and transparency wi
         nightLight += .2126 * night.data[i]! + .7152 * night.data[i + 1]! + .0722 * night.data[i + 2]!;
       }
       assert.ok(nightLight / dayLight > .2 && nightLight / dayLight < .6, `${season}/${part} is darker but legible`);
-      if (part === "right" && season !== "winter") {
+      if (part === "right" && season === "spring") {
         const lantern = (75 * night.width + 92) * 4;
         assert.ok(night.data[lantern]! > 150 && night.data[lantern]! > night.data[lantern + 2]! * 2,
           `${season} keeps the lantern warmly lit`);
       }
-      if (part === "right" && season === "winter") {
+      if (part === "right" && ["summer", "autumn", "winter"].includes(season)) {
         let warm = 0;
         for (let i = 0; i < night.data.length; i += 4)
           if (night.data[i + 3] && night.data[i]! > 150 && night.data[i]! > night.data[i + 2]! * 1.5) warm++;
-        assert.ok(warm > 10, "winter shrine windows remain warmly lit");
+        assert.ok(warm > 10, `${season} shrine windows remain warmly lit`);
       }
     }
   }

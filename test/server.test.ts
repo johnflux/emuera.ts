@@ -401,6 +401,14 @@ test("HTTP UI, isolated sessions, real image bytes, sprite metadata, errors and 
       }
     }
     assert.equal((await fetch(base + "/areas/0-shrine/monsoon-day-left.png")).status, 404);
+    for (const [area, directory] of [["1", "1-temple"], ["2", "2-village"]])
+    for (const time of ["day", "night"]) for (const part of ["left", "middle", "right"]) {
+      const picture = areas[area!][`spring-${time}`][part];
+      assert.match(picture, new RegExp(`^/areas/${directory}/spring-${time}-${part}\\.png\\?v=\\d+$`));
+      const response = await fetch(base + picture);
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get("content-type"), "image/png");
+    }
     assert.equal((await fetch(base + "/areas/0-shrine/..%2f..%2fapp.js")).status, 404);
     const maps = await fetch(base + "/api/maps");
     assert.equal(maps.status, 200);

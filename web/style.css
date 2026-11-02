@@ -77,7 +77,8 @@ button:disabled { color: #666; cursor: default; }
 .menu-panel button { position: relative; text-align: left; padding: 6px 10px 6px 26px; border: 0; border-radius: 5px; background: transparent; }
 .menu-panel button:hover:enabled, .menu-panel button:focus-visible { background: #24313a; }
 .menu-panel a { display: block; padding: 6px 10px 6px 26px; border-radius: 5px; color: inherit; text-decoration: none; }
-.menu-panel a:hover, .menu-panel a:focus-visible { background: #24313a; outline: none; }
+.menu-panel a:hover { background: #24313a; }
+.menu-panel a:focus-visible { outline: 2px solid #8ddaff; outline-offset: -2px; }
 .menu-panel button[aria-pressed="true"]::before, .menu-panel button[aria-expanded="true"]::before { content: "●"; position: absolute; left: 10px; color: #8ddaff; font-size: 9px; line-height: 19px; }
 .menu-font { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 4px; padding: 8px 10px 4px; border-top: 1px solid #2a2a2a; color: #bbb; font-size: 12px; white-space: nowrap; }
 .menu-font input { width: 110px; accent-color: #8ddaff; }

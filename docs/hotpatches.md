@@ -587,14 +587,32 @@ none; an evening dims the day pictures slightly. An area or season with no pictu
 The server lists the files at `/api/areas`; the client reads that list once per page load.
 
 Hakurei Shrine includes all four daytime seasons: the original spring blossoms, green summer foliage, golden
-autumn foliage, and snow-covered winter scenery. Summer and autumn are palette variants of spring, preserving
-its full foliage, geometry and transparency without removing leaves. Winter uses supplied, separately generated snow-covered artwork
+autumn foliage, and snow-covered winter scenery. Summer uses supplied green-leaf artwork at native widths
+(480px left, 481px middle, 524px right after seam cleanup), with faint alpha residue removed, transparent bottom rows
+trimmed and top padding to the shared 144px height without stretching. A cut-off tree at the left panel's far end
+is cropped away; the side panels taper over 64px into the backdrop, and the repeating middle has a 48px
+overlapped join. Day and night use identical edge treatment. Its night grade retains warm shrine windows.
+Autumn uses supplied generated artwork with
+red/orange maple leaves, its white background removed before pixel-grid cleanup and resizing to 520×144px
+per piece. Its matching night grade preserves geometry for weather blending and keeps the shrine windows warm.
+Winter uses supplied, separately generated snow-covered artwork
 for all three pieces, cleaned with the pixel-grid importer and uniformly resized to 144px tall (500px left,
 501px middle/right). Its sky remains transparent and its ground is aligned across the pieces. The matching
 winter night set is a cooler, darker grade of this artwork that retains the warm shrine windows.
 Each season also includes a dedicated night set with cooler,
 darker moonlit colors, warm shrine windows and lanterns, and brighter moonlit snow in winter. Night sets retain
 the daytime geometry and transparency and are displayed without an additional night-dimming filter.
+
+Myouren Temple includes supplied spring artwork: a pine and stone lanterns on the left,
+a repeating cherry-blossom landscape, and the temple hall on the right. The three pieces are cleaned
+with the pixel-grid importer, ground-aligned and uniformly resized to 571×144px. A matching cooler
+night grade preserves transparency and geometry, retaining warm hall windows and lantern light.
+Other temple seasons still use the SVG fallback.
+
+Human Village includes supplied spring artwork with a cherry tree and market stall on the left,
+a repeating rural backdrop, and traditional shops on the right. Pixel-grid cleanup and uniform resizing
+produce three ground-aligned 463×144px pieces. The matching night grade keeps shop windows and
+paper lanterns warm, with identical geometry for weather blending. Other village seasons use the SVG fallback.
 
 During bad-weather days the panorama blends toward its matching night set: cloudy/fog 18%, rain 32%, storm 48%,
 snow 20%, and blizzard 35%. This requires complete day and night sets; missing night pieces leave the day artwork
