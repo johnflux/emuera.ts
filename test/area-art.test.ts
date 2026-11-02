@@ -16,14 +16,14 @@ test("PNG pictures survive encoding and decoding", () => {
   assert.deepEqual(decodePng(encodePng(original)), original);
 });
 
-for (const [area, width] of [["1-temple", 571], ["2-village", 463], ["3-mansion", 532], ["4-bamboo", 480], ["5-forest", 439], ["6-netherworld", 532], ["7-foothills", 559], ["8-summit", 539]] as const)
+for (const [area, width] of [["1-temple", 571], ["2-village", 463], ["3-mansion", 532], ["4-bamboo", 480], ["5-forest", 439], ["6-netherworld", 532], ["7-foothills", 559], ["8-summit", 539], ["9-underworld", 432], ["10-moon", 532]] as const)
 test(`${area} panoramas have aligned transparent day/night artwork and appropriate lighting`, async () => {
   const root = new URL(`../web/areas/${area}/`, import.meta.url);
-  const season = area === "6-netherworld" ? "neutral" : "spring";
+  const season = ["6-netherworld", "9-underworld", "10-moon"].includes(area) ? "neutral" : "spring";
   for (const part of ["left", "middle", "right"]) {
     const day = decodePng(await readFile(new URL(`${season}-day-${part}.png`, root)));
     const night = decodePng(await readFile(new URL(`${season}-night-${part}.png`, root)));
-    assert.equal(day.width, area === "7-foothills" && part === "middle" ? 511 : width);
+    assert.equal(day.width, part === "middle" ? area === "7-foothills" ? 511 : area === "10-moon" ? 500 : width : width);
     assert.equal(day.height, 144);
     assert.equal(night.width, day.width);
     assert.equal(night.height, day.height);
@@ -31,8 +31,9 @@ test(`${area} panoramas have aligned transparent day/night artwork and appropria
     for (let i = 0; i < day.data.length; i += 4) {
       const x = (i / 4) % day.width;
       const join = (area === "7-foothills" && (part === "left" ? x >= day.width - 96
-        : part === "right" ? x < 96 : x < 48 || (x >= 108 && x < 196) || (x >= 347 && x < 435)))
-        || (area === "8-summit" && (part === "left" ? x >= day.width - 64 : part === "right" && x < 64));
+        : part === "right" ? x < 96 : x < 48))
+        || (area === "8-summit" && (part === "left" ? x >= day.width - 64 : part === "right" && x < 64))
+        || (area === "10-moon" && (part === "left" ? x >= day.width - 48 : x < (part === "right" ? 48 : 32)));
       if (!join) assert.ok(day.data[i + 3] === 0 || day.data[i + 3] === 255, "faint alpha residue is removed");
       assert.equal(night.data[i + 3], day.data[i + 3], "night and weather blends stay aligned");
       if (!day.data[i + 3]) { clear++; continue; }
@@ -43,16 +44,30 @@ test(`${area} panoramas have aligned transparent day/night artwork and appropria
     assert.ok(nightLight / dayLight > .2 && nightLight / dayLight < .6, `${part} legible night palette`);
     for (let x = 0; x < day.width; x++) if (day.data[(143 * day.width + x) * 4 + 3]) bottom++;
     assert.ok(bottom / day.width > .9, `${part} ground reaches the baseline`);
-    assert.equal(day.data[(10 * day.width + day.width - 30) * 4 + 3], 0);
+    if (area === "9-underworld") {
+      let ceiling = 0;
+      for (let x = 0; x < day.width; x++) {
+        let rock = 0;
+        for (let y = 0; y < 40; y++)
+          if (day.data[(y * day.width + x) * 4 + 3] === 255) rock++;
+        if (rock >= 3) ceiling++;
+      }
+      assert.equal(ceiling, day.width, `${part} retains rock overhead across the entire panel`);
+      assert.equal(day.data[(60 * day.width + day.width - 30) * 4 + 3], 0, "cavern interior stays transparent");
+    } else assert.equal(day.data[(10 * day.width + day.width - 30) * 4 + 3], 0);
     const lights = area === "1-temple"
       ? part === "right" ? [[194, 91, 217, 106], [276, 91, 299, 106]]
         : part === "left" ? [[133, 95, 143, 103]] : []
       : area === "2-village"
         ? part === "right" ? [[135, 113, 143, 123], [218, 113, 225, 123], [281, 117, 296, 130]] : []
         : area === "3-mansion" && part === "right" ? [[303, 65, 316, 78], [238, 90, 245, 97]]
-          : area === "5-forest" && part === "right" ? [[206, 95, 213, 104]]
+          : area === "5-forest" && part === "right" ? [[206, 99, 213, 108]]
             : area === "6-netherworld" && part === "right" ? [[348, 87, 378, 105]]
-              : area === "7-foothills" && part === "right" ? [[401, 72, 408, 83]] : [];
+              : area === "7-foothills" && part === "right" ? [[401, 72, 408, 83]]
+                : area === "9-underworld" ? part === "left" ? [[54, 84, 63, 96]]
+                  : part === "right" ? [[149, 53, 185, 64]] : []
+                  : area === "10-moon" ? part === "left" ? [[75, 88, 97, 110], [170, 88, 194, 110]]
+                    : part === "right" ? [[230, 72, 280, 99], [310, 91, 333, 111]] : [] : [];
     for (const [left, top, right, bottom] of lights) {
       let warm = 0;
       for (let y = top!; y < bottom!; y++) for (let x = left!; x < right!; x++) {
@@ -61,6 +76,35 @@ test(`${area} panoramas have aligned transparent day/night artwork and appropria
       }
       assert.ok(warm > 2, `${part} warm light`);
     }
+  }
+});
+
+test("Moon ground joins are opaque and its horizon has no saturated matte fringe", async () => {
+  for (const phase of ["day", "night"]) for (const part of ["left", "middle", "right"]) {
+    const art = decodePng(await readFile(new URL(`../web/areas/10-moon/neutral-${phase}-${part}.png`, import.meta.url)));
+    for (let y = 112; y < art.height; y++) for (let x = 0; x < art.width; x++) {
+      const distance = part === "left" ? art.width - 1 - x : part === "right" ? x : 48;
+      const t = Math.min(1, distance / 47);
+      assert.equal(art.data[(y * art.width + x) * 4 + 3], Math.round(255 * t * t * (3 - 2 * t)), "ground is opaque except at feathered joins");
+    }
+    for (let i = 0; i < art.data.length; i += 4) {
+      if (!art.data[i + 3]) continue;
+      const r = art.data[i]!, g = art.data[i + 1]!, b = art.data[i + 2]!;
+      assert.ok(!(b > 170 && b > r * 2 && b > g * 1.8), "no blue matte");
+      assert.ok(!(r > 170 && b > 170 && g < Math.min(r, b) * .55), "no magenta matte");
+    }
+  }
+});
+
+test("foothill middle retains complete original cherry crowns without erased patches", async () => {
+  const art = decodePng(await readFile(new URL("../web/areas/7-foothills/spring-day-middle.png", import.meta.url)));
+  for (const [left, right] of [[115, 185], [355, 425]]) {
+    let blossoms = 0;
+    for (let y = 65; y < 115; y++) for (let x = left!; x < right!; x++) {
+      const i = (y * art.width + x) * 4;
+      if (art.data[i + 3] && art.data[i]! > 160 && art.data[i + 2]! > 110 && art.data[i]! > art.data[i + 1]! * 1.15) blossoms++;
+    }
+    assert.ok(blossoms > 150, "original cherry canopy is intact");
   }
 });
 

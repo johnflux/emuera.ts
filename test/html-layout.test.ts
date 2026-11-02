@@ -322,9 +322,12 @@ test("panorama overlap clips only the middle and applies consistently to artwork
   assert.match(css, /padding-right: min\(50%, max\(0px, calc\(var\(--area-right-width, 0px\) - var\(--area-art-overlap\)\)\)\)/);
   assert.match(css, /background-origin: border-box, border-box, content-box;\s*background-clip: border-box, border-box, content-box/);
   const demo = await readFile(new URL("../web/art-demo.html", import.meta.url), "utf8");
-  assert.match(demo, /id="overlap" type="range" min="0" max="600" step="4" value="96"/);
+  assert.match(demo, /id="overlap" type="range" min="0" max="600" step="4" value="220"/);
+  for (const [area, value] of [220, 88, 116, 320, 264, 168, 96, 360, 176].entries())
+    assert.ok(css.includes(`.era-area-art.era-area-${area} { --area-art-overlap: ${value}px; }`));
   const source = await readFile(new URL("../web/art-demo.js", import.meta.url), "utf8");
   assert.match(source, /overlaps\.set\(overlapKey\(\), Number\(overlap\.value\)\)/);
+  assert.match(source, /getComputedStyle\(scene\)\.getPropertyValue\("--area-art-overlap"\)/);
   assert.match(source, /preview\.querySelector\("\.era-sky"\)\?\.style\.setProperty\("--area-art-overlap"/);
 });
 

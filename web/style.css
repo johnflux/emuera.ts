@@ -483,7 +483,16 @@ body:has(.menu-panel:not([hidden])) .clock-overhang { visibility: hidden; }
 .era-sky.era-area-art .era-sky-landmark { left: 0; right: 0; bottom: 0; width: auto; height: 100%; image-rendering: pixelated; -webkit-mask: none; mask: none;
   background: var(--area-left, none) left bottom / auto no-repeat, var(--area-right, none) right bottom / auto no-repeat, var(--area-middle) left bottom / auto repeat-x;
   filter: var(--landmark-tint, ); }
-.era-area-art { --area-art-overlap: 96px; }
+.era-sky { --area-art-overlap: 96px; }
+.era-area-art.era-area-0 { --area-art-overlap: 220px; }
+.era-area-art.era-area-1 { --area-art-overlap: 88px; }
+.era-area-art.era-area-2 { --area-art-overlap: 116px; }
+.era-area-art.era-area-3 { --area-art-overlap: 320px; }
+.era-area-art.era-area-4 { --area-art-overlap: 264px; }
+.era-area-art.era-area-5 { --area-art-overlap: 168px; }
+.era-area-art.era-area-6 { --area-art-overlap: 96px; }
+.era-area-art.era-area-7 { --area-art-overlap: 360px; }
+.era-area-art.era-area-8 { --area-art-overlap: 176px; }
 .era-area-art :is(.era-sky-landmark, .era-sky-land) {
   padding-left: min(50%, max(0px, calc(var(--area-left-width, 0px) - var(--area-art-overlap))));
   padding-right: min(50%, max(0px, calc(var(--area-right-width, 0px) - var(--area-art-overlap)))); }

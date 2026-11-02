@@ -30,8 +30,6 @@ async function render() {
   scene.dataset.season = values.get("season");
   scene.dataset.day = values.get("day");
   sky(scene, scene);
-  overlap.value = String(overlaps.get(overlapKey()) ?? 96);
-  overlapValue.value = `${overlap.value}px`;
   if (values.get("artwork") === "day") scene.classList.add("era-area-art-day");
   const view = document.createElement("span");
   view.className = "era-sky-view";
@@ -62,8 +60,11 @@ async function render() {
     catch (error) { console.warn("Landmark preview unavailable:", error); }
     if (token !== generation) return;
   }
-  scene.style.setProperty("--area-art-overlap", `${overlaps.get(overlapKey()) ?? 96}px`);
+  const savedOverlap = overlaps.get(overlapKey());
+  if (savedOverlap !== undefined) scene.style.setProperty("--area-art-overlap", `${savedOverlap}px`);
   preview.replaceChildren(header);
+  overlap.value = String(Number.parseFloat(getComputedStyle(scene).getPropertyValue("--area-art-overlap")));
+  overlapValue.value = `${overlap.value}px`;
   const phase = [...scene.classList].find(name => /^era-sky-(dawn|morning|day|evening|night)$/.test(name)).slice(8);
   status.textContent = errors.length ? errors.join("; ")
     : `${time.value} / ${phase} sky / ${scene.dataset.areaArt || "SVG landmark (no panorama for this season)"}${scene.classList.contains("era-area-art-weather") ? " / bad-weather blend" : ""}`;

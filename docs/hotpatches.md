@@ -588,11 +588,14 @@ none; an evening dims the day pictures slightly. When a season has no day or nig
 uses the area's `neutral` set if present, including its matching night set for weather blending.
 Season-specific sets take precedence. With neither, it falls back to its SVG landmark.
 The server lists the files at `/api/areas`; the client reads that list once per page load.
-The middle is clipped to the space between the end panels with a 96px overlap at each join,
+The middle is clipped to the space between the end panels with a per-location overlap at each join,
 rather than extending beneath the entire ends. Image widths determine the clip; narrow headers
 clamp the insets to half the available width. Weather, light halos and water highlights use the
 same geometry. The artwork demo's Middle/end overlap slider ranges from 0 to 600px and remembers
 preview adjustments per location/season until reload; 0 puts panels edge-to-edge.
+Defaults (CSS pixels): Shrine 220, Temple 88, Village 116, Mansion 320, Bamboo 264,
+Forest of Magic 168, Netherworld 96, Foothills 360 and Summit 176. The demo reads the
+same CSS defaults as the game; preview adjustments override them only until reload.
 
 Hakurei Shrine includes all four daytime seasons: the original spring blossoms, green summer foliage, golden
 autumn foliage, and snow-covered winter scenery. Summer uses supplied green-leaf artwork at native widths
@@ -638,19 +641,39 @@ woodland in the middle and a cottage on the right. Four-pixel source-grid cleanu
 resizing produce ground-aligned 439×144px pieces with transparent sky and no neon green matte residue.
 The matching night grade preserves the cottage lantern's warm light and identical geometry for
 weather blending. Other forest seasons use the SVG fallback.
+The cottage panel's bottom four rows of heavy dark soil are cropped away and the panel padded
+at the top, bringing its ground thickness closer to the middle. Both time-of-day sets shift together.
 
 Netherworld uses season-neutral supplied artwork year-round: pale cherry blossoms and a stone lantern
 on the left, a low repeating ornamental garden and the Hakugyokurou manor on the right. The native
 532×144px panels have hard-alpha cleanup and aligned day/night geometry. The cool night grade
 preserves warm manor windows; time-of-day sky and weather continue to change normally.
 
+Underworld uses season-neutral supplied cavern artwork year-round: a stone arch and lantern
+on the left, repeating crystal caves and distant buildings in the middle, and an illuminated
+palace on the right. All three panels include a rocky ceiling and hanging stalactites,
+enclosing the cavern above the transparent interior. Four-pixel source-grid cleanup and
+nearest-neighbour resizing produce ground-aligned 432×144px panels.
+The aligned cooler night grade retains warm lanterns and
+windows. Underground settings continue to suppress the sun, moon, clouds and precipitation.
+Its overlap starts at the shared 96px default and can be tuned in the artwork demo.
+
+Moon uses season-neutral supplied artwork at native 532×144px: a ceremonial gateway and
+pine on the left, a low repeating crater plain in the middle, and an ivory Lunar Capital
+palace on the right. Saturated horizon fringe and faint alpha residue are removed; the
+ground's faded outer edges and transparent bottom row are extended for gap-free tiling.
+End panels feather over their inner 48px; a 32px overlapped middle join reduces the repeating
+tile to 500×144px and avoids a hard boundary through the lunar dust.
+The aligned cool night grade preserves warm palace windows and lanterns. Overlap starts
+at the shared 96px default and can be tuned in the artwork demo.
+
 Mountain Foothills includes supplied spring artwork with mossy rocks and a pine on the left,
 a repeating flowering valley and stream, and a waterfall, torii and stone lantern on the right.
 Four-pixel source-grid cleanup and nearest-neighbour resizing produce aligned 559×144px end panels.
 Their inner 96px feather into the repeating backdrop to avoid hard cuts through trees.
 The middle tile has a 48px overlapped join, reducing it to 511×144px. Day and night share this edge treatment.
-The middle's two tall cherry trees are replaced with low woodland from the same panel, retaining
-the stream below, so end-panel hills cannot hide their trunks and leave floating blossom crowns.
+The middle retains its original cherry trees and stream; an earlier cloned-woodland replacement
+was removed because it left visible cleanup artifacts.
 The matching cool night grade preserves the lantern's warm light and identical transparency
 for weather blending. Other foothill seasons use the SVG fallback.
 The distant blue mountain ridgelines are softened toward the adjacent interior colours without
