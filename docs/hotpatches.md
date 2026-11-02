@@ -658,12 +658,14 @@ The aligned cooler night grade retains warm lanterns and
 windows. Underground settings continue to suppress the sun, moon, clouds and precipitation.
 Its overlap starts at the shared 96px default and can be tuned in the artwork demo.
 
-Moon uses season-neutral supplied artwork at native 532×144px: a ceremonial gateway and
-pine on the left, a low repeating crater plain in the middle, and an ivory Lunar Capital
-palace on the right. Saturated horizon fringe and faint alpha residue are removed; the
-ground's faded outer edges and transparent bottom row are extended for gap-free tiling.
-End panels feather over their inner 48px; a 32px overlapped middle join reduces the repeating
-tile to 500×144px and avoids a hard boundary through the lunar dust.
+Moon uses season-neutral artwork extracted directly from the original combined landscape sheet:
+a ceremonial gateway and pine on the left, a low repeating crater plain in the middle, and
+an ivory Lunar Capital palace on the right. Separator gutters and transparent margins are
+excluded, with a shared vertical crop and uniform scale preserving the original proportions.
+Two-pixel source-grid cleanup and nearest-neighbour resizing produce 339×144px left and
+384×144px right panels. Saturated horizon fringe and faint alpha residue are removed.
+End panels feather over their inner 32px; a 24px overlapped middle join produces a
+277×144px repeating tile without a hard boundary through the lunar dust.
 The aligned cool night grade preserves warm palace windows and lanterns. Overlap starts
 at the shared 96px default and can be tuned in the artwork demo.
 
@@ -707,6 +709,15 @@ ones, changing gradually each day; a 30-minute twilight blends the warm sky into
 times, not changes to game schedules. The sun peaks at `top: 10px` above the `93px` horizon; the moon follows
 an overnight arc. Its transparent crescent artwork has cool ivory shading, subtle craters and a soft
 shape-following glow, without a dark disc covering the sky. The weather glow uses the same artwork.
+From the Moon location, the nighttime orb instead uses the supplied pixel-art Earth,
+cropped to its globe and resized to 104×104px; its weather glow uses the same image.
+Earth's diameter is 3.7 times the 28px moon orb (103.6px), with matching weather-glow
+dimensions. Its centre follows the original moon arc without vertical clamping, allowing
+the larger globe to rise partly above the header and sink behind the lunar horizon.
+Horizontal positioning still keeps the globe on screen where space permits.
+Earth and its weather glow fade with the 30-minute twilight: invisible at sunrise/sunset,
+fully visible deeper into the night, avoiding an abrupt switch while the large globe is still above ground.
+Other locations retain the crescent, and the Moon's daytime sun is unchanged.
 Three differently sized star tiles combine fine blue-white and warm stars with occasional
 soft bright stars and a faint sky haze, avoiding an obvious repeated grid behind weather and scenery.
 The orb stays at least 450px from the right-hand scenery when the header is wide enough and clamps inside narrow

@@ -404,6 +404,10 @@ test("HTTP UI, isolated sessions, real image bytes, sprite metadata, errors and 
     assert.equal(moon.status, 200);
     assert.equal(moon.headers.get("content-type"), "image/svg+xml");
     assert.match(await moon.text(), /clip-path="url\(#crescent\)"/);
+    const earth = await fetch(base + "/earth.png");
+    assert.equal(earth.status, 200);
+    assert.equal(earth.headers.get("content-type"), "image/png");
+    assert.deepEqual(Buffer.from(await earth.arrayBuffer()).subarray(0, 8), Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
     assert.equal((await fetch(base + "/areas/0-shrine/monsoon-day-left.png")).status, 404);
     for (const [area, directory] of [["1", "1-temple"], ["2", "2-village"], ["3", "3-mansion"], ["4", "4-bamboo"], ["5", "5-forest"], ["6", "6-netherworld"], ["7", "7-foothills"], ["8", "8-summit"], ["9", "9-underworld"], ["10", "10-moon"]])
     for (const time of ["day", "night"]) for (const part of ["left", "middle", "right"]) {

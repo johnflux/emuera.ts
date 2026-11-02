@@ -195,6 +195,26 @@ test("area artwork fixes the header height and prevents horizontal scrolling fro
   assert.match(css, /\.era-main-header:has\(\.era-area-art\) > \.era-main-when \{[^}]*max-height: 100%; overflow: auto;/);
 });
 
+test("Moon location replaces only the nighttime orb and its weather glow with Earth", async () => {
+  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  const rule = css.match(/\.era-area-10\.era-sky-moon \.era-sky-orb, \.era-area-10\.era-sky-moon \.era-sky-clouds::after \{([^}]+)\}/)?.[1];
+  assert.ok(rule);
+  assert.match(rule, /background-image: url\(\/earth\.png\); image-rendering: pixelated;/);
+  assert.match(rule, /mask-image: linear-gradient\(rgb\(0 0 0 \/ var\(--sky-darkness, 1\)\), rgb\(0 0 0 \/ var\(--sky-darkness, 1\)\)\);/);
+  const earthSize = Number(rule.match(/--earth-orb-size: ([\d.]+)px;/)?.[1]);
+  const moonSize = Number(css.match(/\.era-sky-moon \.era-sky-orb, \.era-sky-moon \.era-sky-clouds::after \{ width: ([\d.]+)px;/)?.[1]);
+  assert.ok(Math.abs(earthSize / moonSize - 3.7) < 1e-12);
+  assert.match(rule, /width: var\(--earth-orb-size\); height: var\(--earth-orb-size\);/);
+  assert.match(rule, /top: calc\(var\(--sky-orb-top, 10px\) \+ 14px - var\(--earth-orb-size\) \/ 2\);/);
+  const topAt = (moonTop: number) => moonTop + moonSize / 2 - earthSize / 2;
+  assert.ok(topAt(10) < 0, "Earth may rise above the header");
+  assert.ok(topAt(93) + earthSize > 144, "Earth may sink below the horizon without bottom clamping");
+  assert.match(rule, /right: min\(var\(--sky-orb-right\), max\(0px, calc\(100% - var\(--earth-orb-size\) - 10px\)\)\);/);
+  const earth = await readFile(new URL("../web/earth.png", import.meta.url));
+  assert.equal(earth.readUInt32BE(16), 104);
+  assert.equal(earth.readUInt32BE(20), 104);
+});
+
 test("sky follows exact game minutes with a bounded arc and warm sunrise and sunset", async () => {
   const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
   const shared = await readFile(new URL("../web/sky.js", import.meta.url), "utf8");
@@ -236,6 +256,15 @@ test("sky follows exact game minutes with a bounded arc and warm sunrise and sun
     assert.equal(draw(String(sunrise - 15), season).get("phase"), "era-sky-dawn");
     assert.equal(draw(String(sunset + 15), season).get("phase"), "era-sky-evening");
     assert.equal(draw(String(sunset + 31), season).get("phase"), "era-sky-night");
+    const dawnVisibility = [31, 15, 1].map((before) => Number(draw(String(sunrise - before), season).get("--sky-darkness")));
+    assert.equal(dawnVisibility[0], 1, "Earth is fully visible before dawn");
+    assert.ok(dawnVisibility[1]! > .45 && dawnVisibility[1]! < .55, "Earth is half faded midway through dawn");
+    assert.ok(dawnVisibility[2]! < 1 / 30, "Earth is almost invisible before the sunrise orb switch");
+    assert.equal(draw(String(sunrise), season).get("--sky-darkness"), "0", "Earth reaches zero visibility at sunrise");
+    const duskVisibility = [0, 15, 31].map((after) => Number(draw(String(sunset + after), season).get("--sky-darkness")));
+    assert.ok(duskVisibility[0]! < 1 / 30, "Earth starts invisible at sunset");
+    assert.ok(duskVisibility[1]! > .45 && duskVisibility[1]! < .55, "Earth fades in through dusk");
+    assert.equal(duskVisibility[2], 1);
   }
   assert.notEqual(draw("360", 1, 1).get("--sky-orb-top"), draw("360", 1, 31).get("--sky-orb-top"), "day within season changes the arc");
   assert.ok(Number.parseFloat(draw("1080").get("--sky-warmth")!) > 0, "warm evening");

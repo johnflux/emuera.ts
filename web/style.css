@@ -334,6 +334,13 @@ body:has(.menu-panel:not([hidden])) .clock-overhang { visibility: hidden; }
   box-shadow: 0 0 26px 10px color-mix(in srgb, #ffe07a88, #ff7a3a99 var(--sky-warmth, 0%)); }
 .era-sky-moon .era-sky-orb, .era-sky-moon .era-sky-clouds::after { width: 28px; height: 28px;
   background: url(/moon.svg) center / contain no-repeat; box-shadow: none; filter: drop-shadow(0 0 5px #dceaff70); }
+.era-area-10.era-sky-moon .era-sky-orb, .era-area-10.era-sky-moon .era-sky-clouds::after {
+  --earth-orb-size: 103.6px;
+  width: var(--earth-orb-size); height: var(--earth-orb-size);
+  top: calc(var(--sky-orb-top, 10px) + 14px - var(--earth-orb-size) / 2);
+  right: min(var(--sky-orb-right), max(0px, calc(100% - var(--earth-orb-size) - 10px)));
+  mask-image: linear-gradient(rgb(0 0 0 / var(--sky-darkness, 1)), rgb(0 0 0 / var(--sky-darkness, 1)));
+  background-image: url(/earth.png); image-rendering: pixelated; }
 /* Weather: clouds dim or hide the sky, rain and snow fall. */
 .era-weather-fair .era-sky-clouds { background: radial-gradient(40px 12px at 70% 38%, #ffffffb0, transparent), radial-gradient(56px 14px at 86% 62%, #ffffff90, transparent), radial-gradient(34px 10px at 58% 72%, #ffffff70, transparent); }
 .era-sky-night.era-weather-fair .era-sky-clouds { opacity: .25; }
