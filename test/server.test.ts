@@ -374,10 +374,32 @@ test("HTTP UI, isolated sessions, real image bytes, sprite metadata, errors and 
     assert.match(await area.text(), /^<svg /);
     assert.equal((await fetch(base + "/areas/99-nowhere.svg")).status, 404);
     const areas = await (await fetch(base + "/api/areas")).json();
+    const artDemo = await fetch(base + "/art-demo");
+    assert.equal(artDemo.status, 200);
+    assert.match(artDemo.headers.get("content-type")!, /text\/html/);
+    const demoHtml = await artDemo.text();
+    for (const id of ["location", "season", "day", "time", "weather", "artwork", "setting", "minutes"])
+      assert.ok(demoHtml.includes(`id="${id}"`), `artwork demo has ${id} control`);
+    for (const [file, type] of [["art-demo.js", "javascript"], ["sky.js", "javascript"], ["art-demo.css", "text/css"]]) {
+      const resource = await fetch(base + "/" + file);
+      assert.equal(resource.status, 200);
+      assert.ok(resource.headers.get("content-type")!.includes(type!));
+    }
     assert.match(areas["0"]["spring-day"].middle, /^\/areas\/0-shrine\/spring-day-middle\.png\?v=\d+$/);
     const areaPicture = await fetch(base + areas["0"]["spring-day"].left);
     assert.equal(areaPicture.status, 200);
     assert.equal(areaPicture.headers.get("content-type"), "image/png");
+    for (const season of ["spring", "summer", "autumn", "winter"]) {
+      for (const time of ["day", "night"]) {
+        for (const part of ["left", "middle", "right"]) {
+          const picture = areas["0"][`${season}-${time}`][part];
+          assert.match(picture, new RegExp(`^/areas/0-shrine/${season}-${time}-${part}\\.png\\?v=\\d+$`));
+          const response = await fetch(base + picture);
+          assert.equal(response.status, 200);
+          assert.equal(response.headers.get("content-type"), "image/png");
+        }
+      }
+    }
     assert.equal((await fetch(base + "/areas/0-shrine/monsoon-day-left.png")).status, 404);
     assert.equal((await fetch(base + "/areas/0-shrine/..%2f..%2fapp.js")).status, 404);
     const maps = await fetch(base + "/api/maps");

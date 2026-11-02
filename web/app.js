@@ -1,5 +1,6 @@
 import { createTranslation, protectMapTranslation } from "./translate.js";
 import { createLibrary } from "./library.js";
+import { sky, prepareSkyArt } from "./sky.js";
 import { disposeCharacterChats, sendInlineChat, setHistoryTranslator, setupInlineChat } from "./interaction-history.js";
 import { activeLlm, PROVIDERS, setupLlmConfig } from "./llm.js";
 import { encountersEnabled, gossipEnabled, memoriesEnabled, runEncounters, runGossip, runMemories, writeMemory } from "./encounters.js";
@@ -1326,7 +1327,7 @@ async function image(source, token, suppliedSprite, scale = imageScale(), suppli
  * season and hour in its classes. When web/areas/<area>-<name>/<season>-<day|night>-*.png exist (src/area-art.ts),
  * they replace the area's SVG landmark: left and right ends over the middle one repeated along the header, one art
  * pixel per CSS pixel, the header growing to their height. Dawn and night use the night pictures, or the day ones
- * dimmed when there are none.
+ * dimmed when there are none. Bad-weather days partially blend in a complete matching night set.
  */
 let areaManifest;
 async function prepareAreaArt() {
@@ -1334,28 +1335,7 @@ async function prepareAreaArt() {
   if (!skies.length) return;
   areaManifest ??= api("/api/areas").catch((error) => { console.warn("Area pictures unavailable:", error); return {}; });
   const manifest = await areaManifest;
-  for (const sky of skies) {
-    sky.dataset.areaArt = "";
-    const area = [...sky.classList].find((name) => /^era-area-\d+$/.test(name))?.slice("era-area-".length);
-    const season = [...sky.classList].find((name) => name.startsWith("era-season-"))?.slice("era-season-".length);
-    const night = sky.matches(".era-sky-night, .era-sky-dawn");
-    const sets = manifest[area] ?? {};
-    const lit = night && sets[`${season}-night`]?.middle;
-    const set = lit ? sets[`${season}-night`] : sets[`${season}-day`];
-    if (!set?.middle) continue;
-    sky.dataset.areaArt = `${season}-${lit ? "night" : "day"}`;
-    sky.classList.add("era-area-art");
-    sky.classList.toggle("era-area-art-night", Boolean(lit));
-    const header = sky.closest(".era-main-header") ?? sky;
-    for (const part of ["left", "middle", "right"]) {
-      if (!set[part]) continue;
-      sky.style.setProperty(`--area-${part}`, `url("${set[part]}")`);
-      const img = new Image();
-      pendingImages.push(loadImage(img, set[part]).then(() => {
-        if (part === "middle") header.style.setProperty("--area-art-height", `${img.naturalHeight}px`);
-      }, (error) => console.warn(`Area picture ${set[part]}:`, error)));
-    }
-  }
+  prepareSkyArt(outputRoot, manifest, loadImage, pendingImages);
 }
 /**
  * Hotpatch extension: map pictures. The map renderers (hotpatch/MOVE_MAP.ERB) wrap a text map in
@@ -1525,40 +1505,6 @@ new MutationObserver(scheduleHtmlPositions).observe(terminal, {
  */
 function applyClasses(element, node) {
   for (const name of (node.getAttribute("class") ?? "").split(/\s+/)) if (/^era-[a-z0-9-]+$/.test(name)) element.classList.add(name);
-}
-/** Approximate solar time at 36 N; each 31-day game season spans a quarter of the solar year. */
-function sky(node, element) {
-  const value = node.getAttribute("data-minutes");
-  if (!/^-?\d+$/.test(value ?? "") || !Number.isSafeInteger(Number(value)))
-    throw new Error(`Unsupported sky minutes: ${value}`);
-  const minutes = ((Number(value) % 1440) + 1440) % 1440;
-  const season = Number(node.getAttribute("data-season")), day = Number(node.getAttribute("data-day"));
-  if (!Number.isInteger(season) || season < 1 || season > 4 || !Number.isInteger(day) || day < 1 || day > 31)
-    throw new Error(`Unsupported sky date: ${season}/${day}`);
-  const radians = Math.PI / 180;
-  const yearDay = 59 + ((season - 1) + (day - 1) / 31) * 365 / 4;
-  const declination = 23.44 * radians * Math.sin(2 * Math.PI * (yearDay - 80) / 365);
-  const hourAngle = Math.acos((Math.sin(-.833 * radians) - Math.sin(36 * radians) * Math.sin(declination))
-    / (Math.cos(36 * radians) * Math.cos(declination)));
-  const halfDay = hourAngle * 720 / Math.PI;
-  const sunrise = 720 - halfDay, sunset = 720 + halfDay;
-  const night = minutes < sunrise || minutes >= sunset;
-  const twilight = 30;
-  const daylight = Math.max(0, Math.min(1, (minutes - sunrise) / (sunset - sunrise)));
-  const progress = night ? ((minutes - sunset + 1440) % 1440) / (1440 - 2 * halfDay) : daylight;
-  const elevation = Math.sin(progress * Math.PI);
-  const warmth = night ? 0 : Math.max(0, 1 - elevation * 1.6);
-  const phase = minutes < sunrise - twilight || minutes >= sunset + twilight ? "night"
-    : minutes < sunrise + twilight ? "dawn" : minutes >= sunset - twilight ? "evening"
-    : minutes < 600 ? "morning" : "day";
-  element.classList.remove("era-sky-dawn", "era-sky-morning", "era-sky-day", "era-sky-evening", "era-sky-night");
-  element.classList.add(`era-sky-${phase}`);
-  element.classList.toggle("era-sky-moon", night);
-  element.style.setProperty("--sky-orbit", String(progress));
-  element.style.setProperty("--sky-orb-top", `${93 - 83 * elevation}px`);
-  element.style.setProperty("--sky-warmth", `${night && phase !== "night" ? 100 : warmth * 100}%`);
-  element.style.setProperty("--sky-darkness", String(night ? Math.min(1, Math.min(Math.abs(minutes - sunrise), Math.abs(minutes - sunset)) / twilight) : 0));
-  return element;
 }
 /** Hotpatch extension: an era-clock's data-minutes is game time, not a wall-clock timer. */
 function clock(node) {
@@ -2737,11 +2683,11 @@ function setMenu(open, { restoreFocus = false } = {}) {
 }
 menuToggle.addEventListener("click", () => setMenu(menuPanel.hidden));
 // Choosing an action closes the menu; the font slider keeps it open so it can be dragged.
-menuPanel.addEventListener("click", (event) => { if (event.target.closest("button")) setMenu(false); });
+menuPanel.addEventListener("click", (event) => { if (event.target.closest("button, a[href]")) setMenu(false); });
 menuPanel.addEventListener("keydown", (event) => {
   if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
   if (event.target.matches("input[type=range]")) return;
-  const items = [...menuPanel.querySelectorAll("button, input")];
+  const items = [...menuPanel.querySelectorAll("button, a[href], input")];
   const next = items.indexOf(event.target) + (event.key === "ArrowDown" ? 1 : -1);
   event.preventDefault();
   items[(next + items.length) % items.length].focus();

@@ -559,6 +559,12 @@ Restart the demo to pick another scenario.
 
 ### Area pictures
 
+Open **Artwork demo** from the game library, or visit `/art-demo`, to preview the header without starting a game.
+Controls select location, season/day, exact time (or a time scrubber), weather, and indoor/underground settings.
+The artwork selector can follow the time automatically or force day/night images independently of the sky,
+including the daytime bad-weather blend. The demo uses the game's shared sky and panorama renderer and stylesheet.
+It reports when a location uses an SVG fallback instead of panorama images. No game state or saves are changed.
+
 The main screen's header (and the sleep menu's) shows a panorama of the area you are in, as three pixel-art pictures
 per area, season and day/night: a left end, a middle that repeats along the header, and a right end. They live in
 `web/areas/<map id>-<name>/<season>-<day|night>-<left|middle|right>.png` (the area directories are named after the
@@ -580,12 +586,33 @@ the header grows to their height. Dawn and night use the `night` pictures, or th
 none; an evening dims the day pictures slightly. An area or season with no pictures falls back to its SVG landmark.
 The server lists the files at `/api/areas`; the client reads that list once per page load.
 
+Hakurei Shrine includes all four daytime seasons: the original spring blossoms, green summer foliage, golden
+autumn foliage, and snow-covered winter scenery. Summer and autumn are palette variants of spring, preserving
+its full foliage, geometry and transparency without removing leaves. Winter uses supplied, separately generated snow-covered artwork
+for all three pieces, cleaned with the pixel-grid importer and uniformly resized to 144px tall (500px left,
+501px middle/right). Its sky remains transparent and its ground is aligned across the pieces. The matching
+winter night set is a cooler, darker grade of this artwork that retains the warm shrine windows.
+Each season also includes a dedicated night set with cooler,
+darker moonlit colors, warm shrine windows and lanterns, and brighter moonlit snow in winter. Night sets retain
+the daytime geometry and transparency and are displayed without an additional night-dimming filter.
+
+During bad-weather days the panorama blends toward its matching night set: cloudy/fog 18%, rain 32%, storm 48%,
+snow 20%, and blizzard 35%. This requires complete day and night sets; missing night pieces leave the day artwork
+unchanged. Clear/fair days and actual night artwork do not receive this blend. Weather overlays remain above it.
+Cloudy, foggy, snowy and blizzard nights use muted blue-grey cloud and fog palettes, without changing daytime weather. Obscuring weather adds a second,
+softly blurred, translucent sun/moon above the clouds but behind scenery and foreground fog: 2px blur for
+cloud/snow, 3px for rain/fog, and a weaker 4px glow for storms/blizzards. Clear and fair skies retain the original
+orb without this layer. Cloudy skies use overlapping, shaded cloud banks with a darker night palette.
+Night panoramas add a small warm halo isolated from bright window/lantern pixels, leaving the scenery and
+moonlit snow sharp. Underground panoramas do not receive this halo.
+
 `HOTPATCH_SKY` includes the exact game minute, season and day in `data-minutes`, `data-season` and `data-day`.
 The browser approximates sunrise and sunset at latitude 36 N, with solar noon at 12:00. Each 31-day game season
 maps to a quarter of the solar year, starting spring around March 1. Summer has longer days and winter shorter
 ones, changing gradually each day; a 30-minute twilight blends the warm sky into night. These are artwork-only
 times, not changes to game schedules. The sun peaks at `top: 10px` above the `93px` horizon; the moon follows
-an overnight arc. A repeating field of small, varied stars covers the whole night sky behind weather and scenery.
+an overnight arc. Three differently sized star tiles combine fine blue-white and warm stars with occasional
+soft bright stars and a faint sky haze, avoiding an obvious repeated grid behind weather and scenery.
 The orb stays at least 450px from the right-hand scenery when the header is wide enough and clamps inside narrow
 headers. Sunrise and sunset blend the sky and sun into peach, pink and violet. Weather still obscures the orb,
 fog covers the whole panorama, and underground locations hide the weather and orb.

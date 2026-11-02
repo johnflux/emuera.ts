@@ -3,7 +3,7 @@
 .is-home .brand { font-size: 19px; }
 .is-home .brand-mark { width: 30px; height: 30px; font-size: 18px; border-radius: 8px; }
 .is-home #status { text-align: right; color: #8994a7; }
-.is-home #mode, .is-home #activity, .is-home .menu, .is-home > main { display: none; }
+.is-home #mode, .is-home #activity, .is-home > main { display: none; }
 .library-toggle { border-radius: 5px; font-size: 12px; }
 .library { flex: 1; overflow-y: auto; padding: 0 max(24px, calc((100vw - 1160px) / 2)) 32px; background: radial-gradient(ellipse at 85% 0, #28424355, transparent 45%), #10141b; color: #e9edf4; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
 .library[hidden] { display: none; }

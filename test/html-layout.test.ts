@@ -197,7 +197,8 @@ test("area artwork fixes the header height and prevents horizontal scrolling fro
 
 test("sky follows exact game minutes with a bounded arc and warm sunrise and sunset", async () => {
   const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
-  const routine = source.slice(source.indexOf("function sky("), source.indexOf("/** Hotpatch extension: an era-clock"));
+  const shared = await readFile(new URL("../web/sky.js", import.meta.url), "utf8");
+  const routine = shared.slice(shared.indexOf("function sky("), shared.indexOf("/** Apply panorama"));
   const draw = (value: string | null, season = 1, day = 15): Map<string, string> => {
     const properties = new Map<string, string>();
     runInNewContext(`${routine}\nsky(node, element);`, {
@@ -248,17 +249,107 @@ test("sky follows exact game minutes with a bounded arc and warm sunrise and sun
   assert.match(source, /element\.classList\.contains\("era-sky"\) && node\.hasAttribute\("data-minutes"\)\) sky\(node, element\)/);
   const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
   assert.match(css, /--sky-orb-right: clamp\(10px, max\(450px,[^;]*max\(10px, calc\(100% - 40px\)\)\)/);
-  assert.match(css, /\.era-sky-orb \{ top: min\(var\(--sky-orb-top, 10px\), max\(0px, calc\(100% - 30px\)\)\); right: var\(--sky-orb-right\);/);
+  assert.match(css, /\.era-sky-orb, \.era-sky-clouds::after \{ position: absolute; top: min\(var\(--sky-orb-top, 10px\), max\(0px, calc\(100% - 30px\)\)\); right: var\(--sky-orb-right\);/);
   assert.match(css, /linear-gradient\(color-mix\(in srgb, #2f78c4, #493b76 var\(--sky-warmth, 0%\)\)/);
-  assert.match(css, /\.era-sky-moon \.era-sky-orb \{[^}]*background: transparent;[^}]*inset -7px 3px/);
-  assert.match(css, /\.era-sky-view::before \{[^}]*opacity: var\(--sky-darkness, 0\);[^}]*background-size: 173px 97px;/);
+  assert.match(css, /\.era-sky-moon \.era-sky-orb, \.era-sky-moon \.era-sky-clouds::after \{[^}]*background: transparent;[^}]*inset -7px 3px/);
+  assert.match(css, /\.era-sky-view::before \{[^}]*opacity: var\(--sky-darkness, 0\);[^}]*background-size: 389px 173px,[^}]*251px 137px,[^}]*173px 97px/);
   assert.match(css, /\.era-underground \.era-sky-view > :not\(\.era-sky-landmark\) \{ display: none; \}/);
+});
+
+test("area artwork blends bad-weather days and selects undimmed seasonal night panoramas", async () => {
+  const source = await readFile(new URL("../web/sky.js", import.meta.url), "utf8");
+  const routine = source.slice(source.indexOf("function prepareSkyArt("));
+  for (const season of ["spring", "summer", "autumn", "winter"])
+    for (const phase of ["night", "dawn", "day", "evening"])
+      for (const weather of ["clear", "fair", "cloudy", "rain", "storm", "fog", "snow", "blizzard"])
+        for (const availability of ["complete", "missing", "partial"])
+          for (const artwork of ["auto", "day", "night"]) {
+              const classes = new Set(["era-sky", "era-area-0", `era-season-${season}`, `era-sky-${phase}`, `era-weather-${weather}`]);
+              const properties = new Map<string, string>();
+              const element = {
+                dataset: { areaArt: "" },
+                classList: {
+                  [Symbol.iterator]: () => classes[Symbol.iterator](),
+                  add: (value: string) => classes.add(value),
+                  toggle: (value: string, enabled: boolean) => enabled ? classes.add(value) : classes.delete(value),
+                },
+                matches: (selector: string) => selector.split(", ").some((name) => classes.has(name.slice(1))),
+                closest: () => null,
+                style: { setProperty: (name: string, value: string) => properties.set(name, value) },
+              };
+              const set = (time: string) => Object.fromEntries(["left", "middle", "right"]
+                .map((part) => [part, `/areas/0-shrine/${season}-${time}-${part}.png`]));
+              const nightSet = availability === "complete" ? set("night") : availability === "partial" ? { middle: set("night").middle } : undefined;
+              await runInNewContext(`${routine}\nprepareSkyArt(outputRoot, manifest, loadImage, pendingImages, artwork);`, {
+                artwork,
+                outputRoot: { querySelectorAll: () => [element] },
+                manifest: { 0: { [`${season}-day`]: set("day"), [`${season}-night`]: nightSet } },
+                Image: class { naturalHeight = 144; },
+                loadImage: async () => {},
+                pendingImages: [],
+              });
+              const wantsNight = artwork === "auto" ? phase === "night" || phase === "dawn" : artwork === "night";
+              const night = wantsNight && availability !== "missing";
+              const time = night ? "night" : "day";
+              assert.equal(element.dataset.areaArt, `${season}-${time}`);
+              assert.equal(classes.has("era-area-art-night"), night);
+              const blend = !wantsNight && !["clear", "fair"].includes(weather) && availability === "complete";
+              assert.equal(classes.has("era-area-art-weather"), blend);
+              for (const part of ["left", "middle", "right"]) {
+                assert.equal(properties.get(`--area-${part}`), night && availability === "partial" && part !== "middle"
+                  ? undefined : `url("/areas/0-shrine/${season}-${time}-${part}.png")`);
+                assert.equal(properties.get(`--area-weather-${part}`), blend ? `url("/areas/0-shrine/${season}-night-${part}.png")` : undefined);
+              }
+  }
+  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  assert.match(css, /\.era-sky\.era-area-art-night \.era-sky-landmark \{ --landmark-tint: ; \}/);
+  assert.match(css, /\.era-area-art-weather \.era-sky-landmark::after \{[^}]*opacity: var\(--area-weather-blend, 0\);[^}]*--area-weather-middle/);
+  for (const [weather, opacity] of [["cloudy", ".18"], ["rain", ".32"], ["storm", ".48"], ["fog", ".18"], ["snow", ".20"], ["blizzard", ".35"]])
+    assert.ok(css.includes(`.era-weather-${weather} { --area-weather-blend: ${opacity}; }`));
 });
 
 test("fog overlays the full top image but stays hidden underground", async () => {
   const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
   assert.match(css, /\.era-weather-fog \.era-sky-view::after \{ content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none;[^}]*background:/);
   assert.match(css, /\.era-weather-fog\.era-underground \.era-sky-view::after \{ display: none; \}/);
+});
+
+test("night cloud, fog and snow palettes are muted and a blurred orb glows above clouds", async () => {
+  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  assert.match(css, /\.era-sky-moon\.era-weather-cloudy \.era-sky-clouds \{[^}]*#202b3d99/);
+  assert.match(css, /\.era-sky-moon:is\(\.era-weather-snow, \.era-weather-blizzard\) \.era-sky-clouds \{ background: linear-gradient\(#28364aaa, #43536a88\); \}/);
+  assert.match(css, /:is\(\.era-weather-snow, \.era-weather-blizzard\) \.era-sky-clouds \{ background: linear-gradient\(#9aa6b2aa, #c8d2dc88\); \}/);
+  assert.match(css, /\.era-sky-moon\.era-weather-fog \.era-sky-clouds \{[^}]*#2c394b88/);
+  assert.match(css, /\.era-sky-moon\.era-weather-fog \.era-sky-view::after \{[^}]*#35445a44/);
+  assert.match(css, /:is\(\.era-weather-cloudy, \.era-weather-rain, \.era-weather-storm, \.era-weather-fog, \.era-weather-snow, \.era-weather-blizzard\) \.era-sky-clouds::after \{[^}]*content: ""; z-index: 0; pointer-events: none; opacity: \.4; filter: blur\(2px\);/);
+  assert.match(css, /:is\(\.era-weather-rain, \.era-weather-fog\) \.era-sky-clouds::after \{ filter: blur\(3px\);/);
+  assert.match(css, /:is\(\.era-weather-storm, \.era-weather-blizzard\) \.era-sky-clouds::after \{ opacity: \.22; filter: blur\(4px\);/);
+  assert.match(css, /\.era-weather-cloudy \.era-sky-clouds \{[^}]*var\(--cloud-light\)[^}]*var\(--cloud-shade\)[^}]*var\(--cloud-sky\)/);
+});
+
+test("night panorama lights get a warm halo without blurring the scenery", async () => {
+  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  assert.match(css, /\.era-area-art-night:not\(\.era-underground\) \.era-sky-landmark::before \{[^}]*pointer-events: none; opacity: \.7;[^}]*--area-left[^}]*--area-right[^}]*--area-middle/);
+  assert.match(css, /filter: url\(#era-light-glow\)/);
+  for (const file of ["index.html", "art-demo.html"]) {
+    const html = await readFile(new URL(`../web/${file}`, import.meta.url), "utf8");
+    assert.match(html, /<filter id="era-light-glow"[^>]*color-interpolation-filters="sRGB"/);
+    assert.match(html, /feColorMatrix values="0 0 0 0 1 0 0 0 0 \.65 0 0 0 0 \.25 3 3 -4 0 -2"/);
+    assert.match(html, /feGaussianBlur stdDeviation="2"/);
+  }
+});
+
+test("title screen menu is visible and contains the artwork demo link", async () => {
+  const [html, css, app] = await Promise.all([
+    readFile(new URL("../web/index.html", import.meta.url), "utf8"),
+    readFile(new URL("../web/library.css", import.meta.url), "utf8"),
+    readFile(new URL("../web/app.js", import.meta.url), "utf8"),
+  ]);
+  assert.match(html, /<nav id="menu-panel"[^>]*>[\s\S]*<a href="\/art-demo" target="_blank" rel="noopener">Artwork demo<\/a>[\s\S]*<\/nav>/);
+  assert.doesNotMatch(html, /<div class="library-toolbar">[\s\S]*Artwork demo/);
+  assert.match(css, /\.is-home #mode, \.is-home #activity, \.is-home > main \{ display: none; \}/);
+  assert.match(app, /menuPanel\.addEventListener\("click", \(event\) => \{ if \(event\.target\.closest\("button, a\[href\]"\)\) setMenu\(false\); \}\)/);
+  assert.match(app, /menuPanel\.querySelectorAll\("button, a\[href\], input"\)/);
 });
 
 test("terminal hides only the horizontal scrollbar without disabling overflow or logical width", async () => {

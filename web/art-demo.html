@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Header artwork demo - Emuera.ts</title>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/art-demo.css">
+  <script type="module" src="/art-demo.js"></script>
+</head>
+<body class="art-demo">
+  <header><h1>Header artwork demo</h1><a href="/">Back to game library</a></header>
+  <main>
+    <p>Preview the game's header without starting a game. Time controls the sky; the artwork override lets you try night images during the day.</p>
+    <form id="art-controls">
+      <label>Location
+        <select id="location" name="location">
+          <option value="0">Hakurei Shrine</option><option value="1">Myouren Temple</option>
+          <option value="2">Human Village</option><option value="3">Scarlet Devil Mansion</option>
+          <option value="4">Bamboo Forest</option><option value="5">Forest of Magic</option>
+          <option value="6">Netherworld</option><option value="7">Mountain Foothills</option>
+          <option value="8">Mountain Summit</option><option value="9">Underworld</option>
+          <option value="10">Moon</option>
+        </select>
+      </label>
+      <label>Season
+        <select id="season" name="season"><option value="1">Spring</option><option value="2">Summer</option><option value="3">Autumn</option><option value="4">Winter</option></select>
+      </label>
+      <label>Day of season <input id="day" name="day" type="number" min="1" max="31" value="15" required></label>
+      <label>Time <input id="time" name="time" type="time" value="12:00" required></label>
+      <label>Artwork
+        <select id="artwork" name="artwork"><option value="auto">Automatic (follow time)</option><option value="day">Day</option><option value="night">Night</option></select>
+      </label>
+      <label>Weather
+        <select id="weather" name="weather">
+          <option>Clear</option><option>Fair</option><option>Cloudy</option><option>Rain</option>
+          <option>Storm</option><option>Fog</option><option>Snow</option><option>Blizzard</option>
+        </select>
+      </label>
+      <label>Setting
+        <select id="setting" name="setting"><option value="outdoor">Outdoors</option><option value="indoor">Indoors</option><option value="underground">Underground</option></select>
+      </label>
+      <label class="time-scrubber">Scrub time <input id="minutes" type="range" min="0" max="1439" value="720" aria-label="Scrub time"></label>
+    </form>
+    <p id="art-status" role="status" aria-live="polite">Loading artwork...</p>
+    <button id="retry" type="button" hidden>Retry loading artwork</button>
+    <div id="art-preview" aria-label="Header artwork preview"></div>
+    <p class="art-note">Panoramas display at their native pixel size. Locations without images for the selected season use their SVG landmark. Missing night sets fall back to day artwork. Nothing here changes a game or save.</p>
+  </main>
+  <svg width="0" height="0" class="art-filters" aria-hidden="true">
+    <filter id="era-light-glow" color-interpolation-filters="sRGB" x="-10%" y="-30%" width="120%" height="160%">
+      <feColorMatrix values="0 0 0 0 1 0 0 0 0 .65 0 0 0 0 .25 3 3 -4 0 -2"/>
+      <feGaussianBlur stdDeviation="2"/>
+    </filter>
+    <filter id="era-pixelate" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">
+      <feFlood x="2" y="2" width="1" height="1"/><feComposite width="4" height="4"/><feTile result="grid"/>
+      <feComposite in="SourceGraphic" in2="grid" operator="in"/><feMorphology operator="dilate" radius="2"/>
+    </filter>
+  </svg>
+</body>
+</html>
