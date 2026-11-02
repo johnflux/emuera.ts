@@ -176,6 +176,12 @@
   </dialog>
   <!-- Pixel-art filter for the main screen's sky (.era-sky-view): keeps the colour at the centre of each 4x4 px block. -->
   <svg width="0" height="0" style="position: absolute" aria-hidden="true">
+    <filter id="era-water-highlight" color-interpolation-filters="sRGB">
+      <feColorMatrix in="SourceGraphic" values="0 0 0 0 .65 0 0 0 0 .9 0 0 0 0 1 -8 0 8 .8 0" result="cool"/>
+      <feColorMatrix in="SourceGraphic" values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 2 2 0 -2" result="bright"/>
+      <feComposite in="cool" in2="bright" operator="in"/>
+      <feComposite in2="SourceAlpha" operator="in"/>
+    </filter>
     <filter id="era-light-glow" color-interpolation-filters="sRGB" x="-10%" y="-30%" width="120%" height="160%">
       <feColorMatrix values="0 0 0 0 1 0 0 0 0 .65 0 0 0 0 .25 3 3 -4 0 -2"/>
       <feGaussianBlur stdDeviation="2"/>

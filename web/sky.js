@@ -42,13 +42,14 @@ export function prepareSkyArt(outputRoot, manifest, loadImage, pendingImages, ar
     const season = [...sky.classList].find((name) => name.startsWith("era-season-"))?.slice("era-season-".length);
     const night = artwork === "auto" ? sky.matches(".era-sky-night, .era-sky-dawn") : artwork === "night";
     const sets = manifest[area] ?? {};
-    const lit = night && sets[`${season}-night`]?.middle;
-    const set = lit ? sets[`${season}-night`] : sets[`${season}-day`];
+    const artSeason = sets[`${season}-day`]?.middle || sets[`${season}-night`]?.middle ? season : "neutral";
+    const lit = night && sets[`${artSeason}-night`]?.middle;
+    const set = lit ? sets[`${artSeason}-night`] : sets[`${artSeason}-day`];
     if (!set?.middle) continue;
     const weatherSet = !night && sky.matches(".era-weather-cloudy, .era-weather-rain, .era-weather-storm, .era-weather-fog, .era-weather-snow, .era-weather-blizzard")
-      ? sets[`${season}-night`] : undefined;
+      ? sets[`${artSeason}-night`] : undefined;
     const blend = weatherSet && ["left", "middle", "right"].every((part) => set[part] && weatherSet[part]);
-    sky.dataset.areaArt = `${season}-${lit ? "night" : "day"}`;
+    sky.dataset.areaArt = `${artSeason}-${lit ? "night" : "day"}`;
     sky.classList.add("era-area-art");
     sky.classList.toggle("era-area-art-night", Boolean(lit));
     sky.classList.toggle("era-area-art-weather", Boolean(blend));
@@ -59,6 +60,7 @@ export function prepareSkyArt(outputRoot, manifest, loadImage, pendingImages, ar
       const img = new Image();
       pendingImages.push(loadImage(img, set[part]).then(() => {
         if (part === "middle") header.style.setProperty("--area-art-height", `${img.naturalHeight}px`);
+        else sky.style.setProperty(`--area-${part}-width`, `${img.naturalWidth}px`);
       }, (error) => console.warn(`Area picture ${set[part]}:`, error)));
       if (blend) {
         sky.style.setProperty(`--area-weather-${part}`, `url("${weatherSet[part]}")`);

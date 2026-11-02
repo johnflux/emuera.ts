@@ -6,6 +6,10 @@ const status = document.querySelector("#art-status");
 const retry = document.querySelector("#retry");
 const time = document.querySelector("#time");
 const minutes = document.querySelector("#minutes");
+const overlap = document.querySelector("#overlap");
+const overlapValue = document.querySelector("#overlap-value");
+const overlaps = new Map();
+const overlapKey = () => `${controls.elements.location.value}-${controls.elements.season.value}`;
 const seasons = ["spring", "summer", "autumn", "winter"];
 let manifest;
 let generation = 0;
@@ -26,6 +30,8 @@ async function render() {
   scene.dataset.season = values.get("season");
   scene.dataset.day = values.get("day");
   sky(scene, scene);
+  overlap.value = String(overlaps.get(overlapKey()) ?? 96);
+  overlapValue.value = `${overlap.value}px`;
   if (values.get("artwork") === "day") scene.classList.add("era-area-art-day");
   const view = document.createElement("span");
   view.className = "era-sky-view";
@@ -56,6 +62,7 @@ async function render() {
     catch (error) { console.warn("Landmark preview unavailable:", error); }
     if (token !== generation) return;
   }
+  scene.style.setProperty("--area-art-overlap", `${overlaps.get(overlapKey()) ?? 96}px`);
   preview.replaceChildren(header);
   const phase = [...scene.classList].find(name => /^era-sky-(dawn|morning|day|evening|night)$/.test(name)).slice(8);
   status.textContent = errors.length ? errors.join("; ")
@@ -80,6 +87,12 @@ async function load() {
 
 controls.addEventListener("submit", event => event.preventDefault());
 controls.addEventListener("input", event => {
+  if (event.target === overlap) {
+    overlaps.set(overlapKey(), Number(overlap.value));
+    overlapValue.value = `${overlap.value}px`;
+    preview.querySelector(".era-sky")?.style.setProperty("--area-art-overlap", `${overlap.value}px`);
+    return;
+  }
   if (event.target === minutes) {
     const value = Number(minutes.value);
     time.value = `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}`;

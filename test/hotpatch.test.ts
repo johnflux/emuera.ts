@@ -714,6 +714,8 @@ ADDCHARA 1
 MASTER = 0
 TARGET = 1
 BASE:1:怒り = 0
+CFLAG:1:溜まってる度 = 123
+TALENT:MASTER:劣情察知 = 1
 nameArray:1:na_Title = ～A <quiet> visitor～　●Race:Human　●Ability:Floating
 ${scenario.setup}
 CALL HOTPATCH_TARGET_SITUATION
@@ -722,6 +724,7 @@ WAIT`, "<info-title-test>");
     const snapshot = new Runtime(game, GAME_INSTRUCTION_LIMIT).start();
     assert.equal(snapshot.error, null, `${scenario.name}: ${JSON.stringify(snapshot.error)}`);
     const html = snapshot.output.flatMap((item) => item.type === "html" ? [item.text] : []).join("");
+    assert.match(html, /class='era-fact-label'>Frustration<\/span>12%<\/span>/);
     assert.equal(html.includes("era-character-blurb"), scenario.blurb, scenario.name);
     if (scenario.blurb) assert.match(html, /era-character-blurb'>A &lt;quiet&gt; visitor</);
     if (scenario.tag) assert.ok(html.includes(scenario.tag), "existing tags remain visible");

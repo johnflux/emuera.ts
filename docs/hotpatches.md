@@ -568,7 +568,8 @@ It reports when a location uses an SVG fallback instead of panorama images. No g
 The main screen's header (and the sleep menu's) shows a panorama of the area you are in, as three pixel-art pictures
 per area, season and day/night: a left end, a middle that repeats along the header, and a right end. They live in
 `web/areas/<map id>-<name>/<season>-<day|night>-<left|middle|right>.png` (the area directories are named after the
-SVGs beside them, e.g. `0-shrine`, `3-mansion`; the seasons are `spring`, `summer`, `autumn`, `winter`). Import them
+SVGs beside them, e.g. `0-shrine`, `3-mansion`; the seasons are `spring`, `summer`, `autumn`, `winter`,
+or `neutral` for year-round artwork). Import them
 with
 
 ```sh
@@ -583,8 +584,15 @@ and that tiles seamlessly; the ends are drawn over it, so they may fade out into
 
 The browser shows them at one art pixel per CSS pixel, scaled nearest-neighbour (`image-rendering: pixelated`), and
 the header grows to their height. Dawn and night use the `night` pictures, or the `day` ones dimmed when there are
-none; an evening dims the day pictures slightly. An area or season with no pictures falls back to its SVG landmark.
+none; an evening dims the day pictures slightly. When a season has no day or night panorama, the browser
+uses the area's `neutral` set if present, including its matching night set for weather blending.
+Season-specific sets take precedence. With neither, it falls back to its SVG landmark.
 The server lists the files at `/api/areas`; the client reads that list once per page load.
+The middle is clipped to the space between the end panels with a 96px overlap at each join,
+rather than extending beneath the entire ends. Image widths determine the clip; narrow headers
+clamp the insets to half the available width. Weather, light halos and water highlights use the
+same geometry. The artwork demo's Middle/end overlap slider ranges from 0 to 600px and remembers
+preview adjustments per location/season until reload; 0 puts panels edge-to-edge.
 
 Hakurei Shrine includes all four daytime seasons: the original spring blossoms, green summer foliage, golden
 autumn foliage, and snow-covered winter scenery. Summer uses supplied green-leaf artwork at native widths
@@ -614,6 +622,51 @@ a repeating rural backdrop, and traditional shops on the right. Pixel-grid clean
 produce three ground-aligned 463×144px pieces. The matching night grade keeps shop windows and
 paper lanterns warm, with identical geometry for weather blending. Other village seasons use the SVG fallback.
 
+Scarlet Devil Mansion includes supplied spring artwork at its native 532×144px per piece,
+with faint alpha residue removed. The gate and gardens frame a repeating lakeside backdrop and the
+red-brick mansion. The aligned night grade retains warm window light and the clock face, using
+the shared light halo and weather blending. Other mansion seasons use the SVG fallback.
+
+Bamboo Forest includes supplied spring artwork, cleaned on a four-pixel source grid and resized
+with nearest-neighbour sampling to 480×144px per piece. Neon green matte residue is removed before
+sampling, and all pieces share a ground baseline. The left bamboo grove and right path gate frame
+the repeating forest. Its cool night grade preserves transparency and geometry for weather blending;
+no artificial lights are added. Other bamboo seasons use the SVG fallback.
+
+Forest of Magic includes supplied spring artwork with an ancient tree on the left, repeating
+woodland in the middle and a cottage on the right. Four-pixel source-grid cleanup and nearest-neighbour
+resizing produce ground-aligned 439×144px pieces with transparent sky and no neon green matte residue.
+The matching night grade preserves the cottage lantern's warm light and identical geometry for
+weather blending. Other forest seasons use the SVG fallback.
+
+Netherworld uses season-neutral supplied artwork year-round: pale cherry blossoms and a stone lantern
+on the left, a low repeating ornamental garden and the Hakugyokurou manor on the right. The native
+532×144px panels have hard-alpha cleanup and aligned day/night geometry. The cool night grade
+preserves warm manor windows; time-of-day sky and weather continue to change normally.
+
+Mountain Foothills includes supplied spring artwork with mossy rocks and a pine on the left,
+a repeating flowering valley and stream, and a waterfall, torii and stone lantern on the right.
+Four-pixel source-grid cleanup and nearest-neighbour resizing produce aligned 559×144px end panels.
+Their inner 96px feather into the repeating backdrop to avoid hard cuts through trees.
+The middle tile has a 48px overlapped join, reducing it to 511×144px. Day and night share this edge treatment.
+The middle's two tall cherry trees are replaced with low woodland from the same panel, retaining
+the stream below, so end-panel hills cannot hide their trunks and leave floating blossom crowns.
+The matching cool night grade preserves the lantern's warm light and identical transparency
+for weather blending. Other foothill seasons use the SVG fallback.
+The distant blue mountain ridgelines are softened toward the adjacent interior colours without
+changing their silhouette or transparency, in both day and night artwork.
+Spring foothill water has a moving highlight overlay: separate colour and brightness filters retain
+both cyan water and white foam from the composed daytime panels. Broad highlight bands descend
+on a 0.65-second cycle, suggesting falling water and stream ripples without moving rocks or vegetation.
+The previous filter rejected white foam and made the effect too faint. It is dimmer at night, hidden underground and disabled
+for reduced motion. The original artwork remains unchanged.
+
+Mountain Summit includes supplied spring artwork at 539×144px per panel. The repeating middle
+intentionally retains its rocky mountain sanctuary, sacred stone and windswept pine; the ends
+show a large pine and a shrine with cherry blossoms. Source-grid cleanup removes coloured matte
+residue and the left source's white bottom border. Inner end-panel edges feather over 64px.
+Day and cool moonlit night versions share geometry and transparency. Other seasons retain the SVG fallback.
+
 During bad-weather days the panorama blends toward its matching night set: cloudy/fog 18%, rain 32%, storm 48%,
 snow 20%, and blizzard 35%. This requires complete day and night sets; missing night pieces leave the day artwork
 unchanged. Clear/fair days and actual night artwork do not receive this blend. Weather overlays remain above it.
@@ -629,11 +682,23 @@ The browser approximates sunrise and sunset at latitude 36 N, with solar noon at
 maps to a quarter of the solar year, starting spring around March 1. Summer has longer days and winter shorter
 ones, changing gradually each day; a 30-minute twilight blends the warm sky into night. These are artwork-only
 times, not changes to game schedules. The sun peaks at `top: 10px` above the `93px` horizon; the moon follows
-an overnight arc. Three differently sized star tiles combine fine blue-white and warm stars with occasional
+an overnight arc. Its transparent crescent artwork has cool ivory shading, subtle craters and a soft
+shape-following glow, without a dark disc covering the sky. The weather glow uses the same artwork.
+Three differently sized star tiles combine fine blue-white and warm stars with occasional
 soft bright stars and a faint sky haze, avoiding an obvious repeated grid behind weather and scenery.
 The orb stays at least 450px from the right-hand scenery when the header is wide enough and clamps inside narrow
 headers. Sunrise and sunset blend the sky and sun into peach, pink and violet. Weather still obscures the orb,
 fog covers the whole panorama, and underground locations hide the weather and orb.
+Rain uses two independently moving layers of short, slanted drops with varied lengths and opacity.
+Storms use denser, faster versions of those rain layers, with staggered 17-second and 23-second
+wind cycles changing the rain's slant. An occasional thin forked bolt appears behind scenery, synchronized
+with soft blue-grey lightning that illuminates the header
+without the former abrupt particle-brightness flashes; reduced-motion mode also disables lightning.
+Blizzards use tightly packed fine snow and larger foreground flakes, sweeping steadily sideways at roughly
+538px/s and 1005px/s without slowing or reversing. A heavy foreground snow veil obscures the scenery;
+its blue-grey night palette avoids turning the night sky white.
+The snow veil stays static while the flakes move. Reduced-motion mode also hides the lightning bolt.
+Particle tiles travel by whole repeat lengths to avoid loop jumps; reduced-motion mode freezes both layers.
 
 ### Map pictures
 

@@ -400,11 +400,16 @@ test("HTTP UI, isolated sessions, real image bytes, sprite metadata, errors and 
         }
       }
     }
+    const moon = await fetch(base + "/moon.svg");
+    assert.equal(moon.status, 200);
+    assert.equal(moon.headers.get("content-type"), "image/svg+xml");
+    assert.match(await moon.text(), /clip-path="url\(#crescent\)"/);
     assert.equal((await fetch(base + "/areas/0-shrine/monsoon-day-left.png")).status, 404);
-    for (const [area, directory] of [["1", "1-temple"], ["2", "2-village"]])
+    for (const [area, directory] of [["1", "1-temple"], ["2", "2-village"], ["3", "3-mansion"], ["4", "4-bamboo"], ["5", "5-forest"], ["6", "6-netherworld"], ["7", "7-foothills"], ["8", "8-summit"]])
     for (const time of ["day", "night"]) for (const part of ["left", "middle", "right"]) {
-      const picture = areas[area!][`spring-${time}`][part];
-      assert.match(picture, new RegExp(`^/areas/${directory}/spring-${time}-${part}\\.png\\?v=\\d+$`));
+      const season = area === "6" ? "neutral" : "spring";
+      const picture = areas[area!][`${season}-${time}`][part];
+      assert.match(picture, new RegExp(`^/areas/${directory}/${season}-${time}-${part}\\.png\\?v=\\d+$`));
       const response = await fetch(base + picture);
       assert.equal(response.status, 200);
       assert.equal(response.headers.get("content-type"), "image/png");

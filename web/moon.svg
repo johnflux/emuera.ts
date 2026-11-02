@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs>
+    <radialGradient id="light" cx="80%" cy="35%" r="85%">
+      <stop stop-color="#fffbea"/>
+      <stop offset=".55" stop-color="#e3e7df"/>
+      <stop offset="1" stop-color="#8fabc2"/>
+    </radialGradient>
+    <clipPath id="crescent">
+      <path d="M13 2.3A14 14 0 1 1 13 29.7C26 24 26 8 13 2.3Z"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#crescent)">
+    <circle cx="16" cy="16" r="14" fill="url(#light)"/>
+    <g fill="#71899a" opacity=".19">
+      <ellipse cx="24" cy="12" rx="3" ry="3.7"/>
+      <ellipse cx="22" cy="22" rx="2.8" ry="2"/>
+      <circle cx="19" cy="5.5" r="1.5"/>
+      <circle cx="27" cy="18" r="1.2"/>
+    </g>
+    <g fill="none" stroke="#fafff3" stroke-width=".5" opacity=".45">
+      <ellipse cx="24.5" cy="12.5" rx="1.4" ry="1.8"/>
+      <circle cx="24" cy="24" r="1.1"/>
+      <circle cx="27" cy="18" r=".7"/>
+    </g>
+  </g>
+</svg>

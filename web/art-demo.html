@@ -11,7 +11,6 @@
 <body class="art-demo">
   <header><h1>Header artwork demo</h1><a href="/">Back to game library</a></header>
   <main>
-    <p>Preview the game's header without starting a game. Time controls the sky; the artwork override lets you try night images during the day.</p>
     <form id="art-controls">
       <label>Location
         <select id="location" name="location">
@@ -41,13 +40,22 @@
         <select id="setting" name="setting"><option value="outdoor">Outdoors</option><option value="indoor">Indoors</option><option value="underground">Underground</option></select>
       </label>
       <label class="time-scrubber">Scrub time <input id="minutes" type="range" min="0" max="1439" value="720" aria-label="Scrub time"></label>
+      <label class="time-scrubber">Middle/end overlap: <output id="overlap-value" for="overlap">96px</output>
+        <input id="overlap" type="range" min="0" max="600" step="4" value="96" aria-label="Middle/end overlap">
+        <span>0 = panels meet edge-to-edge; larger values put more of the middle behind the ends. Preview only; values are remembered per location and season while this page is open.</span>
+      </label>
     </form>
     <p id="art-status" role="status" aria-live="polite">Loading artwork...</p>
     <button id="retry" type="button" hidden>Retry loading artwork</button>
     <div id="art-preview" aria-label="Header artwork preview"></div>
-    <p class="art-note">Panoramas display at their native pixel size. Locations without images for the selected season use their SVG landmark. Missing night sets fall back to day artwork. Nothing here changes a game or save.</p>
   </main>
   <svg width="0" height="0" class="art-filters" aria-hidden="true">
+    <filter id="era-water-highlight" color-interpolation-filters="sRGB">
+      <feColorMatrix in="SourceGraphic" values="0 0 0 0 .65 0 0 0 0 .9 0 0 0 0 1 -8 0 8 .8 0" result="cool"/>
+      <feColorMatrix in="SourceGraphic" values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 2 2 0 -2" result="bright"/>
+      <feComposite in="cool" in2="bright" operator="in"/>
+      <feComposite in2="SourceAlpha" operator="in"/>
+    </filter>
     <filter id="era-light-glow" color-interpolation-filters="sRGB" x="-10%" y="-30%" width="120%" height="160%">
       <feColorMatrix values="0 0 0 0 1 0 0 0 0 .65 0 0 0 0 .25 3 3 -4 0 -2"/>
       <feGaussianBlur stdDeviation="2"/>

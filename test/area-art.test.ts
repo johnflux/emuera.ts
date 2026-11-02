@@ -16,19 +16,24 @@ test("PNG pictures survive encoding and decoding", () => {
   assert.deepEqual(decodePng(encodePng(original)), original);
 });
 
-for (const [area, width] of [["1-temple", 571], ["2-village", 463]] as const)
-test(`${area} spring panoramas have aligned transparent day/night artwork and warm lights`, async () => {
+for (const [area, width] of [["1-temple", 571], ["2-village", 463], ["3-mansion", 532], ["4-bamboo", 480], ["5-forest", 439], ["6-netherworld", 532], ["7-foothills", 559], ["8-summit", 539]] as const)
+test(`${area} panoramas have aligned transparent day/night artwork and appropriate lighting`, async () => {
   const root = new URL(`../web/areas/${area}/`, import.meta.url);
+  const season = area === "6-netherworld" ? "neutral" : "spring";
   for (const part of ["left", "middle", "right"]) {
-    const day = decodePng(await readFile(new URL(`spring-day-${part}.png`, root)));
-    const night = decodePng(await readFile(new URL(`spring-night-${part}.png`, root)));
-    assert.equal(day.width, width);
+    const day = decodePng(await readFile(new URL(`${season}-day-${part}.png`, root)));
+    const night = decodePng(await readFile(new URL(`${season}-night-${part}.png`, root)));
+    assert.equal(day.width, area === "7-foothills" && part === "middle" ? 511 : width);
     assert.equal(day.height, 144);
     assert.equal(night.width, day.width);
     assert.equal(night.height, day.height);
     let clear = 0, bottom = 0, dayLight = 0, nightLight = 0;
     for (let i = 0; i < day.data.length; i += 4) {
-      assert.ok(day.data[i + 3] === 0 || day.data[i + 3] === 255, "faint alpha residue is removed");
+      const x = (i / 4) % day.width;
+      const join = (area === "7-foothills" && (part === "left" ? x >= day.width - 96
+        : part === "right" ? x < 96 : x < 48 || (x >= 108 && x < 196) || (x >= 347 && x < 435)))
+        || (area === "8-summit" && (part === "left" ? x >= day.width - 64 : part === "right" && x < 64));
+      if (!join) assert.ok(day.data[i + 3] === 0 || day.data[i + 3] === 255, "faint alpha residue is removed");
       assert.equal(night.data[i + 3], day.data[i + 3], "night and weather blends stay aligned");
       if (!day.data[i + 3]) { clear++; continue; }
       dayLight += day.data[i]! + day.data[i + 1]! + day.data[i + 2]!;
@@ -38,11 +43,16 @@ test(`${area} spring panoramas have aligned transparent day/night artwork and wa
     assert.ok(nightLight / dayLight > .2 && nightLight / dayLight < .6, `${part} legible night palette`);
     for (let x = 0; x < day.width; x++) if (day.data[(143 * day.width + x) * 4 + 3]) bottom++;
     assert.ok(bottom / day.width > .9, `${part} ground reaches the baseline`);
-    assert.equal(day.data[(10 * day.width + width - 30) * 4 + 3], 0);
+    assert.equal(day.data[(10 * day.width + day.width - 30) * 4 + 3], 0);
     const lights = area === "1-temple"
       ? part === "right" ? [[194, 91, 217, 106], [276, 91, 299, 106]]
         : part === "left" ? [[133, 95, 143, 103]] : []
-      : part === "right" ? [[135, 113, 143, 123], [218, 113, 225, 123], [281, 117, 296, 130]] : [];
+      : area === "2-village"
+        ? part === "right" ? [[135, 113, 143, 123], [218, 113, 225, 123], [281, 117, 296, 130]] : []
+        : area === "3-mansion" && part === "right" ? [[303, 65, 316, 78], [238, 90, 245, 97]]
+          : area === "5-forest" && part === "right" ? [[206, 95, 213, 104]]
+            : area === "6-netherworld" && part === "right" ? [[348, 87, 378, 105]]
+              : area === "7-foothills" && part === "right" ? [[401, 72, 408, 83]] : [];
     for (const [left, top, right, bottom] of lights) {
       let warm = 0;
       for (let y = top!; y < bottom!; y++) for (let x = left!; x < right!; x++) {
@@ -50,6 +60,29 @@ test(`${area} spring panoramas have aligned transparent day/night artwork and wa
         if (night.data[i + 3] && night.data[i]! > 150 && night.data[i]! > night.data[i + 2]! * 1.5) warm++;
       }
       assert.ok(warm > 2, `${part} warm light`);
+    }
+  }
+});
+
+test("foothill end panels blend into the middle without a hard vertical cut", async () => {
+  for (const time of ["day", "night"]) for (const part of ["left", "right"]) {
+    const art = decodePng(await readFile(new URL(`../web/areas/7-foothills/spring-${time}-${part}.png`, import.meta.url)));
+    const edge = part === "left" ? art.width - 1 : 0;
+    for (let y = 0; y < art.height; y++) assert.equal(art.data[(y * art.width + edge) * 4 + 3], 0);
+    const inward = part === "left" ? art.width - 49 : 48;
+    const alpha = art.data[(143 * art.width + inward) * 4 + 3]!;
+    assert.ok(alpha > 100 && alpha < 160, "ground feathers gradually through the joining region");
+  }
+});
+
+for (const area of ["4-bamboo", "5-forest"])
+test(`${area} foliage has no neon green matte residue`, async () => {
+  for (const part of ["left", "middle", "right"]) {
+    const art = decodePng(await readFile(new URL(`../web/areas/${area}/spring-day-${part}.png`, import.meta.url)));
+    for (let i = 0; i < art.data.length; i += 4) {
+      if (!art.data[i + 3]) continue;
+      const r = art.data[i]!, g = art.data[i + 1]!, b = art.data[i + 2]!;
+      assert.ok(!(g > 175 && g > r * 2.2 && g > b * 2.2), `${part} clean foliage edge`);
     }
   }
 });

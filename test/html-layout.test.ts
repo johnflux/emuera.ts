@@ -251,7 +251,7 @@ test("sky follows exact game minutes with a bounded arc and warm sunrise and sun
   assert.match(css, /--sky-orb-right: clamp\(10px, max\(450px,[^;]*max\(10px, calc\(100% - 40px\)\)\)/);
   assert.match(css, /\.era-sky-orb, \.era-sky-clouds::after \{ position: absolute; top: min\(var\(--sky-orb-top, 10px\), max\(0px, calc\(100% - 30px\)\)\); right: var\(--sky-orb-right\);/);
   assert.match(css, /linear-gradient\(color-mix\(in srgb, #2f78c4, #493b76 var\(--sky-warmth, 0%\)\)/);
-  assert.match(css, /\.era-sky-moon \.era-sky-orb, \.era-sky-moon \.era-sky-clouds::after \{[^}]*background: transparent;[^}]*inset -7px 3px/);
+  assert.match(css, /\.era-sky-moon \.era-sky-orb, \.era-sky-moon \.era-sky-clouds::after \{[^}]*background: url\(\/moon\.svg\)[^}]*box-shadow: none;[^}]*filter: drop-shadow/);
   assert.match(css, /\.era-sky-view::before \{[^}]*opacity: var\(--sky-darkness, 0\);[^}]*background-size: 389px 173px,[^}]*251px 137px,[^}]*173px 97px/);
   assert.match(css, /\.era-underground \.era-sky-view > :not\(\.era-sky-landmark\) \{ display: none; \}/);
 });
@@ -260,6 +260,7 @@ test("area artwork blends bad-weather days and selects undimmed seasonal night p
   const source = await readFile(new URL("../web/sky.js", import.meta.url), "utf8");
   const routine = source.slice(source.indexOf("function prepareSkyArt("));
   for (const season of ["spring", "summer", "autumn", "winter"])
+    for (const palette of ["seasonal", "neutral", "both"])
     for (const phase of ["night", "dawn", "day", "evening"])
       for (const weather of ["clear", "fair", "cloudy", "rain", "storm", "fog", "snow", "blizzard"])
         for (const availability of ["complete", "missing", "partial"])
@@ -277,28 +278,34 @@ test("area artwork blends bad-weather days and selects undimmed seasonal night p
                 closest: () => null,
                 style: { setProperty: (name: string, value: string) => properties.set(name, value) },
               };
+              const artSeason = palette === "neutral" ? "neutral" : season;
               const set = (time: string) => Object.fromEntries(["left", "middle", "right"]
-                .map((part) => [part, `/areas/0-shrine/${season}-${time}-${part}.png`]));
+                .map((part) => [part, `/areas/0-shrine/${artSeason}-${time}-${part}.png`]));
               const nightSet = availability === "complete" ? set("night") : availability === "partial" ? { middle: set("night").middle } : undefined;
               await runInNewContext(`${routine}\nprepareSkyArt(outputRoot, manifest, loadImage, pendingImages, artwork);`, {
                 artwork,
                 outputRoot: { querySelectorAll: () => [element] },
-                manifest: { 0: { [`${season}-day`]: set("day"), [`${season}-night`]: nightSet } },
-                Image: class { naturalHeight = 144; },
+                manifest: { 0: {
+                  ...(palette === "both" ? { "neutral-day": { middle: "/unused-day.png" }, "neutral-night": { middle: "/unused-night.png" } } : {}),
+                  [`${artSeason}-day`]: set("day"), [`${artSeason}-night`]: nightSet,
+                } },
+                Image: class { naturalHeight = 144; naturalWidth = 520; },
                 loadImage: async () => {},
                 pendingImages: [],
               });
               const wantsNight = artwork === "auto" ? phase === "night" || phase === "dawn" : artwork === "night";
               const night = wantsNight && availability !== "missing";
               const time = night ? "night" : "day";
-              assert.equal(element.dataset.areaArt, `${season}-${time}`);
+              assert.equal(element.dataset.areaArt, `${artSeason}-${time}`);
               assert.equal(classes.has("era-area-art-night"), night);
               const blend = !wantsNight && !["clear", "fair"].includes(weather) && availability === "complete";
               assert.equal(classes.has("era-area-art-weather"), blend);
               for (const part of ["left", "middle", "right"]) {
                 assert.equal(properties.get(`--area-${part}`), night && availability === "partial" && part !== "middle"
-                  ? undefined : `url("/areas/0-shrine/${season}-${time}-${part}.png")`);
-                assert.equal(properties.get(`--area-weather-${part}`), blend ? `url("/areas/0-shrine/${season}-night-${part}.png")` : undefined);
+                  ? undefined : `url("/areas/0-shrine/${artSeason}-${time}-${part}.png")`);
+                assert.equal(properties.get(`--area-weather-${part}`), blend ? `url("/areas/0-shrine/${artSeason}-night-${part}.png")` : undefined);
+                if (part !== "middle") assert.equal(properties.get(`--area-${part}-width`),
+                  night && availability === "partial" ? undefined : "520px");
               }
   }
   const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
@@ -306,6 +313,42 @@ test("area artwork blends bad-weather days and selects undimmed seasonal night p
   assert.match(css, /\.era-area-art-weather \.era-sky-landmark::after \{[^}]*opacity: var\(--area-weather-blend, 0\);[^}]*--area-weather-middle/);
   for (const [weather, opacity] of [["cloudy", ".18"], ["rain", ".32"], ["storm", ".48"], ["fog", ".18"], ["snow", ".20"], ["blizzard", ".35"]])
     assert.ok(css.includes(`.era-weather-${weather} { --area-weather-blend: ${opacity}; }`));
+});
+
+test("panorama overlap clips only the middle and applies consistently to artwork overlays", async () => {
+  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  assert.match(css, /--area-art-overlap: 96px/);
+  assert.match(css, /padding-left: min\(50%, max\(0px, calc\(var\(--area-left-width, 0px\) - var\(--area-art-overlap\)\)\)\)/);
+  assert.match(css, /padding-right: min\(50%, max\(0px, calc\(var\(--area-right-width, 0px\) - var\(--area-art-overlap\)\)\)\)/);
+  assert.match(css, /background-origin: border-box, border-box, content-box;\s*background-clip: border-box, border-box, content-box/);
+  const demo = await readFile(new URL("../web/art-demo.html", import.meta.url), "utf8");
+  assert.match(demo, /id="overlap" type="range" min="0" max="600" step="4" value="96"/);
+  const source = await readFile(new URL("../web/art-demo.js", import.meta.url), "utf8");
+  assert.match(source, /overlaps\.set\(overlapKey\(\), Number\(overlap\.value\)\)/);
+  assert.match(source, /preview\.querySelector\("\.era-sky"\)\?\.style\.setProperty\("--area-art-overlap"/);
+});
+
+test("foothill water highlights move independently and respect night, underground and reduced motion", async () => {
+  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  assert.match(css, /\.era-area-7\[data-area-art\^="spring-"\]:not\(\.era-underground\) \.era-sky-land/);
+  assert.match(css, /filter: url\(#era-water-highlight\); clip-path: inset\(70px 0 0\)/);
+  assert.match(css, /mask-size: 24px 24px; animation: era-water-flow .65s linear infinite/);
+  assert.match(css, /@keyframes era-water-flow \{ to \{ mask-position: -24px 24px; \} \}/);
+  assert.match(css, /\.era-area-7\.era-area-art-night \.era-sky-land::before \{ opacity: .28; \}/);
+  assert.match(css, /prefers-reduced-motion: reduce\) \{\s*\.era-area-7[^}]*animation: none; opacity: 0/);
+  for (const file of ["index.html", "art-demo.html"]) {
+    const html = await readFile(new URL(`../web/${file}`, import.meta.url), "utf8");
+    assert.match(html, /id="era-water-highlight" color-interpolation-filters="sRGB"/);
+    assert.match(html, /-8 0 8 .8 0/);
+    assert.match(html, /0 2 2 0 -2/);
+    assert.match(html, /<feComposite in2="SourceAlpha" operator="in"\/>/);
+  }
+  const clamp = (x: number) => Math.max(0, Math.min(1, x));
+  const alpha = (r: number, g: number, b: number) => clamp(-8 * r + 8 * b + .8) * clamp(2 * g + 2 * b - 2);
+  assert.ok(alpha(.9, .95, 1) > .75, "white foam is retained, not cancelled by the colour filter");
+  assert.ok(alpha(.4, .75, .9) > .75, "cyan water stays visible");
+  assert.equal(alpha(.2, .4, .15), 0, "green plants stay still");
+  assert.equal(alpha(.25, .3, .5), 0, "dark mountain scenery stays still");
 });
 
 test("fog overlays the full top image but stays hidden underground", async () => {
@@ -350,6 +393,40 @@ test("title screen menu is visible and contains the artwork demo link", async ()
   assert.match(css, /\.is-home #mode, \.is-home #activity, \.is-home > main \{ display: none; \}/);
   assert.match(app, /menuPanel\.addEventListener\("click", \(event\) => \{ if \(event\.target\.closest\("button, a\[href\]"\)\) setMenu\(false\); \}\)/);
   assert.match(app, /menuPanel\.querySelectorAll\("button, a\[href\], input"\)/);
+});
+
+test("rain and blizzards use layered precipitation with seamless motion and reduced-motion support", async () => {
+  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  for (const weather of ["rain", "blizzard"]) {
+    assert.ok(css.includes(`.era-weather-${weather} .era-sky-fall::before`));
+    assert.ok(css.includes(`.era-weather-${weather} .era-sky-fall::after`));
+  }
+  assert.ok(css.includes("--fall-speed: .8s; --fall-travel: 0px 83px;"));
+  assert.match(css, /background-size: 43px 31px; --fall-speed: \.24s; --fall-travel: -129px 31px/);
+  assert.match(css, /background-size: 67px 47px; --fall-speed: \.2s; --fall-travel: -201px 47px/);
+  assert.doesNotMatch(css, /era-snow-gust|era-snow-descent/);
+  assert.match(css, /\.era-weather-blizzard \.era-sky-fall \{ z-index: 1;[^}]*linear-gradient\(#bccedd90, #d6e3eda6\)/);
+  assert.match(css, /\.era-sky-moon\.era-weather-blizzard \.era-sky-fall \{[^}]*linear-gradient\(#42556b90, #63798fa6\)/);
+  assert.match(css, /@keyframes era-precipitation \{ to \{ background-position: var\(--fall-travel\); \} \}/);
+  assert.match(css, /@media \(prefers-reduced-motion: reduce\) \{ \.era-sky-fall, \.era-sky-fall::before, \.era-sky-fall::after \{ animation: none !important; \} \}/);
+});
+
+test("storms use denser layered rain, staggered wind gusts and gentle lightning", async () => {
+  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  assert.match(css, /\.era-weather-storm \.era-sky-fall::before \{[^}]*background-size: 71px 61px;[^}]*--fall-speed: \.45s;[^}]*era-rain-gust 17s/);
+  assert.match(css, /\.era-weather-storm \.era-sky-fall::after \{[^}]*background-size: 107px 89px;[^}]*--fall-speed: \.32s;[^}]*era-rain-gust 23s -7s/);
+  assert.match(css, /39% \{ transform: skewX\(9deg\); \}/);
+  assert.match(css, /17% \{ transform: skewX\(-27deg\); \}/);
+  assert.match(css, /\.era-weather-storm \.era-sky-fall \{[^}]*animation: era-lightning 13s linear infinite/);
+  assert.match(css, /74%, 76% \{ background-color: #b9d4f538; \}/);
+  assert.match(css, /\.era-weather-storm \.era-sky-clouds::before \{[^}]*opacity: 0;[^}]*clip-path: polygon\([^}]*animation: era-lightning-bolt 13s/);
+  assert.match(css, /@media \(prefers-reduced-motion: reduce\) \{ \.era-weather-storm \.era-sky-clouds::before \{ animation: none; \} \}/);
+});
+
+test("blizzard veil stays static and lightning uses a thin forked silhouette", async () => {
+  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  assert.doesNotMatch(css, /snow-curtain/);
+  assert.match(css, /48% 58%, 32% 60%, 59% 32%, 81% 63%, 63% 31%, 44% 30%, 62% 0/);
 });
 
 test("terminal hides only the horizontal scrollbar without disabling overflow or logical width", async () => {

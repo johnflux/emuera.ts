@@ -441,7 +441,7 @@ HTML_PRINT "<era-close>"
 sHtml '= @"<span class='era-fact'><span class='era-fact-label'>Favor</span>%HOTPATCH_RANK(CFLAG:2, "MAX_50000")% {CFLAG:2}</span>"
 sHtml += @"<span class='era-fact'><span class='era-fact-label'>Trust</span>%HOTPATCH_RANK(CFLAG:信頼度, "MAX_20000")% {CFLAG:信頼度}</span>"
 SIF NOTICE_LUST(TARGET)
-	sHtml += @"<span class='era-fact'><span class='era-fact-label'>Frustration</span>{CFLAG:TARGET:溜まってる度 / 10}%</span>"
+	sHtml += @"<span class='era-fact'><span class='era-fact-label'>Frustration</span>{CFLAG:TARGET:溜まってる度 / 10}\%</span>"
 IF 情報表示MODE == 0
 	sHtml += @"<span class='era-fact'><span class='era-fact-label'>Children</span>{CFLAG:TARGET:子供人数}</span>"
 	IF (!FLAG:CHILD_LIMIT_BYPASS && INRANGE(CFLAG:TARGET:出産経過日, 1, 59)) || TALENT:TARGET:妊娠 ;1で種付け不可

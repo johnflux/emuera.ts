@@ -139,7 +139,7 @@ export function prepareAreaArt(parts: { left: Picture; middle: Picture; right: P
   return { left: part("left", false), middle: part("middle", true), right: part("right", false) };
 }
 
-const SEASONS = ["spring", "summer", "autumn", "winter"];
+const SEASONS = ["spring", "summer", "autumn", "winter", "neutral"];
 
 async function main(args: string[]): Promise<void> {
   let block = 4;
@@ -151,7 +151,7 @@ async function main(args: string[]): Promise<void> {
   const [area, season, phase, ...files] = args;
   if (!area || !/^\d+-[a-z]+$/.test(area) || !SEASONS.includes(season!) || !["day", "night"].includes(phase!)
     || files.length !== 3 || !Number.isInteger(block) || block < 1) {
-    console.error("Usage: npm run area-art -- <area dir, e.g. 0-shrine> <spring|summer|autumn|winter> <day|night> <left.png> <middle.png> <right.png> [--block <px>]");
+    console.error("Usage: npm run area-art -- <area dir, e.g. 0-shrine> <spring|summer|autumn|winter|neutral> <day|night> <left.png> <middle.png> <right.png> [--block <px>]");
     process.exitCode = 2;
     return;
   }

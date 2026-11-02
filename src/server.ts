@@ -43,7 +43,7 @@ async function mapManifest(root: string): Promise<Record<string, MapEntry>> {
 }
 /** Main-screen header pictures: web/areas/<map id>-<name>/<season>-<day|night>-<left|middle|right>.png (src/area-art.ts). */
 const AREA_DIR = /^(\d+)-[a-z]+$/;
-const AREA_PICTURE = /^((?:spring|summer|autumn|winter)-(?:day|night))-(left|middle|right)\.png$/;
+const AREA_PICTURE = /^((?:spring|summer|autumn|winter|neutral)-(?:day|night))-(left|middle|right)\.png$/;
 /** Map id → "<season>-<day|night>" → part → picture URL (versioned by modification time). */
 async function areaManifest(root: string): Promise<Record<string, Record<string, Record<string, string>>>> {
   const areas: Record<string, Record<string, Record<string, string>>> = {};
@@ -609,6 +609,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
         "/library.js": "library.js", "/library.css": "library.css",
         "/art-demo": "art-demo.html", "/art-demo.js": "art-demo.js", "/art-demo.css": "art-demo.css", "/sky.js": "sky.js",
         "/title/new-game.webp": "title/new-game.webp", "/title/load-game.webp": "title/load-game.webp",
+        "/moon.svg": "moon.svg",
         "/clock-frame.png": "clock-frame.png",
         "/clock-frame-hover.png": "clock-frame-hover.png",
         "/fonts/BIZUDGothic-Regular.ttf": "fonts/BIZUDGothic-Regular.ttf",
@@ -618,7 +619,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
       // Map pictures (web/maps/<map key>.<ext>) replace the game's text maps.
       const page = pages[url.pathname] ?? (/^\/areas\/\d+-[a-z]+\.svg$/.test(url.pathname)
         || /^\/decoration\/deco_corner_flower_(spring|summer|autumn|winter)\.png$/.test(url.pathname)
-        || /^\/areas\/\d+-[a-z]+\/(spring|summer|autumn|winter)-(day|night)-(left|middle|right)\.png$/.test(url.pathname)
+        || /^\/areas\/\d+-[a-z]+\/(spring|summer|autumn|winter|neutral)-(day|night)-(left|middle|right)\.png$/.test(url.pathname)
         || /^\/maps\/[a-z0-9-]+\.(webp|svg|png|jpg)$/.test(url.pathname) ? url.pathname.slice(1) : undefined);
       if (request.method === "GET" && page) {
         const body = await readFile(path.join(WEB_ROOT, page)).catch(() => { throw new HttpError(404, "Not found"); });
