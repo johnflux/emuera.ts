@@ -2688,18 +2688,39 @@ function markMapLabels() {
     }
   }
 }
+const commandHistory = [];
+let commandHistoryIndex = 0;
+let commandDraft = "";
+function submitCommand(value = command.value) {
+  if ((busy && !expiring) || !input || input.blocking) return;
+  if (value !== "" && input.kind !== "wait" && input.kind !== "mousekey") commandHistory.push(value);
+  commandHistoryIndex = commandHistory.length;
+  commandDraft = "";
+  void submit(value);
+}
+command.addEventListener("keydown", (event) => {
+  if (event.defaultPrevented || event.isComposing || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey
+    || (event.key !== "ArrowUp" && event.key !== "ArrowDown") || !commandHistory.length) return;
+  event.preventDefault();
+  if (commandHistoryIndex === commandHistory.length) commandDraft = command.value;
+  commandHistoryIndex = Math.max(0, Math.min(commandHistory.length, commandHistoryIndex + (event.key === "ArrowUp" ? -1 : 1)));
+  command.value = commandHistoryIndex === commandHistory.length ? commandDraft : commandHistory[commandHistoryIndex];
+  command.setSelectionRange(command.value.length, command.value.length);
+});
 document.querySelector("#input-form").addEventListener("submit", (event) => {
   event.preventDefault();
   if (command.value === "" && settling()) return;
-  void submit(command.value);
+  submitCommand();
 });
 function submitCharacter() {
   if ((busy && !expiring) || !input?.singleCharacter || !command.value) return;
   const first = Array.from(command.value)[0];
   if (input.kind === "integer" && !/^[0-9]$/.test(first)) return;
-  void submit(first);
+  submitCommand(first);
 }
 command.addEventListener("input", (event) => {
+  commandHistoryIndex = commandHistory.length;
+  commandDraft = command.value;
   if (!event.isComposing) submitCharacter();
 });
 command.addEventListener("compositionend", submitCharacter);
@@ -2732,7 +2753,7 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Enter") {
     event.preventDefault();
     if (command.value === "" && settling()) return;
-    void submit(command.value);
+    submitCommand();
   } else if (Array.from(event.key).length === 1) {
     event.preventDefault();
     command.focus({ preventScroll: true });

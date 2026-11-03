@@ -18,7 +18,7 @@ export function setupInlineChat(parent, history, loadAll, chat) {
   const main = parent.closest(".era-main");
   if (!main || !chat || main.querySelector(".era-main-chat")) return;
   const room = main.querySelector(".era-character");
-  if (!room) throw new Error("The selected character's room panel is unavailable.");
+  if (!room) return;
   const host = element("section", "era-main-chat");
   host.setAttribute("aria-label", `Chat with ${history.character.name}`);
   const pane = element("div", "era-history-pane");

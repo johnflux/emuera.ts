@@ -27,6 +27,10 @@ https://gitgud.io/Legis1998/anon-tw/-/archive/anon-tw_eng-modding/anon-tw-anon-t
 See the [developer guide](docs/developer-guide.md) for compatibility details and
 additional documentation.
 
+With the game input focused, press Up/Down to browse previously typed inputs.
+Going past the newest entry restores your unfinished input. History lasts until
+the page is reloaded.
+
 ## Desktop builds
 
 The Electron desktop app bundles the interpreter but not third-party games. It

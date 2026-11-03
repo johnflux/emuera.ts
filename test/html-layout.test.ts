@@ -1486,6 +1486,12 @@ test("character history renders literal text and local controls without game inp
   const inputContainer = new Element("form");
   inputContainer.append(inlineTextarea);
   const loadInline = async () => { inlineLoads++; return inlineGame.loadAll(); };
+  const incompleteMain = new Element("div");
+  incompleteMain.className = "era-main";
+  assert.doesNotThrow(() => setupInline(incompleteMain, history, loadInline, inlineOptions),
+    "screens without a character panel must not interrupt run restoration");
+  assert.equal(incompleteMain.querySelectorAll(".era-main-chat").length, 0,
+    "inline chat waits until a character room panel is available");
   setupInline(inlineParent, history, loadInline, inlineOptions);
   setupInline(inlineParent, history, loadInline, inlineOptions);
   assert.equal(main.querySelectorAll(".era-main-chat").length, 1, "one bottom chat per main screen");
