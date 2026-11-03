@@ -81,7 +81,10 @@
       </div>
     </section>
     <form id="input-form" autocomplete="off" hidden>
-      <input id="command" aria-label="Game input" disabled spellcheck="false">
+      <div class="command-field">
+        <input id="command" aria-label="Game input" aria-describedby="command-hint" disabled spellcheck="false">
+        <div class="command-hint-overlay" aria-hidden="true"><span id="command-hint-prefix"></span><span id="command-hint"></span></div>
+      </div>
       <button id="submit" disabled>Send</button>
     </form>
     <aside id="compatibility" hidden aria-label="Compatibility report"></aside>

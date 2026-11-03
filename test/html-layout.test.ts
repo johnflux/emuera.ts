@@ -199,7 +199,7 @@ test("area artwork fixes the header height and prevents horizontal scrolling fro
   assert.match(css, /\.era-main-header:has\(\.era-area-art\) > \.era-watch-control \{ position: absolute; top: -32px; right: -37px; margin: 0; width: 300px; container-type: inline-size;/);
   assert.match(css, /\.era-main-header:has\(\.era-area-art\) \.era-watch-control \.era-timestop-button \{ padding: 2px clamp\(2px, 2cqw, 12px\); transform: translateX\(-5px\); \}/);
   assert.match(css, /#terminal:has\(\.screen\.is-active :is\(\.era-main, \.era-shop\) \.era-main-header \.era-area-art\) \{ overflow-x: hidden; \}/);
-  assert.match(css, /\.era-watch-control button\.era-timestop-button::before \{ content: ""; position: absolute; inset: -8px 0; \}/);
+  assert.match(css, /\.era-watch-control button\.era-timestop-button::before \{ content: ""; position: absolute; inset: -14px -16px; \}/);
   assert.match(css, /\.era-main-header:has\(\.era-area-art\) > \.era-main-when \{[^}]*max-height: 100%; overflow: auto;/);
 });
 
@@ -304,7 +304,8 @@ test("Moon location replaces only the nighttime orb and its weather glow with Ea
 test("sky follows exact game minutes with a bounded arc and warm sunrise and sunset", async () => {
   const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
   const shared = await readFile(new URL("../web/sky.js", import.meta.url), "utf8");
-  const routine = shared.slice(shared.indexOf("function sky("), shared.indexOf("/** Apply panorama"));
+  const start = shared.indexOf("export function sky(");
+  const routine = shared.slice(start, shared.indexOf("/** A long stepped sequence", start)).replace("export ", "");
   const draw = (value: string | null, season = 1, day = 15): Map<string, string> => {
     const properties = new Map<string, string>();
     runInNewContext(`${routine}\nsky(node, element);`, {
@@ -1976,9 +1977,12 @@ class Element {
   get childNodes() { return this.children; }
   getAttribute(name: string) { return this.attrs.get(name) ?? null; }
   hasAttribute(name: string) { return this.attrs.has(name); }
+  setAttribute(name: string, value: string) { this.attrs.set(name, value); }
   append(child: Element) { child.parent = this; this.children.push(child); }
+  addEventListener() {}
   matches() { return false; }
   closest(): Element { return this.parent ? this.parent.closest() : this; }
+  querySelector() { return null; }
   querySelectorAll(selector: string): Element[] {
     return this.children.flatMap((child) => [
       ...(selector === ".html-positioned" && child.classes.has("html-positioned") ? [child] : []),
@@ -2011,7 +2015,7 @@ test("HTML pos stacks unequal image layers, resets the cursor and remains stable
   const terminal = new Element("DIV");
   const { renderHtml, layoutHtmlPositions } = runInNewContext([
     functionSource("function sizeAttribute(", "async function loadImage("),
-    functionSource("function layoutHtmlPositions(", "/**"),
+    functionSource("function layoutHtmlPositions(", "let htmlPositionsFrame"),
     functionSource("async function renderHtml(", "// A browser's page translator"),
     "({ renderHtml, layoutHtmlPositions })",
   ].join("\n"), {
@@ -2052,7 +2056,7 @@ test("HTML pos stacks unequal image layers, resets the cursor and remains stable
 test("translated menu labels re-align locked borders after text and wrapper mutations", async () => {
   const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
   const start = source.indexOf("function layoutHtmlPositions(");
-  const end = source.indexOf("/**", start);
+  const end = source.indexOf("/**\n * Hotpatch extension", start);
   const terminal = new Element("DIV");
   const line = new Element("DIV");
   terminal.append(line);
@@ -2070,12 +2074,20 @@ test("translated menu labels re-align locked borders after text and wrapper muta
   const layout = runInNewContext(`${source.slice(start, end)}\nlayoutHtmlPositions`, {
     terminal,
     requestAnimationFrame: (callback: () => void) => { frames.push(callback); return frames.length; },
+    document: {
+      body: new Element("BODY"),
+      createElement: (tag: string) => new Element(tag),
+      addEventListener() {},
+    },
+    window: { addEventListener() {} },
     MutationObserver: class {
       constructor(callback: () => void) { changed = callback; }
       observe(target: unknown, options: unknown) { assert.equal(target, terminal); observed = options; }
     },
   });
-  assert.equal(JSON.stringify(observed), JSON.stringify({ childList: true, characterData: true, subtree: true }));
+  assert.equal(JSON.stringify(observed), JSON.stringify({
+    childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ["class"],
+  }));
   layout();
   assert.equal(border.getBoundingClientRect().left, 240);
   // Translators expand text and may insert wrappers after the initial render.

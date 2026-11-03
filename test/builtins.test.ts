@@ -1257,6 +1257,18 @@ QUIT
   assert.deepEqual(texts(result), ["a,b", ")(", "2", ""]);
 });
 
+test("PRINTV evaluates legacy quoted expression templates", () => {
+  for (const jit of [false, true]) {
+    const result = runtime(`@SYSTEM_TITLE
+LOCAL = 3
+PRINTV 'LV,ABL:親密,'(,LOCAL,')
+PRINTV '(,30 * LOCAL,')
+PRINTL
+QUIT`, undefined, { jit }).start();
+    assert.deepEqual(texts(result), ["LV,ABL:親密,(3)", "(90)", ""]);
+  }
+});
+
 test("RESETDATA empties only VarExt SAVE_* containers and keeps other MAPs", () => {
   const result = runtime(`@SYSTEM_TITLE
 MAP_CREATE "kept"

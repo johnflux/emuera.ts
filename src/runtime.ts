@@ -3385,6 +3385,11 @@ export class Runtime {
     }
     return parts;
   }
+  private printValues(source: string, context: EvaluationContext): string {
+    const template = /^'(?:([^']*)')?\(,(.*),'\)$/.exec(source.trim());
+    if (template) return `${template[1] ?? ""}(${evaluate(this.parse(template[2]!), context)})`;
+    return this.arguments(source).map((part) => String(evaluate(this.parse(part), context))).join("");
+  }
   private info(routine: Routine): RoutineInfo {
     let info = this.routineInfo.get(routine);
     if (info) return info;
@@ -3623,7 +3628,7 @@ export class Runtime {
           const raw = variant.argument === "FORM" ? this.formatted(args, frame)
             : variant.argument === "FORMS" ? this.formatted(text(ev(args)), frame)
             : variant.argument === "S" ? String(ev(args))
-            : variant.argument === "V" ? this.arguments(args).map((part) => String(ev(part))).join("")
+            : variant.argument === "V" ? this.printValues(args, frame.context)
             : args;
           const value = this.kana(this.printC(raw, variant.align), variant.mode);
           yield this.emit("text", value, variant.single || variant.end === "L" || variant.end === "W", false, { style: this.printStyle(variant.mode), single: variant.single, cell: !!variant.align && this.isButtonCell(value) });

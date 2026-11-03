@@ -15,35 +15,59 @@ type InputEvent = {
   shiftKey?: boolean;
 };
 
+function choice(value: string, textContent: string, controlText?: string) {
+  return {
+    dataset: { value },
+    textContent,
+    closest: () => controlText === undefined ? null : { textContent: controlText },
+  };
+}
+
 async function inputHarness() {
   const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
   const handlers = new Map<string, (event: InputEvent) => void>();
   const sent: string[] = [];
+  const hint = { textContent: "" };
+  const hintPrefix = { textContent: "", style: { marginLeft: "" } };
+  const choices: ReturnType<typeof choice>[] = [];
   const command = {
     value: "",
+    scrollLeft: 0,
     selectionStart: 0,
     selectionEnd: 0,
     addEventListener(type: string, handler: (event: InputEvent) => void) { handlers.set(type, handler); },
     setSelectionRange(start: number, end: number) { this.selectionStart = start; this.selectionEnd = end; },
   };
-  const state = { busy: false, expiring: false, input: { kind: "string", singleCharacter: false, blocking: false } };
+  const state = {
+    busy: false, expiring: false,
+    input: { kind: "string", singleCharacter: false, blocking: false },
+    queuedSubmit: null as { value: string; choice?: string } | null,
+  };
   const start = source.indexOf("const commandHistory =");
   const end = source.indexOf("const menuToggle =", start);
-  assert.ok(start >= 0 && end > start);
-  runInNewContext(source.slice(start, end), {
+  const submitStart = source.indexOf("async function submit(");
+  const submitEnd = source.indexOf('  const chat = terminal.querySelector', submitStart);
+  assert.ok(start >= 0 && end > start && submitStart >= 0 && submitEnd > submitStart);
+  const submit = runInNewContext([
+    source.slice(submitStart, submitEnd), "sent.push(value);\n}",
+    source.slice(start, end), "\nsubmit;",
+  ].join("\n"), {
     command,
+    sent,
+    terminal: { querySelectorAll: () => choices },
     get busy() { return state.busy; },
     get expiring() { return state.expiring; },
     get input() { return state.input; },
-    submit(value: string) { sent.push(value); },
+    set queuedSubmit(value: typeof state.queuedSubmit) { state.queuedSubmit = value; },
     settling: () => false,
     Element: class {},
     document: {
       body: { classList: { contains: () => false } },
-      querySelector: () => ({ addEventListener(type: string, handler: (event: InputEvent) => void) { handlers.set(`form:${type}`, handler); } }),
+      querySelector: (selector: string) => selector === "#command-hint" ? hint : selector === "#command-hint-prefix" ? hintPrefix
+        : { addEventListener(type: string, handler: (event: InputEvent) => void) { handlers.set(`form:${type}`, handler); } },
       addEventListener(type: string, handler: (event: InputEvent) => void) { handlers.set(`document:${type}`, handler); },
     },
-  });
+  }) as (value: string, choice?: ReturnType<typeof choice>) => Promise<void>;
   function dispatch(type: string, extra: Partial<InputEvent> = {}) {
     const event = {
       key: "", target: command, defaultPrevented: false,
@@ -59,8 +83,91 @@ async function inputHarness() {
     command.value = "";
   }
   const key = (key: string, extra: Partial<InputEvent> = {}) => dispatch("keydown", { key, ...extra });
-  return { command, state, sent, dispatch, send, key };
+  return { command, state, sent, dispatch, send, key, submit, hint, hintPrefix, choices };
 }
+
+test("recalled commands show a non-editable label that disappears on edits and submission", async () => {
+  const { command, hint, hintPrefix, submit, key, dispatch, sent } = await inputHarness();
+  await submit("400", choice("400", " Move[400] "));
+  command.value = "draft";
+  key("ArrowUp");
+  assert.equal(command.value, "400");
+  assert.equal(hintPrefix.textContent, "400");
+  assert.equal(hint.textContent, " [Move]");
+  command.scrollLeft = 5;
+  dispatch("scroll");
+  assert.equal(hintPrefix.style.marginLeft, "-5px");
+  command.value = "4001";
+  dispatch("input", { isComposing: true });
+  assert.equal(hint.textContent, "");
+  key("ArrowUp");
+  assert.equal(hint.textContent, " [Move]");
+  key("ArrowDown");
+  assert.equal(command.value, "4001");
+  assert.equal(hint.textContent, "");
+  key("ArrowUp");
+  dispatch("form:submit");
+  assert.equal(hint.textContent, "");
+  assert.deepEqual(sent, ["400", "400"]);
+});
+
+test("typed commands capture matching button labels without adding labels to the submitted value", async () => {
+  const { command, choices, hint, send, key } = await inputHarness();
+  choices.push(choice("400", "[Move]"));
+  send("400");
+  send("unlabeled");
+  key("ArrowUp");
+  assert.equal(hint.textContent, "");
+  key("ArrowUp");
+  assert.equal(command.value, "400");
+  assert.equal(hint.textContent, " [Move]");
+});
+
+test("GUI command history captures labels beside number-only buttons for clicks and typed commands", async () => {
+  const { command, choices, hint, submit, send, key, sent } = await inputHarness();
+  const conversation = choice("300", "[300]", " Conversation [300] ");
+  const rest = choice("403", "[403]", "Rest [403]");
+  choices.push(conversation, rest);
+  await submit("300", conversation);
+  send("403");
+  choices.length = 0;
+  key("ArrowUp");
+  assert.equal(command.value, "403");
+  assert.equal(hint.textContent, " [Rest]");
+  key("ArrowUp");
+  assert.equal(command.value, "300");
+  assert.equal(hint.textContent, " [Conversation]");
+  assert.deepEqual(sent, ["300", "403"]);
+});
+
+test("clicked commands enter the same history as typed inputs using their command value", async () => {
+  const { command, sent, send, key, submit } = await inputHarness();
+  send("10");
+  await submit("400", choice("400", "Move"));
+  key("ArrowUp");
+  assert.equal(command.value, "400");
+  key("ArrowUp");
+  assert.equal(command.value, "10");
+  key("ArrowDown");
+  assert.equal(command.value, "400");
+  assert.deepEqual(sent, ["10", "400"]);
+});
+
+test("queued clicked commands are recorded only once when submitted after rendering", async () => {
+  const { command, state, sent, key, submit } = await inputHarness();
+  state.expiring = true;
+  await submit("400", choice("400", "Move"));
+  assert.equal(state.queuedSubmit?.value, "400");
+  assert.equal(state.queuedSubmit?.choice, "400");
+  assert.equal(key("ArrowUp").defaultPrevented, false);
+  state.expiring = false;
+  await submit("400", choice("400", "Move"));
+  key("ArrowUp");
+  assert.equal(command.value, "400");
+  key("ArrowDown");
+  assert.equal(command.value, "");
+  assert.deepEqual(sent, ["400"]);
+});
 
 test("input history navigates both directions, clamps at the ends and restores the draft", async () => {
   const { command, sent, send, key } = await inputHarness();

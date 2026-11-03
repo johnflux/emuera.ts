@@ -27,9 +27,10 @@ https://gitgud.io/Legis1998/anon-tw/-/archive/anon-tw_eng-modding/anon-tw-anon-t
 See the [developer guide](docs/developer-guide.md) for compatibility details and
 additional documentation.
 
-With the game input focused, press Up/Down to browse previously typed inputs.
+With the game input focused, press Up/Down to browse typed inputs and clicked commands.
 Going past the newest entry restores your unfinished input. History lasts until
-the page is reloaded.
+the page is reloaded. Recalled commands show their button label as a non-editable
+hint (for example, `400 [Move]`); editing the input hides the hint.
 
 ## Desktop builds
 

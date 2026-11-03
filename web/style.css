@@ -213,7 +213,11 @@ a { color: #8ddaff; }
 #settings-reset:hover:enabled, #settings-reset:focus-visible { border-color: #69c9b5; background: #183a43; color: #d7f4ed; }
 #input-form { order: 1; flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding: 0 20px; font-size: var(--font-size); line-height: var(--line-height, 1.25); }
 #input-form[hidden] { display: none; }
-#command { flex: 1; min-width: 0; background: transparent; border: 0; padding: 0; line-height: inherit; outline: none; }
+.command-field { position: relative; flex: 1; min-width: 0; }
+#command { display: block; width: 100%; min-width: 0; background: transparent; border: 0; padding: 0; line-height: inherit; outline: none; }
+.command-hint-overlay { position: absolute; inset: 0; display: flex; align-items: center; overflow: hidden; white-space: pre; pointer-events: none; user-select: none; }
+#command-hint-prefix { visibility: hidden; flex-shrink: 0; }
+#command-hint { color: #777; overflow: hidden; text-overflow: ellipsis; }
 #submit { font-size: 12px; padding: 2px 8px; }
 @media (max-width: 600px) { header, #terminal, #input-form { padding-left: 10px; padding-right: 10px; } #compatibility, #debug-output, #settings { margin-left: 10px; margin-right: 10px; } #settings { width: calc(100% - 20px); padding: 15px; } #settings-form { grid-template-columns: minmax(0, 1fr); } #settings-form label:has(input[type="text"]) { grid-column: auto; } #settings-reset { grid-column: auto; } .mode { display: none; } }
 /* Hotpatch sections (hotpatch/*.ERB): one HTML_PRINT, so one logical line, laid out as a block. */

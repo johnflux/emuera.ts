@@ -1993,7 +1993,10 @@ async function renderSnapshot(snapshot, advanceScreen) {
   ]);
   if (snapshot.tooltip) useTooltipSettings(snapshot.tooltip);
   if (snapshot.audio) useAudioSettings(snapshot.audio);
-  if (snapshot.textbox !== undefined) command.value = snapshot.textbox;
+  if (snapshot.textbox !== undefined) {
+    command.value = snapshot.textbox;
+    showCommandHint();
+  }
   const previousScreen = currentScreen;
   const previousLine = currentLine;
   if (advanceScreen === "continue") {
@@ -2311,6 +2314,7 @@ function resetRun() {
   currentScreen = null;
   continuedScreens = [];
   command.value = "";
+  showCommandHint();
   currentLine = null;
   void showBackground([]);
   void showBackgroundMap(null);
@@ -2368,6 +2372,7 @@ async function resume(id) {
     useTooltipSettings(data.tooltip ?? null);
     if (data.audio) useAudioSettings(data.audio);
     command.value = data.textbox ?? "";
+    showCommandHint();
     step = data.step;
     restored = true;
   } catch (error) {
@@ -2417,6 +2422,7 @@ async function submit(value, selectedChoice = null) {
   // Input made while an animation frame is loading is sent once that frame is shown.
   if (expiring) { queuedSubmit = { value, choice: selectedChoice?.dataset.value }; return; }
   if (busy || !input || input.blocking) return;
+  rememberCommand(value, selectedChoice);
   const chat = terminal.querySelector(".screen.is-active .era-main-chat");
   if (routesToCharacter(value, selectedChoice, input, chat)) {
     hideTooltip();
@@ -2691,12 +2697,25 @@ function markMapLabels() {
 const commandHistory = [];
 let commandHistoryIndex = 0;
 let commandDraft = "";
-function submitCommand(value = command.value) {
-  if ((busy && !expiring) || !input || input.blocking) return;
-  if (value !== "" && input.kind !== "wait" && input.kind !== "mousekey") commandHistory.push(value);
+const commandHint = document.querySelector("#command-hint");
+const commandHintPrefix = document.querySelector("#command-hint-prefix");
+function showCommandHint(label = "") {
+  commandHintPrefix.textContent = label ? command.value : "";
+  commandHintPrefix.style.marginLeft = `${-command.scrollLeft}px`;
+  commandHint.textContent = label ? ` [${label}]` : "";
+}
+function rememberCommand(value, selectedChoice) {
+  if (value !== "" && input.kind !== "wait" && input.kind !== "mousekey") {
+    const button = selectedChoice ?? [...terminal.querySelectorAll(".screen.is-active button.choice")]
+      .find((button) => button.dataset.value === value);
+    const labeledControl = button?.closest(".print-cell, .era-guard-control") ?? button;
+    let label = labeledControl?.textContent.replace(/\s+/g, " ").split(`[${value}]`).join("").trim() ?? "";
+    if (label.startsWith("[") && label.endsWith("]")) label = label.slice(1, -1).trim();
+    commandHistory.push({ value, label: label === value ? "" : label });
+  }
   commandHistoryIndex = commandHistory.length;
   commandDraft = "";
-  void submit(value);
+  showCommandHint();
 }
 command.addEventListener("keydown", (event) => {
   if (event.defaultPrevented || event.isComposing || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey
@@ -2704,23 +2723,29 @@ command.addEventListener("keydown", (event) => {
   event.preventDefault();
   if (commandHistoryIndex === commandHistory.length) commandDraft = command.value;
   commandHistoryIndex = Math.max(0, Math.min(commandHistory.length, commandHistoryIndex + (event.key === "ArrowUp" ? -1 : 1)));
-  command.value = commandHistoryIndex === commandHistory.length ? commandDraft : commandHistory[commandHistoryIndex];
+  const entry = commandHistory[commandHistoryIndex];
+  command.value = entry ? entry.value : commandDraft;
   command.setSelectionRange(command.value.length, command.value.length);
+  showCommandHint(entry?.label);
+});
+command.addEventListener("scroll", () => {
+  commandHintPrefix.style.marginLeft = `${-command.scrollLeft}px`;
 });
 document.querySelector("#input-form").addEventListener("submit", (event) => {
   event.preventDefault();
   if (command.value === "" && settling()) return;
-  submitCommand();
+  void submit(command.value);
 });
 function submitCharacter() {
   if ((busy && !expiring) || !input?.singleCharacter || !command.value) return;
   const first = Array.from(command.value)[0];
   if (input.kind === "integer" && !/^[0-9]$/.test(first)) return;
-  submitCommand(first);
+  void submit(first);
 }
 command.addEventListener("input", (event) => {
   commandHistoryIndex = commandHistory.length;
   commandDraft = command.value;
+  showCommandHint();
   if (!event.isComposing) submitCharacter();
 });
 command.addEventListener("compositionend", submitCharacter);
@@ -2753,7 +2778,7 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Enter") {
     event.preventDefault();
     if (command.value === "" && settling()) return;
-    submitCommand();
+    void submit(command.value);
   } else if (Array.from(event.key).length === 1) {
     event.preventDefault();
     command.focus({ preventScroll: true });
