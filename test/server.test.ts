@@ -417,8 +417,8 @@ test("HTTP UI, isolated sessions, real image bytes, sprite metadata, errors and 
     assert.deepEqual(Buffer.from(await earth.arrayBuffer()).subarray(0, 8), Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
     assert.equal((await fetch(base + "/areas/0-shrine/monsoon-day-left.png")).status, 404);
     for (const [area, directory] of [["1", "1-temple"], ["2", "2-village"], ["3", "3-mansion"], ["4", "4-bamboo"], ["5", "5-forest"], ["6", "6-netherworld"], ["7", "7-foothills"], ["8", "8-summit"], ["9", "9-underworld"], ["10", "10-moon"]])
+    for (const season of ["6", "9", "10"].includes(area) ? ["neutral"] : ["spring", "summer", "autumn", "winter"])
     for (const time of ["day", "night"]) for (const part of ["left", "middle", "right"]) {
-      const season = ["6", "9", "10"].includes(area) ? "neutral" : "spring";
       const picture = areas[area!][`${season}-${time}`][part];
       assert.match(picture, new RegExp(`^/areas/${directory}/${season}-${time}-${part}\\.png\\?v=\\d+$`));
       const response = await fetch(base + picture);

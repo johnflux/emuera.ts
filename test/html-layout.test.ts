@@ -447,7 +447,10 @@ test("panorama overlap clips only the middle and applies consistently to artwork
 
 test("foothill water highlights move independently and respect night and reduced motion", async () => {
   const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
-  assert.match(css, /\.era-area-7\[data-area-art\^="spring-"\] \.era-sky-land/);
+  assert.match(css, /\.era-area-7\.era-area-art \.era-sky-land/);
+  assert.match(css, /background: var\(--area-water-left\)[^;]*var\(--area-water-right\)[^;]*var\(--area-water-middle\)/);
+  const skySource = await readFile(new URL("../web/sky.js", import.meta.url), "utf8");
+  assert.match(skySource, /sets\["spring-day"\]\[part\]/);
   assert.match(css, /filter: url\(#era-water-highlight\); clip-path: inset\(70px 0 0\)/);
   assert.match(css, /mask-size: 24px 24px; animation: era-water-flow .65s linear infinite/);
   assert.match(css, /@keyframes era-water-flow \{ to \{ mask-position: -24px 24px; \} \}/);
@@ -466,6 +469,43 @@ test("foothill water highlights move independently and respect night and reduced
   assert.ok(alpha(.4, .75, .9) > .75, "cyan water stays visible");
   assert.equal(alpha(.2, .4, .15), 0, "green plants stay still");
   assert.equal(alpha(.25, .3, .5), 0, "dark mountain scenery stays still");
+});
+
+test("foothill water overlays keep the original water mask in every season without animating frost", async () => {
+  const source = await readFile(new URL("../web/sky.js", import.meta.url), "utf8");
+  const routine = source.slice(source.indexOf("function prepareSkyArt("));
+  for (const season of ["spring", "summer", "autumn", "winter"]) for (const phase of ["day", "night"]) {
+    const classes = new Set(["era-sky", "era-area-7", `era-season-${season}`, `era-sky-${phase}`]);
+    const properties = new Map<string, string>();
+    const element = {
+      dataset: { areaArt: "" },
+      classList: {
+        [Symbol.iterator]: () => classes[Symbol.iterator](),
+        add: (value: string) => classes.add(value),
+        toggle: (value: string, enabled: boolean) => enabled ? classes.add(value) : classes.delete(value),
+      },
+      matches: (selector: string) => selector.split(", ").some(name => classes.has(name.slice(1))),
+      closest: () => null,
+      style: { setProperty: (name: string, value: string) => properties.set(name, value) },
+    };
+    const set = (time: string) => Object.fromEntries(["left", "middle", "right"]
+      .map(part => [part, `/areas/7-foothills/${season}-${time}-${part}.png`]));
+    await runInNewContext(`${routine}\nprepareSkyArt(outputRoot, manifest, loadImage, pendingImages);`, {
+      outputRoot: { querySelectorAll: () => [element] },
+      manifest: { 7: {
+        "spring-day": Object.fromEntries(["left", "middle", "right"].map(part => [part, `/areas/7-foothills/spring-day-${part}.png`])),
+        [`${season}-day`]: set("day"), [`${season}-night`]: set("night"),
+      } },
+      Image: class { naturalHeight = 144; naturalWidth = 559; },
+      loadImage: async () => {},
+      pendingImages: [],
+    });
+    assert.equal(element.dataset.areaArt, `${season}-${phase}`);
+    for (const part of ["left", "middle", "right"]) {
+      assert.equal(properties.get(`--area-water-${part}`), `url("/areas/7-foothills/spring-day-${part}.png")`);
+      assert.equal(properties.get(`--area-${part}`), `url("${set(phase)[part]}")`);
+    }
+  }
 });
 
 test("fog overlays the full top image with half strength in the Underworld", async () => {

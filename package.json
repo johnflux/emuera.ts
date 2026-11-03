@@ -26,7 +26,8 @@
     "check": "tsc --noEmit",
     "test": "tsx --test test/*.test.ts",
     "compat": "tsx src/compat.ts",
-    "area-art": "tsx src/area-art.ts"
+    "area-art": "tsx src/area-art.ts",
+    "area-seasons": "tsx src/seasonal-art.ts"
   },
   "main": "electron/main.cjs",
   "devDependencies": {

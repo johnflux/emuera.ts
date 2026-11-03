@@ -104,6 +104,9 @@ export function prepareSkyArt(outputRoot, manifest, loadImage, pendingImages, ar
     const header = sky.closest(".era-main-header") ?? sky;
     for (const part of ["left", "middle", "right"]) {
       if (!set[part]) continue;
+      // Seasonal palettes leave water unchanged; spring isolates it without shimmering winter's pale foliage.
+      if (area === "7" && sets["spring-day"]?.[part])
+        sky.style.setProperty(`--area-water-${part}`, `url("${sets["spring-day"][part]}")`);
       sky.style.setProperty(`--area-${part}`, `url("${set[part]}")`);
       const img = new Image();
       pendingImages.push(loadImage(img, set[part]).then(() => {

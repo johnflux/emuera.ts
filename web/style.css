@@ -557,21 +557,21 @@ body:has(.menu-panel:not([hidden])) .clock-overhang { visibility: hidden; }
 .era-area-art .era-sky-landmark::after,
 .era-area-art .era-sky-land::before { padding: inherit; }
 .era-sky.era-area-art .era-sky-land { display: none; }
-.era-area-7[data-area-art^="spring-"] .era-sky-land {
+.era-area-7.era-area-art .era-sky-land {
   display: block; height: 100%; background: none; border: 0; border-radius: 0; filter: none;
   -webkit-mask: none; mask: none; pointer-events: none; }
-.era-area-7[data-area-art^="spring-"] .era-sky-land::before {
+.era-area-7.era-area-art .era-sky-land::before {
   content: ""; position: absolute; inset: 0; opacity: .85;
-  background: url(/areas/7-foothills/spring-day-left.png) left bottom / auto no-repeat,
-    url(/areas/7-foothills/spring-day-right.png) right bottom / auto no-repeat,
-    url(/areas/7-foothills/spring-day-middle.png) left bottom / auto repeat-x;
+  background: var(--area-water-left) left bottom / auto no-repeat,
+    var(--area-water-right) right bottom / auto no-repeat,
+    var(--area-water-middle) left bottom / auto repeat-x;
   filter: url(#era-water-highlight); clip-path: inset(70px 0 0);
   mask-image: repeating-linear-gradient(0deg, transparent 0 3px, #000 4px 7px, transparent 8px 12px);
   mask-size: 24px 24px; animation: era-water-flow .65s linear infinite; }
 .era-area-7.era-area-art-night .era-sky-land::before { opacity: .28; }
 @keyframes era-water-flow { to { mask-position: -24px 24px; } }
 @media (prefers-reduced-motion: reduce) {
-  .era-area-7[data-area-art^="spring-"] .era-sky-land::before { animation: none; opacity: 0; } }
+  .era-area-7.era-area-art .era-sky-land::before { animation: none; opacity: 0; } }
 .era-sky.era-area-art-night .era-sky-landmark { --landmark-tint: ; }
 .era-sky.era-area-art-day .era-sky-landmark { --landmark-tint: ; }
 .era-area-art-weather .era-sky-landmark::after { content: ""; position: absolute; inset: 0; opacity: var(--area-weather-blend, 0); pointer-events: none;

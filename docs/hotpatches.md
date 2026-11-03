@@ -619,29 +619,29 @@ Myouren Temple includes supplied spring artwork: a pine and stone lanterns on th
 a repeating cherry-blossom landscape, and the temple hall on the right. The three pieces are cleaned
 with the pixel-grid importer, ground-aligned and uniformly resized to 571×144px. A matching cooler
 night grade preserves transparency and geometry, retaining warm hall windows and lantern light.
-Other temple seasons still use the SVG fallback.
+Summer, autumn and winter use derived palette variations of the same artwork.
 
 Human Village includes supplied spring artwork with a cherry tree and market stall on the left,
 a repeating rural backdrop, and traditional shops on the right. Pixel-grid cleanup and uniform resizing
 produce three ground-aligned 463×144px pieces. The matching night grade keeps shop windows and
-paper lanterns warm, with identical geometry for weather blending. Other village seasons use the SVG fallback.
+paper lanterns warm, with identical geometry for weather blending. Other seasons use derived palette variations.
 
 Scarlet Devil Mansion includes supplied spring artwork at its native 532×144px per piece,
 with faint alpha residue removed. The gate and gardens frame a repeating lakeside backdrop and the
 red-brick mansion. The aligned night grade retains warm window light and the clock face, using
-the shared light halo and weather blending. Other mansion seasons use the SVG fallback.
+the shared light halo and weather blending. Other seasons use derived palette variations.
 
 Bamboo Forest includes supplied spring artwork, cleaned on a four-pixel source grid and resized
 with nearest-neighbour sampling to 480×144px per piece. Neon green matte residue is removed before
 sampling, and all pieces share a ground baseline. The left bamboo grove and right path gate frame
 the repeating forest. Its cool night grade preserves transparency and geometry for weather blending;
-no artificial lights are added. Other bamboo seasons use the SVG fallback.
+no artificial lights are added. Other seasons use derived palettes, with olive-green autumn bamboo rather than orange leaves.
 
 Forest of Magic includes supplied spring artwork with an ancient tree on the left, repeating
 woodland in the middle and a cottage on the right. Four-pixel source-grid cleanup and nearest-neighbour
 resizing produce ground-aligned 439×144px pieces with transparent sky and no neon green matte residue.
 The matching night grade preserves the cottage lantern's warm light and identical geometry for
-weather blending. Other forest seasons use the SVG fallback.
+weather blending. Other seasons use derived palette variations.
 The cottage panel's bottom four rows of heavy dark soil are cropped away and the panel padded
 at the top, bringing its ground thickness closer to the middle. Both time-of-day sets shift together.
 
@@ -711,20 +711,32 @@ The middle tile has a 48px overlapped join, reducing it to 511×144px. Day and n
 The middle retains its original cherry trees and stream; an earlier cloned-woodland replacement
 was removed because it left visible cleanup artifacts.
 The matching cool night grade preserves the lantern's warm light and identical transparency
-for weather blending. Other foothill seasons use the SVG fallback.
+for weather blending. Other seasons use derived palette variations.
 The distant blue mountain ridgelines are softened toward the adjacent interior colours without
 changing their silhouette or transparency, in both day and night artwork.
-Spring foothill water has a moving highlight overlay: separate colour and brightness filters retain
+Foothill water in every season has a moving highlight overlay: separate colour and brightness filters retain
 both cyan water and white foam from the composed daytime panels. Broad highlight bands descend
 on a 0.65-second cycle, suggesting falling water and stream ripples without moving rocks or vegetation.
 The previous filter rejected white foam and made the effect too faint. It is dimmer at night and disabled
-for reduced motion. The original artwork remains unchanged.
+for reduced motion. Shared renderer variables use the spring daytime water-isolation reference in
+all seasons: palette variants preserve water and geometry, so winter's pale foliage does not shimmer.
 
 Mountain Summit includes supplied spring artwork at 539×144px per panel. The repeating middle
 intentionally retains its rocky mountain sanctuary, sacred stone and windswept pine; the ends
 show a large pine and a shrine with cherry blossoms. Source-grid cleanup removes coloured matte
 residue and the left source's white bottom border. Inner end-panel edges feather over 64px.
-Day and cool moonlit night versions share geometry and transparency. Other seasons retain the SVG fallback.
+Day and cool moonlit night versions share geometry and transparency. Other seasons use derived palette variations.
+
+Temple, Village, Mansion, Bamboo, Forest, Foothills and Summit now have complete summer,
+autumn and winter day/night sets derived from spring using `npm run area-seasons`.
+This is selective palette editing, not redrawing: blossoms become green in summer,
+vegetation becomes gold/rust in autumn (olive for bamboo), and vegetation and low soil
+become cool pale frost colours in winter. No branches, leaf removal or snow geometry are added.
+Architecture, water, retained warm lights, image dimensions, alpha and overlap seams are preserved.
+Night variants reuse each original pixel's day/night grading. Shrine's individually supplied
+seasonal artwork and the neutral Netherworld, Underworld and Moon sets are not modified.
+The command skips complete existing sets and reports partially present sets as an error rather
+than overwriting artwork.
 
 During bad-weather days the panorama blends toward its matching night set: cloudy/fog 18%, rain 32%, storm 48%,
 snow 20%, and blizzard 35%. This requires complete day and night sets; missing night pieces leave the day artwork
