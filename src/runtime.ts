@@ -862,20 +862,34 @@ export class Runtime {
     yield this.emit("input", value === REFRESH ? "" : value, true);
     // Anything the game does next belongs to a new interaction, not to the chat window's conversation.
     this.interactionHistory?.endChat();
-    const command = yield* this.runCharacterActions();
+    const command = yield* this.runCharacterActions(value === REFRESH);
     // A command a character tool asked for runs as if the player had typed its number.
     if (value === REFRESH && command !== undefined) return BigInt(command);
     return value === REFRESH ? undefined : BigInt(value.trim());
   }
   /** Runs queued say/act/move actions and returns the number of a queued command, if any. */
-  private *runCharacterActions(): Generator<Yield, number | undefined, string> {
+  private *runCharacterActions(runCommand: boolean): Generator<Yield, number | undefined, string> {
     const actions = this.characterActions;
     this.characterActions = [];
     let command: number | undefined;
     for (const action of actions) {
       const index = this.interactionHistory?.indexOf(action.character) ?? -1;
       if (index < 0) continue;
-      if (action.kind === "command") command = action.command;
+      if (action.kind === "command") {
+        if (action.relationship !== undefined) {
+          if (!this.game.routines.has("HOTPATCH_RELATIONSHIP_REQUEST")) throw new EraError("Relationship actions require the relationship hotpatch");
+          if (!runCommand) {
+            yield this.emit("text", "Relationship attempt cancelled: another game command was chosen instead.", true);
+            continue;
+          }
+          if (this.number("TARGET") !== BigInt(index)) {
+            yield this.emit("text", "Relationship unchanged: the selected character has changed. Discuss this with the intended character again.", true);
+            continue;
+          }
+          yield* this.execute("HOTPATCH_RELATIONSHIP_REQUEST", [BigInt(action.relationship)]);
+        }
+        command = action.command;
+      }
       else if (action.kind === "say") {
         const style = this.style;
         const who = this.voiceIdentity(index).name;

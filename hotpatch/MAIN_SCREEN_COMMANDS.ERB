@@ -71,6 +71,8 @@ FOR LOCAL,0,800
 		CONTINUE
 	SIF GROUPMATCH(LOCAL,400,405,604)
 		CONTINUE
+	SIF LOCAL == 357
+		CONTINUE
 	SIF TRAINNAME:LOCAL == "" && !IS_COM_KOJO(LOCAL)
 		CONTINUE
 	SIF LOCAL == ADD_CUSTOM_COM ;addition custom code, don't display general custom com command, handled elsewhere
@@ -509,6 +511,10 @@ RETURNF 6
 #DIM DYNAMIC nCom
 #DIM DYNAMIC nKojo
 #DIMS DYNAMIC COM_NAME
+IF nCom == 352
+	HTML_PRINT "<button value='352' class='era-chip-button'>Relationship</button>"
+	RETURN 0
+ENDIF
 VARSET COM_DISPLAY_COLOR
 VARSET COM_DISPLAY_BEHAVIOR
 CALL COM_DISPLAY_TR(nCom) ;Custom code, control alternative command names.

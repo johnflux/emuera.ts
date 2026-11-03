@@ -1621,7 +1621,7 @@ test("a player's attempt runs the game's own command, with its rejection and pen
   // The hotpatched Kiss needs no closeness from earlier small talk: it is offered (behind the Petting filter) at once.
   check(runtime.input("837"));
   snapshot = check(runtime.refresh());
-  assert.match(snapshot.output.map((item) => item.text ?? "").join("\n"), /Kiss\[312\][\s\S]*Push Down\[350\][\s\S]*Confess\[352\]/);
+  assert.match(snapshot.output.map((item) => item.text ?? "").join("\n"), /Kiss\[312\][\s\S]*Push Down\[350\][\s\S]*value='352'[^>]*>Relationship/);
   assert.match((tool("player_attempts", { activity: "apologize" }).result as { error: string }).error, /Reimu is not furious with the player/);
   assert.deepEqual(tool("player_attempts", { activity: "kiss" }),
     { result: { note: "The player tries it now; the game decides how you react. The conversation ends here." }, changed: true });
@@ -1645,6 +1645,108 @@ test("a player's attempt runs the game's own command, with its rejection and pen
   for (let i = 0; snapshot.input?.kind === "wait" && i < 20; i++) snapshot = check(runtime.input(""));
   assert.equal(history(snapshot).entries[0]!.action.label, "Apologize");
   assert.deepEqual((tool("get_character_info").result as Record<string, any>).feelingsTowardPlayer.marks, { hate: 1 });
+});
+
+test("AI relationship attempts report unavailability and execute a proposal directly, with commitment in info and history", {
+  skip: !existsSync(GAME_ROOT),
+}, async () => {
+  const game = await loadGame();
+  await applyHotpatches(game);
+  game.routines.set("HOTPATCH_TEST_ORIGINAL_ATTITUDE", game.routines.get("CHARA_ATTITUDE")!);
+  const stub = emptyGame();
+  indexScript(stub, `@CHARA_ATTITUDE
+CALL HOTPATCH_TEST_ORIGINAL_ATTITUDE
+IF TARGET != MASTER && TFLAG:100 && TFLAG:102 == 1 && !FLAG:9999
+	TALENT:TARGET:恋人 = 1
+	TALENT:MASTER:恋人 = NO:TARGET
+	EXP:TARGET:愛情経験 = 351
+	MARK:TARGET:反発刻印 = 0
+	CFLAG:TARGET:不機嫌 = 0
+	FLAG:9999 = 1
+ENDIF`, "<relationship-llm-test>");
+  game.routines.set("CHARA_ATTITUDE", stub.routines.get("CHARA_ATTITUDE")!);
+  const runtime = new Runtime(demoGame(game), GAME_INSTRUCTION_LIMIT);
+  check(runtime.start());
+  check(runtime.input("8"));
+  let snapshot = check(runtime.input("2"));
+  for (let i = 0; snapshot.input?.kind === "wait" && i < 40; i++) snapshot = check(runtime.input(""));
+  const id = history(snapshot).character.id;
+  const tool = (activity: string) => runtime.characterTool(id, "player_attempts", { activity });
+  assert.match((tool("become_lovers").result as { error: string }).error, /already lovers/);
+  assert.match((tool("divorce").result as { error: string }).error, /not married/);
+  assert.equal(tool("propose").changed, true);
+  snapshot = check(runtime.refresh());
+  const printed = snapshot.output.map((item) => item.text ?? "").join("\n");
+  assert.match(printed, /now engaged/);
+  assert.doesNotMatch(printed, /era-dialog era-relationship|Confessing to|are now.*Lovers/);
+  const proposal = history(snapshot).entries[0]!;
+  assert.equal(proposal.action.label, "Propose");
+  assert.equal(Number(proposal.after.time[0]) - Number(proposal.before.time[0]), 10);
+  assert.match(proposal.lines.map((line) => line.text).join("\n"), /now engaged/);
+  const info = runtime.characterTool(id, "get_character_info", {}).result as { feelingsTowardPlayer: { commitment: string } };
+  assert.equal(info.feelingsTowardPlayer.commitment, "engaged");
+  assert.equal(tool("marry").changed, true);
+  snapshot = check(runtime.input("352"));
+  assert.match(snapshot.output.map((item) => item.text ?? "").join("\n"), /Relationship attempt cancelled:/);
+  assert.match(snapshot.output.map((item) => item.text ?? "").join("\n"), /era-dialog era-relationship/);
+  snapshot = check(runtime.input("999"));
+  assert.equal((runtime.characterTool(id, "get_character_info", {}).result as typeof info).feelingsTowardPlayer.commitment, "engaged");
+  assert.equal(tool("marry").changed, true);
+  snapshot = check(runtime.refresh());
+  assert.match(snapshot.output.map((item) => item.text ?? "").join("\n"), /now married/);
+  assert.equal(history(snapshot).entries[0]!.action.label, "Get married");
+});
+
+test("AI confession runs its native attempt without opening the relationship menu", { skip: !existsSync(GAME_ROOT) }, async () => {
+  const game = await loadGame();
+  await applyHotpatches(game);
+  const runtime = new Runtime(demoGame(game), GAME_INSTRUCTION_LIMIT);
+  check(runtime.start());
+  check(runtime.input("8"));
+  let snapshot = check(runtime.input("2"));
+  for (let i = 0; snapshot.input?.kind === "wait" && i < 40; i++) snapshot = check(runtime.input(""));
+  const id = history(snapshot).character.id;
+  assert.equal(runtime.characterTool(id, "player_attempts", { activity: "become_lovers" }).changed, true);
+  snapshot = check(runtime.refresh());
+  const printed = snapshot.output.map((item) => item.text ?? "").join("\n");
+  assert.doesNotMatch(printed, /era-dialog era-relationship/);
+  assert.match(printed, /Confessing to Reimu/);
+  assert.match(printed, /Confession declined:/);
+});
+
+test("AI friendship request exposes the calculation, records acceptance and revokes on hate without replaying the bonus", {
+  skip: !existsSync(GAME_ROOT),
+}, async () => {
+  const game = await loadGame();
+  await applyHotpatches(game);
+  const runtime = new Runtime(demoGame(game), GAME_INSTRUCTION_LIMIT);
+  check(runtime.start());
+  check(runtime.input("8"));
+  let snapshot = check(runtime.input("2"));
+  for (let i = 0; snapshot.input?.kind === "wait" && i < 40; i++) snapshot = check(runtime.input(""));
+  const id = history(snapshot).character.id;
+  const tool = (name: string, args: Record<string, unknown> = {}) => runtime.characterTool(id, name, args);
+  assert.equal(tool("player_attempts", { activity: "become_friends" }).changed, true);
+  snapshot = check(runtime.refresh());
+  const refusal = snapshot.output.map((item) => item.text ?? "").join("\n");
+  assert.match(refusal, /Friendship check: Favor/);
+  assert.match(refusal, /Friendship declined: They would like to know you a bit better first/);
+  // Earn enough goodwill for any combination of Reserved/Misanthrope, below the automatic-offer threshold.
+  for (let i = 0; i < 7; i++) tool("change_feelings", { favor: 50, reason: "A positive conversation" });
+  for (let i = 0; i < 5; i++) tool("change_feelings", { trust: 10, reason: "Getting to know the player" });
+  const before = tool("get_character_info").result as { feelingsTowardPlayer: { favor: number; friendship: { active: boolean; calculation: string } } };
+  assert.match(before.feelingsTowardPlayer.friendship.calculation, /required: 200/);
+  assert.equal(tool("player_attempts", { activity: "become_friends" }).changed, true);
+  snapshot = check(runtime.refresh());
+  const printed = snapshot.output.map((item) => item.text ?? "").join("\n");
+  assert.match(printed, /Friendship check: Favor/);
+  assert.match(printed, /now friends. Favor \+100/);
+  assert.equal(history(snapshot).entries[0]!.action.label, "Ask to be friends");
+  const after = tool("get_character_info").result as typeof before;
+  assert.equal(after.feelingsTowardPlayer.friendship.active, true);
+  assert.equal(after.feelingsTowardPlayer.favor, before.feelingsTowardPlayer.favor + 100);
+  tool("change_mark", { mark: "hate", change: 1, reason: "Broken trust" });
+  assert.equal((tool("get_character_info").result as typeof before).feelingsTowardPlayer.friendship.active, false);
 });
 
 test("a character sulking after a refused push-down stays furious, so she can be apologised to (game patch 5)", {

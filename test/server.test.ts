@@ -411,6 +411,10 @@ test("HTTP UI, isolated sessions, real image bytes, sprite metadata, errors and 
     assert.equal(moon.status, 200);
     assert.equal(moon.headers.get("content-type"), "image/svg+xml");
     assert.match(await moon.text(), /clip-path="url\(#crescent\)"/);
+    const relationships = await fetch(base + "/relationship-icons.svg");
+    assert.equal(relationships.status, 200);
+    assert.equal(relationships.headers.get("content-type"), "image/svg+xml");
+    assert.match(await relationships.text(), /viewBox="0 0 320 64"/);
     const earth = await fetch(base + "/earth.png");
     assert.equal(earth.status, 200);
     assert.equal(earth.headers.get("content-type"), "image/png");

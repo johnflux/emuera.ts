@@ -16,15 +16,16 @@ export interface ToolHost {
   voice?(intimate: boolean): CharacterVoice;
 }
 /** Effects that print to the room, so they run on the game's own screen once the chat window is closed. */
+export type RelationshipAction = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 export type CharacterAction =
   | { kind: "say"; character: string; text: string }
   | { kind: "act"; character: string; text: string }
   | { kind: "move"; character: string; destination: number }
   /** A TRAIN command run as if the player had typed its number, e.g. Kiss (312). */
-  | { kind: "command"; character: string; command: number };
+  | { kind: "command"; character: string; command: number; relationship?: RelationshipAction };
 export interface ToolOutcome {
   result: Record<string, unknown>;
-  action?: { kind: "say" | "act"; text: string } | { kind: "move"; destination: number } | { kind: "command"; command: number };
+  action?: { kind: "say" | "act"; text: string } | { kind: "move"; destination: number } | { kind: "command"; command: number; relationship?: RelationshipAction };
   /** Whether game state or the room will change, so the main screen needs redrawing afterwards. */
   changed: boolean;
   /** Words said to another character away from the player (`tell`), for the interaction history. */
@@ -75,6 +76,10 @@ const ACTIVITIES = Object.keys(COMMANDS);
 /** What the player can try through player_attempts: the intimate commands and Apologize (303), whose own rules decide
  * whether words calm the character's anger and whether a gift box (菓子折り) removes a first hate mark. */
 const ATTEMPTS: Record<string, number> = { ...COMMANDS, apologize: 303 };
+const RELATIONSHIP_ACTIONS: Record<string, RelationshipAction> = {
+  become_lovers: 1, friends_with_benefits: 2, propose: 3, marry: 4, end_engagement: 5, break_up: 6, divorce: 6, end_friends_with_benefits: 7,
+  become_friends: 8,
+};
 /** TRAIN.CSV ids below this are the commands of an intimate scene (caressing, positions, toys and so on). */
 const SCENE_COMMANDS = 200;
 /** USERCOM's "end the affair" input. */
@@ -195,8 +200,16 @@ class CharacterTools {
   private towardPlayer(i: number): Record<string, unknown> {
     const marks = Object.fromEntries(Object.entries(this.marks(i)).filter(([, level]) => level));
     const love = this.loveTalents(i);
+    const commitment = this.host.has("HOTPATCH_RELATIONSHIP_STATE") ? Number(this.host.call("HOTPATCH_RELATIONSHIP_STATE", [BigInt(i)])) : 0;
     return { favor: this.num("CFLAG", BigInt(i), "好感度"), trust: this.num("CFLAG", BigInt(i), "信頼度"),
-      ...(love.length ? { love } : {}), ...(Object.keys(marks).length ? { marks } : {}) };
+      ...(love.length ? { love } : {}), ...(Object.keys(marks).length ? { marks } : {}),
+      ...(commitment > 0 ? { commitment: commitment === 2 ? "married" : "engaged" } : {}),
+      ...(this.host.has("HOTPATCH_FRIENDSHIP_ACTIVE") ? { friendship: {
+        active: !!Number(this.host.call("HOTPATCH_FRIENDSHIP_ACTIVE", [BigInt(i)])),
+        introductionAccepted: this.num("CFLAG", BigInt(i), 7399n) !== 0,
+        calculation: String(this.host.call("HOTPATCH_FRIENDSHIP_DETAILS", [BigInt(i)])),
+        reason: String(this.host.call("HOTPATCH_FRIENDSHIP_REASON", [BigInt(i)])),
+      } } : {}) };
   }
   /** eraTW parks characters who are not on any map in the Gap (SUKIMA). */
   private whereabouts(i: number): string {
@@ -219,9 +232,12 @@ class CharacterTools {
     const relationships: string[] = [];
     if (i !== this.master) {
       const player = this.name(this.master);
-      if (this.num("TALENT", BigInt(i), 7n)) relationships.push(`lovers with ${player}`);
+      const commitment = this.host.has("HOTPATCH_RELATIONSHIP_STATE") ? Number(this.host.call("HOTPATCH_RELATIONSHIP_STATE", [BigInt(i)])) : 0;
+      if (this.num("TALENT", BigInt(i), 7n)) relationships.push(`${commitment === 2 ? "married to" : commitment === 1 ? "engaged to" : "lovers with"} ${player}`);
       else if (this.num("TALENT", BigInt(i), 3n)) relationships.push(`in love with ${player}`);
       else if (this.num("TALENT", BigInt(i), 8n)) relationships.push(`attached to ${player}`);
+      if (this.host.has("HOTPATCH_FRIENDSHIP_ACTIVE") && Number(this.host.call("HOTPATCH_FRIENDSHIP_ACTIVE", [BigInt(i)])))
+        relationships.push(`friends with ${player}`);
       const hate = this.num("MARK", BigInt(i), BigInt(MARKS.hate));
       if (hate) relationships.push(`lasting resentment toward ${player} (hate mark ${hate}/${MARK_MAX})`);
     }
@@ -414,6 +430,9 @@ class CharacterTools {
     const mark = MARKS[kind as keyof typeof MARKS];
     const before = this.num("MARK", BigInt(this.self), BigInt(mark)), after = Math.max(0, Math.min(MARK_MAX, before + change));
     this.host.write("MARK", [BigInt(this.self), BigInt(mark)], BigInt(after));
+    if (mark === MARKS.hate && after > 0 && this.host.has("HOTPATCH_FRIENDSHIP_ACTIVE")
+      && this.num("CFLAG", BigInt(this.self), 7399n) === 1)
+      this.host.write("CFLAG", [BigInt(this.self), 7399n], -1n);
     if (mark === MARKS.hate && after > this.num("MARK", BigInt(this.self), BigInt(OLD_HATE)))
       this.host.write("MARK", [BigInt(this.self), BigInt(OLD_HATE)], BigInt(after));
     return { result: { mark: kind, before, after, max: MARK_MAX }, changed: after !== before };
@@ -597,13 +616,29 @@ class CharacterTools {
    * conversation ends, so its consent check, rejection penalties (antipathy, hate marks, lost favor) and scene apply.
    */
   attempt(args: Record<string, unknown>): ToolOutcome {
-    const activity = this.activity(args, Object.keys(ATTEMPTS));
-    const command = ATTEMPTS[activity]!;
+    const relationshipEnabled = this.host.has("HOTPATCH_RELATIONSHIP_REASON");
+    const activity = this.activity(args, [...Object.keys(ATTEMPTS), ...(relationshipEnabled ? Object.keys(RELATIONSHIP_ACTIONS) : [])]);
+    const relationship = relationshipEnabled ? RELATIONSHIP_ACTIONS[activity] : undefined;
+    const command = relationship !== undefined ? 352 : ATTEMPTS[activity]!;
     if (this.self !== Number(this.host.read("TARGET"))) throw new ToolError("The player is not with you, so they cannot try that");
     if (!this.together(this.self)) throw new ToolError("The player is not in the same room");
     if (this.host.queued().some((action) => action.kind === "command")) throw new ToolError("The player is already trying something");
     // The commands read the consent cached by CHARA_ATTITUDE, so feelings changed during this conversation count.
     if (this.host.has("CHARA_ATTITUDE")) this.host.run("CHARA_ATTITUDE", []);
+    if (relationship !== undefined) {
+      if (activity === "divorce" && Number(this.host.call("HOTPATCH_RELATIONSHIP_STATE", [BigInt(this.self)])) !== 2)
+        throw new ToolError("You are not married to the player");
+      const reason = String(this.host.call("HOTPATCH_RELATIONSHIP_REASON", [BigInt(relationship), BigInt(this.self)]));
+      if (reason) throw new ToolError(reason);
+      if (relationship !== 8) {
+        this.host.run("KOJO_CHECK", [BigInt(this.self), "COM_BLOCKED", "", BigInt(relationship === 2 ? 357 : 352)]);
+        if (Number(this.host.read("RESULT"))) throw new ToolError("Your current character story blocks this relationship conversation");
+        if (Number(this.host.call("GLOBAL_COMABLE2", [BigInt(relationship === 2 ? 357 : 352)])))
+          throw new ToolError("This relationship conversation is blocked by the current encounter rules");
+      }
+      return { result: { note: "The player tries it now; the game decides how you react. The conversation ends here." },
+        action: { kind: "command", command, relationship }, changed: true };
+    }
     if (this.host.has(`COM_ABLE${command}`)) this.host.run(`COM_ABLE${command}`, []);
     if (activity === "apologize" && this.host.has("COM_ABLE303") && !Number(this.host.read("RESULT")))
       throw new ToolError(`${this.name(this.self)} is not furious with the player, so the game has nothing to forgive; respond in words instead`);

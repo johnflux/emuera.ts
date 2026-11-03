@@ -70,8 +70,8 @@ test(`${area} panoramas have aligned transparent day/night artwork and appropria
               : area === "7-foothills" && part === "right" ? [[401, 72, 408, 83]]
                 : area === "9-underworld" ? part === "left" ? [[140, 55, 160, 80]]
                   : part === "right" ? [[201, 67, 233, 91], [149, 93, 167, 109]] : []
-                  : area === "10-moon" ? part === "left" ? [[75, 80, 90, 102], [175, 80, 190, 102]]
-                    : part === "right" ? [[150, 68, 201, 88], [110, 85, 128, 106], [232, 85, 250, 106]] : [] : [];
+                  : area === "10-moon" ? part === "left" ? [[81, 92, 92, 101], [177, 97, 188, 106]]
+                    : part === "right" ? [[159, 81, 201, 95], [113, 101, 122, 108], [245, 101, 254, 108]] : [] : [];
     for (const [left, top, right, bottom] of lights) {
       let warm = 0;
       for (let y = top!; y < bottom!; y++) for (let x = left!; x < right!; x++) {
@@ -79,6 +79,40 @@ test(`${area} panoramas have aligned transparent day/night artwork and appropria
         if (night.data[i + 3] && night.data[i]! > 150 && night.data[i]! > night.data[i + 2]! * 1.5) warm++;
       }
       assert.ok(warm > 2, `${part} warm light`);
+    }
+  }
+});
+
+test("Moon night lights fill entire panes without threshold holes and leave their frames dark", async () => {
+  for (const part of ["left", "right"]) {
+    const root = new URL("../web/areas/10-moon/", import.meta.url);
+    const day = decodePng(await readFile(new URL(`neutral-day-${part}.png`, root)));
+    const night = decodePng(await readFile(new URL(`neutral-night-${part}.png`, root)));
+    const panes = part === "left"
+      ? [[81, 92, 92, 101], [177, 97, 188, 106]]
+      : [[159, 81, 166, 95], [169, 81, 179, 95], [181, 81, 190, 95], [193, 81, 201, 95],
+        [113, 101, 122, 108], [245, 101, 254, 108]];
+    for (const [left, top, right, bottom] of panes) {
+      for (let y = top!; y < bottom!; y++) {
+        let warm = 0;
+        for (let x = left!; x < right!; x++) {
+          const i = (y * day.width + x) * 4;
+          const expected = [.98, .85, .6].map((factor, c) => Math.round(day.data[i + c]! * factor));
+          assert.deepEqual([...night.data.slice(i, i + 3)], expected,
+            `${part} pane ${left},${top} keeps source lattice shading at ${x},${y}, including pale pixels`);
+          if (night.data[i]! > 150 && night.data[i + 1]! > night.data[i + 2]! * 1.2) warm++;
+        }
+        if (y > top! && y < bottom! - 1)
+          assert.ok(warm / (right! - left!) >= .8, `${part} pane glows across every interior row, including the lower rows`);
+      }
+    }
+    const frames = part === "left" ? [[85, 90], [85, 102], [182, 95], [182, 107], [100, 100]]
+      : [[167, 88], [179, 88], [180, 88], [191, 88], [116, 99], [116, 109], [248, 99], [248, 110], [175, 55]];
+    for (const [x, y] of frames) {
+      const i = (y! * day.width + x!) * 4;
+      assert.deepEqual([...night.data.slice(i, i + 3)],
+        [.32, .38, .56].map((factor, c) => Math.round(day.data[i + c]! * factor)),
+        `${part} frame, base or roof decoration at ${x},${y} retains the non-emissive night grade`);
     }
   }
 });

@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="64" viewBox="0 0 320 64">
+  <defs>
+    <linearGradient id="heart" x2=".3" y2="1">
+      <stop stop-color="#ffacc7"/>
+      <stop offset="1" stop-color="#cc426e"/>
+    </linearGradient>
+    <linearGradient id="gold" x2=".6" y2="1">
+      <stop stop-color="#fff3ba"/>
+      <stop offset=".5" stop-color="#e7bc61"/>
+      <stop offset="1" stop-color="#ac7332"/>
+    </linearGradient>
+    <path id="shape" d="M32 55C25 49 7 37 7 23C7 8 25 6 32 19C39 6 57 8 57 23C57 37 39 49 32 55Z"/>
+    <g id="love">
+      <use href="#shape" fill="url(#heart)" stroke="#ffbad0" stroke-width="1.5"/>
+      <path d="M14 23C14 17 20 14 24 18" fill="none" stroke="#ffe0ec" stroke-width="3" stroke-linecap="round"/>
+    </g>
+    <g id="ring">
+      <circle cx="44" cy="43" r="13" fill="#19222b" stroke="url(#gold)" stroke-width="5"/>
+      <path d="M36 28L40 22H48L52 28L44 36Z" fill="#d8f6ff" stroke="#fff4c4" stroke-width="1.5"/>
+    </g>
+  </defs>
+  <use href="#shape" fill="none" stroke="#87929f" stroke-width="2" stroke-dasharray="4 3"/>
+  <g transform="translate(64)">
+    <use href="#love"/>
+  </g>
+  <g transform="translate(128)">
+    <use href="#shape" fill="#a986ca" stroke="#d3b8ed" stroke-width="1.5"/>
+    <path d="M32 20L35 28L43 31L35 34L32 42L29 34L21 31L29 28Z" fill="#f3e7ff"/>
+  </g>
+  <g transform="translate(192)">
+    <use href="#love"/>
+    <use href="#ring"/>
+  </g>
+  <g transform="translate(256)">
+    <use href="#love"/>
+    <circle cx="31" cy="43" r="12" fill="#19222b" stroke="url(#gold)" stroke-width="5"/>
+    <use href="#ring"/>
+  </g>
+</svg>

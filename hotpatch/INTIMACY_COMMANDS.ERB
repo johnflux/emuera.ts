@@ -1,10 +1,7 @@
 ;-------------------------------------------------------------------------------
-; Gameplay hotpatch: Kiss (312) and Confess (352) no longer need a closeness level (TCVAR:MASTER:馴れ合い) from
-; earlier small talk this visit. The command is offered (and can be typed) as soon as its other conditions hold, and
-; the game's own consent check decides: an unwelcome kiss is rejected with REJECT_CHECK's antipathy, fear and favor
-; loss, and a premature confession simply fails. LLM characters use these through the player_attempts tool.
-; The rest of each check is copied unchanged from ERB/コマンド関連/COMF/日常系/COMF312 キスする.ERB and
-; COMF352 告白する.ERB (including the spineless player's stricter rule for kissing).
+; Gameplay hotpatch: Kiss (312) no longer needs closeness from earlier small talk this visit. The other gates and
+; native rejection consequences remain, including the spineless player's stricter kissing rule.
+; Confession and relationship changes are now managed by RELATIONSHIPS.ERB.
 ;-------------------------------------------------------------------------------
 @COM_ABLE312
 ;キスする実行判定
@@ -39,43 +36,6 @@ SIF GETBIT (TCVAR:26,2)
 	RETURN 0
 ;シックスナイン体勢
 SIF TEQUIP:シックスナイン
-	RETURN 0
-RETURN 1
-
-@COM_ABLE352
-;停止中は不可
-SIF FLAG:70
-	RETURN 0
-;妄想中は告白できない
-SIF TFLAG:妄想中 == 1
-	RETURN 0
-;告白する実行判定
-SIF !TFLAG:100
-	RETURN 0
-;一括管理
-SIF GLOBAL_COMABLE(352)
-	RETURN RESULT
-;二人きりでないとだめ
-SIF GET_TARGETNUM() > 1
-	RETURN 0
-;すでに恋人の場合はだめ
-SIF TALENT:恋人
-	RETURN 0
-SIF GETBIT(TFLAG:一日一回, 12)
-	RETURN 0
-;恋人の数が上限に達していてはだめ
-SIF !CAN_MAKE_恋人()
-	RETURN 0
-SIF TALENT:TARGET:行きずり
-	RETURN 0
-;睡眠中
-SIF CFLAG:睡眠
-	RETURN 0
-;添い寝中
-SIF CFLAG:添い寝中
-	RETURN 0
-;気力0
-SIF BASE:MASTER:気力 <= 0
 	RETURN 0
 RETURN 1
 

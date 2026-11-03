@@ -5,6 +5,14 @@ import { runInNewContext } from "node:vm";
 import { parseFragment, type DefaultTreeAdapterMap } from "parse5";
 import { createCanvas, loadImage } from "@napi-rs/canvas";
 
+test("HTML renderer supports semantic headings while keeping executable tags disallowed", async () => {
+  const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
+  const declaration = source.match(/^const allowedTags = .+;$/m)![0];
+  const allowed = runInNewContext(`${declaration}\nallowedTags`) as Set<string>;
+  for (let level = 1; level <= 6; level++) assert.ok(allowed.has(`H${level}`));
+  for (const tag of ["SCRIPT", "STYLE", "IFRAME", "OBJECT", "EMBED"]) assert.ok(!allowed.has(tag));
+});
+
 test("vector clock draws exact game minutes, wraps days and rejects invalid input", async () => {
   const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
   const routine = source.slice(source.indexOf("function clock("), source.indexOf("/** Hotpatch extension: <meter"));

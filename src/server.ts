@@ -610,6 +610,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
         "/art-demo": "art-demo.html", "/art-demo.js": "art-demo.js", "/art-demo.css": "art-demo.css", "/sky.js": "sky.js",
         "/title/new-game.webp": "title/new-game.webp", "/title/load-game.webp": "title/load-game.webp",
         "/moon.svg": "moon.svg",
+        "/relationship-icons.svg": "relationship-icons.svg",
         "/earth.png": "earth.png",
         "/underworld-lantern-mask.png": "underworld-lantern-mask.png",
         "/clock-frame.png": "clock-frame.png",

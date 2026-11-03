@@ -122,6 +122,9 @@ IF MOREDATE
 			CALL TIMEUP_NOTICE(Datees:LOCAL)
 	NEXT
 ENDIF
+CALL HOTPATCH_FRIENDSHIP_SYNC
+SIF TARGET != MASTER && TARGET >= 0
+	CALL HOTPATCH_FRIENDSHIP_OFFER
 ;-------------------------------------------------
 ;情報表示 (hotpatch: the display below is laid out in panels)
 ;-------------------------------------------------
@@ -173,6 +176,7 @@ IF TARGET > 0
 	SIF STRLENS(LOCALS)
 		HTML_PRINT @"<div class='era-player-status era-stains'><span class='era-status-label'>Stains:</span>%LOCALS%</div>"
 	CALL HOTPATCH_TARGET_STATUS
+	HTML_PRINT @"<div class='era-player-status'>%HOTPATCH_RELATIONSHIP_ICON(TARGET)%<button value='352' class='era-chip-button'>Discuss relationship</button></div>"
 	CALL SHOW_EQUIP_1
 	HTML_PRINT "<era-open class='era-look'>"
 	CALL HOTPATCH_LOOK
@@ -341,6 +345,8 @@ IF TARGET > 0
 		SIF !STRLENS(sState)
 			sState '= @"Favor %HOTPATCH_RANK(CFLAG:nChara:2, "MAX_50000")%"
 		sState += HOTPATCH_FEELINGS(nChara, 1)
+		SIF TALENT:nChara:恋人 || TALENT:nChara:恋慕 || TALENT:nChara:セフレ || HOTPATCH_FRIENDSHIP_ACTIVE(nChara)
+			sState += HOTPATCH_RELATIONSHIP_ICON(nChara)
 		sClass += HOTPATCH_MOOD_CLASS(nChara)
 		sPressed '= nChara == TARGET ? "true" # "false"
 		HTML_PRINT @"<era-open class='era-occupant%sClass%'>"
@@ -1052,6 +1058,9 @@ ELSEIF TALENT:nChara:セフレ == 2
 ELSEIF TALENT:nChara:思慕 == 1
 	sWord '= "Yearning"
 	sTone '= "yearning"
+ELSEIF HOTPATCH_FRIENDSHIP_ACTIVE(nChara)
+	sWord '= "Friends"
+	sTone '= "friend"
 ELSE
 	sWord '= ""
 ENDIF

@@ -1434,7 +1434,7 @@ function layoutMapPictures() {
     show(localStorage.getItem(MAP_TEXT_KEY) === "1");
   }
 }
-const allowedTags = new Set(["P", "BR", "B", "STRONG", "I", "EM", "U", "S", "SPAN", "NOBR", "FONT", "NONBUTTON", "DIV"]);
+const allowedTags = new Set(["P", "BR", "B", "STRONG", "I", "EM", "U", "S", "SPAN", "NOBR", "FONT", "NONBUTTON", "DIV", "H1", "H2", "H3", "H4", "H5", "H6"]);
 /** A locked HTML position resets the cursor from the line's left edge, including when it moves backwards. */
 function layoutHtmlPositions() {
   for (const element of terminal.querySelectorAll(".html-positioned")) {

@@ -53,8 +53,12 @@ export const TOOLS = [
     + "their love and asks to become lovers, or sincerely apologizes: hand that moment to the game, which plays it out "
     + "with its own checks, your reaction and the consequences (an unwelcome attempt angers you and can leave a hate "
     + "mark; an apology may calm your anger, and only with a gift removes a hate mark). The conversation ends with this "
-    + "call, so make it last.",
-    { activity: { type: "string", enum: ["kiss", "sex", "become_lovers", "apologize"] } }, ["activity"]),
+    + "call, so make it last. Relationship conversations also support friends_with_benefits, propose, marry, "
+    + "end_engagement, break_up, divorce, end_friends_with_benefits, and become_friends. Use these only when the player explicitly "
+    + "makes that request, never infer a proposal or breakup from casual affection. Ending commitment preserves feelings. "
+    + "Unavailable attempts return a reason: explain it rather than pretending the relationship changed.",
+    { activity: { type: "string", enum: ["kiss", "sex", "become_lovers", "apologize", "friends_with_benefits", "propose", "marry",
+      "end_engagement", "break_up", "divorce", "end_friends_with_benefits", "become_friends"] } }, ["activity"]),
   fn("say", "Say something out loud. This is how you talk: the player sees it in this conversation and everyone in the "
     + "room hears it in the game.",
     { text: who("Only your spoken words, without quotation marks or a speaker-name prefix; the game adds those") }, ["text"]),

@@ -80,7 +80,7 @@ const PENETRATION_A = 7396n;
 const PENETRATION_M = 7397n;
 const PENETRATION_FLAGS = [PENETRATION_V, PENETRATION_A, PENETRATION_M];
 // Talk, Serve Tea, Ask about Dating; Kiss, Push Down, Confess.
-const COMMANDS = new Set([300, 301, 303, 312, 350, 352]);
+const COMMANDS = new Set([300, 301, 303, 312, 350, 352, 357]);
 const MARKS = { pain: 0n, pleasure: 1n, lewd: 2n, hate: 3n };
 // SOURCE_CHECK prints each changed parameter as "Fear   0   + 108   =   108" under the character's name.
 const SOURCE_ROW = /^(\S.*?)\s+-?\d+\s+([+-])\s*(\d+)\s+=\s+-?\d+$/;
@@ -400,6 +400,11 @@ export class TwInteractionHistory {
       }
     }
     const command = /^COM(\d+)$/.exec(name);
+    const relationship = name === "HOTPATCH_RELATIONSHIP_CHANGE";
+    if (relationship && !this.active) {
+      const labels: Record<number, string> = { 3: "Propose", 4: "Get married", 5: "End engagement", 6: "End romantic commitment", 7: "End friends with benefits", 8: "Ask to be friends" };
+      this.begin(Number(this.host.read("TARGET")), { id: 352, label: labels[Number(args[0])] ?? "Relationship" });
+    }
     if (command && COMMANDS.has(Number(command[1])) && !this.active) {
       this.begin(Number(this.host.read("TARGET")), { id: Number(command[1]), label: this.host.label(Number(command[1])) });
     }
@@ -419,7 +424,7 @@ export class TwInteractionHistory {
     const stopped = name === "KOJO_MESSAGE_SEND" && args[0] === "EVENT" && args[1] === 4n && args[3] === 1n;
     const encounter = name === "KOJO_MESSAGE_SEND" && args[0] === "ENCOUNTER" || stopped;
     const owner = meeting || name === "COM_KOJO_CALL" ? args[0] : name === "KOJO_MESSAGE_SEND" ? args[2] : undefined;
-    let completes = reaction;
+    let completes = reaction ?? (relationship ? this.active?.event.id : undefined);
     if ((meeting || encounter) && typeof owner === "bigint" && !this.active) {
       completes = this.begin(Number(owner), name === "FIRSTMEETTODAY" ? { id: "greeting", label: "Daily greeting" }
         : { id: "encounter", label: name === "SYOTAIMEN" ? "First meeting" : stopped ? "Stopped to talk" : "Meeting" });
@@ -430,7 +435,7 @@ export class TwInteractionHistory {
     const scope: Scope = {
       ...(name === "EVENTCOMEND" ? { direct: true } : {}),
       ...(name === "SOURCE_CHECK" ? { source: { pending: [] } } : {}),
-      capture: !!command && COMMANDS.has(Number(command[1])) || game || name.startsWith("ADD_GAME_BET_")
+      capture: relationship || !!command && COMMANDS.has(Number(command[1])) || game || name.startsWith("ADD_GAME_BET_")
         || meeting || name === "KOJO_MESSAGE_SEND"
         || name === "COM_KOJO_CALL" || !!previous?.capture,
       character: previous?.character ?? null,

@@ -1,0 +1,619 @@
+; CFLAG 7398: formal commitment (0 none, 1 engaged, 2 married, -1 former engagement, -2 divorced).
+@HOTPATCH_RELATIONSHIP_STATE(nChara)
+#FUNCTION
+#DIM DYNAMIC nChara
+SIF !TALENT:nChara:恋人 && CFLAG:nChara:7398 > 0
+	RETURNF 0
+RETURNF CFLAG:nChara:7398
+
+@HOTPATCH_RELATIONSHIP_LABEL(nChara)
+#FUNCTIONS
+#DIM DYNAMIC nChara
+SELECTCASE HOTPATCH_RELATIONSHIP_STATE(nChara)
+CASE 2
+	RETURNF "Married"
+CASE 1
+	RETURNF "Engaged"
+ENDSELECT
+SIF TALENT:nChara:恋人
+	RETURNF "Lovers"
+SIF TALENT:nChara:セフレ
+	RETURNF "Friends with benefits"
+SIF HOTPATCH_FRIENDSHIP_ACTIVE(nChara)
+	RETURNF "Friends"
+RETURNF "No formal relationship"
+
+@HOTPATCH_RELATIONSHIP_ICON(nChara)
+#FUNCTIONS
+#DIM DYNAMIC nChara
+#DIMS DYNAMIC sState
+#DIMS DYNAMIC sLabel
+sState '= "none"
+sLabel '= HOTPATCH_RELATIONSHIP_LABEL(nChara)
+IF HOTPATCH_RELATIONSHIP_STATE(nChara) == 2
+	sState '= "married"
+ELSEIF HOTPATCH_RELATIONSHIP_STATE(nChara) == 1
+	sState '= "engaged"
+ELSEIF TALENT:nChara:恋人 || TALENT:nChara:恋慕
+	sState '= "love"
+	SIF !TALENT:nChara:恋人
+		sLabel '= "In love"
+ELSEIF TALENT:nChara:セフレ
+	sState '= "casual"
+ELSEIF HOTPATCH_FRIENDSHIP_ACTIVE(nChara)
+	sState '= "friends"
+ENDIF
+RETURNF @"<span class='era-relationship-icon era-relationship-icon-%sState%' title='%sLabel%'><span class='era-relationship-icon-label'>%sLabel%</span></span>"
+
+@HOTPATCH_RELATIONSHIP_VISIBLE(nAction, nChara)
+#FUNCTION
+#DIM DYNAMIC nAction
+#DIM DYNAMIC nChara
+SELECTCASE nAction
+CASE 4, 5
+	RETURNF HOTPATCH_RELATIONSHIP_STATE(nChara) == 1
+CASE 6
+	RETURNF TALENT:nChara:恋人
+CASE 7
+	RETURNF TALENT:nChara:セフレ
+CASE 8
+	RETURNF !HOTPATCH_FRIENDSHIP_ACTIVE(nChara)
+ENDSELECT
+RETURNF 1
+
+; Transient routing, never saved in game arrays. -1 consumes the pending action.
+@HOTPATCH_RELATIONSHIP_REQUEST(nAction = -1)
+#FUNCTION
+#DIM DYNAMIC nAction
+#DIM nPending
+#DIM DYNAMIC nResult
+IF nAction >= 0
+	nPending = nAction
+	RETURNF nPending
+ENDIF
+nResult = nPending
+nPending = 0
+RETURNF nResult
+
+@HOTPATCH_RELATIONSHIP_CONFIRM(nSet = -1)
+#FUNCTION
+#DIM DYNAMIC nSet
+#DIM nPending
+#DIM DYNAMIC nResult
+IF nSet >= 0
+	nPending = nSet
+	RETURNF nPending
+ENDIF
+nResult = nPending
+nPending = 0
+RETURNF nResult
+
+@HOTPATCH_RELATIONSHIP_REASON(nAction, nChara)
+#FUNCTIONS
+#DIM DYNAMIC nAction
+#DIM DYNAMIC nChara
+SIF !INRANGE(nAction, 1, 8)
+	RETURNF "Unknown relationship action."
+SIF nChara == MASTER
+	RETURNF "Choose another character to discuss a relationship."
+SIF CFLAG:nChara:現在位置 != CFLAG:MASTER:現在位置
+	RETURNF "They are not here."
+SIF !TFLAG:100
+	RETURNF "Finish the current encounter before discussing your relationship."
+SIF FLAG:70
+	RETURNF "Resume time before discussing your relationship."
+SIF TFLAG:妄想中 == 1
+	RETURNF "A daydream cannot change your real relationship."
+SIF TFLAG:102 != 1
+	RETURNF "Finish the current intimate scene before discussing your relationship."
+SIF nAction != 8 && GET_TARGETNUM() > 1
+	RETURNF "Find a private moment together first."
+SIF CFLAG:nChara:睡眠
+	RETURNF "They are asleep."
+SIF CFLAG:nChara:添い寝中
+	RETURNF "Get up from sleeping together first."
+SIF nAction != 8 && TALENT:nChara:行きずり
+	RETURNF "This character cannot form a lasting relationship."
+SIF BASE:MASTER:気力 <= 0
+	RETURNF "You do not have enough energy for this conversation."
+IF nAction == 1
+	SIF TALENT:nChara:恋人
+		RETURNF "You are already lovers."
+	SIF GETBIT(TFLAG:一日一回, 12)
+		RETURNF "You have already confessed today."
+	SIF !CAN_MAKE_恋人()
+		RETURNF "You have reached your current lover limit."
+ENDIF
+IF GROUPMATCH(nAction, 1, 2, 3) && FLAG:甲斐性無 && !FLAG:LUSTMODE
+	RETURNF "You cannot find the courage to make this proposition."
+ENDIF
+IF nAction == 2
+	SIF TALENT:nChara:セフレ
+		RETURNF "You already have a friends-with-benefits agreement."
+	SIF TALENT:nChara:恋人 || TALENT:nChara:恋慕 || TALENT:nChara:愛欲
+		RETURNF "Their existing relationship feelings do not allow this agreement."
+ENDIF
+IF GROUPMATCH(nAction, 3, 4, 5, 6) && !TALENT:nChara:恋人
+	RETURNF "You need to be lovers first."
+ENDIF
+SIF nAction == 3 && HOTPATCH_RELATIONSHIP_STATE(nChara) > 0
+	RETURNF "You are already engaged or married."
+SIF nAction == 4 && HOTPATCH_RELATIONSHIP_STATE(nChara) != 1
+	RETURNF "You need to be engaged first."
+SIF nAction == 5 && HOTPATCH_RELATIONSHIP_STATE(nChara) != 1
+	RETURNF "There is no engagement to end."
+SIF nAction == 7 && !TALENT:nChara:セフレ
+	RETURNF "There is no friends-with-benefits agreement to end."
+RETURNF ""
+
+@HOTPATCH_RELATIONSHIP_ACTION_NAME(nAction)
+#FUNCTIONS
+#DIM DYNAMIC nAction
+SELECTCASE nAction
+CASE 1
+	RETURNF "Confess your love"
+CASE 2
+	RETURNF "Friends with benefits"
+CASE 3
+	RETURNF "Propose"
+CASE 4
+	RETURNF "Get married"
+CASE 5
+	RETURNF "End the engagement"
+CASE 6
+	SIF HOTPATCH_RELATIONSHIP_STATE(TARGET) == 2
+		RETURNF "Ask for a divorce"
+	RETURNF "End the romantic relationship"
+CASE 7
+	RETURNF "End friends with benefits"
+CASE 8
+	RETURNF "Ask to be friends"
+ENDSELECT
+RETURNF ""
+
+@HOTPATCH_RELATIONSHIP_DESCRIPTION(nAction)
+#FUNCTIONS
+#DIM DYNAMIC nAction
+SELECTCASE nAction
+CASE 1
+	RETURNF "Ask to become lovers. Their feelings and character-specific response decide the outcome."
+CASE 2
+	RETURNF "Discuss a casual agreement. The game's existing desire and reservation checks still apply."
+CASE 3
+	RETURNF "Ask for a deeper commitment. Requires love experience above the proposal threshold; a refusal leaves you lovers."
+CASE 4
+	RETURNF "Confirm your marriage together. This adds a saved commitment, not a new wedding storyline."
+CASE 5
+	RETURNF "Return to being lovers. Affection, trust and other feelings are preserved."
+CASE 6
+	RETURNF "End formal romantic commitment. Affection, trust and any separate casual agreement are preserved."
+CASE 7
+	RETURNF "End the casual agreement without erasing affection or romantic commitment."
+CASE 8
+	RETURNF "Ask to get to know each other as friends. Acceptance gives +100 favor once per character; friendship is separate from romance."
+ENDSELECT
+RETURNF ""
+
+@HOTPATCH_RELATIONSHIP_DIALOG(nInitial = 0)
+#DIM DYNAMIC nInitial
+#DIM DYNAMIC nStart
+#DIM DYNAMIC nAction
+#DIM DYNAMIC nSelected
+#DIMS DYNAMIC sReason
+#DIMS DYNAMIC sError
+nStart = LINECOUNT
+nSelected = nInitial
+DO
+	CLEARLINE LINECOUNT - nStart
+	HTML_PRINT "<era-open class='era-dialog era-relationship'>"
+	CALL HOTPATCH_FACE(TARGET, 74)
+	HTML_PRINT @"<div class='era-relationship-header'><span class='era-info-face'>%RESULTS%</span><div><span class='era-sub'>Your relationship with</span><h2 class='era-relationship-heading'>%HTML_ESCAPE(CALLNAME:TARGET)%</h2></div>%HOTPATCH_RELATIONSHIP_ICON(TARGET)%<button value='999' class='era-dialog-close' title='Close relationship dialog'>×</button></div>"
+	HTML_PRINT "<era-open class='era-relationship-body'>"
+	HTML_PRINT @"<div class='era-relationship-summary'><span>Favor <b>{CFLAG:TARGET:好感度}</b></span><span>Trust <b>{CFLAG:TARGET:信頼度}</b></span><span>Love experience <b>{EXP:TARGET:愛情経験}</b></span></div>"
+	IF STRLENS(sError)
+		HTML_PRINT @"<p class='era-relationship-error' role='alert'>%HTML_ESCAPE(sError)%</p>"
+	ENDIF
+	IF nSelected
+		sReason '= HOTPATCH_RELATIONSHIP_REASON(nSelected, TARGET)
+		HTML_PRINT "<era-open class='era-relationship-confirmation'>"
+		HTML_PRINT @"<h3 class='era-relationship-option-title'>%HOTPATCH_RELATIONSHIP_ACTION_NAME(nSelected)%</h3><p>%HOTPATCH_RELATIONSHIP_DESCRIPTION(nSelected)%</p>"
+		SIF nSelected == 8
+			CALL HOTPATCH_FRIENDSHIP_PREVIEW(TARGET)
+		SIF nSelected == 3
+			HTML_PRINT @"<p>Proposal requires love experience above {250 + TALENT:TARGET:一線越えない * 100}. Current: {EXP:TARGET:愛情経験}. This is a requirement, not a promise of acceptance.</p>"
+		IF STRLENS(sReason)
+			HTML_PRINT @"<p class='era-relationship-error'>%HTML_ESCAPE(sReason)%</p>"
+		ELSE
+			HTML_PRINT @"<button value='100' class='era-relationship-primary'>Confirm: %HOTPATCH_RELATIONSHIP_ACTION_NAME(nSelected)%</button>"
+		ENDIF
+		HTML_PRINT "<button value='0' class='era-chip-button'>Back without changing anything</button>"
+		HTML_PRINT "<era-close>"
+	ELSE
+		HTML_PRINT "<era-open class='era-relationship-options'>"
+		FOR nAction, 1, 9
+			SIF !HOTPATCH_RELATIONSHIP_VISIBLE(nAction, TARGET)
+				CONTINUE
+			sReason '= HOTPATCH_RELATIONSHIP_REASON(nAction, TARGET)
+			HTML_PRINT @"<era-open class='era-relationship-option%(INRANGE(nAction, 5, 7) ? " era-relationship-downgrade" # "")%'>"
+			HTML_PRINT @"<h3 class='era-relationship-option-title'>%HOTPATCH_RELATIONSHIP_ACTION_NAME(nAction)%</h3><p>%HOTPATCH_RELATIONSHIP_DESCRIPTION(nAction)%</p>"
+			IF nAction == 8
+				HTML_PRINT @"<p class='era-friendship-formula'>%HTML_ESCAPE(HOTPATCH_FRIENDSHIP_DETAILS(TARGET))%</p>"
+				sReason '= HOTPATCH_FRIENDSHIP_REASON(TARGET)
+				IF STRLENS(sReason)
+					HTML_PRINT @"<p>Current answer: %HTML_ESCAPE(sReason)%</p>"
+				ELSE
+					HTML_PRINT "<p>Current answer: they will agree.</p>"
+				ENDIF
+				sReason '= HOTPATCH_RELATIONSHIP_REASON(nAction, TARGET)
+			ENDIF
+			HTML_PRINT "<era-open class='era-relationship-option-action'>"
+			IF STRLENS(sReason)
+				HTML_PRINT @"<button disabled class='era-relationship-select'>Unavailable</button><span class='era-relationship-reason'>%HTML_ESCAPE(sReason)%</span>"
+			ELSE
+				HTML_PRINT @"<button value='{nAction}' class='era-relationship-select'>Discuss</button>"
+			ENDIF
+			HTML_PRINT "<era-close>"
+			HTML_PRINT "<era-close>"
+		NEXT
+		HTML_PRINT "<era-close>"
+	ENDIF
+	HTML_PRINT "<era-close>"
+	HTML_PRINT "<div class='era-relationship-footer'><span>No changes until you confirm.</span><button value='999' class='era-chip-button'>Close</button></div>"
+	HTML_PRINT "<era-close>"
+	INPUT
+	sError '= ""
+	SELECTCASE RESULT
+	CASE 999
+		CLEARLINE LINECOUNT - nStart
+		RETURN 0
+	CASE 0
+		nSelected = 0
+	CASE 1 TO 8
+		IF !nSelected
+			nSelected = RESULT
+		ELSE
+			sError '= "Use Confirm, Back or Close."
+		ENDIF
+	CASE 100
+		IF nSelected
+			sReason '= HOTPATCH_RELATIONSHIP_REASON(nSelected, TARGET)
+			IF !STRLENS(sReason)
+				CLEARLINE LINECOUNT - nStart
+				RETURN nSelected
+			ENDIF
+			sError '= sReason
+		ELSE
+			sError '= "Choose a relationship conversation first."
+		ENDIF
+	CASEELSE
+		sError '= "Choose a relationship conversation, or close the dialog."
+	ENDSELECT
+LOOP 1
+
+@USERCOM
+#DIM DYNAMIC nInput
+#DIM DYNAMIC nAction
+#DIM DYNAMIC nCommand
+#DIMS DYNAMIC sReason
+nInput = RESULT
+CALL HOTPATCH_RELATIONSHIP_CONFIRM(0)
+RESULT = nInput
+IF !GROUPMATCH(nInput, 352, 357)
+	JUMP HOTPATCH_ORIGINAL_USERCOM
+ENDIF
+nAction = HOTPATCH_RELATIONSHIP_REQUEST()
+IF !nAction
+	CALL HOTPATCH_RELATIONSHIP_DIALOG(nInput == 357 ? 2 # 0)
+	nAction = RESULT
+ENDIF
+SIF !nAction
+	RETURN 0
+sReason '= HOTPATCH_RELATIONSHIP_REASON(nAction, TARGET)
+IF STRLENS(sReason)
+	PRINTFORML Relationship unchanged: %sReason%
+	RETURN 0
+ENDIF
+IF nAction == 8
+	CALL HOTPATCH_RELATIONSHIP_CHANGE(nAction)
+	RETURN 0
+ENDIF
+nCommand = nAction == 2 ? 357 # 352
+IF GLOBAL_COMABLE2(nCommand)
+	PRINTL Relationship unchanged: this conversation is blocked by the current encounter rules.
+	RETURN 0
+ENDIF
+CALL KOJO_CHECK(TARGET, "COM_BLOCKED",,nCommand)
+IF RESULT
+	PRINTL Relationship unchanged: this character's current story blocks this conversation.
+	RETURN 0
+ENDIF
+IF nAction >= 3
+	CALL HOTPATCH_RELATIONSHIP_CHANGE(nAction)
+	RETURN 0
+ENDIF
+CALL HOTPATCH_RELATIONSHIP_CONFIRM(1)
+RESULT = nCommand
+CALL HOTPATCH_ORIGINAL_USERCOM
+RETURN RESULT
+
+@ASK_YN(ARGS:0 = "Yes", ARGS:1 = "No")
+IF (ARGS:0 == "No" && ARGS:1 == "Confess") || (ARGS:0 == "Cancel" && ARGS:1 == "Make proposition")
+	SIF HOTPATCH_RELATIONSHIP_CONFIRM()
+		RETURN 1
+ENDIF
+JUMP HOTPATCH_ORIGINAL_ASK_YN(ARGS:0, ARGS:1)
+
+@COM_ABLE352
+RETURN TFLAG:100 && TARGET != MASTER
+
+@COM_ABLE357
+RETURN TFLAG:100 && TARGET != MASTER
+
+@COM352
+#DIM DYNAMIC nTime
+#DIM DYNAMIC nResult
+#DIMS DYNAMIC sReason
+sReason '= HOTPATCH_RELATIONSHIP_REASON(1, TARGET)
+IF STRLENS(sReason)
+	PRINTFORML Confession failed: %sReason%
+	CALL HOTPATCH_RELATIONSHIP_CONFIRM(0)
+	RETURN 0
+ENDIF
+nTime = TIME
+CALL HOTPATCH_ORIGINAL_COM352
+nResult = RESULT
+CALL HOTPATCH_RELATIONSHIP_CONFIRM(0)
+SIF TIME > nTime
+	TIME = nTime + 10
+IF nResult >= 0 && !TFLAG:193
+	IF TFLAG:192
+		PRINTL Confession declined: their character-specific story does not allow this confession now.
+	ELSE
+		PRINTFORML Confession declined: their agreement level ({CFLAG:TARGET:合意判定}) must be above {350 + TALENT:TARGET:一線越えない * 100}.
+	ENDIF
+ENDIF
+RETURN nResult
+
+@COM357
+#DIM DYNAMIC nYearning
+#DIM DYNAMIC nResult
+#DIMS DYNAMIC sReason
+sReason '= HOTPATCH_RELATIONSHIP_REASON(2, TARGET)
+IF STRLENS(sReason)
+	PRINTFORML Agreement failed: %sReason%
+	CALL HOTPATCH_RELATIONSHIP_CONFIRM(0)
+	RETURN 0
+ENDIF
+nYearning = TALENT:TARGET:思慕
+IF !HOTPATCH_RELATIONSHIP_CONFIRM()
+	PRINTFORML Discuss a friends-with-benefits agreement with %CALLNAME:TARGET%?
+	CALL ASK_YN("Cancel", "Make proposition")
+	SIF !RESULT
+		RETURN -1
+ENDIF
+CALL HOTPATCH_RELATIONSHIP_CASUAL
+nResult = RESULT
+TALENT:TARGET:思慕 = nYearning
+CALL HOTPATCH_RELATIONSHIP_CONFIRM(0)
+RETURN nResult
+
+; TW's native calculation and hooks, without its inaccurate daily-limit/feeling-removal prompt.
+@HOTPATCH_RELATIONSHIP_CASUAL
+#DIM DYNAMIC 理性判定値
+#DIM DYNAMIC 欲望判定値
+#DIM DYNAMIC 酒酔い
+CALL KOJO_MESSAGE_SEND("SEX_FRIEND", 0, TARGET, 0, 0, "導入")
+PRINTFORMW In %CALLNAME:TARGET%'s heart...
+欲望判定値 = MIN(ABL:TARGET:欲望, 10) * 50
+CALL SF_DESIRE_MOD(@"%ABL_TR(GETNUM(ABL, "欲望"))% {ABL:TARGET:欲望}", 欲望判定値)
+欲望判定値 += MIN(ABL:TARGET:従順, 10) * 20
+CALL SF_DESIRE_MOD(@"%ABL_TR(GETNUM(ABL, "従順"))% {ABL:TARGET:従順}", 欲望判定値)
+欲望判定値 += MIN(EXP:TARGET:絶頂経験, 5000) / 10
+CALL SF_DESIRE_MOD(@"%EXP_TR(GETNUM(EXP, "絶頂経験"))% {EXP:TARGET:絶頂経験}", 欲望判定値)
+欲望判定値 += GETPALAMLV(PALAM:TARGET:欲情,15) * (30 + TALENT:TARGET:快感応答 * 10)
+CALL SF_DESIRE_MOD(@"%PALAM_TR("欲情")%", 欲望判定値)
+欲望判定値 += MAX(MARK:TARGET:快楽刻印, MARK:TARGET:時姦刻印) * 200
+CALL SF_DESIRE_MOD(@"%MARK_TR(GETNUM(MARK, "快楽刻印"))%/%MARK_TR(GETNUM(MARK, "時姦刻印"))%", 欲望判定値)
+IF TCVAR:TARGET:発情 || TCVAR:TARGET:媚薬
+	欲望判定値 += 300
+	CALL SF_DESIRE_MOD(@"In Heat/Aphrodisiac", 欲望判定値)
+ENDIF
+理性判定値 = 1000 + BASE:TARGET:理性 / 2
+CALL SF_REASON_MOD(@"Reason：{BASE:TARGET:理性}", 理性判定値)
+酒酔い = BASE:酒気 * 100 / MAXBASE:酒気
+IF 酒酔い
+	SIF 酒酔い > 70
+		酒酔い *= 2
+	理性判定値 -= 酒酔い
+	CALL SF_REASON_MOD(@"Drunkenness", 理性判定値)
+ENDIF
+IF !(CFLAG:TARGET:既成事実 & 合意_うふふ)
+	理性判定値 += 300
+	CALL SF_REASON_MOD(@"【Lack of Consent】", 理性判定値)
+ENDIF
+IF TALENT:TARGET:無知
+	理性判定値 -= 500
+	CALL SF_REASON_MOD(@"【%TALENT_TR(GETNUM(TALENT, "無知"))%】", 理性判定値)
+ENDIF
+IF TALENT:TARGET:プライド
+	理性判定値 += TALENT:TARGET:プライド * 150
+	CALL SF_REASON_MOD(@"【%TALENT_TR(GETNUM(TALENT, "プライド"))%】", 理性判定値)
+ENDIF
+IF TALENT:TARGET:貞操 > 0
+	理性判定値 += 200
+	CALL SF_REASON_MOD(@"【%GET_TALENTNAME_TR(GETNUM(TALENT, "貞操"), 1)%】", 理性判定値)
+ENDIF
+IF TALENT:TARGET:貞操 < 0
+	理性判定値 -= 200
+	CALL SF_REASON_MOD(@"【%GET_TALENTNAME_TR(GETNUM(TALENT, "貞操"), -1)%】", 理性判定値)
+ENDIF
+IF MARK:TARGET:反発刻印
+	理性判定値 += MARK:TARGET:反発刻印 * 100
+	CALL SF_REASON_MOD(@"【%MARK_TR(GETNUM(MARK, "反発刻印"))%】", 理性判定値)
+ENDIF
+IF TALENT:TARGET:機嫌 < 0
+	理性判定値 += 300
+	CALL SF_REASON_MOD(@"【%GET_TALENTNAME_TR(GETNUM(TALENT, "機嫌"), -1)%】", 理性判定値)
+ENDIF
+IF TALENT:TARGET:処女
+	理性判定値 += 300
+	CALL SF_REASON_MOD(@"【%TALENT_TR(GETNUM(TALENT, "処女"))%】", 理性判定値)
+ENDIF
+IF TALENT:TARGET:倒錯的
+	理性判定値 -= 200
+	CALL SF_REASON_MOD(@"【%TALENT_TR(GETNUM(TALENT, "倒錯的"))%】", 理性判定値)
+ENDIF
+IF TALENT:MASTER:謎の魅力
+	理性判定値 -= 150
+	CALL SF_REASON_MOD(@"Your【%TALENT_TR(GETNUM(TALENT, "謎の魅力"))%】", 理性判定値)
+ENDIF
+IF TALENT:MASTER:容姿 > 0
+	理性判定値 -= 200
+	CALL SF_REASON_MOD(@"Your【%TALENT_TR(GETNUM(TALENT, "容姿"))%】", 理性判定値)
+ENDIF
+IF TALENT:MASTER:魅力
+	理性判定値 -= 150
+	CALL SF_REASON_MOD(@"Your【%TALENT_TR(GETNUM(TALENT, "魅力"))%】", 理性判定値)
+ENDIF
+IF TALENT:TARGET:一線越えない
+	理性判定値 += 200
+	CALL SF_REASON_MOD(@"【%TALENT_TR(GETNUM(TALENT, "一線越えない"))%】", 理性判定値)
+ENDIF
+IF OTOKOGIRAI(TARGET)
+	理性判定値 += 300
+	CALL SF_REASON_MOD(@"Sexual Orientation", 理性判定値)
+ENDIF
+IF CFLAG:TARGET:体目当て
+	理性判定値 -= 400
+	CALL SF_REASON_MOD(@"The Millennium Stone of Mirada that Monopolizes Lust starts shining...!", 理性判定値)
+ENDIF
+RESULT = 0
+CALL KOJO_MESSAGE_SEND("SEX_FRIEND", 0, TARGET, 0, 0, "補正")
+IF RESULT
+	理性判定値 = MAX(理性判定値 + RESULT, 0)
+	CALL SHOW_REASONWALL(理性判定値)
+ENDIF
+PRINTFORMW
+IF 欲望判定値 > 理性判定値
+	TALENT:TARGET:セフレ = 1
+	CALL KOJO_MESSAGE_SEND("SEX_FRIEND", 0, TARGET, 0, 0, "成功")
+	CALL COLORMESSAGE(@"%CALLNAME:TARGET% ends up agreeing to become your Sex Friend...",C_PINK,1,1)
+	CALL ASK_DIARY(@"Offered %CALLNAME:TARGET% a sex friend agreement and got %HIM_HER(TARGET)% to accept.")
+	CFLAG:TARGET:契約セフレ = 1
+ELSE
+	CALL KOJO_MESSAGE_SEND("SEX_FRIEND", 0, TARGET, 0, 0, "失敗")
+	PRINTFORMW You get turned down...
+	SOURCE:反感 += 1000
+ENDIF
+TIME += 10
+RETURN 1
+
+@TURN_RESET
+#DIM DYNAMIC nCasual
+#DIM DYNAMIC nConfession
+nCasual = TALENT:TARGET:セフレ
+nConfession = SELECTCOM == 352 && TFLAG:193
+SIF nConfession && !TALENT:TARGET:恋人
+	CFLAG:TARGET:7398 = 0
+CALL HOTPATCH_ORIGINAL_TURN_RESET
+SIF nConfession && nCasual
+	TALENT:TARGET:セフレ = nCasual
+RETURN RESULT
+
+@BE_LOVER(ARG)
+SIF !TALENT:ARG:恋人
+	CFLAG:ARG:7398 = 0
+JUMP HOTPATCH_ORIGINAL_BE_LOVER(ARG)
+
+@SET_FALL_STATE(CharacterIndex,FallState,AllowReverse=0)
+#DIM DYNAMIC CharacterIndex
+#DIMS DYNAMIC FallState
+#DIM DYNAMIC AllowReverse
+SIF GROUPMATCH(FallState, "恋人", "Lover") && !TALENT:CharacterIndex:恋人
+	CFLAG:CharacterIndex:7398 = 0
+JUMP HOTPATCH_ORIGINAL_SET_FALL_STATE(CharacterIndex,FallState,AllowReverse)
+
+@REMOVE_FALL_STATE(CharacterIndex,FallState)
+#DIM DYNAMIC CharacterIndex
+#DIMS DYNAMIC FallState
+CALL HOTPATCH_ORIGINAL_REMOVE_FALL_STATE(CharacterIndex,FallState)
+SIF !TALENT:CharacterIndex:恋人 && CFLAG:CharacterIndex:7398 > 0
+	CFLAG:CharacterIndex:7398 = 0
+RETURN RESULT
+
+@HOTPATCH_RELATIONSHIP_CHANGE(nAction)
+#DIM DYNAMIC nAction
+#DIM DYNAMIC nState
+#DIM DYNAMIC nIndex
+#DIMS DYNAMIC sReason
+sReason '= HOTPATCH_RELATIONSHIP_REASON(nAction, TARGET)
+IF STRLENS(sReason)
+	PRINTFORML Relationship unchanged: %sReason%
+	RETURN 0
+ENDIF
+CALL CHARA_ATTITUDE
+nState = HOTPATCH_RELATIONSHIP_STATE(TARGET)
+SELECTCASE nAction
+CASE 8
+	TIME += 10
+	PRINTFORML Friendship check: %HOTPATCH_FRIENDSHIP_DETAILS(TARGET)%
+	sReason '= HOTPATCH_FRIENDSHIP_REASON(TARGET)
+	IF STRLENS(sReason)
+		PRINTFORML Friendship declined: %sReason%
+		RETURN 0
+	ENDIF
+	CALL HOTPATCH_FRIENDSHIP_ACCEPT(TARGET)
+CASE 3
+	TIME += 10
+	IF EXP:TARGET:愛情経験 <= 250 + TALENT:TARGET:一線越えない * 100
+		PRINTFORML Proposal declined: love experience ({EXP:TARGET:愛情経験}) must be above {250 + TALENT:TARGET:一線越えない * 100}. You remain lovers.
+		RETURN 0
+	ENDIF
+	IF BASE:TARGET:怒り > 0 || CFLAG:TARGET:不機嫌 || MARK:TARGET:反発刻印
+		PRINTL Proposal declined: resolve their anger and resentment first. You remain lovers.
+		RETURN 0
+	ENDIF
+	CFLAG:TARGET:7398 = 1
+	PRINTFORML You ask %CALLNAME:TARGET% to marry you. They accept: you are now engaged.
+CASE 4
+	TIME += 10
+	IF BASE:TARGET:怒り > 0 || CFLAG:TARGET:不機嫌 || MARK:TARGET:反発刻印
+		PRINTL Marriage declined: resolve their anger and resentment first. You remain engaged.
+		RETURN 0
+	ENDIF
+	CFLAG:TARGET:7398 = 2
+	PRINTFORML You and %CALLNAME:TARGET% confirm your marriage. You are now married.
+CASE 5
+	CFLAG:TARGET:7398 = -1
+	TIME += 10
+	PRINTFORML You and %CALLNAME:TARGET% end your engagement. You remain lovers; your feelings are unchanged.
+CASE 6
+	TALENT:TARGET:恋人 = 0
+	CFLAG:TARGET:7398 = nState == 2 ? -2 # nState == 1 ? -1 # MIN(nState, 0)
+	CLEARBIT CFLAG:TARGET:既成事実, 2
+	IF TALENT:MASTER:恋人 == NO:TARGET
+		TALENT:MASTER:恋人 = 0
+		FOR nIndex, 0, CHARANUM
+			IF nIndex != MASTER && TALENT:nIndex:恋人
+				TALENT:MASTER:恋人 = NO:nIndex
+				BREAK
+			ENDIF
+		NEXT
+	ENDIF
+	SIF !TALENT:MASTER:恋人
+		CLEARBIT CFLAG:MASTER:既成事実, 2
+	TIME += 10
+	IF nState == 2
+		PRINTFORML You and %CALLNAME:TARGET% divorce. Formal commitment has ended; affection, trust and other feelings are preserved.
+	ELSE
+		PRINTFORML You and %CALLNAME:TARGET% stop being lovers. Affection, trust and other feelings are preserved.
+	ENDIF
+CASE 7
+	SIF TALENT:TARGET:セフレ == 2
+		TALENT:TARGET:思慕 = 1
+	TALENT:TARGET:セフレ = 0
+	CFLAG:TARGET:契約セフレ = 0
+	TIME += 10
+	PRINTFORML You and %CALLNAME:TARGET% end your friends-with-benefits agreement. Other feelings are preserved.
+ENDSELECT
+RETURN 1

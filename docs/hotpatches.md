@@ -4,8 +4,108 @@ Hotpatches redesign parts of the game's screen for the browser without editing
 the game folder. They are ERB files in [`hotpatch/`](../hotpatch) that are read
 after the game loads (`applyHotpatches` in [`src/loader.ts`](../src/loader.ts)).
 Unlike [game patches](game-patches.md), which fix genuine bugs in the game, a
-hotpatch only changes presentation. The one exception is
-`INTIMACY_COMMANDS.ERB` (see the table below), a deliberate gameplay change.
+hotpatch normally only changes presentation. `INTIMACY_COMMANDS.ERB` and
+`RELATIONSHIPS.ERB` also make deliberate gameplay changes.
+
+## Relationships
+
+### Friendship
+
+[`FRIENDSHIPS.ERB`](../hotpatch/FRIENDSHIPS.ERB) adds **Ask to be friends**
+for every character, without friend slots or a maximum number of friends.
+It is a separate, platonic relationship, available even when native lover
+capacity or the random-encounter trait would prevent romance.
+The relationship panel shows the numeric score and current answer; its
+confirmation view explains the thresholds and refusal rules. An actual request
+takes 10 minutes, including refusal; browsing is free.
+
+First acceptance gives **+100 favor**, exactly once per character:
+
+- At **500 favor**, recognition and the bonus are automatic on the next room
+  redraw (including existing saves).
+- At **400–499**, the selected character offers friendship when the room is
+  shown and they can talk. Accepting grants the bonus; declining sets favor
+  to **399**, without a second saved marker or an offer cooldown.
+- Below **400**, anger, hate, active dislike (nonzero affinity below 60%),
+  favor below -50 or trust below -50 gives the dislike refusal.
+- Otherwise negative favor or trust gives the unfamiliarity refusal.
+- Otherwise acceptance requires **favor + trust + 100 if Cheerful
+  + 100 if the player is Charming - 100 if Reserved - 100 if Misanthrope
+  (the native distrustful trait) >= 200**.
+
+The 400+ thresholds bypass the below-400 willingness calculation. Physical
+conversation restrictions (sleep, stopped time, another scene, etc.) still
+apply to offers and requests. Automatic recognition costs no time.
+A hate mark lapses friendship at the next room redraw (immediately for AI mark
+changes); the active indicator is suppressed immediately, also while angry or
+actively disliked. Reconciliation
+can restore friendship but cannot award the introduction bonus again.
+Romantic feelings, trust and commitment are untouched. The main screen, sheet,
+shared badge and AI character information recognize friendship; AI
+`player_attempts("become_friends")` uses the same rules and prints the calculation
+and refusal instead of silently failing.
+
+Per-character **CFLAG 7399** stores 0 (never accepted), 1 (friends), or -1
+(lapsed, bonus already received), inside the existing 10,000-element array.
+Allocation checks found no numeric/CSV-name/template use of 7399, no computed
+family reaching it, and no overlapping bulk resets (generic dialogue resets
+are 1000–1999; named/ranged resets use other slots). Native saves preserve this
+marker without changing layout or existing meanings.
+
+### Romantic and casual commitment
+
+[`RELATIONSHIPS.ERB`](../hotpatch/RELATIONSHIPS.ERB) replaces Confess with a
+relationship dialog, also accessible from the character's main-screen summary.
+It shows the existing portrait, commitment, favor, trust and love experience.
+The wide dialog uses a three-column action grid on desktop, with two/one
+columns on smaller screens. Ending a commitment is hidden when it does not
+exist; marriage is shown only while engaged. Other unavailable actions retain
+their reasons, with the action areas aligned at the bottom of each card.
+A shared vector heart badge identifies relationships in the dialog header,
+room summary and occupant labels: pink for love/lovers, purple with a sparkle
+for casual agreements, a heart with one diamond ring for engagement, and
+interlocking rings for marriage. An outlined heart means no formal relationship.
+Tooltips and accessible text distinguish each state.
+Browsing, Back and Close are free. Every change requires confirmation; actual
+conversations take **10 minutes**, including rejected confessions/proposals.
+Unavailable options show reasons, and execution rechecks them.
+
+Confession and friends-with-benefits reuse TW's existing checks, character
+dialogue, source effects and story overrides. Small-talk closeness is not an
+availability gate: AI attempts reach the game and receive an explicit failure
+rather than being silently ignored. Other encounter restrictions remain.
+Confession keeps its existing daily limit and lover-capacity rules. The native
+casual-agreement command has no enforced daily limit; this patch does not
+invent one. Existing yearning and casual agreements are preserved when
+formal commitment changes.
+
+Lovers may propose with love experience **strictly above 250**, or **350** for
+reserved characters, and no current anger or hate mark. Refusal leaves them
+lovers. An accepted proposal creates an engagement; confirming marriage creates
+a saved married status; anger or resentment must be resolved before confirming
+the marriage, too. These are lightweight commitment states, **not**
+ported NAS wedding scenes, services or a new character-dialogue pack.
+Ending an engagement returns to lovers; breakup/divorce removes formal lover
+status and updates the player's reciprocal partner reference. Favor, trust,
+love, yearning and separate casual agreements remain. Ending a casual agreement
+preserves other feelings (including the yearning encoded by TW's mistress state).
+The sheet, main screen and AI character descriptions expose engaged/married
+status. AI `player_attempts` has explicit relationship actions and does not
+open an interactive menu.
+
+Per-character **CFLAG 7398** reserves commitment within TW's existing
+10,000-element saved array: 0 none, 1 engaged, 2 married, -1 former engagement,
+-2 divorced. Positive states only apply while the character is a native lover,
+so native removal of lover status cannot leave an active marriage. TALENT 225
+retains its TW brewing-profession meaning. Native lover-creation/removal helpers
+also clear stale commitment, so a later confession cannot revive an old marriage.
+No save dimensions, layout, version,
+or existing meanings change; unpatched Emuera preserves the slot but does not
+display the extra commitment states. Old saves without it remain valid.
+Allocation checks covered CSV names/templates, numeric script references,
+computed-index families and bulk resets: the existing generic character-data
+clears are in the 1000–1999 dialogue region, while named/ranged resets use other
+slots. Character copies carry commitment as other per-character state does.
 
 ## Rules
 
@@ -24,6 +124,8 @@ hotpatch only changes presentation. The one exception is
   functions can invoke other expression functions with `CALLF`.
 - Keep `LINECOUNT` intact: one `HTML_PRINT` is one logical line however many
   rows it wraps to on screen, and the client clears it as one line.
+- The browser renderer supports semantic `h1`–`h6` headings. Use `era-open` /
+  `era-close` for containers spanning multiple `HTML_PRINT` calls.
 - `npm run dev` watches `hotpatch/` and restarts the server on changes.
 
 The main-screen and wake-up clocks use a crisp, minimalist vector dial instead
@@ -420,7 +522,8 @@ for every multi-character list, including short lists with individual tabs.
 | File | Replaces | Change |
 |------|----------|--------|
 | `ITEM_LIST.ERB` | `@QoL_AllItemSort` (called by `@SHOW_ALLITEM`) | Inventory [805] opens in the same modal system as the character sheet, with category tabs and a compact, responsive list of item names and quantities. Hover or focus an item for its description. A search box inside the footer filters names instantly, case-insensitively and entirely client-side, with a matching-item count and an explicit empty state. The filter persists across category and item-mod views until the dialog closes; clear the textbox to reset it, or select All to search every category. The browser creates the textbox in an `era-inventory-filter` placeholder, without expanding the game HTML allowlist. Return, Escape and backdrop clicks close it; category IDs [3000–3020], Item mods [777], Back to items [889] and Return [999] remain available. The Inventory button is on the player card, retaining the existing command-filter bit 4 visibility rule. |
-| `INTIMACY_COMMANDS.ERB` | `@COM_ABLE312` (Kiss), `@COM_ABLE352` (Confess), `@COM350` (Push Down) | **Gameplay change.** The originals with the closeness (`TCVAR:MASTER:馴れ合い`) gate removed, so the player can try a kiss or a confession without small talk first; the commands' own consent checks then decide, and a rejection applies the game's usual penalties (antipathy, anger, hate marks). The other gates (sleep, work, the kiss cooldown, stamina, one confession a day, spineless) are kept. Used by the LLM chat's `player_attempts`; typing 312 or 352 works too, and the buttons show under the Petting filter. Push Down with others in the room (a group attempt, as the target list is everyone present) asks each person who has not consented before for their own answer first: a refusal plays out with its reaction and penalties and ends the attempt, and only if nobody refuses does the group's objection ("some of them still oppose the idea of having an orgy") stop it. Originally the group check came first, so the person never reacted. |
+| `INTIMACY_COMMANDS.ERB` | `@COM_ABLE312` (Kiss), `@COM350` (Push Down) | **Gameplay change.** Kiss removes the closeness (`TCVAR:MASTER:馴れ合い`) gate so an attempt without small talk reaches the game's consent check and rejection consequences. Other kiss gates remain. Confession is now managed by `RELATIONSHIPS.ERB`. Push Down asks each group participant for an answer before applying the group-objection check, so individual refusals play out with their reactions and penalties rather than silently failing. |
+| `RELATIONSHIPS.ERB` | Relationship dialog; confession/casual-agreement wrappers; commitment state helpers | **Gameplay change.** Confirmed ten-minute conversations, explicit failure reasons, proposal/marriage and commitment downgrades, preserving feelings. See [Relationships](#relationships) for conditions, AI routing and the native-save reservation. |
 | `INFO_PALAM.ERB` | `@SHOW_INFO_PALAM` | Palam as a wrapping grid: short name, level, meter, value against the next level's threshold (`1234/2500`, abbreviated as `23.4k/30.0k`) and gain. Zero values are dimmed and the highlighted Palams use the game's yellow. The tooltip shows the full name, a short description of what the Palam is (`HOTPATCH_PALAM_ABOUT`), value, level, "Next level at …" and gems. The collapse toggle and the bars/numbers toggle are dropped. |
 | `MAIN_SCREEN.ERB` | `@SHOW_STATUS` | The main screen as panels (`era-main` layout). A header whose backdrop is the sky for the hour, weather and season (`HOTPATCH_SKY`: CSS gradients, clouds, rain/snow, hills; location-specific cavern ambience for the Underworld) with the area in front (`HOTPATCH_AREA`, the map the place is on): a pixel-art panorama for the season and time of day where there is one (see [Area pictures](#area-pictures)), otherwise one SVG landmark per area in `web/areas/`, drawn blocky through the `era-pixelate` SVG filter in `web/index.html` so it matches the pixel font, e.g. the torii and hall for Hakurei Shrine, bamboo for the Bamboo Forest, the clock tower for the Scarlet Devil Mansion) with a minimalist vector clock (exact-minute hands, teal accent; a dark luminous dial at night), the date on a translucent panel and a large **Time Stop** / **Resume Time** button with the TSP gauge built in; a room card titled with the place (name with its area after it in grey, e.g. "Player's Back Room Hakurei Shrine", furniture, cleanliness) and the room's chatter under it (others' talk, the radio, room descriptions). The occupants stand left to right as borderless sprites beside the selected character's details (at most 400px wide), with the target's Palam in the right sidebar. Each occupant has their name in the game's mood colours (blue asleep, pink in heat, orange drunk, aqua happy, red sullen), favour and state, followed by relationship, Hate Mark and Mad/Sad/Sullen/Happy tags when applicable (`HOTPATCH_FEELINGS`, in the character list's words and colours). Click a sprite or name to select them; a bottom highlight and glow mark the selected person. Portrait layers stack in one place, preserving the game's hover expression and fading the time-stop tint rather than showing its flat square. The selected character's details show their name (card-title blue unless the game colours it for their mood), species (`PRINT_GET_RACE`, with `RACE_INFO` on hover), favour/trust/children/fertility and feelings, anger when nonzero, sleep state, Sta/Ene/Mood/Composure meters and look text (clothes and what is happening to them; LOOK_AT without its picture and toggles). When nobody else is there, a single placeholder and movement hint fill the room stage; each row of cards shares one height. A player card has a "See more" button [803] (the character sheet, below) and your funds in its title (charisma and bullet money in the tooltip), your race and body size on a small grey line under it (`HOTPATCH_PLAYER_KIND`: the sheet's race talents, e.g. "Human", and the size talent, "Normal size" when there is none, highlighted otherwise, e.g. "Inchling" after the mallet), Stamina/Energy/Vigor meters, a plain "Status:" line (arousal Soft/Hard/Erection!!, hunger and bath such as "Can eat", "Can bathe", sleepiness, and your body stains such as "Hands: Semen", from STAIN_INFO; the target's stains are on a "Stains:" line in their card), compact special-effect badges and responsive gauges (`PLAYER_SPECIAL.ERB`). Management controls, including Pushdown Guard, are merged into Player. The game logic before the display (target refresh, events) is kept verbatim. |
 | `MAIN_SCREEN_COMMANDS.ERB` | `@SHOW_USERCOM` | The commands as chips grouped under "Interact with *target*" (Talk & Touch, Advances, Activities, Outing, More and the situational "While time is stopped" group) with the command filters as toggles colour-matched to their commands (petting pink, chores green, dialogue blue), each shown only when flipping it would change the listed actions (it tries each flag and restores it) and a ★ Stalk button (follow the target, only with a target), and movement, management and settings controls merged into Player, starting with "Look after yourself" (Have a Meal and Relax in the Bath, taken out of Activities; Dirtiness/Body Stains [801] is dropped, as the stains are shown on the cards; Abilities [803] and Abilities (Master) [804] are dropped for the player card's "See more", though both numbers still work); the condom/moan/standing settings only during a session, mischief, free use or stopped time. Closes the `era-main` layout. While time is stopped the whole screen freezes: frosted cards, desaturated meters (portraits stay in colour, faded by the game's time-stop tint layer), an iced clock. Each toggle's tooltip is one line saying what it shows, e.g. "Petting: Show touching actions she may not welcome (pink)" (the chip is lit when on). The show/hide toggles for the status and commands (3001–3003), the Display Image / Display Settings options and the line padding are dropped. |
@@ -700,8 +803,11 @@ Two-pixel source-grid cleanup and nearest-neighbour resizing produce 339×144px 
 384×144px right panels. Saturated horizon fringe and faint alpha residue are removed.
 End panels feather over their inner 32px; a 24px overlapped middle join produces a
 277×144px repeating tile without a hard boundary through the lunar dust.
-The aligned cool night grade preserves warm palace windows and lanterns. Overlap starts
-at the shared 96px default and can be tuned in the artwork demo.
+The aligned cool night grade lights the complete palace panes and standing lantern chambers,
+including their pale pixels and lower rows, using the daytime shading in a warm palette.
+Pane-specific masks preserve the dark frames and lattice detail rather than retaining only
+scattered orange pixels; roof decoration and surrounding stone remain non-emissive. Overlap
+starts at the shared 96px default and can be tuned in the artwork demo.
 
 Mountain Foothills includes supplied spring artwork with mossy rocks and a pine on the left,
 a repeating flowering valley and stream, and a waterfall, torii and stone lantern on the right.

@@ -644,6 +644,51 @@ body:has(.menu-panel:not([hidden])) .clock-overhang { visibility: hidden; }
   overflow: hidden; border: 1px solid #2f4a63; border-radius: 12px; background: #0b0e11; color: var(--terminal-foreground); box-shadow: 0 12px 48px #000; }
 .era-dialog::backdrop { background: #000000b0; }
 .era-dialog > .line { flex: none; }
+.era-relationship:popover-open { width: min(1200px, calc(100vw - 32px)); height: fit-content; max-height: calc(100dvh - 32px); overflow: visible; border-color: #735563; }
+.era-relationship-header { display: flex; align-items: center; gap: 16px; padding: 0; border-radius: 10px 10px 0 0; background: linear-gradient(120deg, #30202d, #16212b); border-bottom: 1px solid #614451; }
+.era-relationship .era-info-face { flex: none; border: 0; border-right: 1px solid #3b6274; border-radius: 10px 0 0 0; }
+.era-relationship .era-sub { margin-left: 0; }
+.era-relationship-header .era-dialog-close { margin-right: 16px; }
+.era-relationship-icon { display: inline-block; flex: none; width: 28px; height: 28px; vertical-align: middle; background: url("/relationship-icons.svg") 0 0 / 500% 100% no-repeat; }
+.era-relationship-icon-love { background-position: 25% 0; }
+.era-relationship-icon-casual { background-position: 50% 0; }
+.era-relationship-icon-engaged { background-position: 75% 0; }
+.era-relationship-icon-married { background-position: 100% 0; }
+.era-relationship-icon-friends { background-position: 25% 0; filter: hue-rotate(155deg); }
+.era-relationship-header .era-relationship-icon { width: 52px; height: 52px; margin-left: auto; }
+.era-relationship-icon-label { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.era-occupant-state .era-relationship-icon { width: 22px; height: 22px; margin-left: 6px; }
+.era-relationship-heading, .era-relationship-option-title { margin: 0; font-family: inherit; font-weight: bold; white-space: normal; }
+.era-relationship-heading { margin-top: 4px; color: #f2c8d9; font-size: 1.6em; overflow-wrap: anywhere; }
+.era-relationship-header > div { min-width: 0; }
+.era-relationship-body { overflow: auto; min-height: 0; padding: 20px 24px; }
+.era-relationship-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; margin-bottom: 16px; color: #a9b6bf; }
+.era-relationship p { white-space: normal; line-height: 1.6; }
+.era-relationship-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.era-relationship-option { display: flex; flex-direction: column; padding: 16px; border: 1px solid #38404a; border-radius: 10px; background: #141b22; }
+.era-relationship-option-action { margin-top: auto; min-height: 5em; }
+.era-relationship-option-action .era-relationship-select { display: inline-flex; align-items: center; min-height: 36px; }
+.era-relationship-option > .line { display: contents; }
+.era-relationship-option-title { font-size: 1em; color: #ecd4df; }
+.era-relationship-option p { margin: 8px 0 14px; color: #a9b6bf; font-size: .9em; }
+.era-relationship-downgrade { border-color: #554249; background: #21191e; }
+.era-relationship-reason { display: block; margin-top: 8px; white-space: normal; color: #b2a4ac; font-size: .85em; line-height: 1.5; }
+.era-relationship .line button.choice:is(.era-relationship-select, .era-relationship-primary) { padding: 8px 16px; border: 1px solid #986779; border-radius: 6px; background: #493040; color: #ffe1ee; white-space: normal; }
+.era-relationship .line button.choice:disabled { color: #8b929b; background: #232830; border-color: #3c4149; cursor: not-allowed; }
+.era-relationship .line button.choice:is(.era-relationship-select, .era-relationship-primary):enabled:is(:hover, :focus-visible) { background: #684256; border-color: #df9db9; }
+.era-relationship-confirmation { margin-top: 20px; padding: 20px; border: 1px solid #986779; border-radius: 10px; background: #251c25; }
+.era-relationship-confirmation .era-chip-button { display: block; margin-top: 16px; }
+.era-relationship-error { color: #ffb9b9; }
+.era-friendship-formula { padding: 8px; border-left: 2px solid #78c9c4; background: #102629; color: #b7eeea; }
+.era-relationship-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 24px; border-top: 1px solid #413540; border-radius: 0 0 10px 10px; color: #a9b6bf; font-size: .9em; }
+@media (max-width: 900px) { .era-relationship-options { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 600px) {
+  .era-relationship-options { grid-template-columns: 1fr; }
+  .era-relationship-header { gap: 8px; }
+  .era-relationship-header .era-relationship-icon { width: 32px; height: 32px; }
+  .era-relationship-header .era-dialog-close { margin-right: 8px; }
+  .era-relationship-body, .era-relationship-footer { padding: 16px; }
+}
 .era-sheet-header { display: flex; flex-direction: column; gap: 8px; padding: 10px 16px 0; border-bottom: 1px solid #2a3138; background: #111518; }
 .era-sheet-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .era-sheet-caption { color: #788b97; font-size: .85em; }
