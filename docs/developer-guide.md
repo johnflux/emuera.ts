@@ -15,6 +15,11 @@ EE engine checked under Wine. `SearchSubdirectory` (Japanese:
 `サブディレクトリを検索する`) controls recursion and defaults to off; config layers
 apply before discovery. Filenames currently use deterministic case-insensitive
 code-unit order, not full .NET culture collation or EE's `#`-folder priority.
+Script and data CSV reads use batches of up to 16 files, with indexing and errors
+still processed in discovery order. Headers are indexed before scripts, and
+duplicate-function/character precedence is unchanged. Read-ahead source text is
+limited to one batch rather than retaining every file. Text decoders are reused
+without streaming state; UTF-8, UTF-16LE and Shift-JIS detection is unchanged.
 As in Emuera, a non-event function defined
 twice keeps its first definition and the later one is reported in the
 loader diagnostics; only the system `EVENT*` functions may have several.

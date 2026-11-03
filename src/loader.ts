@@ -164,6 +164,17 @@ export async function filesUnder(root: string, options: { recursive?: boolean; d
 export async function readText(file: string): Promise<string> {
   return decodeText(await readFile(file));
 }
+/** Bound read-ahead memory while preserving file order, including which error is reported first. */
+async function* readTexts(files: readonly string[]): AsyncGenerator<{ file: string; source: string }> {
+  for (let start = 0; start < files.length; start += 16) {
+    const batch = files.slice(start, start + 16);
+    const results = await Promise.allSettled(batch.map(readText));
+    for (const [index, result] of results.entries()) {
+      if (result.status === "rejected") throw result.reason;
+      yield { file: batch[index]!, source: result.value };
+    }
+  }
+}
 /** Synchronous read for script-requested files; null when the file is missing. */
 export function readTextFileSync(file: string): string | null {
   try { return decodeText(readFileSync(file)).replace(/^\uFEFF/, ""); }
@@ -172,12 +183,15 @@ export function readTextFileSync(file: string): string | null {
     throw error;
   }
 }
+const utf16Decoder = new TextDecoder("utf-16le");
+const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
+const shiftJisDecoder = new TextDecoder("shift_jis", { fatal: true });
 function decodeText(buffer: Buffer): string {
-  if (buffer[0] === 0xff && buffer[1] === 0xfe) return new TextDecoder("utf-16le").decode(buffer);
-  try { return new TextDecoder("utf-8", { fatal: true }).decode(buffer); }
+  if (buffer[0] === 0xff && buffer[1] === 0xfe) return utf16Decoder.decode(buffer);
+  try { return utf8Decoder.decode(buffer); }
   catch (error) {
     if (!(error instanceof TypeError)) throw error;
-    return new TextDecoder("shift_jis", { fatal: true }).decode(buffer);
+    return shiftJisDecoder.decode(buffer);
   }
 }
 function* csvRecords(source: string, file: string): Generator<{ row: string[]; line: number }> {
@@ -292,7 +306,7 @@ export function indexScript(game: Game, source: string, file: string, header = f
     // Emuera joins continuation rows before interpreting comments.
     const raw = logical.text.replace(/\[\[([^\]]+)\]\]/g, (match, name: string) => game.renames.get(name) ?? match);
     const content = stripComment(raw, fullWidthSpace).trimStart();
-    const line: Line = { ...logical, text: content };
+    const line: Line = { file: logical.file, line: logical.line, text: content };
     if (raw.includes(";")) line.assignmentText = trimEndWhitespace(raw, fullWidthSpace).trimStart();
     if (content === "[SKIPSTART]") { skipBlock = true; continue; }
     if (content === "[SKIPEND]") { skipBlock = false; continue; }
@@ -445,8 +459,8 @@ export async function loadGame(root = GAME_ROOT, options: { debug?: boolean; anc
   const scripts = erbFiles.filter((file) => /\.(erb|erh)$/i.test(file));
   // Header macro declarations must be available to ERB conditional compilation.
   scripts.sort((a, b) => Number(/\.erh$/i.test(b)) - Number(/\.erh$/i.test(a)));
-  for (const file of scripts) {
-    indexScript(game, await readText(file), path.relative(root, file), /\.erh$/i.test(file));
+  for await (const { file, source } of readTexts(scripts)) {
+    indexScript(game, source, path.relative(root, file), /\.erh$/i.test(file));
     game.scriptFiles++;
   }
   const translationTables: Record<string, string> = {
@@ -458,13 +472,15 @@ export async function loadGame(root = GAME_ROOT, options: { debug?: boolean; anc
   };
   const topCsvFiles = csvFiles.filter((file) => path.dirname(file) === csvRoot);
   const hasParamCsv = topCsvFiles.some((file) => path.basename(file).toUpperCase() === "PARAM.CSV");
-  for (const file of csvFiles) {
+  const dataCsvFiles = csvFiles.filter((file) => {
+    const basename = path.basename(file).toUpperCase();
+    const prefix = basename.endsWith("_TR.CSV") ? basename.slice(0, -7) : "";
+    return path.dirname(file) !== csvRoot || !translationTables[prefix];
+  });
+  for await (const { file, source } of readTexts(dataCsvFiles)) {
     const relative = path.relative(csvRoot, file).split(path.sep).join("/");
     const name = key(relative.replace(/\.csv$/i, ""));
-    const basename = path.basename(file).toUpperCase();
-    const trPrefix = basename.endsWith("_TR.CSV") ? basename.slice(0, -7) : "";
-    if (path.dirname(file) === csvRoot && translationTables[trPrefix]) continue;
-    const records = [...csvRecords(await readText(file), path.relative(root, file))];
+    const records = [...csvRecords(source, path.relative(root, file))];
     const rows = records.map(({ row }) => row);
     if (/^VAREXT/.test(path.basename(name))) {
       for (const row of rows) {
