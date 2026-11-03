@@ -206,7 +206,7 @@ class CharacterTools {
       ...(commitment > 0 ? { commitment: commitment === 2 ? "married" : "engaged" } : {}),
       ...(this.host.has("HOTPATCH_FRIENDSHIP_ACTIVE") ? { friendship: {
         active: !!Number(this.host.call("HOTPATCH_FRIENDSHIP_ACTIVE", [BigInt(i)])),
-        introductionAccepted: this.num("CFLAG", BigInt(i), 7399n) !== 0,
+        bonusReceived: !!Number(this.host.call("HOTPATCH_FRIENDSHIP_BONUS_RECEIVED", [BigInt(i)])),
         calculation: String(this.host.call("HOTPATCH_FRIENDSHIP_DETAILS", [BigInt(i)])),
         reason: String(this.host.call("HOTPATCH_FRIENDSHIP_REASON", [BigInt(i)])),
       } } : {}) };
@@ -430,9 +430,6 @@ class CharacterTools {
     const mark = MARKS[kind as keyof typeof MARKS];
     const before = this.num("MARK", BigInt(this.self), BigInt(mark)), after = Math.max(0, Math.min(MARK_MAX, before + change));
     this.host.write("MARK", [BigInt(this.self), BigInt(mark)], BigInt(after));
-    if (mark === MARKS.hate && after > 0 && this.host.has("HOTPATCH_FRIENDSHIP_ACTIVE")
-      && this.num("CFLAG", BigInt(this.self), 7399n) === 1)
-      this.host.write("CFLAG", [BigInt(this.self), 7399n], -1n);
     if (mark === MARKS.hate && after > this.num("MARK", BigInt(this.self), BigInt(OLD_HATE)))
       this.host.write("MARK", [BigInt(this.self), BigInt(OLD_HATE)], BigInt(after));
     return { result: { mark: kind, before, after, max: MARK_MAX }, changed: after !== before };

@@ -1,4 +1,10 @@
-; CFLAG 7399: friendship introduction (0 never accepted, 1 friends, -1 lapsed).
+; CFLAG 7399 is history ONLY: nonzero means the one-time favor bonus was received.
+; It never determines current friendship. Legacy -1 values also mean bonus received.
+@HOTPATCH_FRIENDSHIP_BONUS_RECEIVED(nChara)
+#FUNCTION
+#DIM DYNAMIC nChara
+RETURNF CFLAG:nChara:7399 != 0
+
 @HOTPATCH_FRIENDSHIP_DISLIKE(nChara)
 #FUNCTION
 #DIM DYNAMIC nChara
@@ -7,7 +13,7 @@ RETURNF BASE:nChara:怒り > 0 || CFLAG:nChara:不機嫌 || CFLAG:nChara:ブチ�
 @HOTPATCH_FRIENDSHIP_ACTIVE(nChara)
 #FUNCTION
 #DIM DYNAMIC nChara
-RETURNF CFLAG:nChara:7399 == 1 && !HOTPATCH_FRIENDSHIP_DISLIKE(nChara)
+RETURNF CFLAG:nChara:好感度 >= 500
 
 @HOTPATCH_FRIENDSHIP_REASON(nChara)
 #FUNCTIONS
@@ -61,7 +67,7 @@ sReason '= HOTPATCH_FRIENDSHIP_REASON(nChara)
 HTML_PRINT @"<p class='era-friendship-formula'>%HTML_ESCAPE(HOTPATCH_FRIENDSHIP_DETAILS(nChara))%</p>"
 HTML_PRINT "<p>Score = favor + trust + 100 if Cheerful + 100 if you are Charming - 100 if Reserved - 100 if Misanthrope (distrustful). Required below 400 favor: at least 200.</p>"
 HTML_PRINT "<p>Below 400 favor: anger, a hate mark, active dislike (affinity below 60%, excluding the unset neutral value), favor below -50 or trust below -50 blocks acceptance. Otherwise, negative favor or trust means they do not really know you yet; with both nonnegative, the score must be at least 200.</p>"
-HTML_PRINT "<p>At 400 favor they offer friendship without the score requirement. Declining sets favor to 399. At 500 favor friendship is automatic. First acceptance, including automatic recognition, gives +100 favor once. A hate mark ends active friendship but never resets the bonus.</p>"
+HTML_PRINT "<p>At 400 favor they offer an introduction without the score requirement. Declining sets favor to 399. Current friendship depends only on favor being at least 500. First acceptance, including automatic recognition, gives +100 favor once; the saved marker records only that bonus history.</p>"
 IF STRLENS(sReason)
 	HTML_PRINT @"<p class='era-relationship-error'>Current answer: %HTML_ESCAPE(sReason)%</p>"
 ELSE
@@ -71,13 +77,13 @@ ENDIF
 @HOTPATCH_FRIENDSHIP_ACCEPT(nChara)
 #DIM DYNAMIC nChara
 #DIM DYNAMIC nBonus
-nBonus = CFLAG:nChara:7399 == 0
+nBonus = !HOTPATCH_FRIENDSHIP_BONUS_RECEIVED(nChara)
 CFLAG:nChara:7399 = 1
 IF nBonus
 	CFLAG:nChara:好感度 += 100
-	PRINTFORML You and %CALLNAME:nChara% are now friends. Favor +100.
+	PRINTFORML %CALLNAME:nChara% accepts your friendship introduction. Favor +100.
 ELSE
-	PRINTFORML You and %CALLNAME:nChara% are friends again. The introduction bonus has already been received.
+	PRINTFORML %CALLNAME:nChara% accepts your friendship introduction. The introduction bonus has already been received.
 ENDIF
 RETURN 1
 
@@ -86,17 +92,14 @@ RETURN 1
 FOR nChara, 0, CHARANUM
 	SIF nChara == MASTER
 		CONTINUE
-	IF CFLAG:nChara:7399 == 1 && MARK:nChara:反発刻印
-		CFLAG:nChara:7399 = -1
-		PRINTFORML Your friendship with %CALLNAME:nChara% has lapsed because of resentment.
-	ELSEIF CFLAG:nChara:7399 == 0 && CFLAG:nChara:好感度 >= 500
+	IF !HOTPATCH_FRIENDSHIP_BONUS_RECEIVED(nChara) && HOTPATCH_FRIENDSHIP_ACTIVE(nChara)
 		CALL HOTPATCH_FRIENDSHIP_ACCEPT(nChara)
 	ENDIF
 NEXT
 
 @HOTPATCH_FRIENDSHIP_OFFER
 #DIMS DYNAMIC sReason
-SIF CFLAG:TARGET:7399 == 1 || CFLAG:TARGET:好感度 < 400 || CFLAG:TARGET:好感度 >= 500
+SIF HOTPATCH_FRIENDSHIP_BONUS_RECEIVED(TARGET) || CFLAG:TARGET:好感度 < 400 || HOTPATCH_FRIENDSHIP_ACTIVE(TARGET)
 	RETURN 0
 sReason '= HOTPATCH_RELATIONSHIP_REASON(8, TARGET)
 SIF STRLENS(sReason)

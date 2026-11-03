@@ -1,3 +1,11 @@
+# UI copy
+
+- Keep game and demo interfaces concise and in the game's style. Do not add
+  unsolicited disclaimers, explanatory paragraphs or reassurance such as
+  "Preview only", "No changes until you confirm" or instructions describing
+  obvious controls. Prefer clear labels; put implementation details in docs.
+- Preserve actionable error messages and reasons an option is unavailable.
+
 # Save compatibility
 
 - Preserve compatibility with standard Emuera `.sav` files in both directions.
@@ -9,8 +17,9 @@
 - eraTW reserves per-character CFLAG 7395 / 7396 / 7397 for pending frozen-time
   V / A / M penetration aftereffects (0 = absent, 1 = pending).
 - eraTW reserves per-character CFLAG 7398 for formal commitment and 7399 for
-  friendship introduction (0 = never accepted, 1 = friends, -1 = lapsed).
-  Lapsed friendship retains the one-time bonus history.
+  friendship bonus HISTORY ONLY (0 = not received, any nonzero value = received).
+  Never use 7399 to determine current friendship: that depends only on favor
+  >= 500. Falling favor or hate marks must never clear the bonus history.
 - Test native save/load round trips and existing saves when changing persistence.
   Do not move game-state flags into sidecars.
 

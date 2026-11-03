@@ -2,6 +2,7 @@ import { createTranslation, protectMapTranslation } from "./translate.js";
 import { createLibrary } from "./library.js";
 import { sky, prepareSkyArt } from "./sky.js";
 import { disposeCharacterChats, sendInlineChat, setHistoryTranslator, setupInlineChat } from "./interaction-history.js";
+import { relationshipTimeline } from "./relationship-timeline.js";
 import { activeLlm, PROVIDERS, setupLlmConfig } from "./llm.js";
 import { encountersEnabled, gossipEnabled, memoriesEnabled, runEncounters, runGossip, runMemories, writeMemory } from "./encounters.js";
 import { cached, LruCache } from "./cache.js";
@@ -1692,6 +1693,7 @@ async function renderHtml(markup, parent, sprites) {
         element.append(fill);
       } else throw new Error(`Unsupported HTML shape: ${type} ${node.getAttribute("param")}`);
     }
+    else if (node.tagName === "DIV" && node.classList.contains("era-relationship-timeline")) element = relationshipTimeline(node);
     else if (node.tagName === "METER") element = meter(node);
     else if (node.tagName === "DIV" && node.classList.contains("era-clock") && node.hasAttribute("data-minutes")) element = clock(node);
     else if (node.tagName === "DIV" && subareaAttributes.some((name) => node.hasAttribute(name))) element = subarea(node, scale = columnScale());
@@ -1729,7 +1731,7 @@ async function renderHtml(markup, parent, sprites) {
     }
     applyClasses(element, node);
     if (node.tagName === "DIV" && element.classList.contains("era-sky") && node.hasAttribute("data-minutes")) sky(node, element);
-    if (element.matches(".era-occupant-label, .era-guard-toggle, .era-setup-choice"))
+    if (element.matches(".era-occupant-label, .era-guard-toggle, .era-setup-choice, .era-relationship-demo-state"))
       element.setAttribute("aria-pressed", String(node.getAttribute("aria-pressed") === "true"));
     if (element.matches(".era-setup-choice, .era-setup-step, .era-setup-trait"))
       element.setAttribute("aria-disabled", String(node.getAttribute("aria-disabled") === "true"));

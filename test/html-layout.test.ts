@@ -13,6 +13,11 @@ test("HTML renderer supports semantic headings while keeping executable tags dis
   for (const tag of ["SCRIPT", "STYLE", "IFRAME", "OBJECT", "EMBED"]) assert.ok(!allowed.has(tag));
 });
 
+test("custom action button wrappers participate directly in the action flex row", async () => {
+  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  assert.match(css, /^\.era-actions-group span:has\(> \.era-guard-control\) \{ display: contents; \}/m);
+});
+
 test("vector clock draws exact game minutes, wraps days and rejects invalid input", async () => {
   const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
   const routine = source.slice(source.indexOf("function clock("), source.indexOf("/** Hotpatch extension: <meter"));
@@ -845,6 +850,28 @@ test("shared main-screen input routes text to chat without changing other game p
   assert.equal(route("Hello", null, mainRequest, null), false, "no selected character means no chat routing");
 });
 
+test("history text clicks bubble for continuation while history controls remain local", async () => {
+  const source = await readFile(new URL("../web/interaction-history.js", import.meta.url), "utf8");
+  const start = source.indexOf("function protectHistoryControls(");
+  const end = source.indexOf("function scrollHistoryToBottom(", start);
+  const protect = runInNewContext(`${source.slice(start, end)}\nprotectHistoryControls`);
+  const listeners = new Map<string, (event: unknown) => void>();
+  protect({ addEventListener: (type: string, handler: (event: unknown) => void) => listeners.set(type, handler) });
+  for (const type of ["click", "pointerdown"]) {
+    for (const control of [false, true]) {
+      let stopped = false;
+      listeners.get(type)!({
+        target: { closest(selector: string) {
+          for (const tag of ["button", "input", "textarea", "summary", "dialog"]) assert.ok(selector.includes(tag));
+          return control ? {} : null;
+        } },
+        stopPropagation() { stopped = true; },
+      });
+      assert.equal(stopped, control, `${type}: controls stay local; plain text reaches terminal input`);
+    }
+  }
+});
+
 test("character history renders literal text and local controls without game input handlers", async () => {
   const source = await readFile(new URL("../web/interaction-history.js", import.meta.url), "utf8");
   class Element {
@@ -978,7 +1005,12 @@ test("character history renders literal text and local controls without game inp
   assert.equal((text.match(/Day 5, 10:00/g) ?? []).length, 1, "timestamp appears only in the entry heading");
   assert.match(text, /truncated/);
   assert.doesNotMatch(text, /Earlier interactions are unavailable|Scripted interactions|no AI requests/);
-  for (const type of ["click", "pointerdown", "keydown", "contextmenu"]) {
+  for (const type of ["click", "pointerdown"]) {
+    let stopped = false;
+    parent.listeners.get(type)!({ stopPropagation() { stopped = true; }, preventDefault() {} });
+    assert.equal(stopped, false, `${type} on history text reaches click-to-continue and drag tracking`);
+  }
+  for (const type of ["keydown", "contextmenu"]) {
     let stopped = false;
     parent.listeners.get(type)!({ stopPropagation() { stopped = true; }, preventDefault() {} });
     assert.equal(stopped, true, `${type} cannot reach the game's input handlers`);

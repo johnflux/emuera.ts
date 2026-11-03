@@ -480,6 +480,17 @@ test("HTTP UI, isolated sessions, real image bytes, sprite metadata, errors and 
     assert.equal(relationships.status, 200);
     assert.equal(relationships.headers.get("content-type"), "image/svg+xml");
     assert.match(await relationships.text(), /viewBox="0 0 320 64"/);
+    const timeline = await fetch(base + "/relationship-timeline.js");
+    assert.equal(timeline.status, 200);
+    assert.match(await timeline.text(), /export function relationshipTimeline\(/);
+    for (const asset of ["node-in-love", "node-fwb", "node-divorced", "scorched-path", "header-sakura", "button-pink", "ribbon-divider"]) {
+      const artwork = await fetch(base + `/relationship-assets/${asset}.svg`);
+      assert.equal(artwork.status, 200);
+      assert.equal(artwork.headers.get("content-type"), "image/svg+xml");
+      assert.match(await artwork.text(), /<svg /);
+    }
+    assert.equal((await fetch(base + "/relationship-assets/missing.svg")).status, 404);
+    assert.equal((await fetch(base + "/relationship-assets/node-in-love.png")).status, 404);
     const earth = await fetch(base + "/earth.png");
     assert.equal(earth.status, 200);
     assert.equal(earth.headers.get("content-type"), "image/png");

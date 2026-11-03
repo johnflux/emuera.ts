@@ -5,6 +5,7 @@ import { applyHotpatches, emptyGame, GAME_ROOT, indexScript, loadGame } from "..
 import { GAME_INSTRUCTION_LIMIT, Runtime, type Snapshot } from "../src/runtime.js";
 import { readNativeSave } from "../src/save-format.js";
 import { MemorySaveStore } from "../src/storage.js";
+import { demoGame } from "../src/demo.js";
 
 const gameReady = (async () => {
   if (!existsSync(GAME_ROOT)) return undefined;
@@ -63,12 +64,14 @@ TFLAG:193 = 0
 PRINTFORML State: time={TIME}, lover={TALENT:TARGET:恋人}, player={TALENT:MASTER:恋人}, commitment={CFLAG:TARGET:7398}, love={TALENT:TARGET:恋慕}, yearning={TALENT:TARGET:思慕}, casual={TALENT:TARGET:セフレ}, favor={CFLAG:TARGET:好感度}, trust={CFLAG:TARGET:信頼度}, brewing={TALENT:TARGET:225}
 @HOTPATCH_TEST_DIALOG
 CALL HOTPATCH_TEST_INIT
+CFLAG:TARGET:好感度 = 300
 CALL HOTPATCH_RELATIONSHIP_DIALOG
 PRINTFORML Selected: {RESULT}
 CALL HOTPATCH_TEST_DUMP
 QUIT
 @HOTPATCH_TEST_DIALOG_STATES
 CALL HOTPATCH_TEST_INIT
+CFLAG:TARGET:好感度 = 300
 INPUT
 TALENT:TARGET:恋人 = INRANGE(RESULT, 1, 3)
 TALENT:TARGET:セフレ = GROUPMATCH(RESULT, 3, 4)
@@ -187,35 +190,87 @@ function settle(runtime: Runtime, snapshot: Snapshot) {
   return snapshot;
 }
 
-test("relationship dialog shows portrait, accurate reasons and a free confirmation/cancellation flow", { skip: !existsSync(GAME_ROOT) }, async () => {
+test("relationship dialog has direct heading actions, unavailable reasons and free cancellation", { skip: !existsSync(GAME_ROOT) }, async () => {
   const game = (await gameReady)!;
   for (const jit of [false, true]) {
     const runtime = new Runtime(game, GAME_INSTRUCTION_LIMIT, { jit });
     let snapshot = check(runtime.start("HOTPATCH_TEST_DIALOG"));
     assert.match(text(snapshot), /era-dialog era-relationship/);
     assert.match(text(snapshot), /test-portrait.png/);
+    assert.match(text(snapshot), /class='era-relationship-timeline' data-favor='300' data-lover='0' data-in-love='0' data-casual='0' data-commitment='0'/);
     assert.match(text(snapshot), /need to be lovers first/);
-    assert.doesNotMatch(text(snapshot), /End the engagement|End the romantic relationship|End friends with benefits|Get married/);
+    assert.doesNotMatch(text(snapshot), /End the engagement|End the romantic relationship|End FWB|Get married/);
     assert.doesNotMatch(text(snapshot), /Commitment is a choice|era-relationship-status/);
-    assert.match(text(snapshot), /era-relationship-icon-none/);
-    assert.equal((text(snapshot).match(/class='era-relationship-option-action'/g) ?? []).length, 4);
+    assert.doesNotMatch(text(snapshot), /era-relationship-icon-none/);
     assert.match(text(snapshot), /Ask to be friends/);
-    assert.match(text(snapshot), /Favor 500 \+ trust 10 = 510; required: 200/);
-    snapshot = check(runtime.input("1"));
-    assert.match(text(snapshot), /Confirm: Confess your love/);
-    snapshot = check(runtime.input("0"));
+    assert.doesNotMatch(text(snapshot), /required: 200|Current answer|Discuss|No changes until|Ask to become lovers/);
+    assert.match(text(snapshot), /<h3[^>]*><button value='1'[^>]*>Confess<\/button><\/h3>/);
+    snapshot = check(runtime.input("3"));
+    assert.match(text(snapshot), /need to be lovers first/);
     assert.match(text(snapshot), /era-relationship-options/);
     snapshot = check(runtime.input("12345"));
     assert.match(text(snapshot), /Choose a relationship conversation/);
     snapshot = check(runtime.input("999"));
     assert.match(text(snapshot), /Selected: 0/);
     assert.match(text(snapshot), /time=100, lover=0, player=0, commitment=0/);
-    assert.match(text(snapshot), /yearning=1, casual=0, favor=500, trust=10, brewing=2/);
+    assert.match(text(snapshot), /yearning=1, casual=0, favor=300, trust=10, brewing=2/);
     const confirmed = new Runtime(game, GAME_INSTRUCTION_LIMIT, { jit });
     check(confirmed.start("HOTPATCH_TEST_DIALOG"));
-    check(confirmed.input("1"));
-    assert.match(text(check(confirmed.input("100"))), /Selected: 1[\s\S]*time=100/);
+    assert.match(text(check(confirmed.input("1"))), /Selected: 1[\s\S]*time=100/);
   }
+});
+
+test("demo relationship switcher previews every state without committing actions or changing the base game", { skip: !existsSync(GAME_ROOT) }, async () => {
+  const game = (await gameReady)!;
+  for (const jit of [false, true]) {
+    const runtime = new Runtime(demoGame(game), GAME_INSTRUCTION_LIMIT, { jit });
+    assert.match(text(check(runtime.start())), /Relationship dialog states/);
+    let snapshot = check(runtime.input("9"));
+    assert.equal(snapshot.input?.kind, "integer");
+    assert.deepEqual([...text(snapshot).matchAll(/class='era-chip-button era-relationship-demo-state'[^>]*>([^<]+)<\/button>/g)].map((match) => match[1]),
+      ["None", "Acquaintance", "Friendship", "Close Friend", "Best Friend", "Almost Family", "In love", "FWB", "Lovers", "Engaged", "Married", "Divorced", "In love + FWB", "In love + Divorced"]);
+    assert.doesNotMatch(text(snapshot), /Preview only|Use the states below|action buttons do not change/);
+    assert.doesNotMatch(text(snapshot), /class='era-relationship-icon /);
+    for (const [state, icon] of [[103, "love"], [104, "casual"], [105, "love"], [106, "engaged"], [107, "married"], [108, "friends"], [101, null]] as const) {
+      snapshot = check(runtime.input(String(state)));
+      const printed = text(snapshot);
+      assert.match(printed, new RegExp(`value='${state}'[^>]*aria-pressed='true'`));
+      assert.match(printed, new RegExp(`Favor <b>${state === 101 ? 20 : 1000}</b>`));
+      if (icon) assert.match(printed, new RegExp(`era-relationship-icon-${icon}`));
+      else assert.doesNotMatch(printed, /class='era-relationship-icon /);
+      assert.equal(printed.includes("Get married"), state === 106);
+      assert.equal(printed.includes("Ask for a divorce"), state === 107);
+      assert.equal(printed.includes("End FWB"), state === 104);
+      assert.ok(snapshot.output.some((item) => item.type === "clear"), "switching replaces rather than appends the preview");
+    }
+    snapshot = check(runtime.input("8"));
+    assert.match(text(snapshot), /Favor <b>20<\/b>/);
+    assert.doesNotMatch(text(snapshot), /now friends|Favor \+100/);
+    for (const [state, casual, commitment, label] of [[114, 1, 0, "FWB"], [115, 0, -2, "Divorced"]] as const) {
+      snapshot = check(runtime.input(String(state)));
+      const printed = text(snapshot);
+      assert.match(printed, new RegExp(`value='${state}'[^>]*aria-pressed='true'`));
+      assert.match(printed, /Favor <b>1000<\/b>/);
+      assert.match(printed, new RegExp(`data-in-love='1' data-casual='${casual}' data-commitment='${commitment}'`));
+      assert.match(printed, /class='era-relationship-flag era-relationship-flag-love'>In love</);
+      assert.match(printed, new RegExp(`class='era-relationship-flag era-relationship-flag-[a-z]+'>${label}<`));
+    }
+    snapshot = check(runtime.input("107"));
+    for (const [button, favor, label] of [[109, 100, "Acquaintance"], [110, 500, "Friendship"], [111, 1000, "Close Friend"], [112, 10000, "Best Friend"], [113, 30000, "Almost Family"]] as const) {
+      snapshot = check(runtime.input(String(button)));
+      assert.match(text(snapshot), new RegExp(`Favor <b>${favor}</b>`));
+      assert.match(text(snapshot), new RegExp(`value='${button}'[^>]*aria-pressed='true'>${label}</button>`));
+      assert.doesNotMatch(text(snapshot), /Ask for a divorce|End FWB/);
+      if (favor >= 500) assert.match(text(snapshot), /era-relationship-icon-friends/);
+      else assert.doesNotMatch(text(snapshot), /class='era-relationship-icon /);
+      assert.equal((text(snapshot).match(/aria-pressed='true'/g) ?? []).length, 1);
+    }
+    snapshot = check(runtime.input("107"));
+    assert.match(text(snapshot), /Favor <b>1000<\/b>/);
+    assert.match(text(snapshot), /era-relationship-icon-married/);
+    assert.match(text(check(runtime.input("999"))), /Relationship dialog states/);
+  }
+  assert.equal(game.routines.has("DEMO_RELATIONSHIP_CONTROLS"), false, "preview controls remain demo-only");
 });
 
 async function friendshipRuntime(source: string, jit = true, saves?: MemorySaveStore) {
@@ -234,13 +289,13 @@ QUIT`, "<friendship-test>");
 test("friendship uses exact favor/trust boundaries and trait modifiers with transparent refusals", { skip: !existsSync(GAME_ROOT) }, async () => {
   const cases: [string, string][] = [
     ["", "know you a bit better"],
-    ["TALENT:TARGET:陽気／陰気 = 1\nTALENT:MASTER:魅力 = 1", "now friends"],
+    ["TALENT:TARGET:陽気／陰気 = 1\nTALENT:MASTER:魅力 = 1", "accepts your friendship introduction"],
     ["CFLAG:TARGET:好感度 = 199", "know you a bit better"],
-    ["CFLAG:TARGET:好感度 = 200", "now friends"],
+    ["CFLAG:TARGET:好感度 = 200", "accepts your friendship introduction"],
     ["CFLAG:TARGET:好感度 = 200\nTALENT:TARGET:一線越えない = 1", "know you a bit better"],
-    ["CFLAG:TARGET:好感度 = 300\nTALENT:TARGET:一線越えない = 1", "now friends"],
+    ["CFLAG:TARGET:好感度 = 300\nTALENT:TARGET:一線越えない = 1", "accepts your friendship introduction"],
     ["CFLAG:TARGET:好感度 = 200\nTALENT:TARGET:性別嗜好 = 3", "know you a bit better"],
-    ["CFLAG:TARGET:好感度 = 300\nTALENT:TARGET:性別嗜好 = 3", "now friends"],
+    ["CFLAG:TARGET:好感度 = 300\nTALENT:TARGET:性別嗜好 = 3", "accepts your friendship introduction"],
     ["CFLAG:TARGET:好感度 = -50", "do not really know you yet"],
     ["CFLAG:TARGET:好感度 = -51", "do not like you"],
     ["CFLAG:TARGET:信頼度 = -50", "do not really know you yet"],
@@ -249,8 +304,8 @@ test("friendship uses exact favor/trust boundaries and trait modifiers with tran
     ["CFLAG:TARGET:好感度 = 300\nBASE:TARGET:怒り = 1", "do not like you"],
     ["CFLAG:TARGET:好感度 = 300\nMARK:TARGET:反発刻印 = 1", "do not like you"],
     ["CFLAG:TARGET:好感度 = 300\nRELATION:TARGET:(NO:MASTER) = 59", "do not like you"],
-    ["CFLAG:TARGET:好感度 = 300\nRELATION:TARGET:(NO:MASTER) = 60", "now friends"],
-    ["CFLAG:TARGET:好感度 = 400\nTALENT:TARGET:一線越えない = 1\nTALENT:TARGET:性別嗜好 = 3", "now friends"],
+    ["CFLAG:TARGET:好感度 = 300\nRELATION:TARGET:(NO:MASTER) = 60", "accepts your friendship introduction"],
+    ["CFLAG:TARGET:好感度 = 400\nTALENT:TARGET:一線越えない = 1\nTALENT:TARGET:性別嗜好 = 3", "accepts your friendship introduction"],
   ];
   for (const jit of [false, true]) for (const [setup, answer] of cases) {
     const runtime = await friendshipRuntime(`${setup}\nCALL HOTPATCH_RELATIONSHIP_CHANGE(8)`, jit);
@@ -258,7 +313,7 @@ test("friendship uses exact favor/trust boundaries and trait modifiers with tran
     assert.match(printed, new RegExp(answer), setup);
     assert.match(printed, /Friendship check: Favor .* \+ trust .* = .*; required: 200/);
     assert.match(printed, /time=110/);
-    assert.match(printed, new RegExp(`marker=${answer === "now friends" ? 1 : 0}`));
+    assert.match(printed, new RegExp(`marker=${answer === "accepts your friendship introduction" ? 1 : 0}`));
   }
 });
 
@@ -284,7 +339,7 @@ RETURN 1`, "<friendship-gates>");
   }
 });
 
-test("friendship automatic recognition is per-character, once only, and hate revokes without resetting the bonus", { skip: !existsSync(GAME_ROOT) }, async () => {
+test("friendship follows favor only while bonus history survives falling favor, hate and legacy markers", { skip: !existsSync(GAME_ROOT) }, async () => {
   for (const jit of [false, true]) {
     const runtime = await friendshipRuntime(`CFLAG:TARGET:好感度 = 500
 CFLAG:2:好感度 = 500
@@ -293,17 +348,36 @@ CALL HOTPATCH_FRIENDSHIP_SYNC
 PRINTFORML Automatic: first={CFLAG:TARGET:好感度}, second={CFLAG:2:好感度}, self={CFLAG:MASTER:7399}
 MARK:TARGET:反発刻印 = 1
 CALL HOTPATCH_FRIENDSHIP_SYNC
-PRINTFORML Revoked: {CFLAG:TARGET:7399}, {HOTPATCH_FRIENDSHIP_ACTIVE(TARGET)}
+PRINTFORML Hate: {CFLAG:TARGET:7399}, {HOTPATCH_FRIENDSHIP_ACTIVE(TARGET)}
 MARK:TARGET:反発刻印 = 0
+CFLAG:TARGET:好感度 = 499
 CALL HOTPATCH_FRIENDSHIP_SYNC
-PRINTFORML Still lapsed: {CFLAG:TARGET:7399}
-CALL HOTPATCH_RELATIONSHIP_CHANGE(8)`, jit);
+PRINTFORML Below threshold: {CFLAG:TARGET:7399}, {HOTPATCH_FRIENDSHIP_ACTIVE(TARGET)}
+CALL HOTPATCH_RELATIONSHIP_CHANGE(8)
+CFLAG:TARGET:好感度 = 500
+CFLAG:TARGET:7399 = -1
+CALL HOTPATCH_FRIENDSHIP_SYNC`, jit);
     const printed = text(check(runtime.start("HOTPATCH_TEST_FRIENDSHIP")));
     assert.match(printed, /Automatic: first=600, second=600, self=0/);
-    assert.match(printed, /Revoked: -1, 0/);
-    assert.match(printed, /Still lapsed: -1/);
+    assert.match(printed, /Hate: 1, 1/);
+    assert.match(printed, /Below threshold: 1, 0/);
     assert.match(printed, /bonus has already been received/);
-    assert.match(printed, /marker=1, favor=600, active=1/);
+    assert.match(printed, /marker=-1, favor=500, active=1/);
+  }
+});
+
+test("friendship status never depends on introduction history or grants a bonus while being read", { skip: !existsSync(GAME_ROOT) }, async () => {
+  for (const jit of [false, true]) {
+    for (const marker of [0, 1, -1]) {
+      for (const favor of [100, 499, 500, 1000]) {
+        const runtime = await friendshipRuntime(`CFLAG:TARGET:7399 = ${marker}
+CFLAG:TARGET:好感度 = ${favor}
+PRINTFORML Bonus received: {HOTPATCH_FRIENDSHIP_BONUS_RECEIVED(TARGET)}`, jit);
+        const printed = text(check(runtime.start("HOTPATCH_TEST_FRIENDSHIP")));
+        assert.match(printed, new RegExp(`Bonus received: ${marker !== 0 ? 1 : 0}`));
+        assert.match(printed, new RegExp(`marker=${marker}, favor=${favor}, active=${favor >= 500 ? 1 : 0}`));
+      }
+    }
   }
 });
 
@@ -342,7 +416,7 @@ LOADDATA 0`, true, saves);
   const printed = text(check(runtime.start("HOTPATCH_TEST_FRIENDSHIP")));
   assert.match(printed, /100 \(Cheerful\).*100 \(your Charming\).*100 \(Reserved\).*100 \(Misanthrope \/ distrustful\).* = 0; required: 200/);
   assert.match(printed, /At 400 favor/);
-  assert.match(printed, /At 500 favor/);
+  assert.match(printed, /favor being at least 500/);
   const saved = readNativeSave(saves.read("save00.sav")!);
   assert.equal(saved.data.variables.CFLAG?.["1:7399"], "1");
   assert.equal(saved.data.variables.CFLAG?.["1:2"], "600");
@@ -357,18 +431,32 @@ test("relationship options and shared icons follow actual commitment rather than
     const runtime = new Runtime(game, GAME_INSTRUCTION_LIMIT);
     check(runtime.start("HOTPATCH_TEST_DIALOG_STATES"));
     const printed = text(check(runtime.input(String(state))));
-    assert.match(printed, new RegExp(`era-relationship-icon-${icon}`));
+    if (icon === "none") assert.doesNotMatch(printed, /class='era-relationship-icon /);
+    else assert.match(printed, new RegExp(`era-relationship-icon-${icon}`));
     if (state === 1) {
       assert.match(printed, /Get married/);
       assert.match(printed, /End the engagement/);
     } else assert.doesNotMatch(printed, /Get married|End the engagement/);
     if (state === 2) assert.match(printed, /Ask for a divorce/);
-    if (state === 3 || state === 4) assert.match(printed, /End friends with benefits/);
-    else assert.doesNotMatch(printed, /End friends with benefits/);
+    if (state === 3 || state === 4) assert.match(printed, /End FWB/);
+    else assert.doesNotMatch(printed, /End FWB/);
     if (state === 0 || state >= 4) assert.doesNotMatch(printed, /End the romantic relationship|Ask for a divorce/);
     if (state === 5) assert.match(printed, /title='In love'/);
+    const flags = [...printed.matchAll(/class='era-relationship-flag era-relationship-flag-[a-z]+'>([^<]+)<\/span>/g)].map((match) => match[1]);
+    assert.deepEqual(flags, state === 1 ? ["Lovers", "Engaged"] : state === 2 ? ["Lovers", "Married"]
+      : state === 3 ? ["Lovers", "FWB"] : state === 4 ? ["FWB"] : state === 5 ? ["In love"] : []);
     check(runtime.input("999"));
   }
+});
+
+test("relationship summary exposes feelings and agreements independently", { skip: !existsSync(GAME_ROOT) }, async () => {
+  const runtime = await friendshipRuntime(`TALENT:TARGET:恋慕 = 1
+TALENT:TARGET:恋人 = 1
+TALENT:TARGET:セフレ = 1
+CFLAG:TARGET:7398 = 2
+PRINTFORML %HOTPATCH_RELATIONSHIP_FLAGS(TARGET)%`);
+  assert.match(text(check(runtime.start("HOTPATCH_TEST_FRIENDSHIP"))),
+    /era-relationship-flag-love'>In love[^]*era-relationship-flag-lovers'>Lovers[^]*era-relationship-flag-fwb'>FWB[^]*era-relationship-flag-married'>Married/);
 });
 
 test("native confession keeps strict thresholds and story overrides, with ten-minute attempts", { skip: !existsSync(GAME_ROOT) }, async () => {

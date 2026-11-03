@@ -52,6 +52,13 @@ nAbleCount = 0
 
 ;コマンド表示 (the usable commands first, so the filters can leave out toggles that would change nothing)
 FOR LOCAL,0,800
+	IF LOCAL == 352
+		IF TARGET != MASTER && TARGET >= 0 && TFLAG:100
+			nAble:nAbleCount = LOCAL
+			nAbleCount ++
+		ENDIF
+		CONTINUE
+	ENDIF
 	IF LOCAL == 332
 		SIF !HOTPATCH_HAS_ALCOHOL()
 			CONTINUE
@@ -95,6 +102,8 @@ FOR nBit, 0, 9
 	nOld = HOTPATCH_FILTER_SET(nBit, 0)
 	CALL HOTPATCH_FILTER_SET(nBit, !nOld)
 	FOR nIndex, 0, nAbleCount
+		SIF nAble:nIndex == 352
+			CONTINUE
 		IF (QUICKFILTER(nAble:nIndex) != 0) != nShown:nIndex
 			SETBIT nFilters, nBit
 			BREAK
@@ -106,7 +115,7 @@ CALL HOTPATCH_FILTERS(nFilters)
 nGroup = -1
 FOR nIndex, 0, nAbleCount
 	LOCAL = nAble:nIndex
-	SIF !QUICKFILTER(LOCAL)
+	SIF LOCAL != 352 && !QUICKFILTER(LOCAL)
 		CONTINUE
 	IF GROUPMATCH(LOCAL, 414, 431)
 		nSelfCare:nSelfCareCount = LOCAL
@@ -512,7 +521,7 @@ RETURNF 6
 #DIM DYNAMIC nKojo
 #DIMS DYNAMIC COM_NAME
 IF nCom == 352
-	HTML_PRINT "<button value='352' class='era-chip-button'>Relationship</button>"
+	HTML_PRINT "<span class='era-guard-control'><button value='352'>Relationship...</button></span>"
 	RETURN 0
 ENDIF
 VARSET COM_DISPLAY_COLOR

@@ -1714,7 +1714,7 @@ test("AI confession runs its native attempt without opening the relationship men
   assert.match(printed, /Confession declined:/);
 });
 
-test("AI friendship request exposes the calculation, records acceptance and revokes on hate without replaying the bonus", {
+test("AI friendship info separates current favor from the one-time bonus history", {
   skip: !existsSync(GAME_ROOT),
 }, async () => {
   const game = await loadGame();
@@ -1724,6 +1724,7 @@ test("AI friendship request exposes the calculation, records acceptance and revo
   check(runtime.input("8"));
   let snapshot = check(runtime.input("2"));
   for (let i = 0; snapshot.input?.kind === "wait" && i < 40; i++) snapshot = check(runtime.input(""));
+  assert.match(snapshot.output.map((item) => item.text ?? "").join("\n"), /class='era-guard-control'><button value='352'>Relationship\.\.\.<\/button>/);
   const id = history(snapshot).character.id;
   const tool = (name: string, args: Record<string, unknown> = {}) => runtime.characterTool(id, name, args);
   assert.equal(tool("player_attempts", { activity: "become_friends" }).changed, true);
@@ -1734,19 +1735,25 @@ test("AI friendship request exposes the calculation, records acceptance and revo
   // Earn enough goodwill for any combination of Reserved/Misanthrope, below the automatic-offer threshold.
   for (let i = 0; i < 7; i++) tool("change_feelings", { favor: 50, reason: "A positive conversation" });
   for (let i = 0; i < 5; i++) tool("change_feelings", { trust: 10, reason: "Getting to know the player" });
-  const before = tool("get_character_info").result as { feelingsTowardPlayer: { favor: number; friendship: { active: boolean; calculation: string } } };
+  const before = tool("get_character_info").result as { feelingsTowardPlayer: { favor: number; friendship: { active: boolean; bonusReceived: boolean; calculation: string } } };
   assert.match(before.feelingsTowardPlayer.friendship.calculation, /required: 200/);
   assert.equal(tool("player_attempts", { activity: "become_friends" }).changed, true);
   snapshot = check(runtime.refresh());
   const printed = snapshot.output.map((item) => item.text ?? "").join("\n");
   assert.match(printed, /Friendship check: Favor/);
-  assert.match(printed, /now friends. Favor \+100/);
+  assert.match(printed, /accepts your friendship introduction. Favor \+100/);
   assert.equal(history(snapshot).entries[0]!.action.label, "Ask to be friends");
   const after = tool("get_character_info").result as typeof before;
-  assert.equal(after.feelingsTowardPlayer.friendship.active, true);
+  assert.equal(after.feelingsTowardPlayer.friendship.active, false);
+  assert.equal(after.feelingsTowardPlayer.friendship.bonusReceived, true);
   assert.equal(after.feelingsTowardPlayer.favor, before.feelingsTowardPlayer.favor + 100);
   tool("change_mark", { mark: "hate", change: 1, reason: "Broken trust" });
   assert.equal((tool("get_character_info").result as typeof before).feelingsTowardPlayer.friendship.active, false);
+  tool("change_feelings", { favor: 50, reason: "More positive conversation" });
+  const friends = (tool("get_character_info").result as typeof before).feelingsTowardPlayer;
+  assert.equal(friends.favor, 500);
+  assert.equal(friends.friendship.active, true);
+  assert.equal(friends.friendship.bonusReceived, true);
 });
 
 test("a character sulking after a refused push-down stays furious, so she can be apologised to (game patch 5)", {

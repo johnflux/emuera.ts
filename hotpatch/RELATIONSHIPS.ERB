@@ -43,6 +43,8 @@ ELSEIF TALENT:nChara:セフレ
 ELSEIF HOTPATCH_FRIENDSHIP_ACTIVE(nChara)
 	sState '= "friends"
 ENDIF
+SIF sState == "none"
+	RETURNF ""
 RETURNF @"<span class='era-relationship-icon era-relationship-icon-%sState%' title='%sLabel%'><span class='era-relationship-icon-label'>%sLabel%</span></span>"
 
 @HOTPATCH_RELATIONSHIP_VISIBLE(nAction, nChara)
@@ -60,6 +62,28 @@ CASE 8
 	RETURNF !HOTPATCH_FRIENDSHIP_ACTIVE(nChara)
 ENDSELECT
 RETURNF 1
+
+@HOTPATCH_RELATIONSHIP_FLAGS(nChara)
+#FUNCTIONS
+#DIM DYNAMIC nChara
+#DIMS DYNAMIC sFlags
+SIF TALENT:nChara:恋慕
+	sFlags += "<span class='era-relationship-flag era-relationship-flag-love'>In love</span>"
+SIF TALENT:nChara:恋人
+	sFlags += "<span class='era-relationship-flag era-relationship-flag-lovers'>Lovers</span>"
+SIF TALENT:nChara:セフレ
+	sFlags += "<span class='era-relationship-flag era-relationship-flag-fwb'>FWB</span>"
+SELECTCASE HOTPATCH_RELATIONSHIP_STATE(nChara)
+CASE 1
+	sFlags += "<span class='era-relationship-flag era-relationship-flag-engaged'>Engaged</span>"
+CASE 2
+	sFlags += "<span class='era-relationship-flag era-relationship-flag-married'>Married</span>"
+CASE -1
+	sFlags += "<span class='era-relationship-flag era-relationship-flag-ended'>Former engagement</span>"
+CASE -2
+	sFlags += "<span class='era-relationship-flag era-relationship-flag-ended'>Divorced</span>"
+ENDSELECT
+RETURNF sFlags
 
 ; Transient routing, never saved in game arrays. -1 consumes the pending action.
 @HOTPATCH_RELATIONSHIP_REQUEST(nAction = -1)
@@ -151,9 +175,9 @@ RETURNF ""
 #DIM DYNAMIC nAction
 SELECTCASE nAction
 CASE 1
-	RETURNF "Confess your love"
+	RETURNF "Confess"
 CASE 2
-	RETURNF "Friends with benefits"
+	RETURNF "FWB"
 CASE 3
 	RETURNF "Propose"
 CASE 4
@@ -165,121 +189,69 @@ CASE 6
 		RETURNF "Ask for a divorce"
 	RETURNF "End the romantic relationship"
 CASE 7
-	RETURNF "End friends with benefits"
+	RETURNF "End FWB"
 CASE 8
 	RETURNF "Ask to be friends"
 ENDSELECT
 RETURNF ""
 
-@HOTPATCH_RELATIONSHIP_DESCRIPTION(nAction)
-#FUNCTIONS
-#DIM DYNAMIC nAction
-SELECTCASE nAction
-CASE 1
-	RETURNF "Ask to become lovers. Their feelings and character-specific response decide the outcome."
-CASE 2
-	RETURNF "Discuss a casual agreement. The game's existing desire and reservation checks still apply."
-CASE 3
-	RETURNF "Ask for a deeper commitment. Requires love experience above the proposal threshold; a refusal leaves you lovers."
-CASE 4
-	RETURNF "Confirm your marriage together. This adds a saved commitment, not a new wedding storyline."
-CASE 5
-	RETURNF "Return to being lovers. Affection, trust and other feelings are preserved."
-CASE 6
-	RETURNF "End formal romantic commitment. Affection, trust and any separate casual agreement are preserved."
-CASE 7
-	RETURNF "End the casual agreement without erasing affection or romantic commitment."
-CASE 8
-	RETURNF "Ask to get to know each other as friends. Acceptance gives +100 favor once per character; friendship is separate from romance."
-ENDSELECT
-RETURNF ""
-
-@HOTPATCH_RELATIONSHIP_DIALOG(nInitial = 0)
-#DIM DYNAMIC nInitial
+@HOTPATCH_RELATIONSHIP_DIALOG(nPreview = 0)
+#DIM DYNAMIC nPreview
 #DIM DYNAMIC nStart
 #DIM DYNAMIC nAction
-#DIM DYNAMIC nSelected
 #DIMS DYNAMIC sReason
 #DIMS DYNAMIC sError
 nStart = LINECOUNT
-nSelected = nInitial
 DO
 	CLEARLINE LINECOUNT - nStart
 	HTML_PRINT "<era-open class='era-dialog era-relationship'>"
-	CALL HOTPATCH_FACE(TARGET, 74)
-	HTML_PRINT @"<div class='era-relationship-header'><span class='era-info-face'>%RESULTS%</span><div><span class='era-sub'>Your relationship with</span><h2 class='era-relationship-heading'>%HTML_ESCAPE(CALLNAME:TARGET)%</h2></div>%HOTPATCH_RELATIONSHIP_ICON(TARGET)%<button value='999' class='era-dialog-close' title='Close relationship dialog'>×</button></div>"
+	SIF nPreview
+		CALL DEMO_RELATIONSHIP_CONTROLS
+	CALL HOTPATCH_FACE(TARGET, 90)
+	HTML_PRINT @"<div class='era-relationship-header'><span class='era-info-face'>%RESULTS%</span>%HOTPATCH_RELATIONSHIP_ICON(TARGET)%<div><span class='era-sub'>Your relationship with</span><h2 class='era-relationship-heading'>%HTML_ESCAPE(CALLNAME:TARGET)%</h2></div><button value='999' class='era-dialog-close' title='Close relationship dialog'>×</button></div>"
 	HTML_PRINT "<era-open class='era-relationship-body'>"
-	HTML_PRINT @"<div class='era-relationship-summary'><span>Favor <b>{CFLAG:TARGET:好感度}</b></span><span>Trust <b>{CFLAG:TARGET:信頼度}</b></span><span>Love experience <b>{EXP:TARGET:愛情経験}</b></span></div>"
+	HTML_PRINT @"<div class='era-relationship-timeline' data-favor='{CFLAG:TARGET:好感度}' data-lover='{TALENT:TARGET:恋人 != 0}' data-in-love='{TALENT:TARGET:恋慕 != 0}' data-casual='{TALENT:TARGET:セフレ != 0}' data-commitment='{HOTPATCH_RELATIONSHIP_STATE(TARGET)}'></div>"
+	HTML_PRINT @"<div class='era-relationship-summary'><span>Favor <b>{CFLAG:TARGET:好感度}</b></span><span>Trust <b>{CFLAG:TARGET:信頼度}</b></span><span>Love exp <b>{EXP:TARGET:愛情経験}</b></span>%HOTPATCH_RELATIONSHIP_FLAGS(TARGET)%</div>"
 	IF STRLENS(sError)
 		HTML_PRINT @"<p class='era-relationship-error' role='alert'>%HTML_ESCAPE(sError)%</p>"
 	ENDIF
-	IF nSelected
-		sReason '= HOTPATCH_RELATIONSHIP_REASON(nSelected, TARGET)
-		HTML_PRINT "<era-open class='era-relationship-confirmation'>"
-		HTML_PRINT @"<h3 class='era-relationship-option-title'>%HOTPATCH_RELATIONSHIP_ACTION_NAME(nSelected)%</h3><p>%HOTPATCH_RELATIONSHIP_DESCRIPTION(nSelected)%</p>"
-		SIF nSelected == 8
-			CALL HOTPATCH_FRIENDSHIP_PREVIEW(TARGET)
-		SIF nSelected == 3
-			HTML_PRINT @"<p>Proposal requires love experience above {250 + TALENT:TARGET:一線越えない * 100}. Current: {EXP:TARGET:愛情経験}. This is a requirement, not a promise of acceptance.</p>"
+	HTML_PRINT "<era-open class='era-relationship-options'>"
+	FOR nAction, 1, 9
+		SIF !HOTPATCH_RELATIONSHIP_VISIBLE(nAction, TARGET)
+			CONTINUE
+		sReason '= HOTPATCH_RELATIONSHIP_REASON(nAction, TARGET)
+		HTML_PRINT @"<era-open class='era-relationship-option era-relationship-action-{nAction}%(INRANGE(nAction, 5, 7) ? " era-relationship-downgrade" # "")%'>"
 		IF STRLENS(sReason)
-			HTML_PRINT @"<p class='era-relationship-error'>%HTML_ESCAPE(sReason)%</p>"
+			HTML_PRINT @"<h3 class='era-relationship-option-title'><button disabled class='era-relationship-select'>%HOTPATCH_RELATIONSHIP_ACTION_NAME(nAction)%</button></h3><span class='era-relationship-reason'>Unavailable</span><span class='era-relationship-reason'>%HTML_ESCAPE(sReason)%</span>"
 		ELSE
-			HTML_PRINT @"<button value='100' class='era-relationship-primary'>Confirm: %HOTPATCH_RELATIONSHIP_ACTION_NAME(nSelected)%</button>"
+			HTML_PRINT @"<h3 class='era-relationship-option-title'><button value='{nAction}' class='era-relationship-select'>%HOTPATCH_RELATIONSHIP_ACTION_NAME(nAction)%</button></h3>"
 		ENDIF
-		HTML_PRINT "<button value='0' class='era-chip-button'>Back without changing anything</button>"
 		HTML_PRINT "<era-close>"
-	ELSE
-		HTML_PRINT "<era-open class='era-relationship-options'>"
-		FOR nAction, 1, 9
-			SIF !HOTPATCH_RELATIONSHIP_VISIBLE(nAction, TARGET)
-				CONTINUE
-			sReason '= HOTPATCH_RELATIONSHIP_REASON(nAction, TARGET)
-			HTML_PRINT @"<era-open class='era-relationship-option%(INRANGE(nAction, 5, 7) ? " era-relationship-downgrade" # "")%'>"
-			HTML_PRINT @"<h3 class='era-relationship-option-title'>%HOTPATCH_RELATIONSHIP_ACTION_NAME(nAction)%</h3><p>%HOTPATCH_RELATIONSHIP_DESCRIPTION(nAction)%</p>"
-			IF nAction == 8
-				HTML_PRINT @"<p class='era-friendship-formula'>%HTML_ESCAPE(HOTPATCH_FRIENDSHIP_DETAILS(TARGET))%</p>"
-				sReason '= HOTPATCH_FRIENDSHIP_REASON(TARGET)
-				IF STRLENS(sReason)
-					HTML_PRINT @"<p>Current answer: %HTML_ESCAPE(sReason)%</p>"
-				ELSE
-					HTML_PRINT "<p>Current answer: they will agree.</p>"
-				ENDIF
-				sReason '= HOTPATCH_RELATIONSHIP_REASON(nAction, TARGET)
-			ENDIF
-			HTML_PRINT "<era-open class='era-relationship-option-action'>"
-			IF STRLENS(sReason)
-				HTML_PRINT @"<button disabled class='era-relationship-select'>Unavailable</button><span class='era-relationship-reason'>%HTML_ESCAPE(sReason)%</span>"
-			ELSE
-				HTML_PRINT @"<button value='{nAction}' class='era-relationship-select'>Discuss</button>"
-			ENDIF
-			HTML_PRINT "<era-close>"
-			HTML_PRINT "<era-close>"
-		NEXT
-		HTML_PRINT "<era-close>"
-	ENDIF
+	NEXT
 	HTML_PRINT "<era-close>"
-	HTML_PRINT "<div class='era-relationship-footer'><span>No changes until you confirm.</span><button value='999' class='era-chip-button'>Close</button></div>"
+	HTML_PRINT "<era-close>"
+	HTML_PRINT "<div class='era-relationship-footer'><button value='999' class='era-chip-button'>Close</button></div>"
 	HTML_PRINT "<era-close>"
 	INPUT
 	sError '= ""
 	SELECTCASE RESULT
+	CASE 101 TO 115
+		IF nPreview
+			nAction = RESULT
+			CLEARLINE LINECOUNT - nStart
+			RETURN nAction
+		ENDIF
+		sError '= "Choose a relationship conversation, or close the dialog."
 	CASE 999
 		CLEARLINE LINECOUNT - nStart
 		RETURN 0
-	CASE 0
-		nSelected = 0
 	CASE 1 TO 8
-		IF !nSelected
-			nSelected = RESULT
-		ELSE
-			sError '= "Use Confirm, Back or Close."
-		ENDIF
-	CASE 100
-		IF nSelected
-			sReason '= HOTPATCH_RELATIONSHIP_REASON(nSelected, TARGET)
+		nAction = RESULT
+		IF HOTPATCH_RELATIONSHIP_VISIBLE(nAction, TARGET)
+			sReason '= HOTPATCH_RELATIONSHIP_REASON(nAction, TARGET)
 			IF !STRLENS(sReason)
 				CLEARLINE LINECOUNT - nStart
-				RETURN nSelected
+				RETURN nAction
 			ENDIF
 			sError '= sReason
 		ELSE
@@ -303,7 +275,7 @@ IF !GROUPMATCH(nInput, 352, 357)
 ENDIF
 nAction = HOTPATCH_RELATIONSHIP_REQUEST()
 IF !nAction
-	CALL HOTPATCH_RELATIONSHIP_DIALOG(nInput == 357 ? 2 # 0)
+	CALL HOTPATCH_RELATIONSHIP_DIALOG
 	nAction = RESULT
 ENDIF
 SIF !nAction

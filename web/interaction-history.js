@@ -41,8 +41,16 @@ export function setupInlineChat(parent, history, loadAll, chat) {
       for (const done of cleanup) done();
     },
   });
+  protectHistoryControls(host);
+}
+
+function protectHistoryControls(parent) {
   for (const type of ["click", "pointerdown", "keydown", "contextmenu"])
-    host.addEventListener(type, (event) => event.stopPropagation());
+    parent.addEventListener(type, (event) => {
+      if ((type === "click" || type === "pointerdown")
+        && !event.target?.closest("button, a[href], input, textarea, select, summary, dialog, [contenteditable]:not([contenteditable='false'])")) return;
+      event.stopPropagation();
+    });
 }
 
 function scrollHistoryToBottom(parent) {
@@ -206,9 +214,7 @@ export function setHistoryTranslator(translator) { translate = translator; }
 
 export function renderCharacterHistory(parent, history, { loadAll, embedded = false, chat, lineTools, hideNarrationPrefix = false } = {}) {
   parent.replaceChildren();
-  // Reading history must never submit a choice or advance a click-to-continue wait.
-  for (const type of ["click", "pointerdown", "keydown", "contextmenu"])
-    parent.addEventListener(type, (event) => event.stopPropagation());
+  protectHistoryControls(parent);
   const text = (tag, content, container, className) => {
     const element = document.createElement(tag);
     element.textContent = content;

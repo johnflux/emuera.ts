@@ -13,10 +13,12 @@ hotpatch normally only changes presentation. `INTIMACY_COMMANDS.ERB` and
 
 [`FRIENDSHIPS.ERB`](../hotpatch/FRIENDSHIPS.ERB) adds **Ask to be friends**
 for every character, without friend slots or a maximum number of friends.
-It is a separate, platonic relationship, available even when native lover
-capacity or the random-encounter trait would prevent romance.
-The relationship panel shows the numeric score and current answer; its
-confirmation view explains the thresholds and refusal rules. An actual request
+Current friendship is derived solely from **favor >= 500**, independently of
+romance and introduction history. The introduction is available even when native
+lover capacity or the random-encounter trait would prevent romance.
+The relationship panel offers a direct action without predicting the answer.
+Actual requests and AI character information expose the calculation and refusal
+reason; the rules are documented below. An actual request
 takes 10 minutes, including refusal; browsing is free.
 
 First acceptance gives **+100 favor**, exactly once per character:
@@ -36,17 +38,20 @@ First acceptance gives **+100 favor**, exactly once per character:
 The 400+ thresholds bypass the below-400 willingness calculation. Physical
 conversation restrictions (sleep, stopped time, another scene, etc.) still
 apply to offers and requests. Automatic recognition costs no time.
-A hate mark lapses friendship at the next room redraw (immediately for AI mark
-changes); the active indicator is suppressed immediately, also while angry or
-actively disliked. Reconciliation
-can restore friendship but cannot award the introduction bonus again.
+Falling below 500 removes current friendship; reaching 500 restores it.
+Anger and hate affect introduction willingness below 400, not the current
+friendship threshold or bonus history. Accepting at low favor grants +100 but
+does not declare a separate friendship state if the resulting favor is below 500.
+Characters who already received the bonus do not repeat unsolicited introductions.
 Romantic feelings, trust and commitment are untouched. The main screen, sheet,
 shared badge and AI character information recognize friendship; AI
 `player_attempts("become_friends")` uses the same rules and prints the calculation
 and refusal instead of silently failing.
 
-Per-character **CFLAG 7399** stores 0 (never accepted), 1 (friends), or -1
-(lapsed, bonus already received), inside the existing 10,000-element array.
+Per-character **CFLAG 7399** stores bonus history ONLY: 0 (not received) or
+nonzero (received), inside the existing 10,000-element array. New receipts write
+1; legacy -1 values are also treated as received. Never infer current friendship
+from this marker, and never clear it on falling favor or hate.
 Allocation checks found no numeric/CSV-name/template use of 7399, no computed
 family reaching it, and no overlapping bulk resets (generic dialogue resets
 are 1000–1999; named/ranged resets use other slots). Native saves preserve this
@@ -57,16 +62,53 @@ marker without changing layout or existing meanings.
 [`RELATIONSHIPS.ERB`](../hotpatch/RELATIONSHIPS.ERB) replaces Confess with a
 relationship dialog, also accessible from the character's main-screen summary.
 It shows the existing portrait, commitment, favor, trust and love experience.
-The wide dialog uses a three-column action grid on desktop, with two/one
-columns on smaller screens. Ending a commitment is hidden when it does not
+The relationship timeline uses favor to fill Strangers → Acquaintances (100)
+→ Friends (500). Once friends, romantically committed, FWB or divorced, the
+main path becomes Strangers → Friends → Lovers → Engaged → Married.
+Romantic lines highlight only current commitments, not acceptance predictions.
+The native In love feeling (`TALENT:恋慕`) adds a node between Friends and Lovers
+only while set, with a filled, throbbing heart badge (static with reduced motion).
+It is independent of the Lovers agreement (`TALENT:恋人`):
+either or both may be present. The summary shows all active In love, Lovers,
+FWB and commitment flags rather than just the highest-priority label.
+FWB branches below Friends with a dotted line; Divorced uses a dotted red branch below Friends when favor is at
+least 500, otherwise below Strangers. Both forks start at the beginning of the
+outgoing track, with symmetric straight/Bezier/straight sections spanning
+25%/50%/25% of the horizontal distance to the destination badge.
+Tracks preserve circular clearance around the In love badge.
+Timeline scaling caps the state circles at 70px, including the shorter early
+friendship path.
+The relationship dialog uses the supplied vector artwork in
+`web/relationship-assets/` for milestone badges, floral decorations, the ribbon
+frame, header and action skins. Future milestones are muted, not hidden; Engaged
+remains an independent milestone even though the mockup abbreviated it.
+Badges use scalloped outlines around the supplied icon artwork, with paired
+hearts for FWB and heart accents around In love. The frame and ribbon remain
+outside the horizontally scrolling track, keeping them intact on narrow screens.
+The summary uses icon pills, and the concise Confess/FWB/End FWB actions retain
+the same gameplay checks and unavailable reasons.
+Divorce scorches the former Lovers → Engaged → Married route; a saved former
+engagement scorches Engaged → Married. Feelings, friendship and FWB are not burnt
+away by either state. Ordinary breakup history is not reliably saved, so absence
+of a Lovers flag alone never produces scorching. No new save fields are added.
+While In love is active, both forks instead leave the In love → Lovers track.
+Higher favor replaces Friends with Close
+Friend (1,000), Best Friend (10,000) or Almost Family (30,000), adding gold rings
+to the flower badge. The timeline is derived from game values and never writes
+relationship state.
+The wide dialog uses a responsive action grid. Action headings are buttons that
+immediately make the request, without a second discussion/confirmation screen
+or explanatory paragraphs. Ending a commitment is hidden when it does not
 exist; marriage is shown only while engaged. Other unavailable actions retain
-their reasons, with the action areas aligned at the bottom of each card.
+their reasons.
 A shared vector heart badge identifies relationships in the dialog header,
 room summary and occupant labels: pink for love/lovers, purple with a sparkle
 for casual agreements, a heart with one diamond ring for engagement, and
-interlocking rings for marriage. An outlined heart means no formal relationship.
+interlocking rings for marriage. No badge is shown for no relationship.
 Tooltips and accessible text distinguish each state.
-Browsing, Back and Close are free. Every change requires confirmation; actual
+The summary badge sits beside the character's name and opens the dialog;
+the action list also has a standard-size **Relationship...** button.
+Browsing and Close are free; clicking an available action immediately starts it. Actual
 conversations take **10 minutes**, including rejected confessions/proposals.
 Unavailable options show reasons, and execution rechecks them.
 
@@ -617,6 +659,9 @@ interaction history in 14px text, without dialog tabs or a separate composer.
 It spans the room panel beneath the portraits and Character Info, without a
 second card border. Actions remain in their own panel below the room.
 A floating top-right more... button opens the full interaction history dialog.
+Clicks on inline history text advance click-to-continue waits like other output;
+dragging still selects text. History controls, editors and the full history
+dialog keep their input local.
 This inline view hides only the "Narration to Player: " label, keeping the
 narration itself visible. The full dialog and LLM context retain the label.
 The history body has no extra padding, and the sticky more... button overlays
@@ -659,6 +704,19 @@ Scroll sideways and select someone near either end to check crowd navigation.
 Scenario 12 meets YuugenMagan for the first time: her introduction event plays (pick her route there), and the main
 screen then has her selected, so the interaction history and LLM chat can be checked against her distinctive voice.
 Restart the demo to pick another scenario.
+
+Conformance demo item **9 — Relationship dialog states** opens the actual
+relationship dialog with a switcher above the dialog for None, In love, FWB,
+Lovers, Engaged, Married, Divorced, In love + FWB and In love + Divorced.
+Switching redraws in place. Action buttons
+are preview-only and do not execute gameplay changes; Close returns to the demo
+menu. These controls are absent during normal play.
+Favor presets alongside the state buttons set the displayed value to
+Acquaintance (100), Friendship (500), Close Friend (1,000), Best Friend (10,000)
+or Almost Family (30,000), without romantic commitment. Friendship and the higher
+favor presets naturally show friendship through favor, not a separate state.
+All preview buttons are mutually exclusive presets. Relationship presets use
+1,000 favor; None uses 20.
 
 ### Area pictures
 

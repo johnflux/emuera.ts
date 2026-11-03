@@ -176,7 +176,6 @@ IF TARGET > 0
 	SIF STRLENS(LOCALS)
 		HTML_PRINT @"<div class='era-player-status era-stains'><span class='era-status-label'>Stains:</span>%LOCALS%</div>"
 	CALL HOTPATCH_TARGET_STATUS
-	HTML_PRINT @"<div class='era-player-status'>%HOTPATCH_RELATIONSHIP_ICON(TARGET)%<button value='352' class='era-chip-button'>Discuss relationship</button></div>"
 	CALL SHOW_EQUIP_1
 	HTML_PRINT "<era-open class='era-look'>"
 	CALL HOTPATCH_LOOK
@@ -435,6 +434,10 @@ CALL HOTPATCH_FACE(TARGET, 74)
 HTML_PRINT @"<div class='era-info-face'>%RESULTS%</div>"
 HTML_PRINT "<era-open class='era-info-summary'>"
 HTML_PRINT @"<button value='-9300' class='era-info-more' title='More about %HOTPATCH_ATTRIBUTE(HTML_ESCAPE(CALLNAME:TARGET))%'>See more</button>"
+HTML_PRINT "<era-open class='era-character-heading'>"
+sHtml '= HOTPATCH_RELATIONSHIP_ICON(TARGET)
+SIF STRLENS(sHtml)
+	HTML_PRINT @"<button value='352' class='era-relationship-open' title='Relationship...'>%sHtml%</button>"
 HTML_PRINT "<era-open class='era-character-state'>"
 CALL SHOW_EQUIP_2
 ;Species after the name (the game's own race text and description, as in its talent list).
@@ -443,6 +446,7 @@ IF STRLENS(sHtml)
 	sHtml '= @"<span class='era-race' title='%HTML_ESCAPE(RACE_INFO(TARGET))%'>%HTML_ESCAPE(sHtml)%</span><span class='era-sep'> · </span>"
 ENDIF
 HTML_PRINT @"<div class='era-character-kind'>%sHtml%%HOTPATCH_BODY_SIZE(TARGET, 0)%</div>"
+HTML_PRINT "<era-close>"
 HTML_PRINT "<era-close>"
 sHtml '= @"<span class='era-fact'><span class='era-fact-label'>Favor</span>%HOTPATCH_RANK(CFLAG:2, "MAX_50000")% {CFLAG:2}</span>"
 sHtml += @"<span class='era-fact'><span class='era-fact-label'>Trust</span>%HOTPATCH_RANK(CFLAG:信頼度, "MAX_20000")% {CFLAG:信頼度}</span>"

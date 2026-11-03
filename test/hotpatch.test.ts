@@ -726,6 +726,10 @@ WAIT`, "<info-title-test>");
     assert.equal(html.includes("era-character-blurb"), scenario.blurb, scenario.name);
     if (scenario.blurb) assert.match(html, /era-character-blurb'>A &lt;quiet&gt; visitor</);
     if (scenario.tag) assert.ok(html.includes(scenario.tag), "existing tags remain visible");
+    if (scenario.name === "relationship")
+      assert.match(html, /era-character-heading[^]*value='352'[^]*era-relationship-icon-love[^]*era-character-state/);
+    if (scenario.name === "quiet") assert.doesNotMatch(html, /era-relationship-open|era-relationship-icon-none/);
+    assert.doesNotMatch(html, /Discuss relationship/);
     assert.doesNotMatch(html, /●Race:|●Ability:/, "redundant race and ability fields are not part of the title");
   }
 });

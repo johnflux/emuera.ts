@@ -24,6 +24,8 @@ PRINTBUTTON " [5] Character portraits ", 5
 PRINTBUTTON " [6] Dialogue (click to continue) ", 6
 PRINTBUTTON " [7] Command grid (PRINTC) ", 7
 PRINTBUTTON " [8] Main screen scenarios ", 8
+SIF EXISTFUNCTION("HOTPATCH_RELATIONSHIP_DIALOG")
+  PRINTBUTTON " [9] Relationship dialog states ", 9
 HTML_PRINT "<button value='0' title='End this demo'>[0] Quit</button>"
 INPUT
 SELECTCASE RESULT
@@ -73,13 +75,79 @@ SELECTCASE RESULT
     ; BEGIN returns only from SCENARIOS; the new state starts once the title program returns.
     SIF DEMO_SCENARIO
       RETURN
+  CASE 9
+    IF EXISTFUNCTION("HOTPATCH_RELATIONSHIP_DIALOG")
+      CALL RELATIONSHIP_PREVIEW
+    ELSE
+      PRINTL Relationship previews require the eraTW hotpatches.
+    ENDIF
   CASE 0
     PRINTL Demo finished. Start another run using the toolbar.
     RETURN
   CASEELSE
-    PRINTL Choose a number from 0 to 8.
+    PRINTL Choose one of the listed demo options.
 ENDSELECT
 GOTO MENU
+
+@RELATIONSHIP_PREVIEW
+#DIM DYNAMIC nState
+#DIM DYNAMIC nChoice
+#DIM FAVOR_LEVELS, 5 = 100, 500, 1000, 10000, 30000
+RESETDATA
+CALL MAKE_TALENT_MAP
+CALL Name_Array_Set
+CALL ADDCHARA_INIT(0)
+CALL ADDCHARA_INIT(1)
+MASTER = 0
+TARGET = 1
+BASE:MASTER:気力 = 100
+TFLAG:100 = 1
+TFLAG:102 = 1
+CFLAG:TARGET:現在位置 = CFLAG:MASTER:現在位置
+CFLAG:TARGET:好感度 = 20
+CFLAG:TARGET:信頼度 = 100
+EXP:TARGET:愛情経験 = 400
+BASE:TARGET:怒り = 0
+CFLAG:TARGET:不機嫌 = 0
+CFLAG:TARGET:ブチギレ = 0
+MARK:TARGET:反発刻印 = 0
+RELATION:TARGET:(NO:MASTER) = 100
+nState = 101
+DO
+  TALENT:TARGET:恋人 = INRANGE(nState, 105, 107)
+  TALENT:MASTER:恋人 = TALENT:TARGET:恋人 ? NO:TARGET # 0
+  TALENT:TARGET:恋慕 = nState == 103 || nState == 114 || nState == 115
+  TALENT:TARGET:セフレ = nState == 104 || nState == 114
+  CFLAG:TARGET:7398 = nState == 106 ? 1 # nState == 107 ? 2 # nState == 108 || nState == 115 ? -2 # 0
+  DEMO_RELATIONSHIP_STATE = nState
+  CALL HOTPATCH_RELATIONSHIP_DIALOG(1)
+  nChoice = RESULT
+  SIF !nChoice
+    RETURN
+  IF nChoice == 101 || INRANGE(nChoice, 103, 108) || INRANGE(nChoice, 114, 115)
+    nState = nChoice
+    CFLAG:TARGET:好感度 = 1000
+    SIF nChoice == 101
+      CFLAG:TARGET:好感度 = 20
+  ELSEIF INRANGE(nChoice, 109, 113)
+    nState = nChoice
+    CFLAG:TARGET:好感度 = FAVOR_LEVELS:(nChoice - 109)
+  ENDIF
+LOOP 1
+
+@DEMO_RELATIONSHIP_CONTROLS
+#DIM DYNAMIC nState
+#DIM DYNAMIC nIndex
+#DIM ORDER, 14 = 101, 109, 110, 111, 112, 113, 103, 104, 105, 106, 107, 108, 114, 115
+#DIMS LABELS, 7 = "None", "In love", "FWB", "Lovers", "Engaged", "Married", "Divorced"
+#DIMS FAVOR_LABELS, 5 = "Acquaintance", "Friendship", "Close Friend", "Best Friend", "Almost Family"
+#DIMS MIXED_LABELS, 2 = "In love + FWB", "In love + Divorced"
+HTML_PRINT "<era-open class='era-relationship-demo'>"
+FOR nIndex, 0, 14
+  nState = ORDER:nIndex
+  HTML_PRINT @"<button value='{nState}' class='era-chip-button era-relationship-demo-state' aria-pressed='%(DEMO_RELATIONSHIP_STATE == nState ? "true" # "false")%'>%(nState >= 114 ? MIXED_LABELS:(nState - 114) # nState < 109 ? LABELS:(nState == 101 ? 0 # nState - 102) # FAVOR_LABELS:(nState - 109))%</button>"
+NEXT
+HTML_PRINT "<era-close>"
 
 @SCENARIOS
 #DIMS SCENE, 13 = "", "Alone", "One person", "Two people", "Crowd (six people)", "Time stopped, two people", "Time stopped, alone", "Partner asleep", "Exhausted", "Outdoors at night, in the rain", "Asleep, before waking (the sleep menu)", "Crowd stress test (24 people)", "Meeting YuugenMagan (her first-meeting event; a distinctive voice for LLM chat)"
@@ -367,7 +435,7 @@ RETURN ARG:0 * ARG:1
 `;
 // Stand-ins for the debug item grants that the game's Quicktest always runs (an SIF there guards only the first CALL); one opens an item menu.
 const quicktestItemGrants = ["100", "101", "102", "103", "104", "105", "106", "107", "108", "110", "200", "201", "202", "203"].map((n) => `DEBUG_MENU_RESULT_2_${n}`);
-const header = "#DIM DEMO_SCENARIO\n";
+const header = "#DIM DEMO_SCENARIO\n#DIM DEMO_RELATIONSHIP_STATE\n";
 /** The demo overlays the (hotpatched) game: its own title program replaces SYSTEM_TITLE, and the scenarios start the game's real main screen. */
 export function demoGame(game: Game): Game {
   const demo: Game = { ...game, routines: new Map(game.routines), headers: [...game.headers], diagnostics: [] };
