@@ -207,6 +207,36 @@ test("header rendering has no indoor or outdoor setting in the demo or game", as
   assert.match(sleep, /^CALL HOTPATCH_SKY$/m);
 });
 
+test("only the Underworld left lantern has a localized randomly timed flicker", async () => {
+  const source = await readFile(new URL("../web/sky.js", import.meta.url), "utf8");
+  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  assert.match(source, /if \(area === "9"\) \{[\s\S]*?lantern\.className = "era-cave-lantern";/);
+  assert.match(source, /--lantern-flicker-duration", `\$\{flicker\.duration\}s`/);
+  assert.match(source, /--lantern-flicker-pattern", flicker\.easing/);
+  assert.match(source, /--lantern-flicker-delay", `\$\{-Math\.random\(\) \* flicker\.duration\}s`/);
+  assert.match(css, /\.era-cave-lantern \{[^}]*left: 132px; bottom: 55px; width: 40px; height: 42px;[^}]*pointer-events: none;[^}]*z-index: 1;[^}]*mask: url\(\/underworld-lantern-mask\.png\)/);
+  assert.match(css, /var\(--lantern-flicker-pattern, steps\(1\)\) infinite;/);
+  const routine = source.slice(source.indexOf("export function lanternFlicker"), source.indexOf("/** Apply panorama"));
+  const generate = new Function(`${routine.replace("export ", "")}; return lanternFlicker;`)();
+  const patterns = [];
+  for (const value of [0, .5, .999]) {
+    const pattern = generate(() => value);
+    assert.ok(pattern.duration >= 175 && pattern.duration <= 515);
+    const stops = [...pattern.easing.matchAll(/([\d.]+) ([\d.]+)%/g)].map(match => [Number(match[1]), Number(match[2])]);
+    assert.ok(Math.abs(stops[1]![1]! / 100 * pattern.duration - (10 + value * 20)) < 1e-8, "bursts wait 10–30 seconds without slowing the flashes");
+    const dips = stops.filter(([opacity]) => opacity! >= .4);
+    assert.equal(dips.length, 32 * (1 + Math.floor(value * 3)), "one to three dips per burst");
+    assert.ok(dips.every(([opacity]) => opacity! >= .4 && opacity! <= .6), "dips leave around half the flame brightness");
+    for (let i = 1; i < stops.length; i++) assert.ok(stops[i]![1]! >= stops[i - 1]![1]!);
+    assert.deepEqual(stops[0], [0, 0]);
+    assert.deepEqual(stops.at(-1), [0, 100]);
+    patterns.push(pattern.easing);
+  }
+  assert.equal(new Set(patterns).size, 3, "brightness and flash counts vary with randomness");
+  assert.match(css, /@keyframes era-lantern-flicker/);
+  assert.match(css, /prefers-reduced-motion: reduce\) \{\s*\.era-cave-lantern \{ animation: none; opacity: 0; \}/);
+});
+
 test("Underworld bats are confined to the cavern artwork and respect reduced motion", async () => {
   const source = await readFile(new URL("../web/sky.js", import.meta.url), "utf8");
   const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
@@ -460,7 +490,13 @@ test("night cloud, fog and snow palettes are muted and a blurred orb glows above
 test("night panorama lights get a warm halo without blurring the scenery", async () => {
   const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
   assert.match(css, /\.era-area-art-night \.era-sky-landmark::before \{[^}]*pointer-events: none; opacity: \.7;[^}]*--area-left[^}]*--area-right[^}]*--area-middle/);
-  assert.match(css, /filter: url\(#era-light-glow\)/);
+  assert.match(css, /filter: url\(#era-light-glow\); mix-blend-mode: screen;/);
+  for (const base of [0, .25, .65, .9, 1]) {
+    for (const glow of [1, .65, .25]) for (const alpha of [0, .1, .7, 1]) {
+      const screened = base + alpha * glow * (1 - base);
+      assert.ok(screened >= base, "the glow cannot darken any lamp channel");
+    }
+  }
   for (const file of ["index.html", "art-demo.html"]) {
     const html = await readFile(new URL(`../web/${file}`, import.meta.url), "utf8");
     assert.match(html, /<filter id="era-light-glow"[^>]*color-interpolation-filters="sRGB"/);

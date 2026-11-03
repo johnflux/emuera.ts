@@ -83,6 +83,28 @@ test(`${area} panoramas have aligned transparent day/night artwork and appropria
   }
 });
 
+test("Underworld lamps retain full daytime brightness and warm colours at night", async () => {
+  for (const part of ["left", "right"]) {
+    const root = new URL("../web/areas/9-underworld/", import.meta.url);
+    const day = decodePng(await readFile(new URL(`neutral-day-${part}.png`, root)));
+    const night = decodePng(await readFile(new URL(`neutral-night-${part}.png`, root)));
+    let cores = 0;
+    for (let y = 0; y < day.height; y++) for (let x = 0; x < day.width; x++) {
+      const lamp = part === "left" ? x >= 130 && x <= 165 && y >= 45 && y <= 86
+        : x >= 50 && x <= 420 && y >= 15 && y <= 130;
+      if (!lamp) continue;
+      const i = (y * day.width + x) * 4;
+      const r = day.data[i]!, g = day.data[i + 1]!, b = day.data[i + 2]!;
+      if (r <= 135 || r < g * .98 || g <= b * 1.25) continue;
+      cores++;
+      assert.deepEqual([...night.data.slice(i, i + 3)], [r, g, b], "emissive light is not dimmed or recoloured at night");
+      assert.ok(night.data[i]! >= night.data[i + 1]! * .98 && night.data[i + 1]! > night.data[i + 2]!, "lamp stays gold, not green");
+      assert.equal(night.data[i + 3], day.data[i + 3], "lamp geometry is unchanged");
+    }
+    assert.ok(cores > 50);
+  }
+});
+
 test("Underworld depth is translucent while foreground stays opaque and joins stay aligned", async () => {
   for (const phase of ["day", "night"]) for (const part of ["left", "middle", "right"]) {
     const art = decodePng(await readFile(new URL(`../web/areas/9-underworld/neutral-${phase}-${part}.png`, import.meta.url)));

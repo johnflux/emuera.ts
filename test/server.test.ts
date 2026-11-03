@@ -378,8 +378,15 @@ test("HTTP UI, isolated sessions, real image bytes, sprite metadata, errors and 
     assert.equal(artDemo.status, 200);
     assert.match(artDemo.headers.get("content-type")!, /text\/html/);
     const demoHtml = await artDemo.text();
-    for (const id of ["location", "season", "day", "time", "weather", "artwork", "setting", "minutes"])
+    for (const id of ["location", "season", "day", "time", "weather", "artwork", "minutes"])
       assert.ok(demoHtml.includes(`id="${id}"`), `artwork demo has ${id} control`);
+    assert.ok(!demoHtml.includes('id="setting"'));
+    const lanternMask = await fetch(base + "/underworld-lantern-mask.png");
+    assert.equal(lanternMask.status, 200);
+    assert.equal(lanternMask.headers.get("content-type"), "image/png");
+    const maskBytes = Buffer.from(await lanternMask.arrayBuffer());
+    assert.equal(maskBytes.readUInt32BE(16), 40);
+    assert.equal(maskBytes.readUInt32BE(20), 42);
     for (const [file, type] of [["art-demo.js", "javascript"], ["sky.js", "javascript"], ["art-demo.css", "text/css"]]) {
       const resource = await fetch(base + "/" + file);
       assert.equal(resource.status, 200);

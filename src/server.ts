@@ -611,6 +611,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
         "/title/new-game.webp": "title/new-game.webp", "/title/load-game.webp": "title/load-game.webp",
         "/moon.svg": "moon.svg",
         "/earth.png": "earth.png",
+        "/underworld-lantern-mask.png": "underworld-lantern-mask.png",
         "/clock-frame.png": "clock-frame.png",
         "/clock-frame-hover.png": "clock-frame-hover.png",
         "/fonts/BIZUDGothic-Regular.ttf": "fonts/BIZUDGothic-Regular.ttf",

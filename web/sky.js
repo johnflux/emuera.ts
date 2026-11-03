@@ -35,6 +35,37 @@ export function sky(node, element) {
   return element;
 }
 
+/** A long stepped sequence keeps flame bursts irregular without timers tied to removed headers. */
+export function lanternFlicker(random = Math.random) {
+  const stops = ["0 0%"];
+  let elapsed = 0, opacity = 0;
+  const changes = [];
+  const change = (next, seconds) => {
+    elapsed += seconds;
+    changes.push([elapsed, opacity, next]);
+    opacity = next;
+  };
+  for (let burst = 0; burst < 16; burst++) {
+    const flashes = 1 + Math.floor(random() * 3);
+    change(.4 + random() * .2, 10 + random() * 20);
+    for (let flash = 1; flash < flashes; flash++) {
+      change(0, .08 + random() * .1);
+      change(.4 + random() * .2, .08 + random() * .12);
+    }
+    change(.25 + random() * .1, .08 + random() * .1);
+    change(.15 + random() * .1, .08 + random() * .1);
+    change(.05 + random() * .05, .08 + random() * .1);
+    change(0, .08 + random() * .1);
+  }
+  elapsed += 10;
+  for (const [time, before, after] of changes) {
+    const percent = time / elapsed * 100;
+    stops.push(`${before} ${percent}%`, `${after} ${percent}%`);
+  }
+  stops.push("0 100%");
+  return { duration: elapsed, easing: `linear(${stops.join(", ")})` };
+}
+
 /** Apply panorama images while leaving weather, sky and SVG fallbacks to the shared stylesheet. */
 export function prepareSkyArt(outputRoot, manifest, loadImage, pendingImages, artwork = "auto") {
   const skies = [...outputRoot.querySelectorAll(".era-sky[class*='era-area-']:not([data-area-art])")];
@@ -61,6 +92,14 @@ export function prepareSkyArt(outputRoot, manifest, loadImage, pendingImages, ar
       bats.setAttribute("aria-hidden", "true");
       for (let i = 0; i < 4; i++) bats.append(document.createElement("span"));
       sky.querySelector(".era-sky-landmark")?.append(bats);
+      const lantern = document.createElement("span");
+      lantern.className = "era-cave-lantern";
+      lantern.setAttribute("aria-hidden", "true");
+      const flicker = lanternFlicker();
+      lantern.style.setProperty("--lantern-flicker-duration", `${flicker.duration}s`);
+      lantern.style.setProperty("--lantern-flicker-pattern", flicker.easing);
+      lantern.style.setProperty("--lantern-flicker-delay", `${-Math.random() * flicker.duration}s`);
+      sky.querySelector(".era-sky-landmark")?.append(lantern);
     }
     const header = sky.closest(".era-main-header") ?? sky;
     for (const part of ["left", "middle", "right"]) {

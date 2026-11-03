@@ -662,8 +662,19 @@ alpha. Day/night versions use identical transparency and the same dark colour in
 Subtler transparency also reveals depth inside the left side of the open doorway, without changing
 the arch. Shadows around the palace and in the far-right cavern retain their original opaque artwork.
 End panels fade over their inner 48px to soften joins.
-The aligned cooler night grade retains warm lanterns and
-windows. The Underworld location suppresses the sun, moon, clouds and precipitation.
+The aligned cooler night grade retains warm lanterns and windows, including pale yellow lamp
+cores as well as orange light, at their full daytime colour and brightness. The cool cave tint
+does not dim or turn them green; darker surroundings and the night halo make them stand out more.
+The shared warm night halo uses screen blending, adding light rather than painting orange over
+bright cores and reducing their brightness.
+Only the left Underworld lantern flickers during both day and night. A pixel-aligned mask isolates
+its flame above the steady night halo without affecting the metal frame or palace lights.
+Each burst holds full brightness, then flashes one to three times with randomized dips to
+40–60% brightness, followed by stepped recovery to full brightness without smooth pulsing.
+A generated sequence of 16 randomized bursts varies pauses (10–30 seconds), flash durations,
+brightness and recovery levels before repeating, with a randomized starting phase.
+Reduced motion disables the flicker.
+The Underworld location suppresses the sun, moon, clouds and precipitation.
 It uses a flat pale lavender-blue (#b3c5ff) midday backdrop,
 fading to #090a1d at sunrise/sunset and throughout night with a squared solar-elevation curve.
 The matching dark tunnel pixels disappear into that background at night, while varying

@@ -513,6 +513,15 @@ body:has(.menu-panel:not([hidden])) .clock-overhang { visibility: hidden; }
 .era-area-art.era-area-7 { --area-art-overlap: 360px; }
 .era-area-art.era-area-8 { --area-art-overlap: 176px; }
 .era-area-art.era-area-9 { --area-art-overlap: 48px; }
+.era-cave-lantern { position: absolute; left: 132px; bottom: 55px; width: 40px; height: 42px;
+  pointer-events: none; opacity: 0; z-index: 1;
+  background: #090a1d; mask: url(/underworld-lantern-mask.png) center / contain no-repeat;
+  animation: era-lantern-flicker var(--lantern-flicker-duration, 9s) var(--lantern-flicker-delay, 0s) var(--lantern-flicker-pattern, steps(1)) infinite; }
+@keyframes era-lantern-flicker {
+  from { opacity: 0; }
+  to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .era-cave-lantern { animation: none; opacity: 0; } }
 .era-cave-bats { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
 .era-cave-bats > span { position: absolute; left: 26%; top: 48%; width: 14px; height: 10px;
   animation: era-bat-flight 8s ease-in-out infinite alternate; }
@@ -570,7 +579,7 @@ body:has(.menu-panel:not([hidden])) .clock-overhang { visibility: hidden; }
 /* Isolate bright warm pixels so windows glow without blurring the buildings or moonlit snow. */
 .era-area-art-night .era-sky-landmark::before { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .7;
   background: var(--area-left, none) left bottom / auto no-repeat, var(--area-right, none) right bottom / auto no-repeat, var(--area-middle) left bottom / auto repeat-x;
-  filter: url(#era-light-glow); }
+  filter: url(#era-light-glow); mix-blend-mode: screen; }
 .era-sky.era-area-art .era-sky-land::before,
 .era-sky.era-area-art .era-sky-landmark::after,
 .era-sky.era-area-art .era-sky-landmark::before {
