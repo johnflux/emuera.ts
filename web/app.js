@@ -5,6 +5,7 @@ import { disposeCharacterChats, sendInlineChat, setHistoryTranslator, setupInlin
 import { activeLlm, PROVIDERS, setupLlmConfig } from "./llm.js";
 import { encountersEnabled, gossipEnabled, memoriesEnabled, runEncounters, runGossip, runMemories, writeMemory } from "./encounters.js";
 import { cached, LruCache } from "./cache.js";
+import { profiling, profileStart, profileEnd } from "./performance.js";
 
 const terminal = document.querySelector("#terminal");
 const timeEffect = document.querySelector("#time-effect");
@@ -255,10 +256,17 @@ function message(value, error = false) {
   status.classList.toggle("error", error);
 }
 async function api(url, data) {
+  const started = profileStart();
   const response = await fetch(url, data === undefined ? {} : {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data),
+    method: "POST", headers: { "Content-Type": "application/json", ...(profiling ? { "X-Era-Profile": "1" } : {}) }, body: JSON.stringify(data),
   });
+  const received = profileStart();
   const result = await response.json();
+  if (profiling) {
+    profileEnd("response.decode", received);
+    profileEnd("request", started, { route: url.split("?")[0], step: result.step, serverTiming: response.headers.get("Server-Timing"),
+      serverHeapBytes: Number(response.headers.get("X-Era-Heap-Bytes")) || undefined });
+  }
   if (!response.ok) throw Object.assign(new Error(result.error ?? `HTTP ${response.status}`), { status: response.status });
   return result;
 }
@@ -1747,6 +1755,8 @@ function render(snapshot, advanceScreen = false, fresh = false, keepFocus = fals
 }
 /** Renders steps in order and shows the result at once; several steps rebuild a reloaded run's output. */
 async function renderSteps(steps, fresh = false, keepFocus = false, toBottom = fresh) {
+  const totalStarted = profileStart();
+  let phaseStarted = totalStarted;
   if (fresh) disposeCharacterChats(terminal);
   const clickingThrough = input?.kind === "wait";
   const setup = terminal.querySelector(".screen.is-active .era-setup:not(.era-setup-editor)");
@@ -1786,21 +1796,33 @@ async function renderSteps(steps, fresh = false, keepFocus = false, toBottom = f
   outputRoot = staged;
   pendingImages = [];
   terminal.setAttribute("aria-busy", "true");
+  profileEnd("render.stage", phaseStarted);
   try {
+    phaseStarted = profileStart();
     for (const { snapshot, advanceScreen } of steps) await renderSnapshot(snapshot, advanceScreen);
+    profileEnd("render.snapshots", phaseStarted);
+    phaseStarted = profileStart();
     await Promise.all(pendingImages);
+    profileEnd("render.images", phaseStarted);
   } finally {
+    phaseStarted = profileStart();
     protectMapTranslation(staged);
     if (!live) terminal.replaceChildren(...staged.childNodes);
     outputRoot = terminal;
     pendingImages = [];
     syncDialogs();
+    profileEnd("render.commit", phaseStarted);
+    phaseStarted = profileStart();
     layoutHtmlPositions();
     layoutMapPictures();
     restoreSetupScroll();
     revealSelectedOccupants();
     markMapLabels();
+    profileEnd("render.layout", phaseStarted);
+    phaseStarted = profileStart();
     translation.translateTree(terminal);
+    profileEnd("render.translation", phaseStarted);
+    phaseStarted = profileStart();
     terminal.removeAttribute("aria-busy");
     showTimeState(steps.at(-1)?.snapshot.timeStopped, fresh);
     updateControls();
@@ -1808,8 +1830,15 @@ async function renderSteps(steps, fresh = false, keepFocus = false, toBottom = f
     else terminal.scrollTop = scrollTop;
     scheduleTimedWait();
     if (clickingThrough && input && input.kind !== "wait") settle();
+    profileEnd("render.controls", phaseStarted);
   }
   if (input && !keepFocus) command.focus({ preventScroll: true });
+  if (profiling) profileEnd("render.total", totalStarted, {
+    step: steps.at(-1)?.snapshot.step,
+    elements: terminal.querySelectorAll("*").length,
+    historyLines: terminal.querySelectorAll(".screen.is-history .line").length,
+    imageCacheBytes: sourceImages.bytes, canvasCacheBytes: paintedPictures.bytes, spriteCacheBytes: sprites.bytes,
+  });
 }
 // TINPUT/TWAIT timers run in the browser; expiry asks the runtime to apply the timeout.
 const FRAME_INTERVAL = 1000 / 60;

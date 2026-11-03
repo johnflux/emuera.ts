@@ -308,6 +308,28 @@ match, so reading interaction events does not repeatedly enumerate growing save
 directories. Native save formats, filename casing compatibility and atomic writes
 are unchanged.
 
+For performance diagnostics, add `&profile` to a game/demo URL (for example
+`/?demo&profile`). This opt-in records up to 2,000 timing samples, without game
+text, input values or credentials. In the page's developer console, run:
+
+```js
+const diagnostics = await import("/performance.js");
+console.table(diagnostics.profileReport());
+diagnostics.clearProfile();
+```
+
+Request samples include server execution (interpreter plus snapshot generation),
+replay preparation and JSON serialization timings, along with a server heap
+sample. Response decoding is measured separately. Render samples separate staging
+(including the visual clone), snapshot construction, image waiting, DOM commit,
+layout, translation scheduling, controls and total time. Total render samples
+also record terminal element/scrollback counts and retained image/canvas/metadata
+cache estimates. Timings are wall-clock measurements, not GPU paint durations;
+phase timings can include asynchronous waits. Translation measures scheduling,
+not the background model's eventual completion. Heap samples without forced GC
+include transient allocations and should not be interpreted as retained memory.
+Reload without `profile` to disable collection.
+
 The header shows the app name, the current run mode (Game or Demo) and the
 interpreter status. While a step runs, the clicked (or typed) choice is
 highlighted and the cursor changes immediately; if the step takes more than

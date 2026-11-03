@@ -99,8 +99,17 @@ class HttpError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
 function json(response: ServerResponse, data: unknown, status = 200): void {
+  const started = performance.now();
+  const body = JSON.stringify(data);
+  serverTiming(response, "serialize", started);
   response.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
-  response.end(JSON.stringify(data));
+  response.end(body);
+}
+function serverTiming(response: ServerResponse, name: string, started: number): void {
+  if (!response.hasHeader("Server-Timing")) return;
+  const previous = response.getHeader("Server-Timing");
+  response.setHeader("Server-Timing", `${previous ? `${previous}, ` : ""}${name};dur=${(performance.now() - started).toFixed(3)}`);
+  response.setHeader("X-Era-Heap-Bytes", process.memoryUsage().heapUsed);
 }
 async function serveFile(request: IncomingMessage, response: ServerResponse, file: string, development: boolean): Promise<void> {
   const info = await stat(file);
@@ -235,6 +244,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
   }
   /** Delivers a step's snapshot and records it so a reloaded page can replay the run (see /api/resume). */
   function deliver(response: ServerResponse, id: string, session: Session | undefined, advance: Advance, snapshot: Snapshot, game: Game, gameId = session?.game ?? path.basename(game.root)): void {
+    const started = performance.now();
     const patched = patchTitleImage(game, snapshot);
     if (patched.error?.context) patched.error.context.server = {
       game: gameId, session: id, step: session ? session.step + 1 : 0, action: advance,
@@ -253,6 +263,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
       // The oldest steps go first; the browser keeps a bounded scrollback anyway.
       while (session.bytes > HISTORY_BYTES && session.history.length > 1) session.bytes -= session.history.shift()!.bytes;
     }
+    serverTiming(response, "prepare", started);
     json(response, { session: id, step: session?.step ?? 0, ...patched });
   }
   /**
@@ -305,6 +316,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
       const origin = request.headers.origin;
       if (origin && origin !== `http://${host}`) throw new HttpError(403, "Cross-origin requests are not allowed");
       const url = new URL(request.url ?? "/", `http://${host}`);
+      if (request.headers["x-era-profile"] === "1") response.setHeader("Server-Timing", "");
       if (request.method === "GET" && url.pathname === "/api/library") {
         json(response, {
           installed: [...entries.values()].map(({ id, title, game }) => {
@@ -385,7 +397,9 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
             ...(client ? { client } : {}),
           });
           executionBreadcrumb(id, entry.id, 0, "start", debug);
+          const started = performance.now();
           const snapshot = runtime.start();
+          serverTiming(response, "execute", started);
           const session: Session | undefined = snapshot.status === "waiting"
             ? { runtime, used: now, mode: data.mode, game: entry.id, debug, history: [], bytes: 0, step: 0 } : undefined;
           if (session) sessions.set(id, session);
@@ -416,7 +430,9 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
           const waiting = session.history.at(-1)?.snapshot.input?.kind === "wait";
           const kind = session.history.at(-1)?.snapshot.input?.kind ?? "unknown";
           executionBreadcrumb(data.session, session.game, session.step, `${timeout ? "timeout" : "input"} (${kind})`, session.debug);
+          const started = performance.now();
           const snapshot = timeout ? session.runtime.timeout() : session.runtime.input(data.value as string);
+          serverTiming(response, "execute", started);
           if (snapshot.status !== "waiting") sessions.delete(data.session);
           deliver(response, data.session, session, timeout ? "timeout" : waiting ? "continue" : "input", snapshot, session.runtime.game);
         } catch (error) {
@@ -625,7 +641,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
       }
       const pages: Record<string, string> = {
         "/": "index.html", "/app.js": "app.js", "/translate.js": "translate.js", "/interaction-history.js": "interaction-history.js", "/llm.js": "llm.js", "/encounters.js": "encounters.js", "/style.css": "style.css",
-        "/library.js": "library.js", "/library.css": "library.css", "/cache.js": "cache.js",
+        "/library.js": "library.js", "/library.css": "library.css", "/cache.js": "cache.js", "/performance.js": "performance.js",
         "/art-demo": "art-demo.html", "/art-demo.js": "art-demo.js", "/art-demo.css": "art-demo.css", "/sky.js": "sky.js",
         "/title/new-game.webp": "title/new-game.webp", "/title/load-game.webp": "title/load-game.webp",
         "/moon.svg": "moon.svg",
