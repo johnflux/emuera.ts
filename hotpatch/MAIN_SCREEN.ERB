@@ -127,7 +127,7 @@ ENDIF
 ;-------------------------------------------------
 HTML_PRINT "<era-open class='era-layout era-main'>"
 HTML_PRINT "<era-open class='era-main-header'>"
-CALL HOTPATCH_SKY(天気非表示)
+CALL HOTPATCH_SKY
 HTML_PRINT "<era-open class='era-main-when'>"
 CALL INFO_TIME_WATCH
 SIF !天気非表示
@@ -742,12 +742,11 @@ SIF STRLENS(sHtml)
 
 ;-------------------------------------------------------------------------------
 ; The header's backdrop, drawn by CSS from its classes: the sky for the hour (TIME), the weather (TIME:5, abnormal
-; weather FLAG:異常気象), the season's land (DAY:2), dimmer under a roof (!OUTROOF), or a cave where the game hides
-; the weather (underground); and the area's landmark (HOTPATCH_AREA, web/areas/*.svg, or the pictures for the season
+; weather FLAG:異常気象), the season's land (DAY:2), and the area's landmark and ambience
+; (HOTPATCH_AREA, web/areas/*.svg, or the pictures for the season
 ; and time of day in web/areas/<area>/, which app.js picks from these classes). Decoration only: it prints one HTML line.
 ;-------------------------------------------------------------------------------
-@HOTPATCH_SKY(nNoWeather)
-#DIM DYNAMIC nNoWeather
+@HOTPATCH_SKY
 #DIM DYNAMIC nHour
 #DIMS DYNAMIC sClass
 #DIMS CONST sSeason, 5 = "spring", "spring", "summer", "autumn", "winter"
@@ -784,11 +783,6 @@ ENDSELECT
 SIF FLAG:異常気象
 	sClass += " era-weather-strange"
 sClass += " era-season-" + sSeason:(LIMIT(DAY:2, 0, 4))
-IF nNoWeather
-	sClass += " era-underground"
-ELSEIF !OUTROOF(CFLAG:MASTER:現在位置)
-	sClass += " era-indoor"
-ENDIF
 SIF HOTPATCH_AREA() >= 0
 	sClass += @" era-area-{HOTPATCH_AREA()}"
 HTML_PRINT @"<div class='era-sky %sClass%' data-minutes='{TIME}' data-season='{LIMIT(DAY:2, 1, 4)}' data-day='{LIMIT(DAY:3, 1, 31)}'><span class='era-sky-view'><span class='era-sky-orb'></span><span class='era-sky-clouds'></span><span class='era-sky-landmark'></span><span class='era-sky-fall'></span><span class='era-sky-land'></span></span></div>"

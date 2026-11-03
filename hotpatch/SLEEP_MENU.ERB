@@ -28,7 +28,7 @@ SIF FLAG:気絶中断
 
 HTML_PRINT "<era-open class='era-layout era-shop'>"
 HTML_PRINT "<era-open class='era-main-header'>"
-CALL HOTPATCH_SKY(0)
+CALL HOTPATCH_SKY
 HTML_PRINT "<era-open class='era-main-when'>"
 PRINTFORM %COND_STR(@"NG:{FLAG:周回数}, ", FLAG:周回数)%Day {DAY}, %PRINT_DATE_F(DAY, 1)% (
 CALL COLOR_YOUBI

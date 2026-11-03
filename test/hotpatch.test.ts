@@ -142,8 +142,9 @@ QUIT`, "<clock-test>");
 
 test("sky hotpatch passes exact game minutes without changing time or weather classes", () => {
   const patch = readFileSync(new URL("../hotpatch/MAIN_SCREEN.ERB", import.meta.url), "utf8");
-  const routine = patch.slice(patch.indexOf("@HOTPATCH_SKY("), patch.indexOf("@HOTPATCH_SITUATION\n"));
+  const routine = patch.slice(patch.indexOf("@HOTPATCH_SKY\n"), patch.indexOf("@HOTPATCH_SITUATION\n"));
   for (const jit of [false, true]) {
+    for (const area of [0, 9])
     for (const [minutes, phase] of [[240, "dawn"], [367, "morning"], [720, "day"], [1080, "evening"], [1439, "night"], [1807, "morning"]] as const) {
       const game = emptyGame();
       game.names.set("FLAG", new Map([["異常気象", 1]]));
@@ -155,21 +156,18 @@ TIME = ${minutes}
 TIME:5 = 7
 DAY:2 = 1
 DAY:3 = 15
-CALL HOTPATCH_SKY(0)
+CALL HOTPATCH_SKY
 PRINTFORML Time: {TIME}
 QUIT
 ${routine}
 @HOTPATCH_AREA
 #FUNCTION
-RETURNF 0
-@OUTROOF(ARG)
-#FUNCTION
-RETURNF 1`, "<sky-test>");
+RETURNF ${area}`, "<sky-test>");
       const snapshot = new Runtime(game, undefined, { jit }).start();
       assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
       const markup = snapshot.output.flatMap((item) => item.type === "html" ? [item.text] : []);
       assert.equal(markup.length, 1);
-      assert.match(markup[0]!, new RegExp(`class='era-sky era-sky-${phase} era-weather-fog era-season-spring era-area-0' data-minutes='${minutes}'`));
+      assert.match(markup[0]!, new RegExp(`class='era-sky era-sky-${phase} era-weather-fog era-season-spring era-area-${area}' data-minutes='${minutes}'`));
       assert.match(markup[0]!, /data-season='1' data-day='15'/);
       assert.ok(snapshot.output.some((item) => item.type === "text" && item.text === `Time: ${minutes}`));
     }

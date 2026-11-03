@@ -23,7 +23,8 @@ test(`${area} panoramas have aligned transparent day/night artwork and appropria
   for (const part of ["left", "middle", "right"]) {
     const day = decodePng(await readFile(new URL(`${season}-day-${part}.png`, root)));
     const night = decodePng(await readFile(new URL(`${season}-night-${part}.png`, root)));
-    const expectedWidth = area === "10-moon" ? { left: 339, middle: 277, right: 384 }[part]
+    const expectedWidth = area === "9-underworld" ? { left: 360, middle: 294, right: 596 }[part]
+      : area === "10-moon" ? { left: 339, middle: 277, right: 384 }[part]
       : area === "7-foothills" && part === "middle" ? 511 : width;
     assert.equal(day.width, expectedWidth);
     assert.equal(day.height, 144);
@@ -35,14 +36,15 @@ test(`${area} panoramas have aligned transparent day/night artwork and appropria
       const join = (area === "7-foothills" && (part === "left" ? x >= day.width - 96
         : part === "right" ? x < 96 : x < 48))
         || (area === "8-summit" && (part === "left" ? x >= day.width - 64 : part === "right" && x < 64))
-        || (area === "10-moon" && (part === "left" ? x >= day.width - 32 : x < (part === "right" ? 32 : 24)));
-      if (!join) assert.ok(day.data[i + 3] === 0 || day.data[i + 3] === 255, "faint alpha residue is removed");
+        || (area === "10-moon" && (part === "left" ? x >= day.width - 32 : x < (part === "right" ? 32 : 24)))
+        || (area === "9-underworld" && (part === "left" ? x >= day.width - 48 : part === "right" && x < 48));
+      if (!join && area !== "9-underworld") assert.ok(day.data[i + 3] === 0 || day.data[i + 3] === 255, "faint alpha residue is removed");
       assert.equal(night.data[i + 3], day.data[i + 3], "night and weather blends stay aligned");
       if (!day.data[i + 3]) { clear++; continue; }
       dayLight += day.data[i]! + day.data[i + 1]! + day.data[i + 2]!;
       nightLight += night.data[i]! + night.data[i + 1]! + night.data[i + 2]!;
     }
-    assert.ok(clear / (day.width * day.height) > .3, `${part} leaves transparent sky`);
+    if (area !== "9-underworld") assert.ok(clear / (day.width * day.height) > .3, `${part} leaves transparent sky`);
     assert.ok(nightLight / dayLight > .2 && nightLight / dayLight < .6, `${part} legible night palette`);
     for (let x = 0; x < day.width; x++) if (day.data[(143 * day.width + x) * 4 + 3]) bottom++;
     assert.ok(bottom / day.width > .9, `${part} ground reaches the baseline`);
@@ -54,8 +56,8 @@ test(`${area} panoramas have aligned transparent day/night artwork and appropria
           if (day.data[(y * day.width + x) * 4 + 3] === 255) rock++;
         if (rock >= 3) ceiling++;
       }
-      assert.equal(ceiling, day.width, `${part} retains rock overhead across the entire panel`);
-      assert.equal(day.data[(60 * day.width + day.width - 30) * 4 + 3], 0, "cavern interior stays transparent");
+      assert.ok(ceiling >= day.width - 48, `${part} retains the painted cavern ceiling outside the joining fade`);
+      assert.ok(day.data[(60 * day.width + day.width - 60) * 4 + 3]! > 0, "painted cavern depth retains coverage");
     } else assert.equal(day.data[(10 * day.width + day.width - 30) * 4 + 3], 0);
     const lights = area === "1-temple"
       ? part === "right" ? [[194, 91, 217, 106], [276, 91, 299, 106]]
@@ -66,8 +68,8 @@ test(`${area} panoramas have aligned transparent day/night artwork and appropria
           : area === "5-forest" && part === "right" ? [[206, 99, 213, 108]]
             : area === "6-netherworld" && part === "right" ? [[348, 87, 378, 105]]
               : area === "7-foothills" && part === "right" ? [[401, 72, 408, 83]]
-                : area === "9-underworld" ? part === "left" ? [[54, 84, 63, 96]]
-                  : part === "right" ? [[149, 53, 185, 64]] : []
+                : area === "9-underworld" ? part === "left" ? [[140, 55, 160, 80]]
+                  : part === "right" ? [[201, 67, 233, 91], [149, 93, 167, 109]] : []
                   : area === "10-moon" ? part === "left" ? [[75, 80, 90, 102], [175, 80, 190, 102]]
                     : part === "right" ? [[150, 68, 201, 88], [110, 85, 128, 106], [232, 85, 250, 106]] : [] : [];
     for (const [left, top, right, bottom] of lights) {
@@ -77,6 +79,74 @@ test(`${area} panoramas have aligned transparent day/night artwork and appropria
         if (night.data[i + 3] && night.data[i]! > 150 && night.data[i]! > night.data[i + 2]! * 1.5) warm++;
       }
       assert.ok(warm > 2, `${part} warm light`);
+    }
+  }
+});
+
+test("Underworld depth is translucent while foreground stays opaque and joins stay aligned", async () => {
+  for (const phase of ["day", "night"]) for (const part of ["left", "middle", "right"]) {
+    const art = decodePng(await readFile(new URL(`../web/areas/9-underworld/neutral-${phase}-${part}.png`, import.meta.url)));
+    let translucent = 0;
+    for (let y = 0; y < art.height; y++) for (let x = 0; x < art.width; x++) {
+      const distance = part === "left" ? art.width - 1 - x : part === "right" ? x : 48;
+      const t = Math.min(1, distance / 47);
+      const alpha = art.data[(y * art.width + x) * 4 + 3]!;
+      const joinAlpha = Math.round(255 * t * t * (3 - 2 * t));
+      assert.ok(alpha <= joinAlpha && alpha >= Math.round(joinAlpha * .35) - 1);
+      const doorway = part === "left" && x > 58 && x < 91 && y > 42 && y < 99;
+      if (y <= 35 || y >= 120 || (part === "left" && x <= 220 && !doorway)
+        || (part === "right" && x >= 65)
+        || art.data[(y * art.width + x) * 4]! > 80)
+        assert.equal(alpha, joinAlpha, "foreground and architecture alpha is unchanged");
+      else if (alpha < joinAlpha && distance >= 48) translucent++;
+    }
+    if (part !== "right") assert.ok(translucent > 1000, "distant tunnels transmit the background");
+    if (part === "middle") {
+      const pixel = (85 * art.width + 160) * 4;
+      const alpha = art.data[pixel + 3]! / 255;
+      const nightBackground = [9, 10, 29];
+      const dayBackground = [179, 197, 255];
+      for (let c = 0; c < 3; c++) {
+        assert.equal(art.data[pixel + c], nightBackground[c], "deep tunnel has the exact night background colour");
+        const nightComposite = art.data[pixel + c]! * alpha + nightBackground[c]! * (1 - alpha);
+        assert.equal(Math.round(nightComposite), nightBackground[c], "tunnel detail vanishes into the night background");
+        const dayComposite = art.data[pixel + c]! * alpha + dayBackground[c]! * (1 - alpha);
+        assert.ok(Math.abs(dayComposite - [111, 122, 169][c]!) < 12, "midday fog retains a pale blue-lavender colour");
+      }
+      let difference = 0;
+      for (let y = 0; y < art.height; y++) for (let c = 0; c < 4; c++)
+        difference += Math.abs(art.data[y * art.width * 4 + c]! - art.data[(y * art.width + art.width - 1) * 4 + c]!);
+      assert.ok(difference / (art.height * 4) < 10, "repeating ceiling and floor have a softened seam");
+    }
+  }
+});
+
+test("Underworld doorway depth is subtle while palace and far-right shading stay opaque", async () => {
+  for (const part of ["left", "right"]) {
+    const day = decodePng(await readFile(new URL(`../web/areas/9-underworld/neutral-day-${part}.png`, import.meta.url)));
+    const night = decodePng(await readFile(new URL(`../web/areas/9-underworld/neutral-night-${part}.png`, import.meta.url)));
+    const samples = part === "left" ? [[65, 65], [70, 80]] : [];
+    for (const [x, y] of samples) {
+      const i = (y! * day.width + x!) * 4;
+      for (const art of [day, night]) {
+        assert.deepEqual([...art.data.slice(i, i + 3)], [9, 10, 29], "side depth matches the night background");
+        const alpha = art.data[i + 3]! / 255;
+        assert.ok(alpha > .8 && alpha < .97, "side transparency remains subtler than the central tunnels");
+        assert.ok(Math.round(29 * alpha + 255 * (1 - alpha)) > 40, "side depth responds to daytime and storm light");
+      }
+      if (part === "right") for (const [x, y] of [[300, 55], [480, 80], [550, 70]]) {
+        const i = (y! * day.width + x!) * 4;
+        assert.equal(day.data[i + 3], 255);
+        assert.equal(night.data[i + 3], 255);
+        assert.notDeepEqual([...day.data.slice(i, i + 3)], [9, 10, 29], "original painted shading is retained");
+      }
+      assert.equal(day.data[i + 3], night.data[i + 3]);
+    }
+    const lights = part === "left" ? [[150, 60]] : [[210, 80], [270, 105]];
+    for (const [x, y] of lights) {
+      const i = (y! * day.width + x!) * 4;
+      assert.equal(day.data[i + 3], 255);
+      assert.equal(night.data[i + 3], 255);
     }
   }
 });

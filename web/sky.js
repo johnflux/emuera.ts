@@ -30,6 +30,8 @@ export function sky(node, element) {
   element.style.setProperty("--sky-orb-top", `${93 - 83 * elevation}px`);
   element.style.setProperty("--sky-warmth", `${night && phase !== "night" ? 100 : warmth * 100}%`);
   element.style.setProperty("--sky-darkness", String(night ? Math.min(1, Math.min(Math.abs(minutes - sunrise), Math.abs(minutes - sunset)) / twilight) : 0));
+  const caveDaylight = night ? 0 : Math.sin(daylight * Math.PI) ** 2;
+  element.style.setProperty("--cave-daylight", `${caveDaylight * 100}%`);
   return element;
 }
 
@@ -53,6 +55,13 @@ export function prepareSkyArt(outputRoot, manifest, loadImage, pendingImages, ar
     sky.classList.add("era-area-art");
     sky.classList.toggle("era-area-art-night", Boolean(lit));
     sky.classList.toggle("era-area-art-weather", Boolean(blend));
+    if (area === "9") {
+      const bats = document.createElement("span");
+      bats.className = "era-cave-bats";
+      bats.setAttribute("aria-hidden", "true");
+      for (let i = 0; i < 4; i++) bats.append(document.createElement("span"));
+      sky.querySelector(".era-sky-landmark")?.append(bats);
+    }
     const header = sky.closest(".era-main-header") ?? sky;
     for (const part of ["left", "middle", "right"]) {
       if (!set[part]) continue;

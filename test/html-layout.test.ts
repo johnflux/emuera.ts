@@ -195,27 +195,51 @@ test("area artwork fixes the header height and prevents horizontal scrolling fro
   assert.match(css, /\.era-main-header:has\(\.era-area-art\) > \.era-main-when \{[^}]*max-height: 100%; overflow: auto;/);
 });
 
-test("underground ambience uses a timeless cavern palette and hides celestial and weather layers", async () => {
-  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
-  const cavern = css.match(/\.era-sky:is\(\.era-underground, \.era-area-9\) \{([^}]+)\}/)?.[1];
-  assert.ok(cavern);
-  for (const colour of ["#3e77734d", "#bc855538", "#141321", "#30283e", "#49505b"])
-    assert.ok(cavern.includes(colour), `cavern palette includes ${colour}`);
-  assert.doesNotMatch(cavern, /sky-warmth|sky-darkness/);
-  assert.match(css, /\.era-sky:is\(\.era-underground, \.era-area-9\) \.era-sky-view \{ background: none; \}/);
-  assert.match(css, /\.era-sky:is\(\.era-underground, \.era-area-9\) \.era-sky-view::before,\s*\.era-sky:is\(\.era-underground, \.era-area-9\) \.era-sky-view::after \{ display: none; \}/);
-  for (const selector of ["era-underground", "era-area-9"])
-    assert.ok(css.includes(`.${selector} .era-sky-view > :not(.era-sky-landmark) { display: none; }`));
+test("header rendering has no indoor or outdoor setting in the demo or game", async () => {
+  for (const file of ["web/art-demo.html", "web/art-demo.js", "web/style.css", "hotpatch/MAIN_SCREEN.ERB", "hotpatch/SLEEP_MENU.ERB"]) {
+    const source = await readFile(new URL(`../${file}`, import.meta.url), "utf8");
+    assert.doesNotMatch(source, /era-indoor|era-underground|id="setting"|values\.get\("setting"\)|nNoWeather|HOTPATCH_SKY\(/);
+  }
+  const main = await readFile(new URL("../hotpatch/MAIN_SCREEN.ERB", import.meta.url), "utf8");
+  const sleep = await readFile(new URL("../hotpatch/SLEEP_MENU.ERB", import.meta.url), "utf8");
+  assert.match(main, /^@HOTPATCH_SKY$/m);
+  assert.match(main, /^CALL HOTPATCH_SKY$/m);
+  assert.match(sleep, /^CALL HOTPATCH_SKY$/m);
 });
 
-test("Moon sky uses a lunar palette for day, twilight and night without affecting underground skies", async () => {
+test("Underworld bats are confined to the cavern artwork and respect reduced motion", async () => {
+  const source = await readFile(new URL("../web/sky.js", import.meta.url), "utf8");
   const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
-  const day = css.match(/\.era-area-10:not\(\.era-underground\):is\(\.era-sky-dawn, \.era-sky-morning, \.era-sky-day, \.era-sky-evening\) \.era-sky-view \{([^}]+)\}/)?.[1];
+  assert.match(source, /if \(area === "9"\) \{[^}]*bats\.className = "era-cave-bats";[^}]*bats\.setAttribute\("aria-hidden", "true"\);[^}]*i < 4[^}]*sky\.querySelector\("\.era-sky-landmark"\)\?\.append\(bats\);/);
+  assert.match(css, /\.era-cave-bats \{[^}]*pointer-events: none; overflow: hidden;/);
+  assert.match(css, /animation: era-bat-flight 8s ease-in-out infinite alternate/);
+  assert.match(css, /animation: era-bat-wings \.32s steps\(1\) infinite;/);
+  assert.match(css, /\.era-cave-bats > span::after \{[^}]*width: 3px; height: 5px;/);
+  assert.match(css, /@keyframes era-bat-wings \{\s*50% \{ clip-path: polygon/);
+  assert.match(css, /0% \{ transform: translate\(-65px, -32px\); \}\s*25% \{ transform: translate\(30px, 32px\); \}/);
+  assert.match(css, /@media \(prefers-reduced-motion: reduce\) \{\s*\.era-cave-bats \{ display: none; \}\s*\.era-cave-bats > span, \.era-cave-bats > span::before \{ animation: none; \}/);
+});
+
+test("Underworld ambience follows location and retains weaker fog and storm flashes", async () => {
+  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  assert.match(css, /\.era-sky\.era-area-9 \{ background: color-mix\(in srgb, #b3c5ff var\(--cave-daylight, 100%\), #090a1d\); \}/);
+  assert.doesNotMatch(css, /era-cave-depth|depth-shade/);
+  assert.match(css, /\.era-sky\.era-area-9 \.era-sky-view \{ background: none; \}/);
+  assert.match(css, /\.era-sky\.era-area-9 \.era-sky-view::before,\s*\.era-sky\.era-area-9 \.era-sky-view::after \{ display: none; \}/);
+  assert.ok(css.includes(".era-area-9 .era-sky-view > :not(.era-sky-landmark) { display: none; }"));
+  assert.match(css, /\.era-sky\.era-area-9\.era-weather-fog \.era-sky-view::after \{ display: block; opacity: \.5; \}/);
+  assert.match(css, /\.era-sky\.era-area-9\.era-weather-storm \.era-sky-view::after \{\s*content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none;\s*display: block; background: none; animation: era-lightning 13s -3s linear infinite; \}/);
+  assert.match(css, /@media \(prefers-reduced-motion: reduce\) \{\s*\.era-sky\.era-area-9\.era-weather-storm \.era-sky-view::after \{ animation: none; \}/);
+});
+
+test("Moon sky uses a lunar palette for day, twilight and night", async () => {
+  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  const day = css.match(/\.era-area-10:is\(\.era-sky-dawn, \.era-sky-morning, \.era-sky-day, \.era-sky-evening\) \.era-sky-view \{([^}]+)\}/)?.[1];
   assert.ok(day);
   for (const colour of ["#242139", "#57506e", "#b6a8c6", "#302039", "#8b5d80", "#dfaaa8"])
     assert.ok(day.includes(colour), `lunar palette includes ${colour}`);
   assert.match(day, /var\(--sky-warmth, 0%\)/);
-  assert.match(css, /\.era-area-10\.era-sky-night:not\(\.era-underground\) \.era-sky-view \{\s*background: linear-gradient\(#080611, #241c3d\); \}/);
+  assert.match(css, /\.era-area-10\.era-sky-night \.era-sky-view \{\s*background: linear-gradient\(#080611, #241c3d\); \}/);
   assert.match(css, /\.era-area-10:is\(\.era-sky-dawn, \.era-sky-evening\) \.era-sky-view::before \{\s*background: linear-gradient\(#080611, #241c3d\); \}/);
 });
 
@@ -258,6 +282,8 @@ test("sky follows exact game minutes with a bounded arc and warm sunrise and sun
   assert.ok(Math.abs(Number(draw("720").get("--sky-orbit")) - .5) < 1e-12);
   assert.equal(draw("720").get("--sky-orb-top"), "10px");
   assert.equal(draw("720").get("--sky-warmth"), "0%");
+  assert.equal(draw("720").get("--cave-daylight"), "100%");
+  assert.equal(draw("0").get("--cave-daylight"), "0%");
   for (let minutes = 0; minutes < 1440; minutes++) {
     const properties = draw(String(minutes));
     const top = Number.parseFloat(properties.get("--sky-orb-top")!);
@@ -280,6 +306,11 @@ test("sky follows exact game minutes with a bounded arc and warm sunrise and sun
     assert.equal(draw(String(sunrise - 15), season).get("phase"), "era-sky-dawn");
     assert.equal(draw(String(sunset + 15), season).get("phase"), "era-sky-evening");
     assert.equal(draw(String(sunset + 31), season).get("phase"), "era-sky-night");
+    for (const boundary of [sunrise, sunset]) {
+      const light = Number.parseFloat(draw(String(boundary), season).get("--cave-daylight")!);
+      assert.ok(light < .1, "cave depth is dark by sunrise/sunset");
+    }
+    assert.ok(Number.parseFloat(draw("1020", season).get("--cave-daylight")!) < Number.parseFloat(draw("900", season).get("--cave-daylight")!), "tunnel visibility decreases through the afternoon");
     const dawnVisibility = [31, 15, 1].map((before) => Number(draw(String(sunrise - before), season).get("--sky-darkness")));
     assert.equal(dawnVisibility[0], 1, "Earth is fully visible before dawn");
     assert.ok(dawnVisibility[1]! > .45 && dawnVisibility[1]! < .55, "Earth is half faded midway through dawn");
@@ -306,7 +337,7 @@ test("sky follows exact game minutes with a bounded arc and warm sunrise and sun
   assert.match(css, /linear-gradient\(color-mix\(in srgb, #2f78c4, #493b76 var\(--sky-warmth, 0%\)\)/);
   assert.match(css, /\.era-sky-moon \.era-sky-orb, \.era-sky-moon \.era-sky-clouds::after \{[^}]*background: url\(\/moon\.svg\)[^}]*box-shadow: none;[^}]*filter: drop-shadow/);
   assert.match(css, /\.era-sky-view::before \{[^}]*opacity: var\(--sky-darkness, 0\);[^}]*background-size: 389px 173px,[^}]*251px 137px,[^}]*173px 97px/);
-  assert.match(css, /\.era-underground \.era-sky-view > :not\(\.era-sky-landmark\) \{ display: none; \}/);
+  assert.match(css, /\.era-area-9 \.era-sky-view > :not\(\.era-sky-landmark\) \{ display: none; \}/);
 });
 
 test("area artwork blends bad-weather days and selects undimmed seasonal night panoramas", async () => {
@@ -384,9 +415,9 @@ test("panorama overlap clips only the middle and applies consistently to artwork
   assert.match(source, /preview\.querySelector\("\.era-sky"\)\?\.style\.setProperty\("--area-art-overlap"/);
 });
 
-test("foothill water highlights move independently and respect night, underground and reduced motion", async () => {
+test("foothill water highlights move independently and respect night and reduced motion", async () => {
   const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
-  assert.match(css, /\.era-area-7\[data-area-art\^="spring-"\]:not\(\.era-underground\) \.era-sky-land/);
+  assert.match(css, /\.era-area-7\[data-area-art\^="spring-"\] \.era-sky-land/);
   assert.match(css, /filter: url\(#era-water-highlight\); clip-path: inset\(70px 0 0\)/);
   assert.match(css, /mask-size: 24px 24px; animation: era-water-flow .65s linear infinite/);
   assert.match(css, /@keyframes era-water-flow \{ to \{ mask-position: -24px 24px; \} \}/);
@@ -407,10 +438,10 @@ test("foothill water highlights move independently and respect night, undergroun
   assert.equal(alpha(.25, .3, .5), 0, "dark mountain scenery stays still");
 });
 
-test("fog overlays the full top image but stays hidden underground", async () => {
+test("fog overlays the full top image with half strength in the Underworld", async () => {
   const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
   assert.match(css, /\.era-weather-fog \.era-sky-view::after \{ content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none;[^}]*background:/);
-  assert.match(css, /\.era-weather-fog\.era-underground \.era-sky-view::after \{ display: none; \}/);
+  assert.match(css, /\.era-sky\.era-area-9\.era-weather-fog \.era-sky-view::after \{ display: block; opacity: \.5; \}/);
 });
 
 test("night cloud, fog and snow palettes are muted and a blurred orb glows above clouds", async () => {
@@ -428,7 +459,7 @@ test("night cloud, fog and snow palettes are muted and a blurred orb glows above
 
 test("night panorama lights get a warm halo without blurring the scenery", async () => {
   const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
-  assert.match(css, /\.era-area-art-night:not\(\.era-underground\) \.era-sky-landmark::before \{[^}]*pointer-events: none; opacity: \.7;[^}]*--area-left[^}]*--area-right[^}]*--area-middle/);
+  assert.match(css, /\.era-area-art-night \.era-sky-landmark::before \{[^}]*pointer-events: none; opacity: \.7;[^}]*--area-left[^}]*--area-right[^}]*--area-middle/);
   assert.match(css, /filter: url\(#era-light-glow\)/);
   for (const file of ["index.html", "art-demo.html"]) {
     const html = await readFile(new URL(`../web/${file}`, import.meta.url), "utf8");

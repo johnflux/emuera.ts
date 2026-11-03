@@ -25,7 +25,6 @@ async function render() {
   header.className = "era-main-header";
   const scene = document.createElement("div");
   scene.className = `era-sky era-area-${values.get("location")} era-season-${season} era-weather-${String(values.get("weather")).toLowerCase()}`;
-  if (values.get("setting") !== "outdoor") scene.classList.add(`era-${values.get("setting")}`);
   scene.dataset.minutes = String(Number(time.value.slice(0, 2)) * 60 + Number(time.value.slice(3)));
   scene.dataset.season = values.get("season");
   scene.dataset.day = values.get("day");

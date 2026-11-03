@@ -327,10 +327,10 @@ body:has(.menu-panel:not([hidden])) .clock-overhang { visibility: hidden; }
     173px 97px, 173px 97px, 173px 97px, 173px 97px, 100% 100%; }
 :is(.era-sky-dawn, .era-sky-evening) .era-sky-view::before {
   background: linear-gradient(#060a1c, #18234a); }
-.era-area-10:not(.era-underground):is(.era-sky-dawn, .era-sky-morning, .era-sky-day, .era-sky-evening) .era-sky-view {
+.era-area-10:is(.era-sky-dawn, .era-sky-morning, .era-sky-day, .era-sky-evening) .era-sky-view {
   background: radial-gradient(ellipse at calc(100% - var(--sky-orb-right) - 15px) 110px, color-mix(in srgb, #e6b9ce55 var(--sky-warmth, 0%), transparent), transparent 60%),
     linear-gradient(color-mix(in srgb, #242139, #302039 var(--sky-warmth, 0%)), color-mix(in srgb, #57506e, #8b5d80 var(--sky-warmth, 0%)) 55%, color-mix(in srgb, #b6a8c6, #dfaaa8 var(--sky-warmth, 0%))); }
-.era-area-10.era-sky-night:not(.era-underground) .era-sky-view {
+.era-area-10.era-sky-night .era-sky-view {
   background: linear-gradient(#080611, #241c3d); }
 .era-area-10:is(.era-sky-dawn, .era-sky-evening) .era-sky-view::before {
   background: linear-gradient(#080611, #241c3d); }
@@ -375,7 +375,6 @@ body:has(.menu-panel:not([hidden])) .clock-overhang { visibility: hidden; }
 .era-sky-moon:is(.era-weather-snow, .era-weather-blizzard) .era-sky-clouds { background: linear-gradient(#28364aaa, #43536a88); }
 .era-sky-moon.era-weather-fog .era-sky-clouds { background: repeating-linear-gradient(#50607800 0 6px, #50607833 10px, #50607800 16px), linear-gradient(#2c394b88, #3c4a5e88); }
 .era-sky-moon.era-weather-fog .era-sky-view::after { background: repeating-linear-gradient(0deg, #53647b00 0 18px, #53647b33 24px, #53647b00 36px), linear-gradient(#35445a44, #46566d77); }
-.era-weather-fog.era-underground .era-sky-view::after { display: none; }
 :is(.era-weather-rain, .era-weather-storm, .era-weather-blizzard) .era-sky-fall::before,
 :is(.era-weather-rain, .era-weather-storm, .era-weather-blizzard) .era-sky-fall::after {
   content: ""; position: absolute; inset: -32px; pointer-events: none;
@@ -458,17 +457,18 @@ body:has(.menu-panel:not([hidden])) .clock-overhang { visibility: hidden; }
 .era-season-winter .era-sky-land { --land: linear-gradient(#eef4f8, #c4d2de); }
 :is(.era-sky-night, .era-sky-dawn) .era-sky-land { filter: brightness(.4) saturate(.7); }
 .era-sky-evening .era-sky-land { filter: brightness(.65) saturate(.9); }
-/* Indoors the sky is dimmer; underground there is only rock (and the area's cavern, if it has one). */
-.era-indoor .era-sky-view { filter: brightness(.7) saturate(.85); }
-.era-sky:is(.era-underground, .era-area-9) {
-  background: radial-gradient(ellipse at 18% 55%, #3e77734d, transparent 65%),
-    radial-gradient(ellipse at 84% 110%, #bc855538, transparent 55%),
-    linear-gradient(#141321, #30283e 55%, #49505b); }
-.era-sky:is(.era-underground, .era-area-9) .era-sky-view { background: none; }
-.era-sky:is(.era-underground, .era-area-9) .era-sky-view::before,
-.era-sky:is(.era-underground, .era-area-9) .era-sky-view::after { display: none; }
-.era-underground .era-sky-view > :not(.era-sky-landmark) { display: none; }
+/* Underworld ambience follows the location, independent of the current room. */
+.era-sky.era-area-9 { background: color-mix(in srgb, #b3c5ff var(--cave-daylight, 100%), #090a1d); }
+.era-sky.era-area-9 .era-sky-view { background: none; }
+.era-sky.era-area-9 .era-sky-view::before,
+.era-sky.era-area-9 .era-sky-view::after { display: none; }
 .era-area-9 .era-sky-view > :not(.era-sky-landmark) { display: none; }
+.era-sky.era-area-9.era-weather-fog .era-sky-view::after { display: block; opacity: .5; }
+.era-sky.era-area-9.era-weather-storm .era-sky-view::after {
+  content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  display: block; background: none; animation: era-lightning 13s -3s linear infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .era-sky.era-area-9.era-weather-storm .era-sky-view::after { animation: none; } }
 /* The area's landmark (web/areas/<map id>-<name>.svg) between the clock panel and the Time Stop button, standing on the
    land; woods repeat along the header instead. Darker at night like the land. */
 .era-sky-landmark { display: none; right: 12%; bottom: 6px; width: min(360px, 40%); height: calc(100% - 10px); background: no-repeat right bottom / contain;
@@ -491,7 +491,6 @@ body:has(.menu-panel:not([hidden])) .clock-overhang { visibility: hidden; }
 .era-area-5 .era-sky-landmark { background-size: auto 78%; background-position: left bottom; }
 :is(.era-sky-night, .era-sky-dawn) .era-sky-landmark { --landmark-tint: brightness(.5) saturate(.75); }
 .era-sky-evening .era-sky-landmark { --landmark-tint: brightness(.75) saturate(.9); }
-.era-underground .era-sky-landmark { --landmark-tint: ; left: 0; right: 0; width: auto; background-size: auto 100%; background-position: right bottom; }
 /* Area pictures (web/areas/<map id>-<name>/<season>-<day|night>-<left|middle|right>.png, chosen by app.js): pixel art
    at one art pixel per CSS pixel, scaled nearest-neighbour; the ends over the middle repeated along the header, which
    stays at their height. Day pictures at night are dimmed as above; night pictures are not. */
@@ -513,6 +512,32 @@ body:has(.menu-panel:not([hidden])) .clock-overhang { visibility: hidden; }
 .era-area-art.era-area-6 { --area-art-overlap: 96px; }
 .era-area-art.era-area-7 { --area-art-overlap: 360px; }
 .era-area-art.era-area-8 { --area-art-overlap: 176px; }
+.era-area-art.era-area-9 { --area-art-overlap: 48px; }
+.era-cave-bats { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.era-cave-bats > span { position: absolute; left: 26%; top: 48%; width: 14px; height: 10px;
+  animation: era-bat-flight 8s ease-in-out infinite alternate; }
+.era-cave-bats > span:nth-child(2) { left: 42%; top: 53%; animation-duration: 11s; animation-delay: -4s; }
+.era-cave-bats > span:nth-child(3) { left: 57%; top: 47%; animation-duration: 9s; animation-delay: -7s; }
+.era-cave-bats > span:nth-child(4) { left: 68%; top: 51%; animation-duration: 13s; animation-delay: -2s; }
+.era-cave-bats > span::before { content: ""; position: absolute; inset: 0; background: #0d0b18;
+  clip-path: polygon(0 0, 21% 10%, 43% 45%, 57% 45%, 79% 10%, 100% 0, 86% 50%, 71% 35%, 57% 65%, 43% 65%, 29% 35%, 14% 50%);
+  animation: era-bat-wings .32s steps(1) infinite; }
+.era-cave-bats > span::after { content: ""; position: absolute; left: 6px; top: 4px; width: 3px; height: 5px;
+  background: #0d0b18; clip-path: polygon(0 0, 50% 20%, 100% 0, 100% 80%, 50% 100%, 0 80%); }
+.era-cave-bats > span:nth-child(2)::before { animation-delay: -.08s; }
+.era-cave-bats > span:nth-child(3)::before { animation-duration: .38s; }
+.era-cave-bats > span:nth-child(4)::before { animation-duration: .28s; }
+@keyframes era-bat-flight {
+  0% { transform: translate(-65px, -32px); }
+  25% { transform: translate(30px, 32px); }
+  50% { transform: translate(125px, -32px); }
+  75% { transform: translate(20px, 32px); }
+  100% { transform: translate(-85px, -32px); } }
+@keyframes era-bat-wings {
+  50% { clip-path: polygon(29% 95%, 21% 60%, 43% 45%, 57% 45%, 79% 60%, 71% 95%, 71% 70%, 64% 85%, 57% 65%, 43% 65%, 36% 85%, 29% 70%); } }
+@media (prefers-reduced-motion: reduce) {
+  .era-cave-bats { display: none; }
+  .era-cave-bats > span, .era-cave-bats > span::before { animation: none; } }
 .era-area-art :is(.era-sky-landmark, .era-sky-land) {
   padding-left: min(50%, max(0px, calc(var(--area-left-width, 0px) - var(--area-art-overlap))));
   padding-right: min(50%, max(0px, calc(var(--area-right-width, 0px) - var(--area-art-overlap)))); }
@@ -523,7 +548,7 @@ body:has(.menu-panel:not([hidden])) .clock-overhang { visibility: hidden; }
 .era-area-art .era-sky-landmark::after,
 .era-area-art .era-sky-land::before { padding: inherit; }
 .era-sky.era-area-art .era-sky-land { display: none; }
-.era-area-7[data-area-art^="spring-"]:not(.era-underground) .era-sky-land {
+.era-area-7[data-area-art^="spring-"] .era-sky-land {
   display: block; height: 100%; background: none; border: 0; border-radius: 0; filter: none;
   -webkit-mask: none; mask: none; pointer-events: none; }
 .era-area-7[data-area-art^="spring-"] .era-sky-land::before {
@@ -543,7 +568,7 @@ body:has(.menu-panel:not([hidden])) .clock-overhang { visibility: hidden; }
 .era-area-art-weather .era-sky-landmark::after { content: ""; position: absolute; inset: 0; opacity: var(--area-weather-blend, 0); pointer-events: none;
   background: var(--area-weather-left) left bottom / auto no-repeat, var(--area-weather-right) right bottom / auto no-repeat, var(--area-weather-middle) left bottom / auto repeat-x; }
 /* Isolate bright warm pixels so windows glow without blurring the buildings or moonlit snow. */
-.era-area-art-night:not(.era-underground) .era-sky-landmark::before { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .7;
+.era-area-art-night .era-sky-landmark::before { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .7;
   background: var(--area-left, none) left bottom / auto no-repeat, var(--area-right, none) right bottom / auto no-repeat, var(--area-middle) left bottom / auto repeat-x;
   filter: url(#era-light-glow); }
 .era-sky.era-area-art .era-sky-land::before,
