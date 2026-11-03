@@ -377,6 +377,7 @@ function retireScreen(screen = currentScreen) {
 // its choices are usable again. Emuera keeps old buttons valid until new ones are
 // printed; choices that exist now are marked so later new choices can retire them.
 function reviveScreen(group) {
+  restoreHistoryScreen(group);
   group.classList.replace("is-history", "is-active");
   group.querySelectorAll(".history-dimmed").forEach((element) => { element.classList.remove("history-dimmed"); });
   group.querySelectorAll(".choice.is-selected").forEach((button) => { button.classList.remove("is-selected"); });
@@ -394,6 +395,56 @@ function reviveScreen(group) {
   group.querySelectorAll(".line").forEach((line) => { line.classList.add("is-revived-line"); });
   currentScreen = group;
   currentLine = null;
+}
+const SCROLLBACK_LINES = 500;
+const archivedScreens = new WeakMap();
+/** Detached originals preserve CLEARLINE/menu revival without cloning or laying out retired GUI trees. */
+function restoreHistoryScreen(group) {
+  const archived = archivedScreens.get(group);
+  if (!archived) return;
+  group.replaceChildren(...archived.original.childNodes);
+  archivedScreens.delete(group);
+}
+function compactHistoryScreen(group) {
+  if (archivedScreens.has(group)) return;
+  const original = document.createElement("div");
+  const sources = new Map();
+  const rows = [];
+  for (const source of group.querySelectorAll(".line")) {
+    const row = document.createElement("div");
+    row.className = "line";
+    row.dataset.logicalLines = source.dataset.logicalLines ?? "1";
+    const echo = source.querySelector(".scrollback-input");
+    const gui = source.closest(".era-box") || source.querySelector(
+      "button, a, img, canvas, svg, input, select, textarea, meter, table, .sprite-clip");
+    const text = echo ? echo.textContent : gui || source.classList.contains("era-marker") ? "" : source.textContent;
+    row.textContent = text && !ruleTail.test(text) ? text : "";
+    row.hidden = !row.textContent.trim();
+    sources.set(row, source);
+    rows.push(row);
+  }
+  original.append(...group.childNodes);
+  group.replaceChildren(...rows);
+  archivedScreens.set(group, { original, sources });
+}
+function trimScrollback() {
+  const groups = [...outputRoot.querySelectorAll(".screen.is-history")];
+  for (const group of groups) compactHistoryScreen(group);
+  let retained = 0;
+  // Count logical output, including hidden GUI/marker lines, so invisible history is bounded too.
+  for (const group of groups.reverse()) {
+    const archived = archivedScreens.get(group);
+    for (const row of [...group.children].reverse()) {
+      const count = Math.max(1, Number(row.dataset.logicalLines));
+      if (retained + count > SCROLLBACK_LINES) {
+        removeLine(archived.sources.get(row));
+        archived.sources.delete(row);
+        row.remove();
+      }
+      retained = Math.min(SCROLLBACK_LINES, retained + count);
+    }
+    if (!group.childElementCount) group.remove();
+  }
 }
 // Once a revived screen's choices go stale (new choices were printed after them), its leading output that is wholly
 // from before the revival moves to a history screen of its own, so it looks and behaves like any older screen.
@@ -1959,6 +2010,7 @@ async function renderSnapshot(snapshot, advanceScreen) {
       let reachedHistory = false;
       while (remaining > 0 && outputRoot.lastElementChild) {
         const group = outputRoot.lastElementChild;
+        restoreHistoryScreen(group);
         const last = [...group.querySelectorAll(".line")].at(-1);
         if (!last) {
           group.remove();
@@ -2044,7 +2096,10 @@ async function renderSnapshot(snapshot, advanceScreen) {
         span.textContent = `[HTML renderer: ${error.message}]`;
       }
     } else if (output.type === "button") span.append(choice(output.text, output.value));
-    else if (output.type === "input") span.textContent = output.text;
+    else if (output.type === "input") {
+      span.classList.add("scrollback-input");
+      span.textContent = output.text;
+    }
     if (output.newline) currentLine = null;
     if (advanceScreen && output.type === "input") {
       retireScreen();
@@ -2129,16 +2184,7 @@ async function renderSnapshot(snapshot, advanceScreen) {
   } else message(snapshot.status !== "waiting" ? "Execution finished."
     : input.kind === "wait" ? "Click or press Enter to continue."
     : input.kind === "mousekey" ? "Click, scroll or press a key." : `Waiting for ${input.kind} input.`);
-  // Keep DOM memory bounded during repeated demo / script runs.
-  const lines = [...outputRoot.querySelectorAll(".screen .line")];
-  if (lines.length > 5000) {
-    for (const oldLine of lines.slice(0, lines.length - 4000)) {
-      const group = oldLine.closest(".screen");
-      removeLine(oldLine);
-      if (!group.querySelector(".line")) group.remove();
-    }
-    message("Older output was trimmed (4,000 displayed lines retained).");
-  }
+  trimScrollback();
 }
 function showReport(visible) {
   report.hidden = !visible;

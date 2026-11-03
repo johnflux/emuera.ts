@@ -842,11 +842,14 @@ global writes made while running ahead are staged (`StagedStores` in
 drop them. Timed and blocking waits (`TWAIT`, `TINPUT`) are not run ahead.
 Clock functions read while running ahead see the earlier time, and text laid
 out ahead uses the columns from the previous request.
-Each accepted input retires its output screen: earlier screens are grayscale and
-dimmed, with choices disabled and links removed from keyboard/pointer interaction.
-Clicked choices retain 70% brightness through
-`is-selected` in history after accepted input; surrounding output stays dimmed.
-This does not re-enable interaction. Typed input does not guess a matching choice.
+Each accepted input retires its output screen. Retired screens become lightweight,
+dimmed text: dialogue/narration outside layout panels and echoed input are kept;
+menus, artwork, status panels and other controls are omitted. Scrollback retains
+at most 500 logical output lines (hidden GUI/marker lines count toward the budget
+too). The active screen and dialogue still awaiting continuation are not trimmed.
+Detached originals within that same budget support line clearing and menu revival;
+they do not participate in layout or the visual copy made during each render.
+This limit does not affect saved character interaction history or native saves.
 Only the latest screen has active choices. Rejected input leaves the current
 screen active. Line clearing and scrollback limits still operate on output lines
 across screen boundaries, not on the screen wrappers. When `CLEARLINE` removes
