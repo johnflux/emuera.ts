@@ -67,7 +67,7 @@ export function lanternFlicker(random = Math.random) {
 }
 
 /** Apply panorama images while leaving weather, sky and SVG fallbacks to the shared stylesheet. */
-export function prepareSkyArt(outputRoot, manifest, loadImage, pendingImages, artwork = "auto") {
+export function prepareSkyArt(outputRoot, manifest, sourceImage, pendingImages, artwork = "auto") {
   const skies = [...outputRoot.querySelectorAll(".era-sky[class*='era-area-']:not([data-area-art])")];
   for (const sky of skies) {
     sky.dataset.areaArt = "";
@@ -108,15 +108,13 @@ export function prepareSkyArt(outputRoot, manifest, loadImage, pendingImages, ar
       if (area === "7" && sets["spring-day"]?.[part])
         sky.style.setProperty(`--area-water-${part}`, `url("${sets["spring-day"][part]}")`);
       sky.style.setProperty(`--area-${part}`, `url("${set[part]}")`);
-      const img = new Image();
-      pendingImages.push(loadImage(img, set[part]).then(() => {
+      pendingImages.push(sourceImage(set[part]).then((img) => {
         if (part === "middle") header.style.setProperty("--area-art-height", `${img.naturalHeight}px`);
         else sky.style.setProperty(`--area-${part}-width`, `${img.naturalWidth}px`);
       }, (error) => console.warn(`Area picture ${set[part]}:`, error)));
       if (blend) {
         sky.style.setProperty(`--area-weather-${part}`, `url("${weatherSet[part]}")`);
-        const weatherImage = new Image();
-        pendingImages.push(loadImage(weatherImage, weatherSet[part])
+        pendingImages.push(sourceImage(weatherSet[part])
           .catch((error) => console.warn(`Area picture ${weatherSet[part]}:`, error)));
       }
     }

@@ -102,6 +102,26 @@ function json(response: ServerResponse, data: unknown, status = 200): void {
   response.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
   response.end(JSON.stringify(data));
 }
+async function serveFile(request: IncomingMessage, response: ServerResponse, file: string, development: boolean): Promise<void> {
+  const info = await stat(file);
+  const etag = `W/"${info.size.toString(16)}-${info.mtimeMs.toString(16)}-${info.ctimeMs.toString(16)}"`;
+  const version = new URL(request.url!, "http://localhost").searchParams.get("v");
+  response.setHeader("Cache-Control", !development && version === String(Math.round(info.mtimeMs))
+    ? "private, max-age=31536000, immutable" : "private, no-cache");
+  response.setHeader("ETag", etag);
+  response.setHeader("Last-Modified", info.mtime.toUTCString());
+  const matches = request.headers["if-none-match"]?.split(",").map((value) => value.trim().replace(/^W\//, ""));
+  const modifiedSince = request.headers["if-modified-since"];
+  if (matches ? matches.includes("*") || matches.includes(etag.replace(/^W\//, ""))
+    : modifiedSince && Math.floor(info.mtimeMs / 1000) * 1000 <= Date.parse(modifiedSince)) {
+    response.writeHead(304);
+    response.end();
+    return;
+  }
+  const bytes = await readFile(file);
+  response.writeHead(200, { "Content-Type": mime[path.extname(file).toLowerCase()]!, "Content-Length": bytes.length });
+  response.end(bytes);
+}
 async function body(request: IncomingMessage, limit = 16_384): Promise<Record<string, unknown>> {
   const chunks: Buffer[] = [];
   let size = 0;
@@ -580,8 +600,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
           throw new HttpError(400, "Invalid resource path encoding");
         }
         const file = await resourceFile(gameDirectory(game.root, resource[2]!), relative, resource[2] === "sound");
-        response.writeHead(200, { "Content-Type": mime[path.extname(file).toLowerCase()]! });
-        response.end(await readFile(file));
+        await serveFile(request, response, file, development);
         return;
       }
       if (request.method === "GET" && url.pathname === "/api/maps") {
@@ -606,7 +625,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
       }
       const pages: Record<string, string> = {
         "/": "index.html", "/app.js": "app.js", "/translate.js": "translate.js", "/interaction-history.js": "interaction-history.js", "/llm.js": "llm.js", "/encounters.js": "encounters.js", "/style.css": "style.css",
-        "/library.js": "library.js", "/library.css": "library.css",
+        "/library.js": "library.js", "/library.css": "library.css", "/cache.js": "cache.js",
         "/art-demo": "art-demo.html", "/art-demo.js": "art-demo.js", "/art-demo.css": "art-demo.css", "/sky.js": "sky.js",
         "/title/new-game.webp": "title/new-game.webp", "/title/load-game.webp": "title/load-game.webp",
         "/moon.svg": "moon.svg",
@@ -625,9 +644,11 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
         || /^\/areas\/\d+-[a-z]+\/(spring|summer|autumn|winter|neutral)-(day|night)-(left|middle|right)\.png$/.test(url.pathname)
         || /^\/maps\/[a-z0-9-]+\.(webp|svg|png|jpg)$/.test(url.pathname) ? url.pathname.slice(1) : undefined);
       if (request.method === "GET" && page) {
-        const body = await readFile(path.join(WEB_ROOT, page)).catch(() => { throw new HttpError(404, "Not found"); });
-        response.writeHead(200, { "Content-Type": mime[path.extname(page)]! });
-        response.end(body);
+        try { await serveFile(request, response, path.join(WEB_ROOT, page), development); }
+        catch (error) {
+          if (error instanceof Error && "code" in error && error.code === "ENOENT") throw new HttpError(404, "Not found");
+          throw error;
+        }
         return;
       }
       throw new HttpError(404, "Not found");

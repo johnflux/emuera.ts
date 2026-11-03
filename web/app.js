@@ -4,6 +4,7 @@ import { sky, prepareSkyArt } from "./sky.js";
 import { disposeCharacterChats, sendInlineChat, setHistoryTranslator, setupInlineChat } from "./interaction-history.js";
 import { activeLlm, PROVIDERS, setupLlmConfig } from "./llm.js";
 import { encountersEnabled, gossipEnabled, memoriesEnabled, runEncounters, runGossip, runMemories, writeMemory } from "./encounters.js";
+import { cached, LruCache } from "./cache.js";
 
 const terminal = document.querySelector("#terminal");
 const timeEffect = document.querySelector("#time-effect");
@@ -124,7 +125,7 @@ let continuedScreens = [];
 let outputRoot = terminal;
 let pendingImages = [];
 let generation = 0;
-const sprites = new Map();
+const sprites = new LruCache(2 * 1024 * 1024, 512);
 const SETTINGS_KEY = "era-typescript.settings";
 /** Emuera's configured font size and line height (emuera.config), the units game image layouts are written in. */
 let metrics = { fontSize: 18, lineHeight: 19, columns: 20 };
@@ -1026,29 +1027,19 @@ async function loadImage(img, url) {
   try { await Promise.race([img.decode(), hidden]); }
   finally { document.removeEventListener("visibilitychange", onVisibilityChange); }
 }
-const sourceImages = new Map();
+const sourceImages = new LruCache(64 * 1024 * 1024, 256);
 function sourceImage(url) {
-  let promise = sourceImages.get(url);
-  if (!promise) {
+  return cached(sourceImages, url, async () => {
     const img = new Image();
-    promise = loadImage(img, url).then(() => img);
-    promise.catch(() => sourceImages.delete(url));
-    sourceImages.set(url, promise);
-  }
-  return promise;
+    await loadImage(img, url);
+    return img;
+  }, (img) => img.naturalWidth * img.naturalHeight * 4);
 }
-const paintedPictures = new Map();
+const paintedPictures = new LruCache(32 * 1024 * 1024, 128);
 /** Paints a runtime graphics display list (GCREATE/GDRAWSPRITE/GDRAWG...) onto a canvas. */
 function paintPicture(picture) {
   const cacheKey = JSON.stringify(picture);
-  let promise = paintedPictures.get(cacheKey);
-  if (!promise) {
-    promise = paintOps(picture);
-    promise.catch(() => paintedPictures.delete(cacheKey));
-    if (paintedPictures.size > 200) paintedPictures.delete(paintedPictures.keys().next().value);
-    paintedPictures.set(cacheKey, promise);
-  }
-  return promise;
+  return cached(paintedPictures, cacheKey, () => paintOps(picture), (canvas) => canvas.width * canvas.height * 4);
 }
 function newCanvas(width, height) {
   const canvas = document.createElement("canvas");
@@ -1298,12 +1289,9 @@ async function image(source, token, suppliedSprite, scale = imageScale(), suppli
   // Builds one clipped picture; src and srcb (the mouse-over picture) share the img's size and ypos.
   const clipFor = async (name, supplied) => {
     const cacheKey = `${runGame}\n${name}`;
-    let promise = supplied ? Promise.resolve(supplied) : sprites.get(cacheKey);
-    if (!promise) {
-      promise = api(`/api/sprite?name=${encodeURIComponent(name)}${runGame ? `&game=${encodeURIComponent(runGame)}` : ""}`);
-      sprites.set(cacheKey, promise);
-    }
-    const sprite = await promise;
+    const sprite = supplied ?? await cached(sprites, cacheKey,
+      () => api(`/api/sprite?name=${encodeURIComponent(name)}${runGame ? `&game=${encodeURIComponent(runGame)}` : ""}`),
+      (value) => JSON.stringify(value).length * 2);
     if (token !== generation) return undefined;
     // img is the whole source (sheet or painted canvas); sprite.x/y/width/height crop it.
     let img, naturalWidth, naturalHeight, layers = [];
@@ -1317,10 +1305,10 @@ async function image(source, token, suppliedSprite, scale = imageScale(), suppli
       img = await pictureCopy(sprite.picture);
       [naturalWidth, naturalHeight] = [img.width, img.height];
     } else {
-      img = document.createElement("img");
+      const source = await sourceImage(sprite.url);
+      img = source.cloneNode();
       img.alt = name;
-      await loadImage(img, sprite.url);
-      [naturalWidth, naturalHeight] = [img.naturalWidth, img.naturalHeight];
+      [naturalWidth, naturalHeight] = [source.naturalWidth, source.naturalHeight];
     }
     if (token !== generation) return undefined;
     const width = sprite.width || naturalWidth;
@@ -1386,7 +1374,7 @@ async function prepareAreaArt() {
   if (!skies.length) return;
   areaManifest ??= api("/api/areas").catch((error) => { console.warn("Area pictures unavailable:", error); return {}; });
   const manifest = await areaManifest;
-  prepareSkyArt(outputRoot, manifest, loadImage, pendingImages);
+  prepareSkyArt(outputRoot, manifest, sourceImage, pendingImages);
 }
 /**
  * Hotpatch extension: map pictures. The map renderers (hotpatch/MOVE_MAP.ERB) wrap a text map in
@@ -1409,10 +1397,12 @@ async function prepareMapPictures() {
     const entry = mapManifest[name];
     if (!entry?.image) continue;
     box.classList.add("era-map-pending");
-    const img = document.createElement("img");
-    img.alt = `Map (${name})`;
-    box.mapPicture = { img, entry };
-    pendingImages.push(loadImage(img, entry.image).catch((error) => { box.mapPicture.error = `${entry.image}: ${error.message}`; }));
+    box.mapPicture = { entry };
+    pendingImages.push(sourceImage(entry.image).then((source) => {
+      const img = source.cloneNode();
+      img.alt = `Map (${name})`;
+      box.mapPicture.img = img;
+    }).catch((error) => { box.mapPicture.error = `${entry.image}: ${error.message}`; }));
   }
 }
 /** Lays the room buttons over each pending map's picture, measuring where they sit in the (hidden) text map. */
@@ -2281,6 +2271,10 @@ function resetRun() {
   input = null;
   clearTimedWait();
   generation++;
+  sprites.clear();
+  sourceImages.clear();
+  paintedPictures.clear();
+  animationClocks.clear();
   animationInterval = undefined;
   lastAnimationRefresh = -Infinity;
   updateControls();

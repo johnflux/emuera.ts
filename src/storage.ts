@@ -1,4 +1,4 @@
-import { mkdirSync, readdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { EraError } from "./model.js";
@@ -7,6 +7,14 @@ import { readNativeSave, writeNativeSave, type SaveMetadata } from "./save-forma
 import { configSetting } from "./config-items.js";
 
 function savePath(directory: string, name: string): string {
+  const exact = path.join(directory, name);
+  try { statSync(exact); return exact; }
+  catch (error) {
+    if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
+  }
+  return caseInsensitiveSavePath(directory, name);
+}
+function caseInsensitiveSavePath(directory: string, name: string): string {
   try {
     const entries = readdirSync(directory);
     const found = entries.includes(name) ? name : entries.find((entry) => entry.toUpperCase() === name.toUpperCase());
@@ -17,7 +25,7 @@ function savePath(directory: string, name: string): string {
   }
 }
 export function gameSaveDirectory(root: string, config: ReadonlyMap<string, string>): string {
-  return /^(YES|TRUE|1)$/i.test(configSetting(config, "UseSaveFolder") ?? "") ? savePath(root, "sav") : root;
+  return /^(YES|TRUE|1)$/i.test(configSetting(config, "UseSaveFolder") ?? "") ? caseInsensitiveSavePath(root, "sav") : root;
 }
 
 export interface GlobalStore {

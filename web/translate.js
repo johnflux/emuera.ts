@@ -1,3 +1,5 @@
+import { LruCache } from "./cache.js";
+
 /**
  * Translates the game's remaining Japanese text in place with the browser's on-device
  * Translator API (Chrome/Edge 138+). Text never leaves the machine. A page translator such as
@@ -30,7 +32,7 @@ export function protectMapTranslation(root) {
 
 export function createTranslation({ onChange = () => {} } = {}) {
   const originals = new WeakMap();
-  const cache = new Map();
+  const cache = new LruCache(2 * 1024 * 1024, 2000);
   const roots = new Set();
   let translator = null;
   let state = "off";
@@ -109,8 +111,12 @@ export function createTranslation({ onChange = () => {} } = {}) {
   function lookup(original) {
     let entry = cache.get(original);
     if (!entry) {
-      entry = { text: null, promise: translator.translate(original).then((text) => (entry.text = text)) };
-      entry.promise.catch(() => cache.delete(original));
+      entry = { text: null, promise: translator.translate(original).then((text) => {
+        entry.text = text;
+        if (cache.get(original) === entry) cache.set(original, entry, text.length * 2);
+        return text;
+      }) };
+      entry.promise.catch(() => { if (cache.get(original) === entry) cache.delete(original); });
       cache.set(original, entry);
     }
     return entry;

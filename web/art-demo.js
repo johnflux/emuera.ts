@@ -50,7 +50,11 @@ async function render() {
     };
     image.src = url;
   });
-  prepareSkyArt(stage, manifest, loadImage, pending, values.get("artwork"));
+  prepareSkyArt(stage, manifest, async (url) => {
+    const image = new Image();
+    await loadImage(image, url);
+    return image;
+  }, pending, values.get("artwork"));
   await Promise.all(pending);
   if (token !== generation) return;
   if (!scene.classList.contains("era-area-art")) {

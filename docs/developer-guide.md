@@ -289,6 +289,25 @@ server is reported while the browser waits for reconnection.
 automatic browser refresh. If switching from the old, already-running
 non-watching server, stop that process once, then use `npm start` instead.
 
+Static files (including game images/audio and bundled fonts) use HTTP ETags and
+Last-Modified validators. Unversioned URLs revalidate before reuse; production
+artwork URLs whose `v` matches the file's modification time can stay cached for
+one year. Development always revalidates. API responses remain `no-store`.
+The renderer reuses loaded source images across panorama, sprite and map redraws.
+Its LRU caches retain up to 64 MiB of estimated source-image pixels (256 entries),
+32 MiB of painted-canvas pixels (128 entries), and 2 MiB of sprite metadata (512
+entries). Keys count toward the budgets, oversized values are used without being
+cached, and pending loads also count toward the entry caps. These run-specific
+caches clear on a new/resumed run. Translation results have a separate 2 MiB /
+2,000-entry LRU cache. These are retained-cache budgets, not total browser/GPU
+memory limits: active output, in-flight work and browser-managed decoding can
+consume additional memory.
+
+Save-file lookup checks the exact path before scanning for a case-insensitive
+match, so reading interaction events does not repeatedly enumerate growing save
+directories. Native save formats, filename casing compatibility and atomic writes
+are unchanged.
+
 The header shows the app name, the current run mode (Game or Demo) and the
 interpreter status. While a step runs, the clicked (or typed) choice is
 highlighted and the cursor changes immediately; if the step takes more than

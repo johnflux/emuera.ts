@@ -404,15 +404,14 @@ test("area artwork blends bad-weather days and selects undimmed seasonal night p
               const set = (time: string) => Object.fromEntries(["left", "middle", "right"]
                 .map((part) => [part, `/areas/0-shrine/${artSeason}-${time}-${part}.png`]));
               const nightSet = availability === "complete" ? set("night") : availability === "partial" ? { middle: set("night").middle } : undefined;
-              await runInNewContext(`${routine}\nprepareSkyArt(outputRoot, manifest, loadImage, pendingImages, artwork);`, {
+              await runInNewContext(`${routine}\nprepareSkyArt(outputRoot, manifest, sourceImage, pendingImages, artwork);`, {
                 artwork,
                 outputRoot: { querySelectorAll: () => [element] },
                 manifest: { 0: {
                   ...(palette === "both" ? { "neutral-day": { middle: "/unused-day.png" }, "neutral-night": { middle: "/unused-night.png" } } : {}),
                   [`${artSeason}-day`]: set("day"), [`${artSeason}-night`]: nightSet,
                 } },
-                Image: class { naturalHeight = 144; naturalWidth = 520; },
-                loadImage: async () => {},
+                sourceImage: async () => ({ naturalHeight: 144, naturalWidth: 520 }),
                 pendingImages: [],
               });
               const wantsNight = artwork === "auto" ? phase === "night" || phase === "dawn" : artwork === "night";
@@ -498,14 +497,13 @@ test("foothill water overlays keep the original water mask in every season witho
     };
     const set = (time: string) => Object.fromEntries(["left", "middle", "right"]
       .map(part => [part, `/areas/7-foothills/${season}-${time}-${part}.png`]));
-    await runInNewContext(`${routine}\nprepareSkyArt(outputRoot, manifest, loadImage, pendingImages);`, {
+    await runInNewContext(`${routine}\nprepareSkyArt(outputRoot, manifest, sourceImage, pendingImages);`, {
       outputRoot: { querySelectorAll: () => [element] },
       manifest: { 7: {
         "spring-day": Object.fromEntries(["left", "middle", "right"].map(part => [part, `/areas/7-foothills/spring-day-${part}.png`])),
         [`${season}-day`]: set("day"), [`${season}-night`]: set("night"),
       } },
-      Image: class { naturalHeight = 144; naturalWidth = 559; },
-      loadImage: async () => {},
+      sourceImage: async () => ({ naturalHeight: 144, naturalWidth: 559 }),
       pendingImages: [],
     });
     assert.equal(element.dataset.areaArt, `${season}-${phase}`);

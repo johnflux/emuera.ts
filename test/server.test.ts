@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { mkdtemp, mkdir, writeFile, rm, symlink } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, rm, symlink, stat, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { once } from "node:events";
@@ -9,6 +9,71 @@ import { promisify } from "node:util";
 import { createApp } from "../src/server.js";
 import { discoverGames, emptyGame, gameDirectory, indexScript, loadGame, readText } from "../src/loader.js";
 import { EraError } from "../src/model.js";
+
+test("static resources revalidate, versioned art stays fresh and APIs remain uncached", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "era-http-cache-"));
+  try {
+    await mkdir(path.join(root, "resources"));
+    const file = path.join(root, "resources", "pixel.png");
+    await writeFile(file, "first image");
+    for (const development of [false, true]) {
+      const app = createApp(emptyGame(root), development);
+      app.listen(0, "127.0.0.1");
+      await once(app, "listening");
+      const address = app.address();
+      assert.ok(address && typeof address !== "string");
+      const base = `http://127.0.0.1:${address.port}`;
+      try {
+        for (const route of ["/", "/app.js", "/cache.js", "/style.css", "/fonts/BIZUDGothic-Regular.ttf", "/resources/pixel.png"]) {
+          const first = await fetch(base + route);
+          assert.equal(first.status, 200, route);
+          assert.equal(first.headers.get("cache-control"), "private, no-cache");
+          const body = await first.arrayBuffer();
+          assert.ok(body.byteLength > 0);
+          const etag = first.headers.get("etag")!;
+          assert.ok(etag);
+          const unchanged = await fetch(base + route, { headers: { "If-None-Match": `"unmatched", ${etag}` } });
+          assert.equal(unchanged.status, 304, route);
+          assert.equal((await unchanged.arrayBuffer()).byteLength, 0);
+          assert.equal(unchanged.headers.get("etag"), etag);
+          const byDate = await fetch(base + route, { headers: { "If-Modified-Since": first.headers.get("last-modified")! } });
+          assert.equal(byDate.status, 304);
+          const precedence = await fetch(base + route, {
+            headers: { "If-None-Match": '"different"', "If-Modified-Since": first.headers.get("last-modified")! },
+          });
+          assert.equal(precedence.status, 200, "ETag takes precedence over date validation");
+          await precedence.arrayBuffer();
+        }
+        const info = await stat(file);
+        const version = Math.round(info.mtimeMs);
+        const versioned = await fetch(`${base}/resources/pixel.png?v=${version}`);
+        assert.equal(versioned.headers.get("cache-control"), development
+          ? "private, no-cache" : "private, max-age=31536000, immutable");
+        const oldEtag = versioned.headers.get("etag")!;
+        await versioned.arrayBuffer();
+        await writeFile(file, "changed image");
+        await utimes(file, info.atime, new Date(info.mtimeMs + 2000));
+        const changed = await fetch(`${base}/resources/pixel.png?v=${version}`, { headers: { "If-None-Match": oldEtag } });
+        assert.equal(changed.status, 200);
+        assert.equal(changed.headers.get("cache-control"), "private, no-cache", "stale version URLs must revalidate");
+        assert.notEqual(changed.headers.get("etag"), oldEtag);
+        assert.equal(await changed.text(), "changed image");
+        for (const route of ["/api/areas", "/api/maps", "/api/games"]) {
+          const api = await fetch(base + route);
+          assert.equal(api.headers.get("cache-control"), "no-store");
+          await api.arrayBuffer();
+        }
+        const missing = await fetch(base + "/maps/missing.png");
+        assert.equal(missing.status, 404);
+        assert.equal(missing.headers.get("cache-control"), "no-store");
+        await missing.arrayBuffer();
+      } finally {
+        app.closeAllConnections();
+        await new Promise<void>((resolve, reject) => app.close((error) => error ? reject(error) : resolve()));
+      }
+    }
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
 
 test("HTTP crash reports carry execution context and development breadcrumbs exclude input values", async () => {
   const script = `
