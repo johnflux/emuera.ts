@@ -152,6 +152,17 @@ CALL COM357
 PRINTFORML Result: {RESULT}
 CALL HOTPATCH_TEST_DUMP
 QUIT
+@HOTPATCH_TEST_CASUAL_REASON
+CALL HOTPATCH_TEST_INIT
+INPUT
+CFLAG:TARGET:好感度 = RESULT
+INPUT
+TALENT:TARGET:恋人 = RESULT & 1
+TALENT:TARGET:恋慕 = RESULT & 2
+TALENT:TARGET:愛欲 = RESULT & 4
+TALENT:TARGET:セフレ = RESULT & 8
+PRINTFORML Reason: [%HOTPATCH_RELATIONSHIP_REASON(2, TARGET)%]
+QUIT
 @HOTPATCH_TEST_SAVE
 CALL HOTPATCH_TEST_INIT
 TALENT:TARGET:恋人 = 1
@@ -231,7 +242,7 @@ test("demo relationship switcher previews every state without committing actions
       ["None", "Acquaintance", "Friendship", "Close Friend", "Best Friend", "Almost Family", "In love", "FWB", "Lovers", "Engaged", "Married", "Divorced", "In love + FWB", "In love + Divorced"]);
     assert.doesNotMatch(text(snapshot), /Preview only|Use the states below|action buttons do not change/);
     assert.doesNotMatch(text(snapshot), /class='era-relationship-icon /);
-    for (const [state, icon] of [[103, "love"], [104, "casual"], [105, "love"], [106, "engaged"], [107, "married"], [108, "friends"], [101, null]] as const) {
+    for (const [state, icon] of [[103, "love"], [104, "casual"], [105, "love"], [106, "engaged"], [107, "married"], [108, "divorced"], [101, null]] as const) {
       snapshot = check(runtime.input(String(state)));
       const printed = text(snapshot);
       assert.match(printed, new RegExp(`value='${state}'[^>]*aria-pressed='true'`));
@@ -442,6 +453,11 @@ test("relationship options and shared icons follow actual commitment rather than
     else assert.doesNotMatch(printed, /End FWB/);
     if (state === 0 || state >= 4) assert.doesNotMatch(printed, /End the romantic relationship|Ask for a divorce/);
     if (state === 5) assert.match(printed, /title='In love'/);
+    if (state >= 1 && state <= 3) {
+      assert.match(printed, /Reaffirm your love/);
+      assert.doesNotMatch(printed, />Confess</);
+    } else assert.doesNotMatch(printed, /Reaffirm your love/);
+    if (state === 1 || state === 2) assert.doesNotMatch(printed, />FWB<|>Propose</);
     const flags = [...printed.matchAll(/class='era-relationship-flag era-relationship-flag-[a-z]+'>([^<]+)<\/span>/g)].map((match) => match[1]);
     assert.deepEqual(flags, state === 1 ? ["Lovers", "Engaged"] : state === 2 ? ["Lovers", "Married"]
       : state === 3 ? ["Lovers", "FWB"] : state === 4 ? ["FWB"] : state === 5 ? ["In love"] : []);
@@ -514,6 +530,21 @@ test("relationship failures are explicit and reserved proposal boundaries respec
   assert.match(printed, /time=130/);
 });
 
+test("casual proposition requires friendship but does not block existing romantic feelings", { skip: !existsSync(GAME_ROOT) }, async () => {
+  const game = (await gameReady)!;
+  for (const [favor, flags, reason] of [
+    [499, 0, "You need to be friends first."],
+    [500, 0, ""], [500, 1, ""], [500, 2, ""], [500, 4, ""], [500, 7, ""],
+    [500, 8, "You already have a friends-with-benefits agreement."],
+  ] as const) {
+    const runtime = new Runtime(game, GAME_INSTRUCTION_LIMIT);
+    check(runtime.start("HOTPATCH_TEST_CASUAL_REASON"));
+    check(runtime.input(String(favor)));
+    const result = check(runtime.input(String(flags)));
+    assert.ok(text(result).includes(`Reason: [${reason}]`), `favor=${favor}, flags=${flags}: ${text(result)}`);
+  }
+});
+
 test("native casual agreement retains its character hooks, ten-minute cost and yearning", { skip: !existsSync(GAME_ROOT) }, async () => {
   const game = (await gameReady)!;
   const runtime = new Runtime(game, GAME_INSTRUCTION_LIMIT);
@@ -522,6 +553,50 @@ test("native casual agreement retains its character hooks, ten-minute cost and y
   assert.match(text(result), /time=110/);
   assert.match(text(result), /yearning=1, casual=1/);
   assert.match(text(result), /Native hook: SEX_FRIEND \/ 成功/);
+});
+
+test("engagement blocks new FWB propositions even through direct requests", { skip: !existsSync(GAME_ROOT) }, async () => {
+  for (const commitment of [1, 2]) {
+    const runtime = await friendshipRuntime(`TALENT:TARGET:恋人 = 1
+CFLAG:TARGET:好感度 = 500
+CFLAG:TARGET:7398 = ${commitment}
+PRINTFORML FWB reason: %HOTPATCH_RELATIONSHIP_REASON(2, TARGET)%`);
+    assert.match(text(check(runtime.start("HOTPATCH_TEST_FRIENDSHIP"))), /End the engagement or marriage before suggesting FWB/);
+  }
+});
+
+test("reaffirm routes to the native hug command without confession confirmation or commitment changes", { skip: !existsSync(GAME_ROOT) }, async () => {
+  for (const jit of [false, true]) {
+    for (const allowed of [0, 1]) {
+      const original = (await gameReady)!;
+      const game = { ...original, routines: new Map(original.routines) };
+      const stub = emptyGame();
+      indexScript(stub, `@HOTPATCH_TEST_REAFFIRM
+CALL HOTPATCH_TEST_INIT
+TALENT:TARGET:恋人 = 1
+CFLAG:TARGET:7398 = 2
+CALL HOTPATCH_RELATIONSHIP_REQUEST(9)
+RESULT = 352
+CALL USERCOM
+CALL HOTPATCH_TEST_DUMP
+QUIT
+@COM_ABLE311
+RETURN ${allowed}
+@HOTPATCH_ORIGINAL_USERCOM
+PRINTFORML Native command: {RESULT}, confirmation={HOTPATCH_RELATIONSHIP_CONFIRM()}
+RETURN 0`, "<reaffirm-test>");
+      for (const [name, routines] of stub.routines) game.routines.set(name, routines);
+      const result = check(new Runtime(game, GAME_INSTRUCTION_LIMIT, { jit }).start("HOTPATCH_TEST_REAFFIRM"));
+      if (allowed) {
+        assert.match(text(result), /remind Test Partner that you love them/);
+        assert.match(text(result), /Native command: 311, confirmation=0/);
+      } else {
+        assert.match(text(result), /cannot share a hug right now/);
+        assert.doesNotMatch(text(result), /Native command:/);
+      }
+      assert.match(text(result), /commitment=2/);
+    }
+  }
 });
 
 test("casual agreement calculations match TW outside confirmation text and preserved yearning", { skip: !existsSync(GAME_ROOT) }, async () => {

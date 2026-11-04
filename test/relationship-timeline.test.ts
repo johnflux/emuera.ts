@@ -99,6 +99,17 @@ test("timeline renderer draws partial lines, boost rings and non-overlapping bra
   const node = (values: Record<string, string>) => ({ getAttribute: (key: string) => values[key.slice(5)] ?? null });
   const attrs = { favor: "30000", lover: "0", "in-love": "0", casual: "1", commitment: "-2" };
   const root = render(node(attrs)) as Element;
+  assert.equal(root.className, "era-relationship-timeline is-casual", "FWB without current romance uses a plain lavender frame");
+  for (const [favor, frame] of [["20", "is-early"], ["100", "is-early"], ["500", "is-friendship"], ["10000", "is-friendship"]]) {
+    for (const commitment of ["0", "-1", "-2"]) {
+      assert.equal((render(node({ ...attrs, favor, casual: "0", commitment })) as Element).className,
+        `era-relationship-timeline ${frame}`, "ended commitments do not change the current relationship frame");
+    }
+  }
+  for (const [lover, casual, commitment] of [["0", "0", "0"], ["1", "0", "2"], ["0", "1", "0"], ["0", "0", "-2"]]) {
+    assert.equal((render(node({ ...attrs, lover, casual, commitment, "in-love": "1" })) as Element).className,
+      "era-relationship-timeline is-in-love", "ornament follows feelings independently of agreements and history");
+  }
   assert.equal(root.children[0]!.className, "era-relationship-track-scroll", "only the track scrolls; the ribbon stays outside the clipping region");
   const svg = root.children[0]!.children[0]!;
   assert.equal(svg.attributes.get("viewBox"), "0 0 820 374");
@@ -115,11 +126,41 @@ test("timeline renderer draws partial lines, boost rings and non-overlapping bra
   }
   assert.match(svg.children[0]!.textContent, /Almost Family \(reached\).*FWB branches.*Divorced branches/);
   const all = (element: Element): Element[] => [element, ...element.children.flatMap(all)];
+  for (const [commitment, lover, emphasized] of [["2", "1", true], ["1", "1", false], ["-2", "0", false]] as const) {
+    const elements = all(render(node({ ...attrs, commitment, lover })));
+    const marriage = elements.find((element) => element.tag === "g" && element.attributes.get("class")?.includes("is-married"))!;
+    assert.equal(marriage.attributes.get("class")!.includes("is-reached"), emphasized);
+    assert.equal(marriage.children.find((element) => element.attributes.get("class") === "era-timeline-badge")!.attributes.get("r"), emphasized ? "44" : "30");
+    assert.equal(marriage.children.filter((element) => element.attributes.get("class") === "era-timeline-marriage-ring").length, emphasized ? 1 : 0);
+    assert.equal(marriage.children.filter((element) => element.attributes.get("class") === "era-timeline-marriage-sparkles").length, emphasized ? 1 : 0);
+    if (emphasized) {
+      const sparkles = marriage.children.find((element) => element.attributes.get("class") === "era-timeline-marriage-sparkles")!;
+      assert.equal(sparkles.children.length, 3, "three independently animated stars");
+      assert.ok(sparkles.children.every((star) => star.tag === "g" && star.children[0]!.tag === "path"));
+    }
+    assert.equal(elements.filter((element) => element.attributes.get("class") === "era-timeline-fill is-married").length, emphasized ? 1 : 0);
+    if (emphasized) {
+      assert.equal(marriage.children.find((element) => element.attributes.get("class") === "era-timeline-marriage-ring")!.attributes.get("r"), "49");
+      assert.equal(marriage.children.find((element) => element.tag === "text")!.attributes.get("y"), "78");
+      assert.ok(marriage.children.some((element) => element.attributes.get("class") === "era-timeline-marriage-bow"));
+      assert.equal(elements.find((element) => element.attributes.get("class") === "era-timeline-fill is-married")!.attributes.get("d"), "M609 56H685", "final track clears the larger marriage ring");
+    }
+  }
+  assert.equal(all(root).filter((element) => element.tag === "g" && element.attributes.get("class")?.includes("is-friendship")).length, 1);
   const artwork = all(root).filter((element) => element.tag === "image");
-  assert.ok(all(root).some((element) => element.attributes.get("class") === "era-timeline-glyph era-timeline-paired-hearts"));
+  assert.ok(all(root).some((element) => element.attributes.get("href") === "/relationship-assets/icon-fwb.svg"));
+  assert.ok(all(root).some((element) => element.attributes.get("class") === "era-timeline-fwb-flourish"));
+  const fwb = all(root).find((element) => element.tag === "g" && element.attributes.get("class")?.includes("is-fwb"))!;
+  assert.equal(fwb.children.find((element) => element.tag === "text")!.attributes.get("y"), "50");
+  assert.equal(fwb.children.find((element) => element.attributes.get("class") === "era-timeline-fwb-flourish")!.attributes.get("transform"), "translate(0 2)");
   const shells = all(root).filter((element) => element.attributes.get("class") === "era-timeline-badge");
   assert.equal(shells.length, 7);
+  assert.equal(shells.filter((shell) => shell.tag === "circle").length, 6, "only Strangers is scalloped on the full timeline");
   for (const shell of shells) {
+    if (shell.tag === "circle") {
+      assert.equal(shell.attributes.get("r"), "30");
+      continue;
+    }
     assert.equal(shell.tag, "path");
     assert.equal((shell.attributes.get("d")!.match(/Q/g) ?? []).length, 12, "scalloped rather than circular badges");
   }
@@ -127,19 +168,33 @@ test("timeline renderer draws partial lines, boost rings and non-overlapping bra
   assert.match(svg.children[0]!.textContent, /Lovers \(ended\).*Married \(ended\)/);
   for (const image of artwork) {
     const asset = image.attributes.get("href")!;
+    if (asset === "/relationship-assets/marriage-laurel.png" || asset === "/relationship-assets/marriage-bow.png") {
+      const png = await readFile(new URL(`../web${asset}`, import.meta.url));
+      assert.equal(png.readUInt32BE(0), 0x89504e47);
+      continue;
+    }
     assert.match(asset, /^\/relationship-assets\/[a-z-]+\.svg$/);
     assert.match(await readFile(new URL(`../web${asset}`, import.meta.url), "utf8"), /<svg /);
   }
-  assert.equal(all(root).filter((element) => element.attributes.get("class") === "era-timeline-boost").length, 3);
+  for (const [favor, flowers] of [["1000", 3], ["10000", 5], ["30000", 7]] as const) {
+    const elements = all(render(node({ ...attrs, favor })));
+    const rings = elements.filter((element) => element.attributes.get("class") === "era-timeline-boost");
+    assert.equal(rings.length, 1, "at most two circles including the inner badge");
+    assert.equal(rings[0]!.attributes.get("r"), "36");
+    assert.equal(elements.filter((element) => element.attributes.get("class") === "era-timeline-flowers").length, flowers);
+    const tracks = elements.filter((element) => element.attributes.get("class")?.startsWith("era-timeline-track"));
+    assert.equal(tracks[0]!.attributes.get("d"), "M117 56H206", "incoming track stops outside the outer ring");
+    assert.equal(tracks[1]!.attributes.get("d"), "M286 56H375", "outgoing track starts outside the outer ring");
+  }
   const branches = all(root).filter((element) => element.attributes.get("class")?.startsWith("era-timeline-branch"));
   assert.equal(branches.length, 2);
   assert.equal(branches[0]!.attributes.get("class"), "era-timeline-branch is-fwb");
   assert.equal(branches[1]!.attributes.get("class"), "era-timeline-branch is-divorced");
-  const checkFork = (element: Element, from: number, y: number) => {
+  const checkFork = (element: Element, from: number, y: number, clearance = 35) => {
     const match = /^M([\d.]+) 56H([\d.]+)C([\d.]+) 56 ([\d.]+) ([\d.]+) ([\d.]+) ([\d.]+)H([\d.]+)$/.exec(element.attributes.get("d")!);
     assert.ok(match, "straight lead-in, cubic S with horizontal tangents, straight lead-out");
     const [start, curveStart, control1, control2, controlY, curveEnd, endY, end] = match.slice(1).map(Number);
-    assert.equal(start, 82 + from * 164 + 35, "preserves circular clearance around the source");
+    assert.equal(start, 82 + from * 164 + clearance, "preserves circular clearance around the source");
     const width = end! - start!;
     assert.equal(curveStart! - start!, width * .25);
     assert.equal(curveEnd! - curveStart!, width * .5);
@@ -151,13 +206,13 @@ test("timeline renderer draws partial lines, boost rings and non-overlapping bra
     assert.equal(endY, y);
     assert.equal(end, 82 + (from + 1) * 164 - 30, "connects to the state circle");
   };
-  checkFork(branches[0]!, 1, 176);
-  checkFork(branches[1]!, 1, 286);
+  checkFork(branches[0]!, 1, 176, 40);
+  checkFork(branches[1]!, 1, 286, 40);
   const lowFavorDivorce = all(render(node({ ...attrs, favor: "20", casual: "0" })));
   checkFork(lowFavorDivorce.find((element) => element.attributes.get("class") === "era-timeline-branch is-divorced")!, 0, 176);
   for (const [casual, commitment] of [["1", "0"], ["0", "-2"]]) {
     const combined = all(render(node({ ...attrs, "in-love": "1", casual, commitment })));
-    const love = combined.find((element) => element.attributes.get("class")?.includes("is-in-love"))!;
+    const love = combined.find((element) => element.tag === "g" && element.attributes.get("class")?.includes("is-in-love"))!;
     assert.ok(love);
     assert.ok(love.children.some((element) => element.attributes.get("href") === "/relationship-assets/icon-in-love.svg"));
     assert.ok(love.children.some((element) => element.attributes.get("class") === "era-timeline-hearts"));
@@ -165,7 +220,7 @@ test("timeline renderer draws partial lines, boost rings and non-overlapping bra
     assert.equal(combined.filter((element) => element.attributes.get("class")?.startsWith("era-timeline-branch")).length, 1);
     checkFork(combined.find((element) => element.attributes.get("class")?.startsWith("era-timeline-branch"))!, 2, 176);
     const tracks = combined.filter((element) => element.attributes.get("class")?.startsWith("era-timeline-track"));
-    assert.equal(tracks[1]!.attributes.get("d"), "M281 56H375", "incoming line preserves empty circular space");
+    assert.equal(tracks[1]!.attributes.get("d"), "M286 56H375", "incoming line preserves empty circular space");
     assert.equal(tracks[2]!.attributes.get("d"), "M445 56H539", "outgoing line preserves empty circular space");
     assert.ok(combined.some((element) => element.textContent === "In love"));
   }

@@ -18,6 +18,22 @@ test("custom action button wrappers participate directly in the action flex row"
   assert.match(css, /^\.era-actions-group span:has\(> \.era-guard-control\) \{ display: contents; \}/m);
 });
 
+test("relationship avatar scales from the bottom-left within its shorter wrapper", async () => {
+  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  assert.match(css, /\.era-relationship \.era-info-face \{[^}]*width: 99px; height: 90px; border: 0;/);
+  assert.match(css, /\.era-relationship \.era-info-face \.sprite-clip \{ transform-origin: left bottom; \}/);
+});
+
+test("friendship uses a gold heart without recoloring the romance icons", async () => {
+  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  const icons = await readFile(new URL("../web/relationship-icons.svg", import.meta.url), "utf8");
+  assert.match(css, /relationship-icons\.svg"\) 0 0 \/ 600% 100%/);
+  assert.match(css, /\.era-relationship-icon-friends \{ background-position: 100% 0; \}/);
+  assert.match(css, /\.era-relationship-icon-love \{ background-position: 20% 0; \}/);
+  assert.match(icons, /viewBox="0 0 384 64"/);
+  assert.match(icons, /translate\(320\)">\s*<use href="#shape" fill="url\(#gold\)"/);
+});
+
 test("vector clock draws exact game minutes, wraps days and rejects invalid input", async () => {
   const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
   const routine = source.slice(source.indexOf("function clock("), source.indexOf("/** Hotpatch extension: <meter"));

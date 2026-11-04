@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160">
+  <defs>
+    <g id="curl" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M80 2H49C34 2 34 22 25 26C18 29 15 42 26 38C35 35 28 23 34 20C41 16 44 28 33 27C23 26 2 30 2 49V80" stroke="#d99bb9" stroke-width="2.2"/>
+    </g>
+  </defs>
+  <use href="#curl"/>
+  <use href="#curl" transform="translate(160 0) scale(-1 1)"/>
+  <use href="#curl" transform="translate(0 160) scale(1 -1)"/>
+  <use href="#curl" transform="translate(160 160) scale(-1 -1)"/>
+</svg>

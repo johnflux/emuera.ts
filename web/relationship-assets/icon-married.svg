@@ -1,15 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160"><defs>
- <radialGradient id="pinkFill" cx=".34" cy=".21" r=".9"><stop offset="0" stop-color="#6c3955" stop-opacity=".87"/><stop offset=".55" stop-color="#332432" stop-opacity=".82"/><stop offset="1" stop-color="#1c1d29" stop-opacity=".95"/></radialGradient>
- <radialGradient id="goldFill"><stop offset="0" stop-color="#625036" stop-opacity=".96"/><stop offset="1" stop-color="#241e23" stop-opacity=".96"/></radialGradient>
- <radialGradient id="lavFill"><stop offset="0" stop-color="#563956" stop-opacity=".96"/><stop offset="1" stop-color="#20202c" stop-opacity=".96"/></radialGradient>
- <radialGradient id="redFill"><stop offset="0" stop-color="#54252c" stop-opacity=".96"/><stop offset="1" stop-color="#201920" stop-opacity=".96"/></radialGradient>
- <radialGradient id="grayFill"><stop offset="0" stop-color="#2f2b34" stop-opacity=".89"/><stop offset="1" stop-color="#151720" stop-opacity=".9"/></radialGradient>
- <linearGradient id="buttonPink" x2="0" y2="1"><stop stop-color="#61364c" stop-opacity=".68"/><stop offset="1" stop-color="#342533" stop-opacity=".48"/></linearGradient>
- <linearGradient id="buttonLav" x2="0" y2="1"><stop stop-color="#524062" stop-opacity=".61"/><stop offset="1" stop-color="#292737" stop-opacity=".55"/></linearGradient>
- <linearGradient id="buttonRed" x2="0" y2="1"><stop stop-color="#572d39" stop-opacity=".66"/><stop offset="1" stop-color="#301f2b" stop-opacity=".56"/></linearGradient>
- <linearGradient id="buttonGray" x2="0" y2="1"><stop stop-color="#292932" stop-opacity=".7"/><stop offset="1" stop-color="#1e1e27" stop-opacity=".7"/></linearGradient>
- <linearGradient id="fadingLine" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#e6a0c1"/><stop offset=".3" stop-color="#ad687e"/><stop offset=".7" stop-color="#5b3037"/><stop offset="1" stop-color="#24202b" stop-opacity=".1"/></linearGradient>
- <filter id="pinkGlow" x="-70%" y="-70%" width="240%" height="240%"><feGaussianBlur stdDeviation="4"/></filter>
- <filter id="goldGlow" x="-70%" y="-70%" width="240%" height="240%"><feGaussianBlur stdDeviation="3"/></filter>
- <filter id="redGlow" x="-80%" y="-100%" width="280%" height="300%"><feGaussianBlur stdDeviation="3"/></filter>
- </defs><circle cx="66" cy="84" r="23" fill="none" stroke="#e9a7c7" stroke-width="5"/><circle cx="96" cy="84" r="23" fill="none" stroke="#f2d38e" stroke-width="5"/><path d="M77 66 C70 72 68 85 78 97" fill="none" stroke="#ffd0e3" stroke-width="5" stroke-linecap="round"/><path d="M80 44 L84 52 L92 56 L84 60 L80 68 L76 60 L68 56 L76 52 Z" fill="#f2d38e" transform="translate(23 -8) scale(.83)"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160">
+  <circle cx="65" cy="84" r="23" fill="none" stroke="#f2b8ce" stroke-width="6"/>
+  <circle cx="95" cy="84" r="23" fill="none" stroke="#f5d49d" stroke-width="6"/>
+  <path d="M77 66C70 72 68 85 78 97" fill="none" stroke="#ffd0e3" stroke-width="6" stroke-linecap="round"/>
+  <path d="M99 43L102 51L110 54L102 57L99 65L96 57L88 54L96 51Z" fill="#ffe3b5"/>
+</svg>

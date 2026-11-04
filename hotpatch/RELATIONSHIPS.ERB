@@ -40,6 +40,9 @@ ELSEIF TALENT:nChara:恋人 || TALENT:nChara:恋慕
 		sLabel '= "In love"
 ELSEIF TALENT:nChara:セフレ
 	sState '= "casual"
+ELSEIF HOTPATCH_RELATIONSHIP_STATE(nChara) == -2
+	sState '= "divorced"
+	sLabel '= "Divorced"
 ELSEIF HOTPATCH_FRIENDSHIP_ACTIVE(nChara)
 	sState '= "friends"
 ENDIF
@@ -52,6 +55,12 @@ RETURNF @"<span class='era-relationship-icon era-relationship-icon-%sState%' tit
 #DIM DYNAMIC nAction
 #DIM DYNAMIC nChara
 SELECTCASE nAction
+CASE 1
+	RETURNF !TALENT:nChara:恋人
+CASE 2
+	RETURNF !TALENT:nChara:セフレ && HOTPATCH_RELATIONSHIP_STATE(nChara) <= 0
+CASE 3
+	RETURNF HOTPATCH_RELATIONSHIP_STATE(nChara) <= 0
 CASE 4, 5
 	RETURNF HOTPATCH_RELATIONSHIP_STATE(nChara) == 1
 CASE 6
@@ -60,6 +69,8 @@ CASE 7
 	RETURNF TALENT:nChara:セフレ
 CASE 8
 	RETURNF !HOTPATCH_FRIENDSHIP_ACTIVE(nChara)
+CASE 9
+	RETURNF TALENT:nChara:恋人 != 0
 ENDSELECT
 RETURNF 1
 
@@ -116,7 +127,7 @@ RETURNF nResult
 #FUNCTIONS
 #DIM DYNAMIC nAction
 #DIM DYNAMIC nChara
-SIF !INRANGE(nAction, 1, 8)
+SIF !INRANGE(nAction, 1, 9)
 	RETURNF "Unknown relationship action."
 SIF nChara == MASTER
 	RETURNF "Choose another character to discuss a relationship."
@@ -152,14 +163,18 @@ IF GROUPMATCH(nAction, 1, 2, 3) && FLAG:甲斐性無 && !FLAG:LUSTMODE
 	RETURNF "You cannot find the courage to make this proposition."
 ENDIF
 IF nAction == 2
+	SIF HOTPATCH_RELATIONSHIP_STATE(nChara) > 0
+		RETURNF "End the engagement or marriage before suggesting FWB."
 	SIF TALENT:nChara:セフレ
 		RETURNF "You already have a friends-with-benefits agreement."
-	SIF TALENT:nChara:恋人 || TALENT:nChara:恋慕 || TALENT:nChara:愛欲
-		RETURNF "Their existing relationship feelings do not allow this agreement."
+	SIF CFLAG:nChara:好感度 < 500
+		RETURNF "You need to be friends first."
 ENDIF
 IF GROUPMATCH(nAction, 3, 4, 5, 6) && !TALENT:nChara:恋人
 	RETURNF "You need to be lovers first."
 ENDIF
+SIF nAction == 9 && !TALENT:nChara:恋人
+	RETURNF "You need to be lovers first."
 SIF nAction == 3 && HOTPATCH_RELATIONSHIP_STATE(nChara) > 0
 	RETURNF "You are already engaged or married."
 SIF nAction == 4 && HOTPATCH_RELATIONSHIP_STATE(nChara) != 1
@@ -192,6 +207,8 @@ CASE 7
 	RETURNF "End FWB"
 CASE 8
 	RETURNF "Ask to be friends"
+CASE 9
+	RETURNF "Reaffirm your love"
 ENDSELECT
 RETURNF ""
 
@@ -216,7 +233,7 @@ DO
 		HTML_PRINT @"<p class='era-relationship-error' role='alert'>%HTML_ESCAPE(sError)%</p>"
 	ENDIF
 	HTML_PRINT "<era-open class='era-relationship-options'>"
-	FOR nAction, 1, 9
+	FOR nAction, 1, 10
 		SIF !HOTPATCH_RELATIONSHIP_VISIBLE(nAction, TARGET)
 			CONTINUE
 		sReason '= HOTPATCH_RELATIONSHIP_REASON(nAction, TARGET)
@@ -245,7 +262,7 @@ DO
 	CASE 999
 		CLEARLINE LINECOUNT - nStart
 		RETURN 0
-	CASE 1 TO 8
+	CASE 1 TO 9
 		nAction = RESULT
 		IF HOTPATCH_RELATIONSHIP_VISIBLE(nAction, TARGET)
 			sReason '= HOTPATCH_RELATIONSHIP_REASON(nAction, TARGET)
@@ -289,7 +306,7 @@ IF nAction == 8
 	CALL HOTPATCH_RELATIONSHIP_CHANGE(nAction)
 	RETURN 0
 ENDIF
-nCommand = nAction == 2 ? 357 # 352
+nCommand = nAction == 9 ? 311 # nAction == 2 ? 357 # 352
 IF GLOBAL_COMABLE2(nCommand)
 	PRINTL Relationship unchanged: this conversation is blocked by the current encounter rules.
 	RETURN 0
@@ -299,11 +316,20 @@ IF RESULT
 	PRINTL Relationship unchanged: this character's current story blocks this conversation.
 	RETURN 0
 ENDIF
-IF nAction >= 3
+IF nAction >= 3 && nAction != 9
 	CALL HOTPATCH_RELATIONSHIP_CHANGE(nAction)
 	RETURN 0
 ENDIF
-CALL HOTPATCH_RELATIONSHIP_CONFIRM(1)
+IF nAction == 9
+	CALL COM_ABLE311
+	IF !RESULT
+		PRINTL You cannot share a hug right now.
+		RETURN 0
+	ENDIF
+	PRINTFORML You remind %CALLNAME:TARGET% that you love them and reach out for a hug.
+ELSE
+	CALL HOTPATCH_RELATIONSHIP_CONFIRM(1)
+ENDIF
 RESULT = nCommand
 CALL HOTPATCH_ORIGINAL_USERCOM
 RETURN RESULT

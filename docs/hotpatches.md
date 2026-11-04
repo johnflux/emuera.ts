@@ -58,6 +58,15 @@ are 1000–1999; named/ranged resets use other slots). Native saves preserve thi
 marker without changing layout or existing meanings.
 
 ### Romantic and casual commitment
+FWB propositions require current friendship (favor >= 500), but existing romantic
+feelings or a Lovers agreement do not disable them. Acceptance still uses TW's
+native calculation. Existing FWB agreements and encounter-context restrictions
+remain guarded.
+Engagement or marriage hides and blocks new FWB propositions until that commitment
+ends. Confess is hidden once Lovers; Propose is hidden while engaged or married.
+Lovers, Engaged and Married instead offer Reaffirm your love, which expresses love
+then routes through the native hug command (311), preserving its availability,
+character dialogue, success rolls, time cost and stat effects.
 
 [`RELATIONSHIPS.ERB`](../hotpatch/RELATIONSHIPS.ERB) replaces Confess with a
 relationship dialog, also accessible from the character's main-screen summary.
@@ -82,9 +91,61 @@ The relationship dialog uses the supplied vector artwork in
 `web/relationship-assets/` for milestone badges, floral decorations, the ribbon
 frame, header and action skins. Future milestones are muted, not hidden; Engaged
 remains an independent milestone even though the mockup abbreviated it.
-Badges use scalloped outlines around the supplied icon artwork, with paired
-hearts for FWB and heart accents around In love. The frame and ribbon remain
+Only Strangers and Acquaintances use scalloped outlines; other badges are smooth
+circles around the supplied icon artwork, with a four-point lavender sparkle,
+heart/star accents and a curved flourish for FWB, and heart accents around In love.
+The frame and ribbon remain
 outside the horizontally scrolling track, keeping them intact on narrow screens.
+The SVG frame flows through interlocking curls at all four corners. Nine-slice
+border scaling stretches only the straight edges, not the corners, and stays
+fixed outside the scrolling track without interfering with input.
+The supplied miko ribbon replaces the original bow only while In love is active.
+Its transparent PNG is cropped, cleaned of faint alpha speckles and resized to
+720×170, displayed at 200px wide with a -21px top offset on desktop.
+Header relationship icons are 4em square. The shared indicator uses a broken
+heart for divorce when there is no current romance or FWB; its accessible label
+and tooltip say Divorced. Friendship frame colors remain unaffected.
+Friendship-only states use a plain yellow frame; None and Acquaintance use grey.
+Ended commitments, including divorce, do not change that frame classification;
+current romance still uses the ornate frame. FWB without current romance uses a
+plain lavender frame without floral backgrounds, including when divorced.
+Its lavender label sits at y=50, with the curved flourish shifted down 2px.
+Branch tracks use a 7/8 dash
+pattern with a soft glow; divorce retains its red track and badge.
+Friendship badges have smooth circular outlines. Close Friend and higher tiers
+use a gold, notched cherry-blossom icon with a star-like centre rather than a
+stemmed flower. They
+add one outer gold ring and a 3px inner outline, without changing the friendship
+background fill. Higher tiers increase the yellow glow and flower accents (three,
+five, then seven), not the ring count. Tracks leave clearance around the outer
+ring. These decorative
+accents remain hidden on mobile.
+Friendship hearts and reached friendship milestones use yellow/gold consistently,
+including the character-list indicators; romance retains pink.
+Reached Married deliberately exceeds the ordinary 70px badge cap on desktop:
+its inner radius is 44 and outer radius 49, with a bright champagne outline,
+warm blush fill, broad gold halo and three small sparkles.
+The sparkles drift and twinkle independently on staggered 7–9 second loops;
+reduced-motion mode leaves them static.
+Its larger pink and gold interlocking rings are thicker, with a pink bow,
+gold leaf sprigs and a brighter bold proportional label.
+The leaf sprigs use the supplied laurel PNG with its dark matte removed and
+transparent bounds cropped; the same asset is mirrored for symmetry.
+The supplied pink-and-gold bow replaces the vector bow. Its transparent margins
+and faint alpha speckles are removed, then it is resized to 240×162 and displayed
+at 40×27 beneath the marriage circle.
+Mobile restores the ordinary badge size and omits the bow, leaves and halo.
+Its incoming filled track is champagne and slightly thicker;
+future or scorched marriage milestones do not receive this emphasis.
+Mobile omits the frame, ribbon, portrait, decorative images and action divider,
+while retaining timeline labels, flags, actions and unavailable reasons.
+The desktop portrait renders at 99×99px in a 99×90px wrapper, anchored
+bottom-left so its top protrudes 9px without shifting horizontally.
+The large character name uses proportional system sans-serif with slight letter
+spacing; smaller text
+retains the terminal font.
+Action hover brightens the SVG skin without an additional outline or background;
+keyboard focus uses a stronger brightness and glow treatment.
 The summary uses icon pills, and the concise Confess/FWB/End FWB actions retain
 the same gameplay checks and unavailable reasons.
 Divorce scorches the former Lovers → Engaged → Married route; a saved former
@@ -93,7 +154,7 @@ away by either state. Ordinary breakup history is not reliably saved, so absence
 of a Lovers flag alone never produces scorching. No new save fields are added.
 While In love is active, both forks instead leave the In love → Lovers track.
 Higher favor replaces Friends with Close
-Friend (1,000), Best Friend (10,000) or Almost Family (30,000), adding gold rings
+Friend (1,000), Best Friend (10,000) or Almost Family (30,000), adding gold decoration
 to the flower badge. The timeline is derived from game values and never writes
 relationship state.
 The wide dialog uses a responsive action grid. Action headings are buttons that

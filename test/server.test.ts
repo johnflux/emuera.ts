@@ -479,11 +479,11 @@ test("HTTP UI, isolated sessions, real image bytes, sprite metadata, errors and 
     const relationships = await fetch(base + "/relationship-icons.svg");
     assert.equal(relationships.status, 200);
     assert.equal(relationships.headers.get("content-type"), "image/svg+xml");
-    assert.match(await relationships.text(), /viewBox="0 0 320 64"/);
+    assert.match(await relationships.text(), /viewBox="0 0 384 64"/);
     const timeline = await fetch(base + "/relationship-timeline.js");
     assert.equal(timeline.status, 200);
     assert.match(await timeline.text(), /export function relationshipTimeline\(/);
-    for (const asset of ["node-in-love", "node-fwb", "node-divorced", "scorched-path", "header-sakura", "button-pink", "ribbon-divider"]) {
+    for (const asset of ["node-in-love", "node-fwb", "node-divorced", "scorched-path", "header-sakura", "button-pink", "ribbon-divider", "frame-curls"]) {
       const artwork = await fetch(base + `/relationship-assets/${asset}.svg`);
       assert.equal(artwork.status, 200);
       assert.equal(artwork.headers.get("content-type"), "image/svg+xml");
@@ -491,6 +491,25 @@ test("HTTP UI, isolated sessions, real image bytes, sprite metadata, errors and 
     }
     assert.equal((await fetch(base + "/relationship-assets/missing.svg")).status, 404);
     assert.equal((await fetch(base + "/relationship-assets/node-in-love.png")).status, 404);
+    const ribbon = await fetch(base + "/relationship-assets/miko-ribbon.png");
+    assert.equal(ribbon.status, 200);
+    assert.equal(ribbon.headers.get("content-type"), "image/png");
+    const ribbonBytes = Buffer.from(await ribbon.arrayBuffer());
+    assert.deepEqual(ribbonBytes.subarray(0, 8), Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+    assert.equal(ribbonBytes.readUInt32BE(16), 720);
+    assert.equal(ribbonBytes.readUInt32BE(20), 170);
+    const laurel = await fetch(base + "/relationship-assets/marriage-laurel.png");
+    assert.equal(laurel.status, 200);
+    assert.equal(laurel.headers.get("content-type"), "image/png");
+    const laurelBytes = Buffer.from(await laurel.arrayBuffer());
+    assert.equal(laurelBytes.readUInt32BE(16), 50);
+    assert.equal(laurelBytes.readUInt32BE(20), 61);
+    const bow = await fetch(base + "/relationship-assets/marriage-bow.png");
+    assert.equal(bow.status, 200);
+    assert.equal(bow.headers.get("content-type"), "image/png");
+    const bowBytes = Buffer.from(await bow.arrayBuffer());
+    assert.equal(bowBytes.readUInt32BE(16), 240);
+    assert.equal(bowBytes.readUInt32BE(20), 162);
     const earth = await fetch(base + "/earth.png");
     assert.equal(earth.status, 200);
     assert.equal(earth.headers.get("content-type"), "image/png");

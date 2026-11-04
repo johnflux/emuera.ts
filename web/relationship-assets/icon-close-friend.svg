@@ -1,15 +1,16 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160"><defs>
- <radialGradient id="pinkFill" cx=".34" cy=".21" r=".9"><stop offset="0" stop-color="#6c3955" stop-opacity=".87"/><stop offset=".55" stop-color="#332432" stop-opacity=".82"/><stop offset="1" stop-color="#1c1d29" stop-opacity=".95"/></radialGradient>
- <radialGradient id="goldFill"><stop offset="0" stop-color="#625036" stop-opacity=".96"/><stop offset="1" stop-color="#241e23" stop-opacity=".96"/></radialGradient>
- <radialGradient id="lavFill"><stop offset="0" stop-color="#563956" stop-opacity=".96"/><stop offset="1" stop-color="#20202c" stop-opacity=".96"/></radialGradient>
- <radialGradient id="redFill"><stop offset="0" stop-color="#54252c" stop-opacity=".96"/><stop offset="1" stop-color="#201920" stop-opacity=".96"/></radialGradient>
- <radialGradient id="grayFill"><stop offset="0" stop-color="#2f2b34" stop-opacity=".89"/><stop offset="1" stop-color="#151720" stop-opacity=".9"/></radialGradient>
- <linearGradient id="buttonPink" x2="0" y2="1"><stop stop-color="#61364c" stop-opacity=".68"/><stop offset="1" stop-color="#342533" stop-opacity=".48"/></linearGradient>
- <linearGradient id="buttonLav" x2="0" y2="1"><stop stop-color="#524062" stop-opacity=".61"/><stop offset="1" stop-color="#292737" stop-opacity=".55"/></linearGradient>
- <linearGradient id="buttonRed" x2="0" y2="1"><stop stop-color="#572d39" stop-opacity=".66"/><stop offset="1" stop-color="#301f2b" stop-opacity=".56"/></linearGradient>
- <linearGradient id="buttonGray" x2="0" y2="1"><stop stop-color="#292932" stop-opacity=".7"/><stop offset="1" stop-color="#1e1e27" stop-opacity=".7"/></linearGradient>
- <linearGradient id="fadingLine" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#e6a0c1"/><stop offset=".3" stop-color="#ad687e"/><stop offset=".7" stop-color="#5b3037"/><stop offset="1" stop-color="#24202b" stop-opacity=".1"/></linearGradient>
- <filter id="pinkGlow" x="-70%" y="-70%" width="240%" height="240%"><feGaussianBlur stdDeviation="4"/></filter>
- <filter id="goldGlow" x="-70%" y="-70%" width="240%" height="240%"><feGaussianBlur stdDeviation="3"/></filter>
- <filter id="redGlow" x="-80%" y="-100%" width="280%" height="300%"><feGaussianBlur stdDeviation="3"/></filter>
- </defs><path d="M0,-4 C-14,-19 -10,-33 0,-36 C10,-33 14,-19 0,-4 Z" transform="translate(80 75) rotate(-90) scale(1.0)" fill="#f2d38e" fill-opacity=".11" stroke="#f2d38e" stroke-width="4.4" stroke-linejoin="round"/><path d="M0,-4 C-14,-19 -10,-33 0,-36 C10,-33 14,-19 0,-4 Z" transform="translate(80 75) rotate(-18) scale(1.0)" fill="#f2d38e" fill-opacity=".11" stroke="#f2d38e" stroke-width="4.4" stroke-linejoin="round"/><path d="M0,-4 C-14,-19 -10,-33 0,-36 C10,-33 14,-19 0,-4 Z" transform="translate(80 75) rotate(54) scale(1.0)" fill="#f2d38e" fill-opacity=".11" stroke="#f2d38e" stroke-width="4.4" stroke-linejoin="round"/><path d="M0,-4 C-14,-19 -10,-33 0,-36 C10,-33 14,-19 0,-4 Z" transform="translate(80 75) rotate(126) scale(1.0)" fill="#f2d38e" fill-opacity=".11" stroke="#f2d38e" stroke-width="4.4" stroke-linejoin="round"/><path d="M0,-4 C-14,-19 -10,-33 0,-36 C10,-33 14,-19 0,-4 Z" transform="translate(80 75) rotate(198) scale(1.0)" fill="#f2d38e" fill-opacity=".11" stroke="#f2d38e" stroke-width="4.4" stroke-linejoin="round"/><circle cx="80" cy="75" r="4.9" fill="#f2d38e"/><circle cx="78" cy="73" r="1.8" fill="#fff0c5"/><path d="M80 95 V118 M67 118 H93" fill="none" stroke="#f2d38e" stroke-width="5" stroke-linecap="round"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160">
+  <defs>
+    <path id="petal" d="M-14.107-19.416C-19-33-9-40 0-32C9-40 19-33 14.107-19.416"/>
+  </defs>
+  <g transform="translate(80 79)" fill="none" stroke="#f2d38e" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round">
+    <use href="#petal" transform="rotate(0)"/>
+    <use href="#petal" transform="rotate(72)"/>
+    <use href="#petal" transform="rotate(144)"/>
+    <use href="#petal" transform="rotate(216)"/>
+    <use href="#petal" transform="rotate(288)"/>
+  </g>
+  <g transform="translate(80 79)" fill="none" stroke="#f2d38e" stroke-width="2.5" stroke-linecap="round">
+    <path d="M0-10V10M-9.5-3.1L9.5 3.1M-5.9 8.1L5.9-8.1M-5.9-8.1L5.9 8.1M-9.5 3.1L9.5-3.1"/>
+    <circle r="3" fill="#fff0c5" stroke="none"/>
+  </g>
+</svg>
