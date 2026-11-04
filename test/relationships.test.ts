@@ -328,22 +328,22 @@ PRINTFORML Second intimacy: {ABL:TARGET:親密}`);
 
 test("friendship uses exact favor/trust boundaries and trait modifiers with transparent refusals", { skip: !existsSync(GAME_ROOT) }, async () => {
   const cases: [string, string][] = [
-    ["", "know you a bit better"],
+    ["", "(?:He|She) would like to know you a bit better"],
     ["TALENT:TARGET:陽気／陰気 = 1\nTALENT:MASTER:魅力 = 1", "accepts your friendship introduction"],
-    ["CFLAG:TARGET:好感度 = 199", "know you a bit better"],
+    ["CFLAG:TARGET:好感度 = 199", "(?:He|She) would like to know you a bit better"],
     ["CFLAG:TARGET:好感度 = 200", "accepts your friendship introduction"],
-    ["CFLAG:TARGET:好感度 = 200\nTALENT:TARGET:一線越えない = 1", "know you a bit better"],
+    ["CFLAG:TARGET:好感度 = 200\nTALENT:TARGET:一線越えない = 1", "(?:He|She) would like to know you a bit better"],
     ["CFLAG:TARGET:好感度 = 300\nTALENT:TARGET:一線越えない = 1", "accepts your friendship introduction"],
-    ["CFLAG:TARGET:好感度 = 200\nTALENT:TARGET:性別嗜好 = 3", "know you a bit better"],
+    ["CFLAG:TARGET:好感度 = 200\nTALENT:TARGET:性別嗜好 = 3", "(?:He|She) would like to know you a bit better"],
     ["CFLAG:TARGET:好感度 = 300\nTALENT:TARGET:性別嗜好 = 3", "accepts your friendship introduction"],
-    ["CFLAG:TARGET:好感度 = -50", "do not really know you yet"],
-    ["CFLAG:TARGET:好感度 = -51", "do not like you"],
-    ["CFLAG:TARGET:信頼度 = -50", "do not really know you yet"],
-    ["CFLAG:TARGET:信頼度 = -51", "do not like you"],
-    ["CFLAG:TARGET:好感度 = 300\nCFLAG:TARGET:信頼度 = -1", "do not really know you yet"],
-    ["CFLAG:TARGET:好感度 = 300\nBASE:TARGET:怒り = 1", "do not like you"],
-    ["CFLAG:TARGET:好感度 = 300\nMARK:TARGET:反発刻印 = 1", "do not like you"],
-    ["CFLAG:TARGET:好感度 = 300\nRELATION:TARGET:(NO:MASTER) = 59", "do not like you"],
+    ["CFLAG:TARGET:好感度 = -50", "(?:He|She) does not really know you yet"],
+    ["CFLAG:TARGET:好感度 = -51", "(?:He|She) does not like you"],
+    ["CFLAG:TARGET:信頼度 = -50", "(?:He|She) does not really know you yet"],
+    ["CFLAG:TARGET:信頼度 = -51", "(?:He|She) does not like you"],
+    ["CFLAG:TARGET:好感度 = 300\nCFLAG:TARGET:信頼度 = -1", "(?:He|She) does not really know you yet"],
+    ["CFLAG:TARGET:好感度 = 300\nBASE:TARGET:怒り = 1", "(?:He|She) does not like you"],
+    ["CFLAG:TARGET:好感度 = 300\nMARK:TARGET:反発刻印 = 1", "(?:He|She) does not like you"],
+    ["CFLAG:TARGET:好感度 = 300\nRELATION:TARGET:(NO:MASTER) = 59", "(?:He|She) does not like you"],
     ["CFLAG:TARGET:好感度 = 300\nRELATION:TARGET:(NO:MASTER) = 60", "accepts your friendship introduction"],
     ["CFLAG:TARGET:好感度 = 400\nTALENT:TARGET:一線越えない = 1\nTALENT:TARGET:性別嗜好 = 3", "accepts your friendship introduction"],
   ];
@@ -751,6 +751,17 @@ CALL HOTPATCH_TEST_DUMP`, jit);
       assert.match(transcript, new RegExp(`time=110, lover=1, player=0, commitment=${accepted}, love=1`));
       assert.equal((transcript.match(/Proposal declined:|You ask Test Partner to marry you/g) ?? []).length, 1);
     }
+  }
+});
+
+test("accepted proposals use the target's gendered subject pronoun", { skip: !existsSync(GAME_ROOT) }, async () => {
+  for (const [gender, pronoun] of [[1, "She"], [2, "He"]] as const) {
+    const runtime = await friendshipRuntime(`TALENT:TARGET:性別 = ${gender}
+TALENT:TARGET:恋人 = 1
+TALENT:TARGET:恋慕 = 1
+EXP:TARGET:愛情経験 = 251
+CALL HOTPATCH_RELATIONSHIP_CHANGE(3)`);
+    assert.match(text(check(runtime.start("HOTPATCH_TEST_FRIENDSHIP"))), new RegExp(`You ask Test Partner to marry you\\. ${pronoun} accepts: you are now engaged\\.`));
   }
 });
 

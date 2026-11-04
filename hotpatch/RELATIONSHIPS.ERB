@@ -132,7 +132,7 @@ SIF !INRANGE(nAction, 1, 9)
 SIF nChara == MASTER
 	RETURNF "Choose another character to discuss a relationship."
 SIF CFLAG:nChara:現在位置 != CFLAG:MASTER:現在位置
-	RETURNF "They are not here."
+	RETURNF @"%(IS_FEMALE(nChara) ? "She" # "He")% is not here."
 SIF !TFLAG:100
 	RETURNF "Finish the current encounter before discussing your relationship."
 SIF FLAG:70
@@ -144,7 +144,7 @@ SIF TFLAG:102 != 1
 SIF nAction != 8 && GET_TARGETNUM() > 1
 	RETURNF "Find a private moment together first."
 SIF CFLAG:nChara:睡眠
-	RETURNF "They are asleep."
+	RETURNF @"%(IS_FEMALE(nChara) ? "She" # "He")% is asleep."
 SIF CFLAG:nChara:添い寝中
 	RETURNF "Get up from sleeping together first."
 SIF nAction != 8 && TALENT:nChara:行きずり
@@ -863,7 +863,7 @@ ELSEIF !nCalmPass
 	sResponse '= "Proposal declined: resolve their anger and resentment first. You remain lovers."
 ELSE
 	CFLAG:TARGET:7398 = 1
-	sResponse '= @"You ask %CALLNAME:TARGET% to marry you. They accept: you are now engaged."
+	sResponse '= @"You ask %CALLNAME:TARGET% to marry you. %(IS_FEMALE(TARGET) ? "She" # "He")% accepts: you are now engaged."
 ENDIF
 IF nPopup
 	PRINTFORML You reach for %CALLNAME:TARGET%'s hand, your carefully rehearsed words suddenly nowhere to be found.

@@ -1731,7 +1731,7 @@ test("AI friendship info separates current favor from the one-time bonus history
   snapshot = check(runtime.refresh());
   const refusal = snapshot.output.map((item) => item.text ?? "").join("\n");
   assert.match(refusal, /Friendship check: Favor/);
-  assert.match(refusal, /Friendship declined: They would like to know you a bit better first/);
+  assert.match(refusal, /Friendship declined: (?:He|She) would like to know you a bit better first/);
   // Earn enough goodwill for any combination of Reserved/Misanthrope, below the automatic-offer threshold.
   for (let i = 0; i < 7; i++) tool("change_feelings", { favor: 50, reason: "A positive conversation" });
   for (let i = 0; i < 5; i++) tool("change_feelings", { trust: 10, reason: "Getting to know the player" });

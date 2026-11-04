@@ -23,11 +23,11 @@ SIF HOTPATCH_FRIENDSHIP_ACTIVE(nChara)
 SIF CFLAG:nChara:好感度 >= 400 || ABL:nChara:親密 >= 5
 	RETURNF ""
 SIF HOTPATCH_FRIENDSHIP_DISLIKE(nChara)
-	RETURNF "They do not like you right now. Resolve their anger, resentment or dislike first."
+	RETURNF @"%(IS_FEMALE(nChara) ? "She" # "He")% does not like you right now. Resolve %HIS_HER(nChara)% anger, resentment or dislike first."
 SIF CFLAG:nChara:好感度 < 0 || CFLAG:nChara:信頼度 < 0
-	RETURNF "They do not really know you yet."
+	RETURNF @"%(IS_FEMALE(nChara) ? "She" # "He")% does not really know you yet."
 SIF HOTPATCH_FRIENDSHIP_SCORE(nChara) < 200
-	RETURNF "They would like to know you a bit better first."
+	RETURNF @"%(IS_FEMALE(nChara) ? "She" # "He")% would like to know you a bit better first."
 RETURNF ""
 
 @HOTPATCH_FRIENDSHIP_SCORE(nChara)
