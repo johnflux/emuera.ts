@@ -70,7 +70,19 @@ at the header width minus the watch's 239px space. Header text wraps
 to the panel width without the legacy clock-width padding or blank lines.
 
 `CALENDAR.ERB` replaces `CALENDAR` with a seven-day calendar grid popup,
-shared by the main and wake-up screens. A compact, neutral slate table has seven
+shared by the main and wake-up screens. An interactive 31-day season grid sits
+beside the agenda, with previous/next season navigation (bounded at Year 1),
+a Today button, festival markers, and highlighted selected date and seven-day
+range. The game has four 31-day seasons per year, not four-week months.
+Selecting a date starts the seven-day agenda there; the panels stack on narrow
+screens. The two panels are vertically centered beside one another.
+Muted gold trim frames the neutral teal/slate panels.
+For tenant farmers, gold diamond markers and agenda entries show harvest tribute
+due on future season starts, naming the current landlord. Pending collection
+is marked on today and shown above the panels, even when browsing another season.
+Past obligations and already-collected tribute are not inferred. These reminders
+do not alter tribute flags, harvest totals, loans or native collection rules.
+A compact table has seven
 horizontal rows, a narrow date/weekday column, and a shared events/work heading.
 Today has a green date number; empty work lists take no space. Content wraps on
 narrow screens. The dialog fits its contents vertically, capped at the viewport

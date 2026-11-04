@@ -529,6 +529,7 @@ export class Runtime {
     if (options.intrinsics !== false) {
       const { functions, enabled } = loadIntrinsics({
         routines: game.routines,
+        autoToStr: this.autoToStr,
         call: (name, args, native = true) => this.expressionFunction(name, args as Argument[], native),
         statics: (name) => { const routine = game.routines.get(name)?.[0]; return routine && this.statics.get(routine); },
         context: (variables) => this.context(variables),

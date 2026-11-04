@@ -47,7 +47,9 @@ test("date panel hides blank text lines and renders an accessible calendar icon"
 
 test("calendar popup presents seven day rows with a shared day and schedule heading", async () => {
   const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
-  assert.match(css, /\.era-calendar:popover-open \{ width: min\(1300px, calc\(100vw - 32px\)\); height: fit-content; max-height: calc\(100dvh - 32px\);/);
+  assert.match(css, /\.era-calendar:popover-open \{ width: min\(1440px, calc\(100vw - 32px\)\); height: fit-content; max-height: calc\(100dvh - 32px\);/);
+  assert.match(css, /\.era-calendar-layout \{ display: grid; grid-template-columns: minmax\(300px, \.85fr\) minmax\(0, 1\.65fr\); gap: 20px; align-items: center;/);
+  assert.match(css, /\.era-calendar-month-grid \{ display: grid; grid-template-columns: repeat\(7, minmax\(0, 1fr\)\);/);
   assert.match(css, /\.era-calendar \.era-inventory-body \{ flex: 0 1 auto;/);
   assert.match(css, /\.era-calendar-table-heading, \.era-calendar-week > \.era-calendar-day \{ display: grid; grid-template-columns: var\(--calendar-day-width\) minmax\(0, 1fr\);/);
   assert.match(css, /\.era-inventory-body \{ flex: 1; min-height: 0; overflow: auto;/);

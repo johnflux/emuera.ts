@@ -7,20 +7,26 @@
 #DIM DYNAMIC nDay
 #DIM DYNAMIC nSeason
 #DIM DYNAMIC nMonthDay
+#DIM DYNAMIC nSelected
+#DIM DYNAMIC nMonthStart
 #DIMS DYNAMIC sError
 #DIMS DYNAMIC sHeader
 nStart = LINECOUNT
 nDay = DAY
 nSeason = DAY:2
 nMonthDay = DAY:3
+nSelected = nDay
+nMonthStart = nDay - nMonthDay + 1
 DO
 	CLEARLINE LINECOUNT - nStart
 	HTML_PRINT "<era-open class='era-dialog era-calendar'>"
-	sHeader '= @"<div class='era-inventory-header'><div class='era-inventory-heading'><span class='era-calendar-emblem'></span><div><span class='era-inventory-title'>Week Calendar</span><div class='era-sub'>%HTML_ESCAPE(PRINT_DATE_F(nDay, 1))%</div></div><button value='0' class='era-dialog-close' title='Close calendar'>×</button></div>"
+	sHeader '= @"<div class='era-inventory-header'><div class='era-inventory-heading'><span class='era-calendar-emblem'></span><div><span class='era-inventory-title'>Calendar</span><div class='era-sub'>%HTML_ESCAPE(PRINT_DATE_F(nDay, 1))%</div></div><button value='0' class='era-dialog-close' title='Close calendar'>×</button></div>"
 	SIF FLAG:1007
 		sHeader += @"<div class='era-sheet-subpages era-inventory-tabs'><button value='900' class='era-sheet-subpage%(nView == 0 ? " era-current" # "")%'>Work</button><button value='901' class='era-sheet-subpage%(nView == 1 ? " era-current" # "")%'>Fertility</button></div>"
 	HTML_PRINT sHeader + "</div>"
 	HTML_PRINT "<era-open class='era-inventory-body'>"
+	SIF FLAG:地主 && FLAG:年貢
+		HTML_PRINT @"<div class='era-calendar-tribute-notice'>%HTML_ESCAPE(HOTPATCH_CALENDAR_TRIBUTE(nDay, nDay))%</div>"
 	IF nCharacter
 		HTML_PRINT "<era-open class='era-calendar-detail'>"
 		HTML_PRINT @"<div class='era-card-title'>%HTML_ESCAPE(CALLNAME:nCharacter)%<button value='-1' class='era-chip-button'>Back to week</button></div>"
@@ -35,22 +41,28 @@ DO
 		HTML_PRINT @"<div class='era-calendar-fact'><span class='era-status-label'>Workplace</span>%HTML_ESCAPE(CSTR:nCharacter:2)%</div>"
 		HTML_PRINT "<era-close>"
 	ELSE
+		HTML_PRINT "<era-open class='era-calendar-layout'>"
+		CALL HOTPATCH_CALENDAR_MONTH(nMonthStart, nSelected, nDay)
+		HTML_PRINT "<era-open class='era-calendar-agenda'>"
+		HTML_PRINT @"<div class='era-calendar-agenda-title'>Seven days <span class='era-sub'>from %HTML_ESCAPE(PRINT_DATE_F(nSelected, 1))%</span></div>"
 		HTML_PRINT "<era-open class='era-calendar-week'>"
 		HTML_PRINT @"<div class='era-calendar-table-heading'><span>Day</span><span>Event / Banquet Information / <span class='era-calendar-theme-label'>[Stone Stacking Theme]</span> / <span class='era-calendar-work-label'>%(nView ? "Fertility" # "Work")%</span></span></div>"
 		FOR nOffset, 0, 7
-			DAY = nDay + nOffset
-			DAY:3 = (nMonthDay + nOffset - 1) % 31 + 1
-			DAY:2 = (nSeason - 1 + (nMonthDay + nOffset - 1) / 31) % 4 + 1
-			HTML_PRINT @"<era-open class='era-calendar-day%(nOffset == 0 ? " era-calendar-today" # "")%'>"
+			DAY = nSelected + nOffset
+			DAY:3 = (DAY - 1) % 31 + 1
+			DAY:2 = (DAY - 1) / 31 % 4 + 1
+			HTML_PRINT @"<era-open class='era-calendar-day%(DAY == nDay ? " era-calendar-today" # "")%'>"
 			HTML_PRINT @"<div class='era-calendar-date' title='%HTML_ESCAPE(PRINT_DATE_F(DAY, 1))%'><span class='era-calendar-number'>{DAY:3}</span><span class='era-calendar-weekday'>%HTML_ESCAPE(GET_DAY_TR())%</span></div>"
 			HTML_PRINT "<era-open class='era-calendar-day-content'>"
-			CALL HOTPATCH_CALENDAR_SCHEDULE(nView, nOffset)
+			CALL HOTPATCH_CALENDAR_SCHEDULE(nView, DAY - nDay)
 			HTML_PRINT "<era-close>"
 			HTML_PRINT "<era-close>"
 			DAY = nDay
 			DAY:2 = nSeason
 			DAY:3 = nMonthDay
 		NEXT
+		HTML_PRINT "<era-close>"
+		HTML_PRINT "<era-close>"
 		HTML_PRINT "<era-close>"
 	ENDIF
 	HTML_PRINT "<era-close>"
@@ -63,6 +75,21 @@ DO
 		RETURN
 	CASE -1
 		nCharacter = 0
+	CASE -9401
+		IF nMonthStart > 1
+			nMonthStart -= 31
+			nSelected = nMonthStart
+		ELSE
+			sError '= "This is the first season."
+		ENDIF
+	CASE -9402
+		nMonthStart += 31
+		nSelected = nMonthStart
+	CASE -9403
+		nSelected = nDay
+		nMonthStart = nDay - nMonthDay + 1
+	CASE -9531 TO -9501
+		nSelected = nMonthStart - RESULT - 9501
 	CASE 900
 		nView = 0
 		nCharacter = 0
@@ -82,6 +109,56 @@ DO
 	ENDSELECT
 LOOP 1
 
+@HOTPATCH_CALENDAR_MONTH(nStart, nSelected, nToday)
+#DIM DYNAMIC nStart
+#DIM DYNAMIC nSelected
+#DIM DYNAMIC nToday
+#DIM DYNAMIC nCell
+#DIM DYNAMIC nDate
+#DIM DYNAMIC nLeading
+#DIMS DYNAMIC sHtml
+#DIMS DYNAMIC sFestival
+#DIMS DYNAMIC sTribute
+nLeading = (nStart + 6) % 7
+HTML_PRINT "<era-open class='era-calendar-month'>"
+HTML_PRINT @"<div class='era-calendar-month-heading'><button value='-9401' class='era-chip-button' title='Previous season'>&lt;</button><div>%HTML_ESCAPE(GET_MONTH((nStart - 1) / 31 % 4 + 1, 1))%<span class='era-sub'>Year {(nStart - 1) / 124 + 1}</span></div><button value='-9402' class='era-chip-button' title='Next season'>&gt;</button></div>"
+sHtml '= "<div class='era-calendar-month-grid'><span class='era-calendar-dow'>Mon</span><span class='era-calendar-dow'>Tue</span><span class='era-calendar-dow'>Wed</span><span class='era-calendar-dow'>Thu</span><span class='era-calendar-dow'>Fri</span><span class='era-calendar-dow'>Sat</span><span class='era-calendar-dow'>Sun</span>"
+FOR nCell, 0, ((nLeading + 31 + 6) / 7) * 7
+	nDate = nCell - nLeading + 1
+	IF nDate < 1 || nDate > 31
+		sHtml += "<span class='era-calendar-month-blank'></span>"
+	ELSE
+		DAY = nStart + nDate - 1
+		DAY:3 = nDate
+		DAY:2 = (DAY - 1) / 31 % 4 + 1
+		sFestival '= FESTIVAL_TR()
+		sTribute '= HOTPATCH_CALENDAR_TRIBUTE(DAY, nToday)
+		sHtml += @"<button value='{-9500 - nDate}' class='era-calendar-month-date%(DAY == nSelected ? " era-calendar-selected" # "")%%(DAY == nToday ? " era-calendar-month-today" # "")%%(DAY >= nSelected && DAY < nSelected + 7 ? " era-calendar-in-week" # "")%' title='%HOTPATCH_ATTRIBUTE(HTML_ESCAPE(PRINT_DATE_F(DAY, 1) + COND_STR(" - " + sFestival, sFestival != "") + COND_STR(" - " + sTribute, sTribute != "")))%'><span>{nDate}</span>%COND_STR("<span class='era-calendar-event-dot'></span>", sFestival != "")%%COND_STR("<span class='era-calendar-tribute-dot'></span>", sTribute != "")%</button>"
+	ENDIF
+NEXT
+DAY = nToday
+DAY:3 = (nToday - 1) % 31 + 1
+DAY:2 = (nToday - 1) / 31 % 4 + 1
+HTML_PRINT sHtml + "</div>"
+sHtml '= "<div class='era-calendar-month-footer'><button value='-9403' class='era-chip-button'>Today</button><span><span class='era-calendar-event-dot'></span> Festival</span>"
+SIF FLAG:地主
+	sHtml += "<span><span class='era-calendar-tribute-dot'></span> Harvest tribute</span>"
+HTML_PRINT sHtml + "</div>"
+HTML_PRINT "<era-close>"
+
+@HOTPATCH_CALENDAR_TRIBUTE(nDate, nToday)
+#FUNCTIONS
+#DIM DYNAMIC nDate
+#DIM DYNAMIC nToday
+SIF !FLAG:地主
+	RETURNF ""
+IF nDate == nToday && FLAG:年貢
+	RETURNF "Harvest tribute pending collection - " + CALLNAME:(FLAG:地主)
+ENDIF
+SIF nDate > nToday && (nDate - 1) % 31 == 0
+	RETURNF "Harvest tribute due - " + CALLNAME:(FLAG:地主)
+RETURNF ""
+
 @HOTPATCH_CALENDAR_SCHEDULE(nView, nOffset)
 #DIM DYNAMIC nView
 #DIM DYNAMIC nOffset
@@ -94,6 +171,10 @@ LOOP 1
 #DIM DYNAMIC nWorkType
 #DIM DYNAMIC nPay
 #DIM DYNAMIC nThanks
+#DIMS DYNAMIC sTribute
+sTribute '= HOTPATCH_CALENDAR_TRIBUTE(DAY, DAY - nOffset)
+SIF sTribute != ""
+	HTML_PRINT @"<div class='era-calendar-tribute'>%HTML_ESCAPE(sTribute)%</div>"
 HTML_PRINT "<era-open class='era-calendar-events'>"
 IF FESTIVAL() != ""
 	SETCOLOR C_RED

@@ -524,8 +524,36 @@ QUIT`, "<calendar-popup-test>");
       return html;
     };
     const initial = check(7);
+    assert.equal((initial.match(/class='era-calendar-month-date/g) ?? []).length, 31);
+    assert.equal((initial.match(/class='era-calendar-month-blank'/g) ?? []).length, 4,
+      "Winter starts on Wednesday and needs five calendar rows");
+    assert.match(initial, /value='-9531' class='[^']*era-calendar-selected[^']*era-calendar-month-today/);
     assert.match(initial, /era-calendar-number'>31</);
     assert.match(initial, /era-calendar-number'>1</);
+    for (const [value, firstDate, year] of [
+      ["-9402", 1, 2], ["-9503", 3, 2], ["-9401", 1, 1], ["-9531", 31, 1],
+      ["-9403", 31, 1],
+    ] as const) {
+      snapshot = runtime.input(value);
+      const html = check(7);
+      assert.equal((html.match(/class='era-calendar-month-date/g) ?? []).length, 31);
+      assert.match(html, new RegExp(`era-calendar-number'>${firstDate}<`));
+      assert.match(html, new RegExp(`Year ${year}</span>`));
+      if (value === "-9402") {
+        assert.equal((html.match(/class='era-calendar-month-blank'/g) ?? []).length, 11,
+          "the next year's Spring starts on Saturday and needs six calendar rows");
+        assert.match(html, /Seven days <span class='era-sub'>from 1st of Spring, Year 2/);
+      }
+    }
+    // Navigate back to the first season, then verify its lower bound.
+    for (let season = 0; season < 3; season++) {
+      snapshot = runtime.input("-9401");
+      check(7);
+    }
+    snapshot = runtime.input("-9401");
+    assert.match(check(7), /This is the first season/);
+    snapshot = runtime.input("-9403");
+    check(7);
     for (const value of ["901", "900", "1", "-1", "9999"]) {
       snapshot = runtime.input(value);
       const html = check(value === "1" ? 0 : 7);
@@ -537,6 +565,65 @@ QUIT`, "<calendar-popup-test>");
     assert.equal(snapshot.status, "halted");
     assert.deepEqual(snapshot.output.flatMap(item => item.type === "text" ? [item.text] : []),
       ["State: 124, 4, 31, 720", "Work: 321, 123, 456, 9, 2, 789, 12"]);
+  }
+});
+
+test("calendar marks upcoming landlord tribute and pending collection without changing obligations", {
+  skip: !existsSync(GAME_ROOT),
+}, async () => {
+  const game = await loadGame();
+  await applyHotpatches(game);
+  for (const jit of [false, true]) {
+    for (const [today, landlord, pending, selected, due, notice] of [
+      [31, 1, 0, 31, true, false],
+      [124, 1, 0, 124, true, false],
+      [32, 1, 0, 32, false, false],
+      [34, 1, 1, 34, false, true],
+      [34, 1, 1, 1, false, true],
+      [31, 0, 1, 31, false, false],
+    ] as const) {
+      const stub = emptyGame(game.root);
+      indexScript(stub, `@SYSTEM_TITLE
+ADDCHARA 0
+ADDCHARA 1
+MASTER = 0
+TARGET = 1
+CALLNAME:1 = Landlord
+DAY = ${today}
+DAY:2 = ${Math.floor((today - 1) / 31) % 4 + 1}
+DAY:3 = ${(today - 1) % 31 + 1}
+FLAG:地主 = ${landlord}
+FLAG:年貢 = ${pending}
+FLAG:畑仕事の成果 = 73
+FLAG:地主貸付金 = 2500
+CALL CALENDAR
+PRINTFORML Obligations: {FLAG:地主}, {FLAG:年貢}, {FLAG:畑仕事の成果}, {FLAG:地主貸付金}
+PRINTFORML Date: {DAY}, {DAY:2}, {DAY:3}
+QUIT`, "<calendar-tribute-test>");
+      game.routines.set("SYSTEM_TITLE", stub.routines.get("SYSTEM_TITLE")!);
+      const runtime = new Runtime(game, GAME_INSTRUCTION_LIMIT, { jit });
+      let snapshot = runtime.start();
+      if (selected === 1) {
+        snapshot = runtime.input("-9401");
+      }
+      assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
+      const html = snapshot.output.flatMap(item => item.type === "html" ? [item.text] : []).join("");
+      assert.equal(html.includes("Harvest tribute due - Landlord"), due);
+      assert.equal(html.includes("era-calendar-tribute-notice"), notice);
+      assert.equal(html.includes("Harvest tribute pending collection - Landlord"), notice);
+      if (due) {
+        snapshot = runtime.input("-9402");
+        assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
+        const month = snapshot.output.flatMap(item => item.type === "html" ? [item.text] : []).join("");
+        assert.match(month, /value='-9501'[^>]*title='[^']*Harvest tribute due - Landlord[^']*'>.*?era-calendar-tribute-dot/);
+      }
+      if (!landlord) assert.doesNotMatch(html, /era-calendar-tribute-dot|Harvest tribute/);
+      snapshot = runtime.input("0");
+      assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
+      assert.deepEqual(snapshot.output.flatMap(item => item.type === "text" ? [item.text] : []),
+        [`Obligations: ${landlord}, ${pending}, 73, 2500`,
+          `Date: ${today}, ${Math.floor((today - 1) / 31) % 4 + 1}, ${(today - 1) % 31 + 1}`]);
+    }
   }
 });
 

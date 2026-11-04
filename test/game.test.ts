@@ -243,6 +243,17 @@ test("OBJ framework intrinsics return what the ERB framework returns", {
   });
   assert.equal(runtimes[0]!.runtime.enabledIntrinsics.length, 1);
   assert.equal(runtimes[1]!.runtime.enabledIntrinsics.length, 0);
+  for (const { runtime, call } of runtimes) {
+    const state = runtime as unknown as {
+      globals: { get(name: string, indices: unknown[], context: unknown): unknown; set(name: string, indices: unknown[], value: unknown, context: unknown): void };
+      context(variables: unknown): unknown;
+    };
+    const context = state.context(state.globals);
+    state.globals.set("DAY", [], 5n, context);
+    assert.equal(call("GET_INT", [0n, "キャラデータ", 30n, "特殊衣装着用"]), 62n);
+    assert.equal(call("GET_INT", [0n, "キャラデータ", 30n, "特殊衣装着用"]), 62n);
+    assert.equal(call("TEMP_STOCK", ["GET_TOTAL"]), "0");
+  }
   const results = runtimes.map(({ call: raw }) => {
     const call = (name: string, args: unknown[]): unknown => {
       try { return raw(name, args); } catch (error) { return (error as Error).message; }

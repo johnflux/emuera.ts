@@ -11,6 +11,7 @@ export type Intrinsic = (args: IntrinsicArgument[]) => Value | typeof DECLINE;
 
 export interface IntrinsicHost {
   routines: Map<string, Routine[]>;
+  autoToStr: boolean;
   /** Runs a user function as an expression function; nested calls still use intrinsics, the named routine's own ERB body runs when `native` is false. */
   call(name: string, args: IntrinsicArgument[], native?: boolean): Value;
   /** The static variables of a routine, if it has run. */
@@ -59,7 +60,11 @@ function objFramework(host: IntrinsicHost): Map<string, Intrinsic> {
   const classIndex = new Map<string, number>();
 
   const int = (arg: IntrinsicArgument): bigint | undefined => arg === undefined ? 0n : typeof arg === "bigint" ? arg : undefined;
-  const str = (arg: IntrinsicArgument): string | undefined => arg === undefined ? "" : typeof arg === "string" ? arg : undefined;
+  const str = (arg: IntrinsicArgument): string | undefined => {
+    if (arg === undefined) return "";
+    if (typeof arg === "string") return arg;
+    return typeof arg === "bigint" && host.autoToStr ? String(arg) : undefined;
+  };
   const erb = (name: string, args: IntrinsicArgument[]): Value => {
     captures.push(null);
     try { return host.call(name, args, false); } finally { captures.pop(); }
