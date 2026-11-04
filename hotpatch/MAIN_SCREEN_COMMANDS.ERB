@@ -35,6 +35,7 @@ RETURNF 0
 #DIM DYNAMIC nOld
 #DIM DYNAMIC nShown, 800
 #DIM DYNAMIC nFilters
+#DIMS DYNAMIC sAutoToggles
 TFLAG:100 = !TFLAG:101
 VARSET LOCAL
 ;前ターンのMASTERが射精した相手をLOCAL:1へセット
@@ -422,26 +423,18 @@ SIF CAN_DATE(TARGET)
 	PRINTC Invite On A Date[992]
 SIF FLAG:パンツ輸送
 	PRINTC Check Pilfered Panties[994]
-IF AT_HOME(MASTER) && GETBIT(FLAG:瞬間移動, 1)
-	SETCOLOR 0x5090FF
-ELSEIF !AT_HOME(MASTER) && GETBIT(FLAG:瞬間移動, 0)
-	SETCOLOR 0x5090FF
+sAutoToggles '= ""
+IF !GETBIT(FLAG:USERCOMフィルタ, 13)
+	sAutoToggles += @"<button value='995' class='era-toggle%(GETBIT(FLAG:瞬間移動, AT_HOME(MASTER)) ? " era-on" # "")%' role='checkbox' aria-checked='%(GETBIT(FLAG:瞬間移動, AT_HOME(MASTER)) ? "true" # "false")%' title='Travel with TSP automatically whenever you have enough'>Auto-TSP Movement</button>"
 ENDIF
-SIF !GETBIT(FLAG:USERCOMフィルタ, 13)
-	PRINTC Auto-TSP Movement[995]
-RESETCOLOR
-
 ;自動掃除
-IF AT_HOME(MASTER) && GETBIT(FLAG:自動掃除, 1)
-	SETCOLOR 0x5090FF
-ELSEIF !AT_HOME(MASTER) && GETBIT(FLAG:自動掃除, 0)
-	SETCOLOR 0x5090FF
+IF !GETBIT(FLAG:USERCOMフィルタ, 14) & AT_HOME(MASTER) && !CFLAG:うふふ && !CFLAG:添い寝中 && !CFLAG:MASTER:イタズラ ;bug fix
+	sAutoToggles += @"<button value='996' class='era-toggle%(GETBIT(FLAG:自動掃除, AT_HOME(MASTER)) ? " era-on" # "")%' role='checkbox' aria-checked='%(GETBIT(FLAG:自動掃除, AT_HOME(MASTER)) ? "true" # "false")%'>Auto-Clean</button>"
 ENDIF
-SIF !GETBIT(FLAG:USERCOMフィルタ, 14) & AT_HOME(MASTER) && !CFLAG:うふふ && !CFLAG:添い寝中 && !CFLAG:MASTER:イタズラ ;bug fix
-	PRINTC Auto-Clean[996]
-RESETCOLOR
+sAutoToggles += @"<button value='-9200' class='era-toggle%(FLAG:押し倒し ? " era-on" # "")%' role='checkbox' aria-checked='%(FLAG:押し倒し ? "true" # "false")%' title='When on, someone only pushes you down if they are stronger than you (fighting ability and build, with shyness, seduction and forwardness); otherwise they just hug you. When off, anyone in the mood can push you down.'>Pushdown Guard</button>"
+SIF STRLENS(sAutoToggles)
+	HTML_PRINT @"<div class='era-toggles era-auto-toggles'>%sAutoToggles%</div>"
 
-HTML_PRINT @"<span class='era-guard-control'><button value='-9200' class='era-guard-toggle' aria-pressed='%(FLAG:押し倒し ? "true" # "false")%' title='When on, someone only pushes you down if they are stronger than you (fighting ability and build, with shyness, seduction and forwardness); otherwise they just hug you. When off, anyone in the mood can push you down.'>Pushdown Guard</button></span>"
 PRINTL
 ;custom, moved to its own line due to length
 IF CAN_DATE(TARGET)
@@ -689,7 +682,7 @@ SIF STRLENS(sKind)
 	sClass '= " era-kind-" + sKind
 SIF STRLENS(sTitle)
 	sTitle '= @" title='%sLabel%: %sTitle%'"
-RETURNF @"<button value='{nValue}' class='era-toggle%sClass%%(nOn ? " era-on" # "")%' aria-pressed='%(nOn ? "true" # "false")%'%sTitle%>%sLabel%</button>"
+RETURNF @"<button value='{nValue}' class='era-toggle%sClass%%(nOn ? " era-on" # "")%' role='checkbox' aria-checked='%(nOn ? "true" # "false")%'%sTitle%>%sLabel%</button>"
 
 ;-------------------------------------------------------------------------------
 ; QOL_EXTRA_COMMAND_BUTTONS as toggle chips, each only when it can matter: the sex settings (condom, moaning,
@@ -712,7 +705,7 @@ IF TARGET > 0 && TARGET != MASTER && (CFLAG:MASTER:うふふ || CFLAG:TARGET:う
 		CASEELSE
 			sMoan '= "Invalid Option"
 	ENDSELECT
-	sHtml += HOTPATCH_TOGGLE(sMoan, 4000, CFLAG:オート喘ぎ, "", "Cycles this character through No, Yes and Yes (Ahegao). Adds automatic moans during intimate actions when no scripted dialogue is provided; Ahegao enables more expressive variations.")
+	sHtml += @"<button value='4000' class='era-cycle-toggle' title='%sMoan%: Cycles this character through No, Yes and Yes (Ahegao). Adds automatic moans during intimate actions when no scripted dialogue is provided; Ahegao enables more expressive variations.'>%sMoan%</button>"
 	sHtml += HOTPATCH_TOGGLE("Standing", -9122, CFLAG:STANDING_TOGGLE, "", "Prefer standing versions of supported intimate positions with this character. When off, use normal positions where the location allows; standing may still be required elsewhere. Does not apply during sleep sessions.")
 ENDIF
 HTML_PRINT @"<div class='era-toggles era-settings'>%sHtml%</div>"

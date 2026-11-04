@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -6,8 +7,19 @@ import { emptyGame, indexScript, isGameRoot, loadGame } from "../src/loader.js";
 import { Runtime } from "../src/runtime.js";
 
 const suite = fileURLToPath(new URL("../OTHER/emuera-tty/compat", import.meta.url));
+const ttyTests = new URL("../OTHER/emuera-tty/tests/erb/", import.meta.url);
 
 for (const jit of [false, true]) {
+  test(`installed tty string/regex checks (${jit ? "JIT" : "interpreted"})`, { skip: !existsSync(new URL("strings_regex.erb", ttyTests)) }, async () => {
+    const game = emptyGame();
+    for (const name of ["_helpers.erh", "_helpers.erb", "strings_regex.erb"])
+      indexScript(game, await readFile(new URL(name, ttyTests), "utf8"), name, name.endsWith(".erh"));
+    const snapshot = new Runtime(game, 50_000, { jit }).start();
+    assert.equal(snapshot.status, "halted", JSON.stringify(snapshot.error));
+    const lines = snapshot.output.flatMap(line => "text" in line ? [line.text] : []);
+    assert.deepEqual(lines.filter(line => line.startsWith("NG ")), []);
+    assert.ok(lines.includes("DONE 26 checks"));
+  });
   test(`installed eraBasic conformance suite (${jit ? "JIT" : "interpreted"})`, { skip: !isGameRoot(suite) }, async () => {
     const game = await loadGame(suite);
     assert.deepEqual(game.diagnostics, []);

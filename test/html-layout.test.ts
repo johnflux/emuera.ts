@@ -11,6 +11,7 @@ test("HTML renderer supports semantic headings while keeping executable tags dis
   const allowed = runInNewContext(`${declaration}\nallowedTags`) as Set<string>;
   for (let level = 1; level <= 6; level++) assert.ok(allowed.has(`H${level}`));
   for (const tag of ["SCRIPT", "STYLE", "IFRAME", "OBJECT", "EMBED"]) assert.ok(!allowed.has(tag));
+  assert.match(source, /node\.getAttribute\("role"\) === "checkbox"[\s\S]*element\.setAttribute\("aria-checked", checked\)/);
 });
 
 test("custom action button wrappers participate directly in the action flex row", async () => {
@@ -42,13 +43,15 @@ test("date panel hides blank text lines and renders an accessible calendar icon"
   const icon = await readFile(new URL("../web/calendar.svg", import.meta.url), "utf8");
   assert.match(icon, /viewBox="0 0 24 24"/);
   assert.match(icon, /stroke="#000"/);
-  assert.match(icon, /<rect[^>]*fill="#fff"/);
+  assert.match(icon, /<rect[^>]*fill="#fff" fill-opacity="0\.8"/);
+  assert.equal((icon.match(/width="2" height="2"/g) ?? []).length, 5, "small date cells remain distinct at 40px");
+  assert.match(icon, /width="4" height="4"/, "one marked date anchors the icon");
 });
 
 test("calendar popup presents seven day rows with a shared day and schedule heading", async () => {
   const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
   assert.match(css, /\.era-calendar:popover-open \{ width: min\(1440px, calc\(100vw - 32px\)\); height: fit-content; max-height: calc\(100dvh - 32px\);/);
-  assert.match(css, /\.era-calendar-layout \{ display: grid; grid-template-columns: minmax\(300px, \.85fr\) minmax\(0, 1\.65fr\); gap: 20px; align-items: center;/);
+  assert.match(css, /\.era-calendar-layout \{ display: grid; grid-template-columns: minmax\(300px, \.85fr\) minmax\(0, 1\.65fr\); gap: 20px; align-items: start;/);
   assert.match(css, /\.era-calendar-month-grid \{ display: grid; grid-template-columns: repeat\(7, minmax\(0, 1fr\)\);/);
   assert.match(css, /\.era-calendar \.era-inventory-body \{ flex: 0 1 auto;/);
   assert.match(css, /\.era-calendar-table-heading, \.era-calendar-week > \.era-calendar-day \{ display: grid; grid-template-columns: var\(--calendar-day-width\) minmax\(0, 1fr\);/);
@@ -60,6 +63,9 @@ test("calendar popup presents seven day rows with a shared day and schedule head
   assert.match(patch, /class='era-calendar-weekday'/);
   assert.match(patch, /class='era-calendar-table-heading'/);
   assert.match(patch, /class='era-calendar-day-content'/);
+  assert.doesNotMatch(patch, /era-calendar-agenda-title/);
+  assert.match(patch, /class='era-calendar-agenda'>"\s*HTML_PRINT "<era-open class='era-calendar-week'/);
+  assert.match(patch, /title='Festival marks a named holiday, not necessarily a gathering\.[^']*Banquets are listed separately\.'/);
 });
 
 test("all dialog close buttons retain accessible names without hover tooltips", async () => {
@@ -1070,14 +1076,15 @@ test("room overlays reserve no layout height and chat follows every responsive m
   assert.match(css, /\.era-main:has\(\.era-main-chat\) \{ grid-template-rows: auto 1fr auto auto auto; \}/);
   assert.match(css, /\.era-main:has\(\.era-main-chat\):not\(:has\(\.era-counters\)\) \{ grid-template-rows: auto 1fr auto auto; \}/);
   assert.match(css, /\.era-character:has\(\.era-main-chat\) \{ grid-template-rows: auto 1fr; \}/);
-  assert.match(css, /\.era-player-management \.era-actions-group span:has\(> \.era-guard-control\) \{ display: contents; \}/);
+  assert.match(css, /\.era-actions-group span:has\(> \.era-guard-control\) \{ display: contents; \}/);
   assert.match(css, /\.era-player-management \.era-actions-group :is\(\.print-cell, \.era-guard-control\) \{ display: block; flex: 1 1 100%; \}/);
   assert.match(css, /button\.choice:is\(\.era-see-more, \.era-info-more\) \{[^}]*border: 0; border-radius: 0;/);
   assert.match(css, /\.era-main-sidebar > \.era-main-right \{ flex: 1; \}/);
   assert.match(css, /\.era-main-sidebar > \.era-main-left \{ flex: none; \}/);
   assert.match(css, /\.era-main-left > \.era-stats \{ flex: none; \}/);
   assert.match(css, /\.era-player-actions \{[^}]*margin-top: auto;/);
-  assert.match(css, /\.era-main \.era-player :is\(\.print-cell, \.era-guard-control\),\s*\.era-main \.era-player \.line button\.choice:is\(\.era-player-control, \.era-chip-button, \.era-toggle\) \{[^}]*padding: 6px 10px;[^}]*border-radius: 4px;/);
+  assert.match(css, /\.era-main \.era-player :is\(\.print-cell, \.era-guard-control\),\s*\.era-main \.era-player \.line button\.choice:is\(\.era-player-control, \.era-chip-button\) \{[^}]*padding: 6px 10px;[^}]*border-radius: 4px;/);
+  assert.match(css, /\.line button\.choice\.era-toggle \{ display: inline-flex; align-items: center; gap: 5px;/);
   const patch = await readFile(new URL("../hotpatch/MAIN_SCREEN.ERB", import.meta.url), "utf8");
   assert.doesNotMatch(patch, /era-interaction-history/);
   assert.doesNotMatch(patch, /era-info-tabs|era-info-title/);

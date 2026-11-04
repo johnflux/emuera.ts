@@ -212,6 +212,46 @@ CASE 9
 ENDSELECT
 RETURNF ""
 
+@HOTPATCH_RELATIONSHIP_REQUIREMENTS(nAction, nChara)
+#DIM DYNAMIC nAction
+#DIM DYNAMIC nChara
+#DIM DYNAMIC nThreshold
+#DIM DYNAMIC nCurrent
+#DIM DYNAMIC nMet
+#DIMS DYNAMIC sLabel
+#DIMS DYNAMIC sComparison
+SELECTCASE nAction
+CASE 1
+	sLabel '= "Agreement"
+	nCurrent = CFLAG:nChara:合意判定
+	nThreshold = 350 + TALENT:nChara:一線越えない * 100
+	sComparison '= "&gt;"
+CASE 2
+	sLabel '= "Friendship favor"
+	nCurrent = CFLAG:nChara:好感度
+	nThreshold = 500
+	sComparison '= "&ge;"
+CASE 3
+	sLabel '= "Love exp"
+	nCurrent = EXP:nChara:愛情経験
+	nThreshold = 250 + TALENT:nChara:一線越えない * 100
+	sComparison '= "&gt;"
+ENDSELECT
+IF STRLENS(sLabel)
+	nMet = nAction == 2 ? nCurrent >= nThreshold # nCurrent > nThreshold
+	HTML_PRINT @"<p class='era-relationship-requirement %(nMet ? "era-requirement-met" # "era-requirement-unmet")%'>%sLabel%: <b>{nCurrent} %sComparison% {nThreshold}</b> <span>%(nMet ? "Met" # "Not met")%</span></p>"
+	SIF GROUPMATCH(nAction, 1, 3) && TALENT:nChara:一線越えない
+		HTML_PRINT "<p class='era-relationship-requirement-note'>Reserved raises the threshold by 100.</p>"
+ENDIF
+IF nAction == 1
+	HTML_PRINT "<p class='era-relationship-requirement-note'>Standard threshold; character dialogue can override it.</p>"
+ELSEIF nAction == 2
+	HTML_PRINT "<p class='era-relationship-requirement-note'>Allows asking; acceptance uses a separate native calculation.</p>"
+ELSEIF GROUPMATCH(nAction, 3, 4)
+	nMet = !(BASE:nChara:怒り > 0 || CFLAG:nChara:不機嫌 || MARK:nChara:反発刻印)
+	HTML_PRINT @"<p class='era-relationship-requirement %(nMet ? "era-requirement-met" # "era-requirement-unmet")%'>No anger or resentment: <span>%(nMet ? "Met" # "Not met")%</span></p>"
+ENDIF
+
 @HOTPATCH_RELATIONSHIP_DIALOG(nPreview = 0)
 #DIM DYNAMIC nPreview
 #DIM DYNAMIC nStart
@@ -219,6 +259,7 @@ RETURNF ""
 #DIMS DYNAMIC sReason
 #DIMS DYNAMIC sError
 #DIMS DYNAMIC sHate
+CALL CHARA_ATTITUDE
 nStart = LINECOUNT
 DO
 	CLEARLINE LINECOUNT - nStart
@@ -232,7 +273,7 @@ DO
 	HTML_PRINT @"<div class='era-relationship-header'><span class='era-info-face'>%RESULTS%</span>%HOTPATCH_RELATIONSHIP_ICON(TARGET)%<div><span class='era-sub'>Your relationship with</span><h2 class='era-relationship-heading'>%HTML_ESCAPE(CALLNAME:TARGET)%</h2>%sHate%</div><button value='999' class='era-dialog-close' title='Close relationship dialog'>×</button></div>"
 	HTML_PRINT "<era-open class='era-relationship-body'>"
 	HTML_PRINT @"<div class='era-relationship-timeline' data-favor='{CFLAG:TARGET:好感度}' data-intimacy='{ABL:TARGET:親密}' data-lover='{TALENT:TARGET:恋人 != 0}' data-in-love='{TALENT:TARGET:恋慕 != 0}' data-casual='{TALENT:TARGET:セフレ != 0}' data-commitment='{HOTPATCH_RELATIONSHIP_STATE(TARGET)}'></div>"
-	HTML_PRINT @"<div class='era-relationship-summary'><span>Favor <b>{CFLAG:TARGET:好感度}</b></span><span>Trust <b>{CFLAG:TARGET:信頼度}</b></span><span>Intimacy <b>{ABL:TARGET:親密}</b></span><span>Love exp <b>{EXP:TARGET:愛情経験}</b></span>%HOTPATCH_RELATIONSHIP_FLAGS(TARGET)%</div>"
+	HTML_PRINT @"<div class='era-relationship-summary'><span>Favor <b>{CFLAG:TARGET:好感度}</b></span><span>Trust <b>{CFLAG:TARGET:信頼度}</b></span><span>Intimacy <b>{ABL:TARGET:親密}</b></span><span>Agreement <b>{CFLAG:TARGET:合意判定}</b></span><span>Love exp <b>{EXP:TARGET:愛情経験}</b></span>%HOTPATCH_RELATIONSHIP_FLAGS(TARGET)%</div>"
 	IF STRLENS(sError)
 		HTML_PRINT @"<p class='era-relationship-error' role='alert'>%HTML_ESCAPE(sError)%</p>"
 	ENDIF
@@ -247,6 +288,7 @@ DO
 		ELSE
 			HTML_PRINT @"<h3 class='era-relationship-option-title'><button value='{nAction}' class='era-relationship-select'>%HOTPATCH_RELATIONSHIP_ACTION_NAME(nAction)%</button></h3>"
 		ENDIF
+		CALL HOTPATCH_RELATIONSHIP_REQUIREMENTS(nAction, TARGET)
 		HTML_PRINT "<era-close>"
 	NEXT
 	HTML_PRINT "<era-close>"

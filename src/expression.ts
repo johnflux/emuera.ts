@@ -83,8 +83,8 @@ function tokenize(source: string, depth = 0): Token[] {
         if (c === "\\") {
           const next = source[i++];
           if (next === undefined) throw new EraError("Unterminated string escape");
-          const escapes: Record<string, string> = { n: "\n", r: "\r", t: "\t", '"': '"', "\\": "\\" };
-          value += next in escapes ? escapes[next] : "\\" + next;
+          const escapes: Record<string, string> = { n: "\n", t: "\t", s: " ", S: "\u3000", "\n": "" };
+          value += next in escapes ? escapes[next] : next;
         } else value += c;
       }
       if (!closed) throw new EraError("Unterminated string");

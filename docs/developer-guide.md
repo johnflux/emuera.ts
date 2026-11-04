@@ -983,6 +983,15 @@ lines with the expectations in the TypeScript test. Do not run these probes
 inside an installed game's directory. The browser runtime additionally prints
 its existing `Log written to emuera.log` notification.
 
+`native-string-escapes.erb` covers ordinary versus formatted string escapes,
+eraTW's input-trim pattern, and regex operators that must stay literal.
+Its escape and replacement expectations were checked by invoking the original
+Emuera 1.824 assembly's `LexicalAnalyzer.ReadString` under Mono, then .NET
+`Regex.Replace`, without launching the game UI. The escaping rules agree with
+[Emuera-EM's lexer](https://github.com/ArtifactYu/era-for-Android/blob/fe54fae4693ab0f3d93bf38836f64d0fafbf6aa7/upstream/emuera.em/Emuera/Runtime/Script/Parser/LexicalAnalyzer.cs)
+and the local tty parser independently corroborates `\s`, `\S`, and
+unknown-escape handling.
+
 The core conformance fixtures verify native shift-count masking (low six bits,
 including negative counts), inclusive string `CASE ... TO ...` ranges, and
 default built-in array dimensions. `CASE IS` deliberately retains the native
@@ -1005,6 +1014,13 @@ topics, not every command of every Emuera variant. The test skips when the
 ignored checkout is absent. Independent fixtures above capture the actual
 fixes and their native results without copying the external suite into the
 repository.
+
+The installed-suite tests also run `OTHER/emuera-tty/tests/erb/strings_regex.erb`
+unchanged with its shared helpers: all 26 checks pass in both modes. Its Rust
+unit tests are useful leads, not native expectations: the checked-out
+`src/regex.rs` expects `$12` to fall back to `$1` plus `2`, whereas native .NET
+leaves an undefined `$12` literal. Native `$+` uses the last numbered group
+even if unmatched, and named captures are numbered after unnamed ones.
 
 The verified behavior includes NAND/NOR short-circuiting, `RETURN 0` when a
 normal routine reaches its end (without clearing other result slots),
@@ -1123,6 +1139,13 @@ stays literal rather than falling back to `$1` plus `2`. This is not complete
 .NET regex compatibility: supplementary-character matching still uses JavaScript
 Unicode semantics, and numeric pattern backreferences are not remapped for
 mixed named/unnamed captures. Invalid JavaScript regex syntax reports a script error.
+Ordinary string literals follow Emuera's escaping rules: `\n`, `\t`, `\s`, and
+`\S` produce a newline, tab, ASCII space, and full-width space; other escapes
+consume the backslash and keep the following character (`\r` is `r`, not a
+carriage return). Double a backslash to pass it to the regex engine: `"\\w"`
+is the regex word class, while `"\w"` is the literal letter `w`. This also
+explains eraTW's escaped trim pattern `"\(\^\\s\+\|\\s\+\$)"`: the string
+lexer produces the ordinary regex `(^\s+|\s+$)`, not POSIX basic-regex syntax.
 
 Reference checks:
 [Emuera operators](https://evilmask.gitlab.io/emuera.em.doc/Emuera/operand.html),

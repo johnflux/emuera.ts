@@ -1,0 +1,24 @@
+@SYSTEM_TITLE
+FOR A, 0, 45
+CALL PROBE
+NEXT
+PRINTL DONE
+OUTPUTLOG
+QUIT
+
+@PROBE
+PRINTSL "\q\r\s\S"
+PRINTSL "\n\t"
+PRINTSL "\\q"
+PRINTSL "\(\^\\s\+\|\\s\+\$)"
+PRINTSL @"\q\r\s\S"
+PRINTSL REPLACE("  player name  ", "\(\^\\s\+\|\\s\+\$)", "")
+PRINTSL REPLACE("(a|b)", "\\(a\\|b\\)", "#")
+PRINTSL REPLACE("(a|b)", @"\\(a\\|b\\)", "#")
+LOCALS = unchanged
+REPLACE LOCALS, "\(\^\\s\+\|\\s\+\$)", ""
+PRINTSL LOCALS
+LOCALS = \s\splayer name\s\s
+REPLACE LOCALS, "\(\^\\s\+\|\\s\+\$)", ""
+PRINTSL RESULTS
+RETURN

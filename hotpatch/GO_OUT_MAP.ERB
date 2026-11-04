@@ -388,9 +388,9 @@ NEXT
 HTML_PRINT "<div class='era-move-subtitle'>Travel to</div>"
 HTML_PRINT @"<div class='era-move-dests'>%sHtml%</div>"
 IF 同行人数() == 0
-	sHtml '= @"<button value='99' class='era-toggle%(FLAG:時間停止 ? " era-on" # "")%' title='Stop time: travel costs TSP (3 per minute) instead of time'>Time Stop</button>"
-	sHtml += @"<button value='199' class='era-toggle%(GETBIT(FLAG:瞬間移動, AT_HOME(MASTER)) ? " era-on" # "")%' title='Travel with TSP automatically whenever you have enough'>TSP Movement</button>"
-	sHtml += @"<button value='198' class='era-toggle%(FLAG:DANGEROUS_TRAVEL ? " era-on" # "")%' title='Take the dangerous paths: quicker, but something may happen on the way'>Dangerous Paths</button>"
+	sHtml '= @"<button value='99' class='era-toggle%(FLAG:時間停止 ? " era-on" # "")%' role='checkbox' aria-checked='%(FLAG:時間停止 ? "true" # "false")%' title='Stop time: travel costs TSP (3 per minute) instead of time'>Time Stop</button>"
+	sHtml += @"<button value='199' class='era-toggle%(GETBIT(FLAG:瞬間移動, AT_HOME(MASTER)) ? " era-on" # "")%' role='checkbox' aria-checked='%(GETBIT(FLAG:瞬間移動, AT_HOME(MASTER)) ? "true" # "false")%' title='Travel with TSP automatically whenever you have enough'>TSP Movement</button>"
+	sHtml += @"<button value='198' class='era-toggle%(FLAG:DANGEROUS_TRAVEL ? " era-on" # "")%' role='checkbox' aria-checked='%(FLAG:DANGEROUS_TRAVEL ? "true" # "false")%' title='Take the dangerous paths: quicker, but something may happen on the way'>Dangerous Paths</button>"
 	HTML_PRINT "<div class='era-move-subtitle'>Travel options</div>"
 	HTML_PRINT @"<div class='era-shop-chips'>%sHtml%</div>"
 ENDIF

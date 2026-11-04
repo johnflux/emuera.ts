@@ -1802,8 +1802,13 @@ async function renderHtml(markup, parent, sprites) {
       element.dataset.htmlPosition = String(sizeAttribute(position, 0, scale ?? imageScale()));
     }
     applyClasses(element, node);
+    if (node.getAttribute("role") === "checkbox") {
+      element.setAttribute("role", "checkbox");
+      const checked = node.getAttribute("aria-checked");
+      if (checked === "true" || checked === "false") element.setAttribute("aria-checked", checked);
+    }
     if (node.tagName === "DIV" && element.classList.contains("era-sky") && node.hasAttribute("data-minutes")) sky(node, element);
-    if (element.matches(".era-occupant-label, .era-guard-toggle, .era-setup-choice, .era-relationship-demo-state"))
+    if (element.matches(".era-occupant-label, .era-setup-choice, .era-relationship-demo-state"))
       element.setAttribute("aria-pressed", String(node.getAttribute("aria-pressed") === "true"));
     if (element.matches(".era-setup-choice, .era-setup-step, .era-setup-trait"))
       element.setAttribute("aria-disabled", String(node.getAttribute("aria-disabled") === "true"));

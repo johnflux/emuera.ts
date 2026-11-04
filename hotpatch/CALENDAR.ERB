@@ -44,7 +44,6 @@ DO
 		HTML_PRINT "<era-open class='era-calendar-layout'>"
 		CALL HOTPATCH_CALENDAR_MONTH(nMonthStart, nSelected, nDay)
 		HTML_PRINT "<era-open class='era-calendar-agenda'>"
-		HTML_PRINT @"<div class='era-calendar-agenda-title'>Seven days <span class='era-sub'>from %HTML_ESCAPE(PRINT_DATE_F(nSelected, 1))%</span></div>"
 		HTML_PRINT "<era-open class='era-calendar-week'>"
 		HTML_PRINT @"<div class='era-calendar-table-heading'><span>Day</span><span>Event / Banquet Information / <span class='era-calendar-theme-label'>[Stone Stacking Theme]</span> / <span class='era-calendar-work-label'>%(nView ? "Fertility" # "Work")%</span></span></div>"
 		FOR nOffset, 0, 7
@@ -140,7 +139,7 @@ DAY = nToday
 DAY:3 = (nToday - 1) % 31 + 1
 DAY:2 = (nToday - 1) / 31 % 4 + 1
 HTML_PRINT sHtml + "</div>"
-sHtml '= "<div class='era-calendar-month-footer'><button value='-9403' class='era-chip-button'>Today</button><span><span class='era-calendar-event-dot'></span> Festival</span>"
+sHtml '= "<div class='era-calendar-month-footer'><button value='-9403' class='era-chip-button'>Today</button><span title='Festival marks a named holiday, not necessarily a gathering. Select its date to see the name in the agenda. Some holidays trigger morning messages or special interactions when you meet characters; others are just date labels. There is no universal festival task or attendance requirement. Banquets are listed separately.'><span class='era-calendar-event-dot'></span> Festival</span>"
 SIF FLAG:地主
 	sHtml += "<span><span class='era-calendar-tribute-dot'></span> Harvest tribute</span>"
 HTML_PRINT sHtml + "</div>"

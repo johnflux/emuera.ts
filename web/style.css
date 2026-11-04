@@ -781,6 +781,11 @@ body:has(.menu-panel:not([hidden])) .clock-overhang { visibility: hidden; }
 .era-relationship-action-9 { --relationship-action-icon: url("/relationship-assets/icon-in-love.svg"); }
 .era-relationship-downgrade { --relationship-button: url("/relationship-assets/button-danger.svg"); --relationship-action-icon: url("/relationship-assets/icon-divorced.svg"); }
 .era-relationship-reason { display: block; margin: 4px 8px 0; white-space: normal; color: #b2a4ac; font-size: .75em; line-height: 1.35; }
+.era-relationship-option .era-relationship-requirement { margin: 8px 8px 0; font-size: .8em; }
+.era-relationship-requirement.era-requirement-met { color: #a9d8bd; }
+.era-relationship-requirement.era-requirement-unmet { color: #e4a6b0; }
+.era-relationship-requirement > span { font-weight: bold; }
+.era-relationship-option .era-relationship-requirement-note { margin: 4px 8px 0; color: #b2a4ac; font-size: .75em; line-height: 1.35; }
 .era-relationship .line .era-relationship-select { display: flex; align-items: center; justify-content: center; gap: 10px; box-sizing: border-box; width: 100%; min-height: 68px; padding: 12px 14px; border: 0; border-radius: 12px; background: var(--relationship-button) center / 100% 100% no-repeat; color: #ffe1ee; white-space: normal; text-align: left; font-size: 1.2em; }
 .era-relationship-select::before { content: ""; flex: none; width: 30px; height: 30px; background: var(--relationship-action-icon) center / 58px 58px no-repeat; }
 .era-relationship .line .era-relationship-select:is(:disabled, span) { color: #918792; background-image: url("/relationship-assets/button-disabled.svg"); cursor: not-allowed; }
@@ -970,7 +975,7 @@ body:has(.menu-panel:not([hidden])) .clock-overhang { visibility: hidden; }
 .era-calendar .era-inventory-title { color: #e2edf0; font-size: 1.4em; font-weight: normal; }
 .era-calendar-emblem { flex: none; width: 40px; height: 40px; background: url("./calendar.svg") center / contain no-repeat; }
 .era-calendar .era-inventory-body { flex: 0 1 auto; padding: 20px 28px; }
-.era-calendar-layout { display: grid; grid-template-columns: minmax(300px, .85fr) minmax(0, 1.65fr); gap: 20px; align-items: center; }
+.era-calendar-layout { display: grid; grid-template-columns: minmax(300px, .85fr) minmax(0, 1.65fr); gap: 20px; align-items: start; }
 .era-calendar-month { padding: 14px; border: 1px solid #5b8895; border-radius: 12px; background: linear-gradient(145deg, #142a34, #0b151e); box-shadow: inset 0 0 18px #76bccc08; }
 .era-calendar-month-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 16px; color: #efdfb9; text-align: center; font-size: 1.15em; }
 .era-calendar-month-heading .era-sub { display: block; margin: 3px 0 0; font-size: .75em; }
@@ -991,8 +996,6 @@ body:has(.menu-panel:not([hidden])) .clock-overhang { visibility: hidden; }
 .era-calendar-month-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-top: 16px; color: #a4b9bf; font-size: .8em; }
 .era-calendar-month-footer > span { display: inline-flex; align-items: center; gap: 6px; }
 .era-calendar-agenda { min-width: 0; }
-.era-calendar-agenda-title { padding: 0 2px 12px; color: #d3bb80; white-space: normal; }
-.era-calendar-agenda-title .era-sub { margin-left: 8px; font-size: .8em; }
 .era-calendar-week { --calendar-day-width: 64px; border: 1px solid #5b8895; border-radius: 10px; overflow: hidden; background: #0c151d; }
 .era-calendar-week > .line:has(.era-calendar-table-heading) { white-space: normal; }
 .era-calendar-table-heading, .era-calendar-week > .era-calendar-day { display: grid; grid-template-columns: var(--calendar-day-width) minmax(0, 1fr); }
@@ -1248,14 +1251,18 @@ main:has(.screen.is-active .era-launch) { padding: 0; background: #000; }
 .screen.is-active .line button.choice.era-timestop-button:focus-visible { outline: 2px solid #ffe0a2; outline-offset: 4px; }
 .era-timestop .interactive-label, .era-bars .interactive-label, .era-player-status .interactive-label, .era-occupants .interactive-label, .era-toggles .interactive-label, .era-character .interactive-label { text-decoration-line: none; }
 /* Chips and toggles. */
-.line button.choice:is(.era-chip-button, .era-toggle, .era-star), .era-chip-button { display: inline-block; padding: 1px 9px; border: 1px solid #39434c; border-radius: 999px; background: #182027; color: #c9d4dc; cursor: pointer; }
-.line button.choice.era-toggle:not(.era-on) { border-style: dashed; background: transparent; color: #707a82; }
-.line button.choice.era-on { border-color: #5aa0c8; background: #1d3444; color: #e2f4ff; }
+.line button.choice:is(.era-chip-button, .era-star), .era-chip-button { display: inline-block; padding: 1px 9px; border: 1px solid #39434c; border-radius: 999px; background: #182027; color: #c9d4dc; cursor: pointer; }
+.line button.choice.era-toggle { display: inline-flex; align-items: center; gap: 5px; padding: 2px 5px; border: 1px solid transparent; border-radius: 4px; background: transparent; color: #aeb8bf; cursor: pointer; }
+.line button.choice.era-cycle-toggle { display: inline-block; padding: 1px 7px; border: 1px solid #39434c; border-radius: 4px; background: #182027; color: #c9d4dc; cursor: pointer; }
+.line button.choice.era-toggle::before { content: ""; flex: 0 0 12px; width: 12px; height: 12px; border: 1px solid #71808a; border-radius: 2px; background: #0d141a; box-shadow: inset 0 0 0 1px #0005; }
+.line button.choice.era-toggle[aria-checked="true"]::before { content: "✓"; display: grid; place-items: center; border-color: #8ddaff; background: #8ddaff; color: #09131a; font: bold 10px/10px ui-sans-serif, system-ui, sans-serif; }
+.line button.choice.era-toggle.era-on { color: #e2f4ff; }
 .line button.choice.era-warn { border-color: #d88; color: #ffbcbc; }
 .era-chip-button.era-unavailable { color: #777; border-color: #333; cursor: default; }
 .line button.choice.era-star { padding: 1px 7px; color: #777; }
 .line button.choice.era-star.era-on { color: #ff0; border-color: #aa0; background: #2a2a10; }
-.era-toggles { display: inline-flex; flex-wrap: wrap; gap: 4px; font-weight: normal; }
+.era-toggles { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 2px 6px; font-weight: normal; }
+.era-auto-toggles { margin-top: 2px; }
 .era-settings { margin-top: 8px; padding-top: 8px; border-top: 1px solid #ffffff14; }
 .era-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
 .era-chip { padding: 0 8px; border-radius: 999px; background: #222; color: #ddd; font-size: .9em; }
@@ -1267,7 +1274,7 @@ main:has(.screen.is-active .era-launch) { padding: 0; background: #000; }
 .era-status-label { margin-right: 1ch; color: #8a949c; }
 .era-status + .era-status::before { content: "·"; margin: 0 .8ch; color: #5a646c; }
 .era-strong { font-weight: bold; }
-.screen.is-active .line button.choice:is(.era-chip-button, .era-toggle, .era-star):enabled:is(:hover, :focus-visible) { border-color: #8ddaff; }
+.screen.is-active .line button.choice:is(.era-chip-button, .era-toggle, .era-cycle-toggle, .era-star):enabled:is(:hover, :focus-visible) { border-color: #8ddaff; }
 /* The room is a row of full portraits, not a tab rail. Crowds scroll without shrinking the sprites. */
 .era-occupants { min-width: 0; }
 .era-occupant-list { display: flex; align-items: stretch; justify-content: safe center; gap: 8px; overflow-x: auto; padding: 2px 2px 8px; }
@@ -1534,15 +1541,14 @@ main:has(.screen.is-active .era-launch) { padding: 0; background: #000; }
 .era-player-management .era-settings > .line { display: contents; }
 .era-player-management .era-settings .era-chip-button { min-width: 12ch; text-align: center; }
 .era-main .era-player :is(.print-cell, .era-guard-control),
-.era-main .era-player .line button.choice:is(.era-player-control, .era-chip-button, .era-toggle) { padding: 6px 10px; border: 1px solid #35566d; border-radius: 4px; background: linear-gradient(#102330, #0b1822); color: #b7d5e2; font: inherit; line-height: 1.25; text-align: left; }
-.era-main .era-player .line button.choice:is(.era-chip-button, .era-toggle) { flex: 1 1 100%; min-width: 0; width: 100%; }
+.era-main .era-player .line button.choice:is(.era-player-control, .era-chip-button) { padding: 6px 10px; border: 1px solid #35566d; border-radius: 4px; background: linear-gradient(#102330, #0b1822); color: #b7d5e2; font: inherit; line-height: 1.25; text-align: left; }
+.era-main .era-player .line button.choice.era-chip-button { flex: 1 1 100%; min-width: 0; width: 100%; }
+.era-main .era-player .line button.choice.era-toggle { flex: 0 0 auto; width: auto; min-width: 0; padding: 2px 5px; border-color: transparent; background: transparent; }
 .screen.is-active .era-player :is(.print-cell, .era-guard-control):has(.choice:enabled:is(:hover, :focus-visible)),
 .screen.is-active .era-player .line button.choice:is(.era-player-control, .era-chip-button, .era-toggle):enabled:is(:hover, :focus-visible) { border-color: #78bdd6; background: #193744; color: #e2f5ff; }
 .era-player :is(.print-cell, .era-guard-control):has(.choice:focus-visible),
 .era-player .line button.choice:is(.era-player-control, .era-chip-button, .era-toggle):focus-visible { outline: 2px solid #7ccce3; outline-offset: 2px; }
-.era-main .era-player .line button.choice.era-toggle.era-on { border-color: #5090ff; background: #102b40; color: #d7eff8; }
-.era-player-management .era-guard-control:has(.era-guard-toggle[aria-pressed="true"]) { border-color: #5090ff; background: #102b40; }
-.era-player-management .era-guard-control button.choice.era-guard-toggle { margin: 0; color: inherit; font-size: inherit; }
+.era-main .era-player .line button.choice.era-toggle.era-on { border-color: transparent; background: transparent; color: #d7eff8; }
 .era-guard-control .interactive-label { text-decoration: none; }
 .era-guard-control .choice::after { content: ""; position: absolute; inset: 0; }
 /* Filter kinds (HOTPATCH_ACTION_KIND): a filter toggle and the actions it shows share a tint. */
@@ -1550,20 +1556,20 @@ main:has(.screen.is-active .era-launch) { padding: 0; background: #000; }
 .era-kind-petting .print-cell { border-color: #6a3456; background: #2a1824; }
 .era-kind-chores .print-cell { border-color: #2f5e3c; background: #15251a; }
 .era-kind-dialogue .print-cell { border-color: #36527c; background: #161f31; }
-.line button.choice.era-toggle.era-kind-petting { border-color: #6a3456; color: #b07898; }
-.line button.choice.era-toggle.era-kind-chores { border-color: #2f5e3c; color: #78a884; }
-.line button.choice.era-toggle.era-kind-dialogue { border-color: #36527c; color: #7c98c4; }
-.line button.choice.era-toggle.era-kind-petting.era-on { border-color: #c0609a; background: #3a1c30; color: #ffd0ec; }
-.line button.choice.era-toggle.era-kind-chores.era-on { border-color: #4fa064; background: #1c3424; color: #d0ffd8; }
-.line button.choice.era-toggle.era-kind-dialogue.era-on { border-color: #5a86c8; background: #1c2a44; color: #d6e6ff; }
-.line button.choice.era-toggle.era-kind-vaginal { border-color: #e9a1c5; color: #f5bddd; }
-.line button.choice.era-toggle.era-kind-anal { border-color: #947052; color: #c5a180; }
-.line button.choice.era-toggle.era-kind-sm { border-color: #a44f52; color: #d27f84; }
-.line button.choice.era-toggle.era-kind-service { border-color: #eee18d; color: #fff3a6; }
-.line button.choice.era-toggle.era-kind-vaginal.era-on { border-color: #ffb8dc; background: #ffd6eb; color: #54253e; }
-.line button.choice.era-toggle.era-kind-anal.era-on { border-color: #cda47d; background: #3b2c20; color: #f0d2b2; }
-.line button.choice.era-toggle.era-kind-sm.era-on { border-color: #e87980; background: #442026; color: #ffc1c5; }
-.line button.choice.era-toggle.era-kind-service.era-on { border-color: #fff09a; background: #fff6b8; color: #45421b; }
+.line button.choice.era-toggle.era-kind-petting { color: #b07898; }
+.line button.choice.era-toggle.era-kind-chores { color: #78a884; }
+.line button.choice.era-toggle.era-kind-dialogue { color: #7c98c4; }
+.line button.choice.era-toggle.era-kind-vaginal { color: #f5bddd; }
+.line button.choice.era-toggle.era-kind-anal { color: #c5a180; }
+.line button.choice.era-toggle.era-kind-sm { color: #d27f84; }
+.line button.choice.era-toggle.era-kind-service { color: #fff3a6; }
+.line button.choice.era-toggle.era-kind-petting[aria-checked="true"]::before { border-color: #c0609a; background: #c0609a; }
+.line button.choice.era-toggle.era-kind-chores[aria-checked="true"]::before { border-color: #4fa064; background: #4fa064; }
+.line button.choice.era-toggle.era-kind-dialogue[aria-checked="true"]::before { border-color: #5a86c8; background: #5a86c8; }
+.line button.choice.era-toggle.era-kind-vaginal[aria-checked="true"]::before { border-color: #ffb8dc; background: #ffb8dc; }
+.line button.choice.era-toggle.era-kind-anal[aria-checked="true"]::before { border-color: #cda47d; background: #cda47d; }
+.line button.choice.era-toggle.era-kind-sm[aria-checked="true"]::before { border-color: #e87980; background: #e87980; }
+.line button.choice.era-toggle.era-kind-service[aria-checked="true"]::before { border-color: #fff09a; background: #fff09a; }
 /* The look text (clothes and what is happening) under the target's meters: no image toggles, no spacer lines. */
 .era-look { margin-top: 8px; }
 /* The room's chatter (others' talk, the radio, room descriptions) under the place title; gone when there is none. */

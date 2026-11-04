@@ -67,6 +67,30 @@ test("native EE string, regex substitution and Unicode results match in both exe
   }
 });
 
+test("native Emuera string escapes and literal regex operators match in interpreted and warmed JIT routines", async () => {
+  const source = await readFile(new URL("./fixtures/native-string-escapes.erb", import.meta.url), "utf8");
+  const expected = [
+    "qr \u3000",
+    "\n\t",
+    "\\q",
+    "(^\\s+|\\s+$)",
+    "qr \u3000",
+    "player name",
+    "#",
+    "#",
+    "unchanged",
+    "player name",
+  ];
+  for (const jit of [false, true]) {
+    const game = emptyGame();
+    indexScript(game, source, "native-string-escapes.erb");
+    const snapshot = new Runtime(game, 50_000, { jit }).start();
+    assert.equal(snapshot.status, "halted", JSON.stringify(snapshot.error));
+    assert.deepEqual(snapshot.output.filter((line) => line.type === "text").map((line) => line.text),
+      [...Array.from({ length: 45 }, () => expected).flat(), "DONE", "Log written to emuera.log"]);
+  }
+});
+
 test("trailing separators retain interior omissions and reject extra nonempty arguments", () => {
   for (const call of ["ONE(1,2,)", "ONE(1,,,)"]) {
     const game = emptyGame();

@@ -208,14 +208,24 @@ RETURN`, undefined, { jit }).start();
 
 test(".NET escaped commas work in Unicode regexes without changing escaped backslashes or invalid escapes", () => {
   const result = runtime(String.raw`@SYSTEM_TITLE
-PRINTSL REPLACE("a,b,c", "\,(?!.*\,)", " and ")
+PRINTSL REPLACE("a,b,c", "\\,(?!.*\\,)", " and ")
 PRINTSL REPLACE("a,b", "\\\\,", "|")
-PRINTFORML {STRCOUNT("日,月", "\,")}`).start();
+PRINTFORML {STRCOUNT("日,月", "\\,")}`).start();
   assert.deepEqual(texts(result), ["a,b and c", "a,b", "1"]);
   const invalid = runtime(String.raw`@SYSTEM_TITLE
-PRINTSL REPLACE("x", "\q", "")`).start();
+PRINTSL REPLACE("x", "\\q", "")`).start();
   assert.equal(invalid.status, "error");
   assert.match(invalid.error!.message, /Invalid regular expression/);
+});
+
+test("REPLACE decodes string escapes in the whitespace trim pattern used by game input prompts", () => {
+  const statement = runtime(String.raw`@SYSTEM_TITLE
+REPLACE LOCALS, "\(\^\\s\+\|\\s\+\$)", ""
+QUIT`).start();
+  assert.equal(statement.status, "halted", JSON.stringify(statement.error));
+  const result = runtime(String.raw`@SYSTEM_TITLE
+PRINTSL REPLACE("  player name  ", "\(\^\\s\+\|\\s\+\$)", "")`).start();
+  assert.deepEqual(texts(result), ["player name"]);
 });
 
 test("STR defaults to 20000 elements, preserves CSV defaults on reset, and respects explicit sizes", () => {

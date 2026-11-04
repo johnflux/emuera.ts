@@ -1030,6 +1030,68 @@ test("native casual agreement retains its character hooks, ten-minute cost and y
   assert.match(transcript.join("\n"), /let's enjoy this, you and me/);
 });
 
+test("relationship action indicators use exact native threshold boundaries and Reserved adjustment", { skip: !existsSync(GAME_ROOT) }, async () => {
+  for (const jit of [false, true]) {
+    for (const reserved of [0, 1]) {
+      for (const [action, field, label, threshold] of [
+        [1, "CFLAG:TARGET:合意判定", "Agreement", 350 + 100 * reserved],
+        [2, "CFLAG:TARGET:好感度", "Friendship favor", 500],
+        [3, "EXP:TARGET:愛情経験", "Love exp", 250 + 100 * reserved],
+      ] as const) {
+        for (const delta of [-1, 0, 1]) {
+          const current = threshold + delta;
+          const met = action === 2 ? delta >= 0 : delta > 0;
+          const runtime = await friendshipRuntime(`TALENT:TARGET:一線越えない = ${reserved}
+${field} = ${current}
+CALL HOTPATCH_RELATIONSHIP_REQUIREMENTS(${action}, TARGET)
+CALL HOTPATCH_TEST_DUMP`, jit);
+          const printed = text(check(runtime.start("HOTPATCH_TEST_FRIENDSHIP")));
+          assert.ok(printed.includes(`era-relationship-requirement ${met ? "era-requirement-met" : "era-requirement-unmet"}'>${label}: <b>${current} ${action === 2 ? "&ge;" : "&gt;"} ${threshold}</b> <span>${met ? "Met" : "Not met"}</span>`));
+          assert.equal(printed.includes("Reserved raises"), reserved === 1 && action !== 2);
+          if (action === 1) assert.match(printed, /character dialogue can override/);
+          if (action === 2) assert.match(printed, /acceptance uses a separate native calculation/);
+          assert.match(printed, /time=100, lover=0, player=0, commitment=0/);
+        }
+      }
+    }
+  }
+});
+
+test("proposal and wedding readiness shows each anger or resentment blocker", { skip: !existsSync(GAME_ROOT) }, async () => {
+  for (const jit of [false, true]) {
+    for (const action of [3, 4]) {
+      for (const blocker of ["", "BASE:TARGET:怒り = 1", "CFLAG:TARGET:不機嫌 = 1", "MARK:TARGET:反発刻印 = 1"]) {
+        const runtime = await friendshipRuntime(`${blocker}
+CALL HOTPATCH_RELATIONSHIP_REQUIREMENTS(${action}, TARGET)`, jit);
+        const printed = text(check(runtime.start("HOTPATCH_TEST_FRIENDSHIP")));
+        assert.ok(printed.includes(`era-relationship-requirement ${blocker ? "era-requirement-unmet" : "era-requirement-met"}'>No anger or resentment: <span>${blocker ? "Not met" : "Met"}</span>`));
+      }
+    }
+  }
+});
+
+test("relationship menu refreshes Agreement and wires visible action requirements without gating attempts", { skip: !existsSync(GAME_ROOT) }, async () => {
+  for (const jit of [false, true]) {
+    const runtime = await friendshipRuntime(`CFLAG:TARGET:合意判定 = 9999
+CALL HOTPATCH_RELATIONSHIP_DIALOG
+CALL HOTPATCH_TEST_DUMP
+QUIT
+@CHARA_ATTITUDE
+CFLAG:TARGET:合意判定 = 350
+RETURN`, jit);
+    let result = check(runtime.start("HOTPATCH_TEST_FRIENDSHIP"));
+    const printed = text(result);
+    assert.match(printed, /Agreement <b>350<\/b>/);
+    assert.doesNotMatch(printed, /9999/);
+    assert.match(printed, /Agreement: <b>350 &gt; 350<\/b> <span>Not met/);
+    assert.match(printed, /Friendship favor: <b>0 &ge; 500<\/b>/);
+    assert.match(printed, /Love exp: <b>0 &gt; 250<\/b>/);
+    assert.match(printed, /<button value='1'[^>]*>Confess/);
+    result = check(runtime.input("1"));
+    assert.match(text(result), /time=100, lover=0, player=0, commitment=0/);
+  }
+});
+
 test("relationship header shows each nonzero Hate Marks level and omits the badge at zero", { skip: !existsSync(GAME_ROOT) }, async () => {
   for (const jit of [false, true]) {
     for (const hate of [0, 1, 2, 3]) {

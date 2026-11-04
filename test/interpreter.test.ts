@@ -20,6 +20,15 @@ const context = {
   get(): never { throw new EraError("Unexpected variable evaluation"); },
   call(): never { throw new EraError("Unexpected function evaluation"); },
 };
+test("ordinary string literals use native Emuera escapes rather than C-style escapes", () => {
+  for (const [source, expected] of [
+    [String.raw`"\q\r\s\S"`, "qr \u3000"],
+    [String.raw`"\n\t"`, "\n\t"],
+    [String.raw`"\\q"`, "\\q"],
+    [String.raw`"\"\\\(\)\+\|\^\$"`, '"\\()+|^$'],
+    ['"a\\\nb"', "ab"],
+  ] as const) assert.equal(evaluate(parseExpression(source), context), expected);
+});
 test("cached identifier normalization preserves Unicode and case equivalence", () => {
   for (let i = 0; i < 3; i++) {
     assert.equal(key("player"), "PLAYER");

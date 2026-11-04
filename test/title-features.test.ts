@@ -306,8 +306,8 @@ PRINTSL HTML_TOPLAINTEXT("<b>safe &amp; text</b><br>next")`)).start();
 });
 test("string regex helpers and omitted defaults support game-style wrapping", () => {
   const result = new Runtime(game(String.raw`@SYSTEM_TITLE
-PRINTFORML {STRCOUNT("one two three", "\s")}
-PRINTSL REPLACE("one two", "(\w+)", "[$1]")
+PRINTFORML {STRCOUNT("one two three", "\\s")}
+PRINTSL REPLACE("one two", "(\\w+)", "[$1]")
 PRINTSL SUBSTRING("abc", 1, 2)
 PRINTFORML {STRLENS("Aあ")}
 PRINTSL @"\@ 1 ? ok # wrong \@"

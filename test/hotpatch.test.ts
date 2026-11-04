@@ -446,6 +446,10 @@ test("main screen hotpatch opens and closes its panel boxes in balance", {
     assert.equal(opens, closes, `screen ${index} closes every box`);
     assert.ok(screen.some((text) => text.includes("era-timestop-button")), `screen ${index} has the time stop control`);
     const html = screen.join("");
+    if (index === 0) {
+      assert.match(html, /value='995' class='era-toggle[^']*' role='checkbox' aria-checked='(?:true|false)'[^>]*>Auto-TSP Movement<\/button>/);
+      assert.match(html, /value='996' class='era-toggle[^']*' role='checkbox' aria-checked='(?:true|false)'[^>]*>Auto-Clean<\/button>/);
+    }
     assert.match(html, /<div class='era-clock' data-minutes='\d+'><\/div>/);
     assert.match(html, /<era-open class='era-watch-control'>.*class='era-clock'.*era-timestop-button/);
     const whenStart = screen.indexOf("<era-open class='era-main-when'>");
@@ -464,7 +468,7 @@ test("main screen hotpatch opens and closes its panel boxes in balance", {
     assert.doesNotMatch(html, /<div class='era-clock'><img/);
     assert.equal((html.match(/value='805'/g) ?? []).length, 1, "inventory has exactly one entry point");
     assert.match(html, /era-player-actions'><button value='805' class='era-player-control era-inventory-button'/, "inventory is on the player card");
-    assert.match(html, /era-player-management'>.*value='-9200' class='era-guard-toggle' aria-pressed='(?:true|false)'/, "the guard is a player management control");
+    assert.match(html, /class='era-toggles era-auto-toggles'><button value='995'[^]*<button value='-9200' class='era-toggle[^']*' role='checkbox' aria-checked='(?:true|false)'[^>]*>Pushdown Guard<\/button><\/div>/, "the guard shares the compact checkbox row with Auto-TSP and Auto-Clean");
     assert.doesNotMatch(html, /era-player-toggles|Go &amp; Manage|Auto Items/);
   }
   assert.ok(screens[1]!.some((text) => /era-stopped'[^>]*value='999'|value='999'[^>]*era-stopped/.test(text)), "time stop switches to Resume Time");
@@ -542,7 +546,7 @@ QUIT`, "<calendar-popup-test>");
       if (value === "-9402") {
         assert.equal((html.match(/class='era-calendar-month-blank'/g) ?? []).length, 11,
           "the next year's Spring starts on Saturday and needs six calendar rows");
-        assert.match(html, /Seven days <span class='era-sub'>from 1st of Spring, Year 2/);
+        assert.match(html, /class='era-calendar-date' title='1st of Spring, Year 2'/);
       }
     }
     // Navigate back to the first season, then verify its lower bound.
@@ -687,7 +691,7 @@ QUIT`, "<filter-colors-test>");
     assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
     const html = snapshot.output.flatMap((item) => item.type === "html" ? [item.text] : []).join("");
     for (const [id, kind] of [[831, "vaginal"], [832, "anal"], [836, "sm"], [835, "service"], [-9120, "service"]]) {
-      assert.match(html, new RegExp(`value='${id}' class='era-toggle era-kind-${kind}${on ? " era-on" : ""}'`));
+      assert.match(html, new RegExp(`value='${id}' class='era-toggle era-kind-${kind}${on ? " era-on" : ""}' role='checkbox' aria-checked='${on ? "true" : "false"}'`));
     }
     assert.ok(snapshot.output.some((item) => item.type === "text" && item.text === "Kinds: vaginal,anal,sm,service"));
   }
@@ -999,7 +1003,7 @@ test("room lineup renders every portrait and preserves target selection", {
     assert.doesNotMatch(html, /era-info-tabs|era-info-title|Go &amp; Manage/);
     assert.match(html, /value='-9300' class='era-info-more'/, "More opens details for the selected character");
     assert.match(html, /<era-open class='era-info-summary'><button value='-9300'/, "See more is beside the character name");
-    assert.match(html, /value='-9200' class='era-guard-toggle' aria-pressed='false'/);
+    assert.match(html, /value='-9200' class='era-toggle' role='checkbox' aria-checked='false'/);
     assert.doesNotMatch(html, /Auto Items/);
     assert.match(html, /<era-open class='era-info-body'>/);
     assert.match(html, /era-info-face/, "the details identify the selected person");
@@ -1078,10 +1082,10 @@ test("character More opens the selected person's sheet while See more still open
   }
   snapshot = runtime.input("-9200");
   settle();
-  const first = html().match(/value='-9200' class='era-toggle[^']*' aria-pressed='(true|false)'/)![1];
+  const first = html().match(/value='-9200' class='era-toggle(?: era-on)?' role='checkbox' aria-checked='(true|false)'/)![1];
   snapshot = runtime.input("-9200");
   settle();
-  const second = html().match(/value='-9200' class='era-toggle[^']*' aria-pressed='(true|false)'/)![1];
+  const second = html().match(/value='-9200' class='era-toggle(?: era-on)?' role='checkbox' aria-checked='(true|false)'/)![1];
   assert.notEqual(first, second, "guard still toggles through the game's command");
 });
 
