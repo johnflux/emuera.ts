@@ -320,6 +320,22 @@ RETURN`, undefined, { jit }).start();
   }
 });
 
+test("HTML_PRINT counts newlines in text but not inside attributes", () => {
+  for (const jit of [false, true]) {
+    const snapshot = runtime(`@SYSTEM_TITLE
+L = LINECOUNT
+HTML_PRINT @"<nonbutton title='first\\nsecond\\nthird'>[Talent]</nonbutton>"
+PRINTFORML {LINECOUNT - L}
+L = LINECOUNT
+HTML_PRINT @"one\\ntwo"
+PRINTFORML {LINECOUNT - L}`, undefined, { jit }).start();
+    assert.equal(snapshot.status, "halted", JSON.stringify(snapshot.error));
+    assert.deepEqual(texts(snapshot).filter((text) => /^\d+$/.test(text)), ["1", "2"]);
+    const html = snapshot.output.filter((item) => item.type === "html");
+    assert.deepEqual(html.map((item) => "breaks" in item ? item.breaks : undefined), [undefined, 1]);
+  }
+});
+
 test("OUTPUTLOG persists visible plain text including pending output and reports storage failures", async () => {
   const { MemorySaveStore } = await import("../src/storage.js");
   const saves = new MemorySaveStore();

@@ -2118,7 +2118,7 @@ async function renderSnapshot(snapshot, advanceScreen) {
         if (lines > remaining) {
           const retained = lines - remaining;
           last.dataset.logicalLines = String(retained);
-          last.style.height = `${retained * Number(last.dataset.lineHeight)}px`;
+          if (last.dataset.lineHeight) last.style.height = `${retained * Number(last.dataset.lineHeight)}px`;
           break;
         }
         removeLine(last);
@@ -2184,6 +2184,7 @@ async function renderSnapshot(snapshot, advanceScreen) {
     const span = document.createElement("span");
     applyStyle(span, output.style);
     target.append(span);
+    if (output.breaks) target.dataset.logicalLines = String(Number(target.dataset.logicalLines ?? 1) + output.breaks);
     if (output.type === "html") {
       try {
         await renderHtml(output.text, span, output.sprites);

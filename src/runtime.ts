@@ -8,7 +8,7 @@ import { symbolTable, Variables, type GlobalData, type SaveData } from "./variab
 import { parseFormat } from "./format.js";
 import { MemoryGlobalStore, MemorySaveStore, StagedStores, type GlobalStore, type SaveStore } from "./storage.js";
 import { randomInt, randomUUID } from "node:crypto";
-import { escapeHtml, type ColoredText, htmlButtons, htmlLineCount, htmlSpriteNames, htmlTagSplit, htmlWidth, plainHtml } from "./html.js";
+import { escapeHtml, type ColoredText, htmlButtons, htmlLineBreaks, htmlLineCount, htmlSpriteNames, htmlTagSplit, htmlWidth, plainHtml } from "./html.js";
 import { formatInteger, stringWidth, toFullWidth, toHalfWidth } from "./strings.js";
 import { DataTables, TABLE_OPERATIONS } from "./data-tables.js";
 import { CONFIG_ITEMS, configSetting } from "./config-items.js";
@@ -73,7 +73,8 @@ function animationFrame(frame: Omit<AnimationFrame, "src" | "offset">, src: Rect
 }
 export type Output =
   /** cell: a PRINTC item that the display wraps as a whole (Emuera's ボタンの途中で行を折りかえさない). */
-  | { type: "text" | "html" | "input"; text: string; newline: boolean; style: Style; plain?: boolean; single?: boolean; cell?: boolean; sprites?: Record<string, SpriteDefinition>; browserLaunch?: { id: string; url: string } }
+  /** breaks: the extra logical lines an HTML print's text newlines add, which CLEARLINE counts. */
+  | { type: "text" | "html" | "input"; text: string; newline: boolean; style: Style; plain?: boolean; single?: boolean; cell?: boolean; sprites?: Record<string, SpriteDefinition>; browserLaunch?: { id: string; url: string }; breaks?: number }
   | { type: "button"; text: string; value: string; style: Style }
   | { type: "clear"; count: number };
 /**
@@ -3298,14 +3299,16 @@ export class Runtime {
       this.dropLines(1);
       this.deferOutput({ type: "clear", count: 1 });
     }
-    this.lineCount += (value.match(/\n/g)?.length ?? 0) + (newline ? 1 : 0);
-    this.lineOpen = newline ? false : value.includes("\n") ? !value.endsWith("\n") : this.lineOpen || value !== "";
-    this.printingHtml += type === "html" ? value : escapeHtml(value);
+    const html = type === "html";
+    const breaks = html ? htmlLineBreaks(value) : value.match(/\n/g)?.length ?? 0;
+    this.lineCount += breaks + (newline ? 1 : 0);
+    this.lineOpen = newline ? false : !html && breaks ? !value.endsWith("\n") : this.lineOpen || value !== "";
+    this.printingHtml += html ? value : escapeHtml(value);
     if (newline) this.printingHtml = "";
-    else if (value.includes("\n")) this.printingHtml = escapeHtml(value.slice(value.lastIndexOf("\n") + 1));
+    else if (!html && breaks) this.printingHtml = escapeHtml(value.slice(value.lastIndexOf("\n") + 1));
     this.recordPrinted(type, value, newline, options.style ?? this.style, !plain);
     const sprites = type === "html" ? this.htmlSprites(value) : undefined;
-    const output: Output = { type, text: value, newline, style: { ...(options.style ?? this.style) }, ...(plain ? { plain: true } : {}), ...(options.single ? { single: true } : {}), ...(options.cell ? { cell: true } : {}), ...(sprites ? { sprites } : {}) };
+    const output: Output = { type, text: value, newline, style: { ...(options.style ?? this.style) }, ...(plain ? { plain: true } : {}), ...(options.single ? { single: true } : {}), ...(options.cell ? { cell: true } : {}), ...(sprites ? { sprites } : {}), ...(html && breaks ? { breaks } : {}) };
     this.accountOutput(output);
     this.interactionHistory?.output(type, value, newline, (options.style ?? this.style).color);
     return { output };

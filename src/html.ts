@@ -63,6 +63,21 @@ export function htmlSpriteNames(value: string): string[] {
   return names;
 }
 
+/** Newlines in an HTML print's text, which LINECOUNT counts; newlines inside attributes such as title are not. */
+export function htmlLineBreaks(value: string): number {
+  if (!value.includes("\n")) return 0;
+  let breaks = 0;
+  function visit(node: DefaultTreeAdapterMap["node"]): void {
+    if ("value" in node && node.nodeName === "#text") {
+      for (const c of node.value) if (c === "\n") breaks++;
+      return;
+    }
+    if ("childNodes" in node) node.childNodes.forEach(visit);
+  }
+  visit(parseFragment(value));
+  return breaks;
+}
+
 /** Fixed-cell line measurement, using the same sprite/shape units as HTML_STRINGLEN. */
 export function htmlLineCount(value: string, width: number, fontSize: number, spriteSize: (name: string) => { width: number; height: number } | undefined): number {
   let lines = 0, used = 0;
