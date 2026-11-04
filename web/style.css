@@ -211,7 +211,7 @@ a { color: #8ddaff; }
 #settings-form input:focus-visible { outline: 2px solid #69c9b5; outline-offset: 2px; }
 #settings-reset { grid-column: 1 / -1; justify-self: start; margin-top: 3px; padding: 7px 11px; border: 1px solid #365a6c; border-radius: 5px; background: #142c38; color: #9bd5ed; font-size: 12px; }
 #settings-reset:hover:enabled, #settings-reset:focus-visible { border-color: #69c9b5; background: #183a43; color: #d7f4ed; }
-#input-form { order: 1; flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding: 0 20px; font-size: var(--font-size); line-height: var(--line-height, 1.25); }
+#input-form { order: 1; flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding: 0 10px; font-size: var(--font-size); line-height: var(--line-height, 1.25); }
 #input-form[hidden] { display: none; }
 .command-field { position: relative; flex: 1; min-width: 0; }
 #command { display: block; width: 100%; min-width: 0; background: transparent; border: 0; padding: 0; line-height: inherit; outline: none; }
