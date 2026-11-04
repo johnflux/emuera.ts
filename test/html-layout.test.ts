@@ -70,6 +70,19 @@ test("relationship endings use subdued action-specific emblems without celebrato
   assert.match(css, /\.era-relationship-ending-7 \.era-proposal-jewel \{ background-image: url\("\/relationship-assets\/icon-fwb.svg"\); \}/);
 });
 
+test("confession shares the staged reveal but uses the Lovers emblem and standalone box markers", async () => {
+  const script = await readFile(new URL("../hotpatch/RELATIONSHIPS.ERB", import.meta.url), "utf8");
+  const result = script.slice(script.indexOf("@HOTPATCH_CONFESSION_RESULT("), script.indexOf("@COM357"));
+  for (const line of result.split("\n").filter(line => line.includes("HTML_PRINT") && line.includes("<era-open"))) {
+    assert.match(line, /^HTML_PRINT @?"<era-open [^>]+>"$/);
+  }
+  assert.match(result, /era-dialog era-proposal era-confession/);
+  assert.match(result, /Agreement threshold/);
+  assert.match(result, /Character-specific story/);
+  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  assert.match(css, /\.era-confession \.era-proposal-jewel \{ background-image: url\("\/relationship-assets\/icon-lovers.svg"\); \}/);
+});
+
 test("proposal staggers labels and results, types the response and reveals the outcome once", async () => {
   const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
   const routine = source.slice(source.indexOf("const proposalTimers ="), source.indexOf("function syncDialogs("));

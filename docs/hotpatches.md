@@ -70,6 +70,28 @@ ends. Confess is hidden once Lovers; Propose is hidden while engaged or married.
 Lovers, Engaged and Married instead offer Reaffirm your love, which expresses love
 then routes through the native hug command (311), preserving its availability,
 character dialogue, success rolls, time cost and stat effects.
+Confess asks for explicit Not now/Confess confirmation before the native command
+pipeline starts; cancelling costs nothing and consumes no daily attempt.
+The native SUCCESS override, agreement check, SOURCE effects, character COMMAND
+dialogue and TURN_RESET Lovers assignment still run normally and only once.
+After TURN_RESET, an animated result popup shows the actual final Lovers state.
+The agreement score, Reserved trait and story override are captured at COM352,
+before subsequent dialogue or turn cleanup can change them. The standard check
+is strictly Agreement - 100 * Reserved > 350; Reserved is omitted when absent.
+A separate story row shows Standard rules, Acceptance, Refusal or Interrupted,
+so a forced result is not misrepresented as passing/failing the numeric check.
+If later character dialogue changes the rolled outcome, the story row reflects
+that final override while the numeric row retains the original roll inputs.
+Character dialogue remains in the plain-text view, including its choices and
+waits. The popup adds a neutral outcome summary, not invented character dialogue.
+Becoming Lovers does not automatically grant the independent In love feeling.
+Existing FWB agreements survive the native Lovers transition.
+The popup uses the Lovers emblem and the shared staged reveal, confetti on
+success, delayed footer, early dismissal and reduced-motion behaviour.
+The relationship demo invokes the native SUCCESS/COMMAND hooks, COM352 and
+TURN_RESET for its Confess preview, but does not simulate the full world's
+SOURCE-processing turn. Selecting a demo preset resets the daily attempt;
+real gameplay retains the native once-per-day limit.
 Propose opens a dedicated pink-and-gold result popup with the character portrait,
 after a plain-text No/Propose confirmation displaying the character name and
 the NAS-style wife-limit message (additional lover slots + 1). No cancels freely,

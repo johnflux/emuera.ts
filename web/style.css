@@ -793,6 +793,7 @@ body:has(.menu-panel:not([hidden])) .clock-overhang { visibility: hidden; }
 .era-proposal-moment { text-align: center; padding-bottom: 22px; white-space: normal; }
 .era-proposal-jewel { display: block; width: 116px; height: 116px; margin: 0 auto; background: url("/relationship-assets/icon-engaged.svg") center / contain no-repeat; filter: drop-shadow(0 0 16px #f4a8d1); }
 .era-wedding .era-proposal-jewel { background-image: url("/relationship-assets/icon-married.svg"); }
+.era-confession .era-proposal-jewel { background-image: url("/relationship-assets/icon-lovers.svg"); }
 .era-wedding-message { color: #ead9e4; text-align: center; white-space: normal; line-height: 1.7; }
 .era-relationship-ending .era-proposal-jewel { background-image: url("/relationship-assets/icon-divorced.svg"); }
 .era-relationship-ending-5 .era-proposal-jewel { background-image: url("/relationship-assets/icon-engaged.svg"); }

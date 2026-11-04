@@ -286,6 +286,7 @@ LOOP 1
 #DIMS DYNAMIC sReason
 nInput = RESULT
 CALL HOTPATCH_RELATIONSHIP_CONFIRM(0)
+CALL HOTPATCH_CONFESSION_FLOW(0)
 RESULT = nInput
 IF !GROUPMATCH(nInput, 352, 357)
 	JUMP HOTPATCH_ORIGINAL_USERCOM
@@ -327,6 +328,12 @@ IF nAction == 9
 		RETURN 0
 	ENDIF
 	PRINTFORML You remind %CALLNAME:TARGET% that you love them and reach out for a hug.
+ELSEIF nAction == 1
+	CALL HOTPATCH_CONFESSION_CONFIRM
+	SIF !RESULT
+		RETURN 0
+	CALL HOTPATCH_CONFESSION_FLOW(1)
+	CALL HOTPATCH_RELATIONSHIP_CONFIRM(1)
 ELSE
 	CALL HOTPATCH_RELATIONSHIP_CONFIRM(1)
 ENDIF
@@ -350,20 +357,26 @@ RETURN TFLAG:100 && TARGET != MASTER
 @COM352
 #DIM DYNAMIC nTime
 #DIM DYNAMIC nResult
+#DIM DYNAMIC nStart
 #DIMS DYNAMIC sReason
 sReason '= HOTPATCH_RELATIONSHIP_REASON(1, TARGET)
 IF STRLENS(sReason)
 	PRINTFORML Confession failed: %sReason%
 	CALL HOTPATCH_RELATIONSHIP_CONFIRM(0)
+	CALL HOTPATCH_CONFESSION_FLOW(0)
 	RETURN 0
 ENDIF
 nTime = TIME
+nStart = LINECOUNT
 CALL HOTPATCH_ORIGINAL_COM352
 nResult = RESULT
 CALL HOTPATCH_RELATIONSHIP_CONFIRM(0)
 SIF TIME > nTime
 	TIME = nTime + 10
-IF nResult >= 0 && !TFLAG:193
+CALL HOTPATCH_CONFESSION_FLOW(2, nResult)
+IF RESULT
+	CLEARLINE LINECOUNT - nStart
+ELSEIF nResult >= 0 && !TFLAG:193
 	IF TFLAG:192
 		PRINTL Confession declined: their character-specific story does not allow this confession now.
 	ELSE
@@ -371,6 +384,104 @@ IF nResult >= 0 && !TFLAG:193
 	ENDIF
 ENDIF
 RETURN nResult
+
+@HOTPATCH_CONFESSION_CONFIRM
+PRINTFORML Confess your feelings to %CALLNAME:TARGET% and ask to become lovers?
+IF FLAG:追加恋人枠 >= 150
+	PRINTL You can have as many lovers as you want.
+ELSE
+	PRINTFORML You can currently have %PRINT_PLUR("lover", FLAG:追加恋人枠 + 1)%.
+ENDIF
+CALL ASK_YN("Not now", "Confess")
+RETURN RESULT
+
+; Keep a snapshot of the actual roll until native dialogue and Lovers assignment finish.
+@HOTPATCH_CONFESSION_FLOW(nMode, nCommandResult = 0)
+#DIM DYNAMIC nMode
+#DIM DYNAMIC nCommandResult
+#DIM nPending
+#DIM nChara
+#DIM nAgreement
+#DIM nReserved
+#DIM nOverride
+#DIM nRollAccepted
+SELECTCASE nMode
+CASE 0
+	nPending = 0
+CASE 1
+	nPending = 1
+	nChara = TARGET
+CASE 2
+	SIF nPending != 1
+		RETURN 0
+	IF nCommandResult < 0
+		nPending = 0
+		RETURN 0
+	ENDIF
+	nAgreement = CFLAG:TARGET:合意判定
+	nReserved = TALENT:TARGET:一線越えない
+	nOverride = TFLAG:192
+	nRollAccepted = TFLAG:193 != 0
+	nPending = 2
+CASE 3
+	SIF nPending != 2
+		RETURN 0
+	nPending = 0
+	IF (TALENT:nChara:恋人 != 0) != nRollAccepted
+		nOverride = TALENT:nChara:恋人 ? 1 # -1
+	ENDIF
+	CALL HOTPATCH_CONFESSION_RESULT(nChara, nAgreement, nReserved, nOverride)
+ENDSELECT
+RETURN 1
+
+@HOTPATCH_CONFESSION_RESULT(nChara, nAgreement, nReserved, nOverride)
+#DIM DYNAMIC nChara
+#DIM DYNAMIC nAgreement
+#DIM DYNAMIC nReserved
+#DIM DYNAMIC nOverride
+#DIM DYNAMIC nAccepted
+#DIM DYNAMIC nPass
+#DIM DYNAMIC nStart
+#DIMS DYNAMIC sResponse
+#DIMS DYNAMIC sReserved
+#DIMS DYNAMIC sStory
+nAccepted = TALENT:nChara:恋人 != 0
+nPass = nAgreement > 350 + nReserved * 100
+sStory '= nOverride == 1 ? "Acceptance" # nOverride == -1 ? "Refusal" # nOverride == -2 ? "Interrupted" # nOverride ? "Script-defined" # "Standard rules"
+IF nAccepted
+	sResponse '= @"You and %CALLNAME:nChara% are now lovers. Your feelings and any FWB agreement remain independent."
+ELSEIF nOverride == -2
+	sResponse '= "The character-specific story ended this confession before a relationship could begin."
+ELSEIF nOverride == -1
+	sResponse '= @"%CALLNAME:nChara%'s character-specific story declined this confession."
+ELSEIF !nPass && !nOverride
+	sResponse '= @"Your confession did not meet the agreement threshold. You and %CALLNAME:nChara% have not become lovers."
+ELSE
+	sResponse '= @"The conversation did not result in a Lovers agreement with %CALLNAME:nChara%."
+ENDIF
+nStart = LINECOUNT
+HTML_PRINT @"<era-open class='era-dialog era-proposal era-confession %(nAccepted ? "era-proposal-accepted" # "era-proposal-declined")%'>"
+CALL HOTPATCH_FACE(nChara, 90)
+HTML_PRINT @"<div class='era-proposal-header'><span class='era-info-face'>%RESULTS%</span><div><span class='era-sub'>Putting your feelings into words</span><h2>Confess to %HTML_ESCAPE(CALLNAME:nChara)%</h2></div><button value='999' class='era-dialog-close' title='Close confession result'>×</button></div>"
+HTML_PRINT "<era-open class='era-proposal-body'>"
+HTML_PRINT @"<div class='era-proposal-moment'><span class='era-proposal-jewel' aria-hidden='true'></span><span class='era-proposal-caption'>%(nAccepted ? "A new chapter, together" # "Your feelings, spoken honestly")%</span><h3>%(nAccepted ? "You are now lovers" # nOverride == -2 ? "The conversation ended" # "You have not become lovers")%</h3><span class='era-proposal-verdict'>%(nAccepted ? "Confession accepted" # nOverride == -2 ? "Confession interrupted" # "Confession declined")%</span></div>"
+HTML_PRINT "<div class='era-proposal-check-heading'>How this confession was resolved</div>"
+HTML_PRINT @"<div class='era-proposal-check %(nPass ? "era-check-pass" # "era-check-fail")%'><span>Agreement threshold</span><strong>{nAgreement - 100 * nReserved} &gt; 350</strong><b>%(nPass ? "PASS" # "FAIL")%</b></div>"
+HTML_PRINT @"<div class='era-proposal-check'><span>Character-specific story</span><strong>%sStory%</strong><b>%(nOverride ? "OVERRIDE" # "DEFAULT")%</b></div>"
+IF nReserved
+	sReserved '= @" - 100 × <span class='era-proposal-trait' title='%HTML_ESCAPE(CALLNAME:nChara)% has a reserved, deliberate personality.'>Reserved ({nReserved})</span>"
+ENDIF
+HTML_PRINT @"<p class='era-proposal-formula'><span class='era-proposal-love-exp' title='The native agreement score at the time of your confession.'>Agreement ({nAgreement})</span>%sReserved% = {nAgreement - 100 * nReserved}<br>A character-specific story can override this threshold.</p>"
+HTML_PRINT @"<div class='era-proposal-response'>%HTML_ESCAPE(sResponse)%</div>"
+HTML_PRINT "<era-close>"
+HTML_PRINT "<div class='era-proposal-footer'><span>Confession attempt: 10 minutes</span><button value='999' class='era-chip-button'>Continue</button></div>"
+HTML_PRINT "<era-close>"
+DO
+	INPUT
+LOOP RESULT != 999
+CLEARLINE LINECOUNT - nStart
+PRINTFORML %sResponse%
+RETURN 1
 
 @COM357
 #DIM DYNAMIC nYearning
@@ -509,14 +620,18 @@ RETURN 1
 @TURN_RESET
 #DIM DYNAMIC nCasual
 #DIM DYNAMIC nConfession
+#DIM DYNAMIC nResult
 nCasual = TALENT:TARGET:セフレ
 nConfession = SELECTCOM == 352 && TFLAG:193
 SIF nConfession && !TALENT:TARGET:恋人
 	CFLAG:TARGET:7398 = 0
 CALL HOTPATCH_ORIGINAL_TURN_RESET
+nResult = RESULT
 SIF nConfession && nCasual
 	TALENT:TARGET:セフレ = nCasual
-RETURN RESULT
+SIF SELECTCOM == 352
+	CALL HOTPATCH_CONFESSION_FLOW(3)
+RETURN nResult
 
 @BE_LOVER(ARG)
 SIF !TALENT:ARG:恋人

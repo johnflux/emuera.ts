@@ -297,13 +297,15 @@ test("demo previews every relationship state and supports proposals without chan
 async function friendshipRuntime(source: string, jit = true, saves?: MemorySaveStore) {
   const original = (await gameReady)!;
   const game = { ...original, routines: new Map(original.routines) };
-  indexScript(game, `@HOTPATCH_TEST_FRIENDSHIP
+  const stub = emptyGame();
+  indexScript(stub, `@HOTPATCH_TEST_FRIENDSHIP
 CALL HOTPATCH_TEST_INIT
 CFLAG:TARGET:好感度 = 0
 CFLAG:TARGET:信頼度 = 0
 ${source}
 PRINTFORML Friendship: marker={CFLAG:TARGET:7399}, favor={CFLAG:TARGET:好感度}, active={HOTPATCH_FRIENDSHIP_ACTIVE(TARGET)}, time={TIME}
 QUIT`, "<friendship-test>");
+  for (const [name, routines] of stub.routines) game.routines.set(name, routines);
   return new Runtime(game, GAME_INSTRUCTION_LIMIT, { jit, ...(saves ? { saves } : {}) });
 }
 
@@ -514,6 +516,164 @@ test("native confession keeps strict thresholds and story overrides, with ten-mi
       assert.doesNotMatch(text(result), /era-dialog/);
       if (!success) assert.match(text(result), /Confession declined:/);
     }
+  }
+});
+
+test("interactive confession preserves native dialogue, captures the actual check and waits for the Lovers transition", { skip: !existsSync(GAME_ROOT) }, async () => {
+  for (const jit of [false, true]) {
+    for (const [agreement, reserved, override, accepted] of [
+      [350, 0, 0, 0], [351, 0, 0, 1], [450, 1, 0, 0], [451, 1, 0, 1],
+      [0, 0, 1, 1], [999, 0, -1, 0], [999, 0, -2, 0],
+    ]) {
+      const runtime = await friendshipRuntime(`TALENT:TARGET:セフレ = 1
+TALENT:TARGET:恋慕 = 0
+CALL HOTPATCH_RELATIONSHIP_REQUEST(1)
+RESULT = 352
+CALL USERCOM
+CALL HOTPATCH_TEST_DUMP
+PRINTFORML Attempt: daily={GETBIT(TFLAG:一日一回, 12)}
+@HOTPATCH_ORIGINAL_USERCOM
+SELECTCOM = RESULT
+CALL KOJO_MESSAGE_SEND("SUCCESS", -1, TARGET, -1, -1)
+CALL COM352
+LOCAL = RESULT
+IF LOCAL > 0
+  CALL KOJO_MESSAGE_SEND("COMMAND", -1, TARGET, -1, -1)
+ENDIF
+CALL TURN_RESET
+RETURN LOCAL
+@KOJO_MESSAGE_SEND(ARGS, ARG, ARG:1, ARG:2, ARG:3, ARGS:1)
+IF ARGS == "SUCCESS"
+  CFLAG:TARGET:合意判定 = ${agreement}
+  TALENT:TARGET:一線越えない = ${reserved}
+  TFLAG:192 = ${override}
+ELSEIF ARGS == "COMMAND"
+  PRINTFORMW Native character confession dialogue.
+  CFLAG:TARGET:合意判定 = 9999
+  TALENT:TARGET:一線越えない = 0
+ENDIF
+RETURN 0`, jit);
+      let snapshot = check(runtime.start("HOTPATCH_TEST_FRIENDSHIP"));
+      assert.match(text(snapshot), /Confess your feelings to Test Partner/);
+      assert.doesNotMatch(text(snapshot), /era-confession|Native character confession/);
+      snapshot = check(runtime.input("1"));
+      if (override !== -2) {
+        assert.match(text(snapshot), /Native character confession dialogue/);
+        assert.doesNotMatch(text(snapshot), /era-confession/);
+        snapshot = check(runtime.input(""));
+      }
+      const popup = text(snapshot);
+      assert.match(popup, /era-confession/);
+      assert.ok(popup.includes(accepted ? "era-proposal-accepted" : "era-proposal-declined"));
+      assert.ok(popup.includes(`${agreement - 100 * reserved} &gt; 350`));
+      assert.ok(popup.includes(`Agreement (${agreement})`));
+      assert.ok(popup.includes(override === 1 ? "Acceptance" : override === -1 ? "Refusal" : override === -2 ? "Interrupted" : "Standard rules"));
+      assert.equal(popup.includes("Reserved ("), !!reserved);
+      assert.doesNotMatch(popup, /Agreement \(9999\)|You are now engaged|Love experience/);
+      snapshot = check(runtime.input("1"));
+      assert.ok(snapshot.input, "unrelated input does not run the confession again");
+      snapshot = check(runtime.input("999"));
+      assert.equal(snapshot.input, null);
+      assert.match(text(snapshot), new RegExp(`time=110, lover=${accepted}, player=${accepted ? 42 : 0}, commitment=0, love=0, yearning=1, casual=1`));
+      assert.match(text(snapshot), /Attempt: daily=1/);
+      assert.doesNotMatch(text(snapshot), /era-confession/);
+      if (accepted) assert.match(text(snapshot), /are now lovers/);
+    }
+  }
+});
+
+test("confession popup survives deferred native USERCOM training dispatch and follows post-roll story overrides", { skip: !existsSync(GAME_ROOT) }, async () => {
+  for (const jit of [false, true]) {
+    for (const accepted of [0, 1]) {
+      const original = (await gameReady)!;
+      const game = { ...original, routines: new Map(original.routines), tables: new Map(original.tables) };
+      game.tables.set("TRAIN", new Map([[352, ["Confess"]]]));
+      const stub = emptyGame();
+      indexScript(stub, `@HOTPATCH_TEST_TRAIN
+BEGIN TRAIN
+@EVENTTRAIN
+CALL HOTPATCH_TEST_INIT
+CFLAG:TARGET:合意判定 = ${accepted ? 0 : 999}
+@SHOW_STATUS
+@SHOW_USERCOM
+CALL HOTPATCH_RELATIONSHIP_REQUEST(1)
+RESULT = 352
+CALL USERCOM
+@CAN_COM352(ARG = 0)
+RETURN 1
+@EVENTCOM
+@COM999
+RETURN 1
+@SOURCE_CHECK
+SELECTCOM = TFLAG:3
+CALL COM352
+PRINTFORMW Native post-roll story.
+TFLAG:193 = ${accepted}
+@EVENTCOMEND
+CALL TURN_RESET
+CALL HOTPATCH_TEST_DUMP
+QUIT`, "<confession-training-test>");
+      for (const [name, routines] of stub.routines) game.routines.set(name, routines);
+      const runtime = new Runtime(game, GAME_INSTRUCTION_LIMIT, { jit });
+      assert.match(text(check(runtime.start("HOTPATCH_TEST_TRAIN"))), /Confess your feelings/);
+      assert.match(text(check(runtime.input("1"))), /Native post-roll story/);
+      const popup = check(runtime.input(""));
+      assert.match(text(popup), /era-confession/);
+      assert.ok(text(popup).includes(accepted ? "era-proposal-accepted" : "era-proposal-declined"));
+      assert.ok(text(popup).includes(accepted ? ">Acceptance</strong>" : ">Refusal</strong>"));
+      assert.match(text(popup), />OVERRIDE<\/b>/);
+      const result = check(runtime.input("999"));
+      assert.equal(result.input, null);
+      assert.match(text(result), new RegExp(`time=110, lover=${accepted}`));
+    }
+  }
+});
+
+test("confession cancellation and blocked encounters never run the native command or spend an attempt", { skip: !existsSync(GAME_ROOT) }, async () => {
+  for (const jit of [false, true]) {
+    for (const blocked of [false, true]) {
+      const runtime = await friendshipRuntime(`CALL HOTPATCH_RELATIONSHIP_REQUEST(1)
+RESULT = 352
+CALL USERCOM
+CALL HOTPATCH_TEST_DUMP
+PRINTFORML Attempt: daily={GETBIT(TFLAG:一日一回, 12)}
+@HOTPATCH_ORIGINAL_USERCOM
+THROW Native command must not run
+@GLOBAL_COMABLE2(ARG)
+#FUNCTION
+RETURNF ${blocked ? 1 : 0}`, jit);
+      let snapshot = check(runtime.start("HOTPATCH_TEST_FRIENDSHIP"));
+      if (!blocked) snapshot = check(runtime.input("0"));
+      assert.equal(snapshot.input, null);
+      assert.match(text(snapshot), /time=100, lover=0, player=0, commitment=0/);
+      assert.match(text(snapshot), /Attempt: daily=0/);
+      assert.doesNotMatch(text(snapshot), /era-confession/);
+      if (blocked) assert.match(text(snapshot), /blocked by the current encounter rules/);
+    }
+  }
+});
+
+test("demo confession cancellation is free and the result updates the existing independent flags", { skip: !existsSync(GAME_ROOT) }, async () => {
+  for (const jit of [false, true]) {
+    const game = { ...(await gameReady)!, routines: new Map((await gameReady)!.routines) };
+    const stub = emptyGame();
+    indexScript(stub, `@CHARA_ATTITUDE
+CFLAG:TARGET:合意判定 = 451`, "<demo-confession-score>");
+    for (const [name, routines] of stub.routines) game.routines.set(name, routines);
+    const runtime = new Runtime(demoGame(game), GAME_INSTRUCTION_LIMIT, { jit });
+    check(runtime.start());
+    check(runtime.input("9"));
+    check(runtime.input("114"));
+    check(runtime.input("1"));
+    assert.match(text(check(runtime.input("0"))), /value='114'[^>]*aria-pressed='true'/);
+    check(runtime.input("1"));
+    const popup = check(runtime.input("1"));
+    assert.match(text(popup), /era-confession era-proposal-accepted/);
+    const updated = check(runtime.input("999"));
+    assert.match(text(updated), /value='105'[^>]*aria-pressed='true'/);
+    assert.match(text(updated), /data-in-love='1' data-casual='1'/);
+    assert.match(text(updated), /era-relationship-flag-lovers'>Lovers/);
+    assert.doesNotMatch(text(updated), />Confess<\/button>/);
   }
 });
 
