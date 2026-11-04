@@ -1,0 +1,148 @@
+; Calendar presentation shares the native schedule calculations without advancing the game date.
+@CALENDAR
+#DIM DYNAMIC nStart
+#DIM DYNAMIC nView
+#DIM DYNAMIC nCharacter
+#DIM DYNAMIC nOffset
+#DIM DYNAMIC nDay
+#DIM DYNAMIC nSeason
+#DIM DYNAMIC nMonthDay
+#DIMS DYNAMIC sError
+#DIMS DYNAMIC sHeader
+nStart = LINECOUNT
+nDay = DAY
+nSeason = DAY:2
+nMonthDay = DAY:3
+DO
+	CLEARLINE LINECOUNT - nStart
+	HTML_PRINT "<era-open class='era-dialog era-calendar'>"
+	sHeader '= @"<div class='era-inventory-header'><div class='era-inventory-heading'><span class='era-calendar-emblem'></span><div><span class='era-inventory-title'>Week Calendar</span><div class='era-sub'>%HTML_ESCAPE(PRINT_DATE_F(nDay, 1))%</div></div><button value='0' class='era-dialog-close' title='Close calendar'>×</button></div>"
+	SIF FLAG:1007
+		sHeader += @"<div class='era-sheet-subpages era-inventory-tabs'><button value='900' class='era-sheet-subpage%(nView == 0 ? " era-current" # "")%'>Work</button><button value='901' class='era-sheet-subpage%(nView == 1 ? " era-current" # "")%'>Fertility</button></div>"
+	HTML_PRINT sHeader + "</div>"
+	HTML_PRINT "<era-open class='era-inventory-body'>"
+	IF nCharacter
+		HTML_PRINT "<era-open class='era-calendar-detail'>"
+		HTML_PRINT @"<div class='era-card-title'>%HTML_ESCAPE(CALLNAME:nCharacter)%<button value='-1' class='era-chip-button'>Back to week</button></div>"
+		IF CFLAG:nCharacter:自宅位置
+			IF CFLAG:nCharacter:神社在住
+				HTML_PRINT @"<div class='era-calendar-fact'><span class='era-status-label'>Home</span>%HTML_ESCAPE(NAME_FROM_PLACE(CFLAG:nCharacter:神社在住))%</div>"
+			ELSE
+				HTML_PRINT @"<div class='era-calendar-fact'><span class='era-status-label'>Home</span>%HTML_ESCAPE(NAME_FROM_PLACE((CFLAG:nCharacter:自宅位置) / 10 + 6000))%</div>"
+			ENDIF
+		ENDIF
+		HTML_PRINT @"<div class='era-calendar-fact'><span class='era-status-label'>Work</span>%HTML_ESCAPE(WORK_INFO(nCharacter))%</div>"
+		HTML_PRINT @"<div class='era-calendar-fact'><span class='era-status-label'>Workplace</span>%HTML_ESCAPE(CSTR:nCharacter:2)%</div>"
+		HTML_PRINT "<era-close>"
+	ELSE
+		HTML_PRINT "<era-open class='era-calendar-week'>"
+		HTML_PRINT @"<div class='era-calendar-table-heading'><span>Day</span><span>Event / Banquet Information / <span class='era-calendar-theme-label'>[Stone Stacking Theme]</span> / <span class='era-calendar-work-label'>%(nView ? "Fertility" # "Work")%</span></span></div>"
+		FOR nOffset, 0, 7
+			DAY = nDay + nOffset
+			DAY:3 = (nMonthDay + nOffset - 1) % 31 + 1
+			DAY:2 = (nSeason - 1 + (nMonthDay + nOffset - 1) / 31) % 4 + 1
+			HTML_PRINT @"<era-open class='era-calendar-day%(nOffset == 0 ? " era-calendar-today" # "")%'>"
+			HTML_PRINT @"<div class='era-calendar-date' title='%HTML_ESCAPE(PRINT_DATE_F(DAY, 1))%'><span class='era-calendar-number'>{DAY:3}</span><span class='era-calendar-weekday'>%HTML_ESCAPE(GET_DAY_TR())%</span></div>"
+			HTML_PRINT "<era-open class='era-calendar-day-content'>"
+			CALL HOTPATCH_CALENDAR_SCHEDULE(nView, nOffset)
+			HTML_PRINT "<era-close>"
+			HTML_PRINT "<era-close>"
+			DAY = nDay
+			DAY:2 = nSeason
+			DAY:3 = nMonthDay
+		NEXT
+		HTML_PRINT "<era-close>"
+	ENDIF
+	HTML_PRINT "<era-close>"
+	HTML_PRINT @"<div class='era-inventory-footer'><button value='0' class='era-chip-button'>0 - Return</button><span class='era-tone-red'>%HTML_ESCAPE(sError)%</span></div>"
+	HTML_PRINT "<era-close>"
+	INPUT
+	sError '= ""
+	SELECTCASE RESULT
+	CASE 0
+		RETURN
+	CASE -1
+		nCharacter = 0
+	CASE 900
+		nView = 0
+		nCharacter = 0
+	CASE 901
+		IF FLAG:1007
+			nView = 1
+			nCharacter = 0
+		ELSE
+			sError '= "Fertility information is unavailable."
+		ENDIF
+	CASEELSE
+		IF RESULT >= 1 && RESULT < CHARANUM
+			nCharacter = RESULT
+		ELSE
+			sError '= "Choose a character, a schedule, or Return."
+		ENDIF
+	ENDSELECT
+LOOP 1
+
+@HOTPATCH_CALENDAR_SCHEDULE(nView, nOffset)
+#DIM DYNAMIC nView
+#DIM DYNAMIC nOffset
+#DIM DYNAMIC nCharacter
+#DIM DYNAMIC nCount
+#DIM DYNAMIC nWorkAmount
+#DIM DYNAMIC nWorkStart
+#DIM DYNAMIC nWorkEnd
+#DIM DYNAMIC nWorkplace
+#DIM DYNAMIC nWorkType
+#DIM DYNAMIC nPay
+#DIM DYNAMIC nThanks
+HTML_PRINT "<era-open class='era-calendar-events'>"
+IF FESTIVAL() != ""
+	SETCOLOR C_RED
+	PRINTFORM %FESTIVAL_TR()%　
+	RESETCOLOR
+ENDIF
+CALL ADD_BANQUET_PRINT_CALENDAR()
+SETCOLOR C_YELLOW
+IF STONE_PLAYCOUNT:2 == 16 && (STONE_UKETSUKEDAY + 14 - DAY:0) > 0 && (STONE_UKETSUKEDAY + 14 - DAY:0) < 15
+	PRINTFORM 【Suspended Until After %PRINT_PLUR("day", STONE_UKETSUKEDAY + 14 - DAY:0)%】
+ELSE
+	PRINTFORM 【%STONECombiDAY(DAY:3)%】
+ENDIF
+RESETCOLOR
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-open class='era-calendar-people'>"
+FOR nCharacter, 1, CHARANUM
+	IF !nView
+		nWorkAmount = MAXBASE:nCharacter:仕事量
+		nWorkStart = TCVAR:nCharacter:仕事開始
+		nWorkEnd = TCVAR:nCharacter:仕事終了
+		nWorkplace = CFLAG:nCharacter:職場
+		nWorkType = CFLAG:nCharacter:職種
+		nPay = TCVAR:nCharacter:給料
+		nThanks = TCVAR:nCharacter:お礼
+		CALL 仕事内容設定(nCharacter, 1)
+		IF !CHARA_HOLIDAY(nCharacter, 1) && CFLAG:nCharacter:信頼度 >= 10
+			nCount ++
+			PRINTBUTTON CALLNAME:nCharacter, nCharacter
+			PRINT 　
+		ENDIF
+		MAXBASE:nCharacter:仕事量 = nWorkAmount
+		TCVAR:nCharacter:仕事開始 = nWorkStart
+		TCVAR:nCharacter:仕事終了 = nWorkEnd
+		CFLAG:nCharacter:職場 = nWorkplace
+		CFLAG:nCharacter:職種 = nWorkType
+		TCVAR:nCharacter:給料 = nPay
+		TCVAR:nCharacter:お礼 = nThanks
+	ELSEIF ESTRUS_CATEGORY(nCharacter, nOffset) == "危険日" && FLAG:1007
+		nCount ++
+		SIF !INRANGE(CFLAG:nCharacter:出産経過日, 1, 59) && (CFLAG:nCharacter:生解禁 == 1 || CFLAG:nCharacter:生解禁 == 2)
+			SETCOLOR C_GREEN
+		SIF CFLAG:nCharacter:妊娠経過日数
+			SETCOLOR C_PINK
+		PRINTBUTTON CALLNAME:nCharacter, nCharacter
+		SETCOLOR C_PINK
+		CALL HEART
+		RESETCOLOR
+		PRINT 　
+	ENDIF
+NEXT
+HTML_PRINT "<era-close>"

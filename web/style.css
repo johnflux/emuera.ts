@@ -255,14 +255,23 @@ a { color: #8ddaff; }
 .era-main > * { min-width: 0; align-self: start; }
 .era-main > .line { grid-column: 1 / -1; }
 .era-main-header { grid-area: header; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; padding: 8px 12px; border: 1px solid #2c3640; border-radius: 10px; background: linear-gradient(90deg, #12181e, #0d1014); }
-.era-main-when { flex: 1 1 32ch; min-width: 0; }
+.era-main-when { flex: 0 1 auto; width: max-content; min-width: 0; color: #fff; }
+.era-main-when .output-text { color: #fff; }
+.era-main-when > .line:has(> .is-empty:only-child) { display: none; }
+.era-main-when:has(.era-calendar-button) { display: flex; align-items: inherit; gap: 8px; }
+.era-main-when:has(.era-calendar-button) > .line { min-width: 0; }
+.era-main-when > .line:has(.era-calendar-button) { flex: 0 0 40px; line-height: 0; }
+:is(.era-main, .era-shop) .era-main-when .line button.choice.era-calendar-button { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.screen.is-active .era-main-when .line button.choice.era-calendar-button:enabled:is(:hover, :focus-visible) { background: transparent; }
+.era-calendar-button::before { content: ""; width: 40px; height: 40px; margin-top: -5px; background: url("./calendar.svg") center / contain no-repeat; }
+.era-calendar-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 /* The header's backdrop (HOTPATCH_SKY): sky for the hour, weather over it, the season's land along the bottom; under a
    roof the sky is dimmer, underground there is none. The text sits on a translucent panel to stay readable. */
 .era-main-header { position: relative; overflow: visible; isolation: isolate; }
 .era-main-header > * { position: relative; z-index: 1; }
 .era-main-header > .line:has(.era-sky), .era-main-header > .line > span:has(> .era-sky) { display: contents; }
 .era-sky { position: absolute; inset: 0; z-index: 0; overflow: hidden; border-radius: inherit; pointer-events: none; background: #0d1014; }
-.era-main-header > .era-main-when { order: 0; flex: 1 1 24ch; padding: 6px 12px; border-radius: 8px; background: #0a0e1428; backdrop-filter: blur(3px); }
+.era-main-header > .era-main-when { order: 0; flex: 0 1 auto; padding: 6px 12px; border-radius: 8px; background: #0a0e1428; backdrop-filter: blur(3px); }
 .era-main-header > .era-watch-control { order: 1; margin-left: auto; margin-right: -60px; margin-top: -44px; margin-bottom: -16px; width: 420px; max-width: 100%; aspect-ratio: 825 / 509; flex: 0 0 auto; min-width: 0; isolation: isolate; }
 .era-watch-control > .line:has(.era-clock) { position: static; }
 .era-watch-control > .line { position: static; z-index: auto; min-width: 0; }
@@ -502,7 +511,7 @@ body:has(.menu-panel:not([hidden])) .clock-overhang { visibility: hidden; }
 :is(.era-main, .era-shop) .era-main-header:has(.era-area-art) > .era-watch-control { position: absolute; top: -32px; right: -37px; margin: 0; width: 300px; container-type: inline-size; }
 #terminal:has(.screen.is-active :is(.era-main, .era-shop) .era-main-header .era-area-art) { overflow-x: hidden; }
 :is(.era-main, .era-shop) .era-main-header:has(.era-area-art) .era-watch-control .era-timestop-button { padding: 2px clamp(2px, 2cqw, 12px); transform: translateX(-5px); }
-:is(.era-main, .era-shop) .era-main-header:has(.era-area-art) > .era-main-when { flex: 0 1 40%; max-width: 40%; max-height: 100%; overflow: auto; }
+:is(.era-main, .era-shop) .era-main-header:has(.era-area-art) > .era-main-when { max-width: calc(100% - 239px); max-height: 100%; overflow: auto; padding: 4px 12px; }
 .era-sky.era-area-art .era-sky-landmark { left: 0; right: 0; bottom: 0; width: auto; height: 100%; image-rendering: pixelated; -webkit-mask: none; mask: none;
   background: var(--area-left, none) left bottom / auto no-repeat, var(--area-right, none) right bottom / auto no-repeat, var(--area-middle) left bottom / auto repeat-x;
   filter: var(--landmark-tint, ); }
@@ -669,6 +678,7 @@ body:has(.menu-panel:not([hidden])) .clock-overhang { visibility: hidden; }
 .era-relationship-heading, .era-relationship-option-title { margin: 0; font-family: inherit; font-weight: bold; white-space: normal; }
 .era-relationship-heading { margin-top: 4px; color: #f2c8d9; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 2em; letter-spacing: .03em; overflow-wrap: anywhere; }
 .era-relationship-header > div { min-width: 0; }
+.era-relationship-hate { display: inline-block; margin: 4px 0; padding: 2px 8px; border: 1px solid #b16c7b; border-radius: 999px; background: #492832; color: #ffc0ca; font-size: .75em; white-space: normal; }
 .era-relationship-body { overflow: auto; min-height: 0; padding: 28px 18px 16px; }
 .era-relationship-body > .line.era-marker, .era-relationship-options > .line.era-marker, .era-relationship-option > .line.era-marker { display: none; }
 .era-relationship-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 24px; margin: 20px 12px 12px; color: #b7c9d4; font-size: 1.1em; }
@@ -955,6 +965,39 @@ body:has(.menu-panel:not([hidden])) .clock-overhang { visibility: hidden; }
 .era-inventory-search { width: 100%; min-width: 0; padding: 5px 8px; border: 1px solid #2a3943; border-radius: 4px; background: #0b1117; color: #c5d3dc; font: inherit; }
 .era-inventory-search::placeholder { color: #768894; }
 .era-inventory-search:focus { outline: 1px solid #63b6d2; outline-offset: 1px; }
+.era-calendar:popover-open { width: min(1300px, calc(100vw - 32px)); height: fit-content; max-height: calc(100dvh - 32px); border-color: #708793; background: linear-gradient(135deg, #17212b, #0d1118); }
+.era-calendar .era-inventory-header { background: linear-gradient(110deg, #253942, #1a202c); border-color: #708793; }
+.era-calendar .era-inventory-title { color: #e2edf0; font-size: 1.4em; font-weight: normal; }
+.era-calendar-emblem { flex: none; width: 40px; height: 40px; background: url("./calendar.svg") center / contain no-repeat; }
+.era-calendar .era-inventory-body { flex: 0 1 auto; padding: 20px 28px; }
+.era-calendar-week { --calendar-day-width: clamp(64px, 10vw, 130px); border: 1px solid #708793; border-radius: 12px; overflow: hidden; background: #0c1118; }
+.era-calendar-week > .line:has(.era-calendar-table-heading) { white-space: normal; }
+.era-calendar-table-heading, .era-calendar-week > .era-calendar-day { display: grid; grid-template-columns: var(--calendar-day-width) minmax(0, 1fr); }
+.era-calendar-table-heading { background: linear-gradient(100deg, #2c3a45, #232b37); color: #e1e9ed; text-align: center; }
+.era-calendar-table-heading > span { padding: 10px 14px; }
+.era-calendar-table-heading > span:first-child { border-right: 1px solid #708793; }
+.era-calendar-theme-label { color: #e8d477; }
+.era-calendar-work-label { color: #8edab5; }
+.era-calendar-week > .era-calendar-day { min-width: 0; border-top: 1px solid #708793; }
+.era-calendar-day > .line:has(.era-calendar-date) { align-self: stretch; background: #ffffff05; border-right: 1px solid #708793; }
+.era-calendar-date { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 64px; height: 100%; padding: 6px; color: #e3eaef; }
+.era-calendar-number { font-size: 1.5em; line-height: 1; font-variant-numeric: tabular-nums; }
+.era-calendar-weekday { font-size: .9em; line-height: 1.1; }
+.era-calendar-today .era-calendar-number { color: #80dfb5; }
+.era-calendar-day-content { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; min-width: 0; padding: 10px 22px; }
+.era-calendar :is(.era-calendar-events, .era-calendar-people) { white-space: normal; overflow-wrap: anywhere; }
+.era-calendar-events { color: #e4ca85; }
+.era-calendar-people:not(:has(button)) { display: none; }
+.era-calendar-people .line button.choice { padding: 3px 8px; margin: 2px 0; border: 1px solid #35566d; border-radius: 5px; background: #172d3a; color: #c8e6f4; }
+.era-calendar .era-inventory-footer { justify-content: flex-start; padding: 16px 28px; border-color: transparent; }
+@media (max-width: 600px) {
+  .era-calendar .era-inventory-body { padding: 12px; }
+  .era-calendar-day-content { padding: 8px 12px; }
+  .era-calendar-table-heading > span { padding: 8px; font-size: .8em; }
+}
+.era-calendar-detail { padding: 16px; border: 1px solid #35566d; border-radius: 10px; background: #10212c; white-space: normal; }
+.era-calendar-detail .era-card-title { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+.era-calendar-fact { padding: 10px 0; border-top: 1px solid #ffffff12; color: #d0dde5; overflow-wrap: anywhere; }
 
 /* Keep the original TW title graphic, with its neon colors against black. */
 #terminal:has(.screen.is-active .era-launch)::before { margin-top: 0; }

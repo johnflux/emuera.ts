@@ -218,6 +218,7 @@ RETURNF ""
 #DIM DYNAMIC nAction
 #DIMS DYNAMIC sReason
 #DIMS DYNAMIC sError
+#DIMS DYNAMIC sHate
 nStart = LINECOUNT
 DO
 	CLEARLINE LINECOUNT - nStart
@@ -225,7 +226,10 @@ DO
 	SIF nPreview
 		CALL DEMO_RELATIONSHIP_CONTROLS
 	CALL HOTPATCH_FACE(TARGET, 90)
-	HTML_PRINT @"<div class='era-relationship-header'><span class='era-info-face'>%RESULTS%</span>%HOTPATCH_RELATIONSHIP_ICON(TARGET)%<div><span class='era-sub'>Your relationship with</span><h2 class='era-relationship-heading'>%HTML_ESCAPE(CALLNAME:TARGET)%</h2></div><button value='999' class='era-dialog-close' title='Close relationship dialog'>×</button></div>"
+	sHate '= ""
+	SIF MARK:TARGET:反発刻印
+		sHate '= @"<span class='era-relationship-hate' title='Resentment toward you. This can affect relationship conversations and block engagement or marriage.'>Hate Marks {MARK:TARGET:反発刻印}</span>"
+	HTML_PRINT @"<div class='era-relationship-header'><span class='era-info-face'>%RESULTS%</span>%HOTPATCH_RELATIONSHIP_ICON(TARGET)%<div><span class='era-sub'>Your relationship with</span><h2 class='era-relationship-heading'>%HTML_ESCAPE(CALLNAME:TARGET)%</h2>%sHate%</div><button value='999' class='era-dialog-close' title='Close relationship dialog'>×</button></div>"
 	HTML_PRINT "<era-open class='era-relationship-body'>"
 	HTML_PRINT @"<div class='era-relationship-timeline' data-favor='{CFLAG:TARGET:好感度}' data-intimacy='{ABL:TARGET:親密}' data-lover='{TALENT:TARGET:恋人 != 0}' data-in-love='{TALENT:TARGET:恋慕 != 0}' data-casual='{TALENT:TARGET:セフレ != 0}' data-commitment='{HOTPATCH_RELATIONSHIP_STATE(TARGET)}'></div>"
 	HTML_PRINT @"<div class='era-relationship-summary'><span>Favor <b>{CFLAG:TARGET:好感度}</b></span><span>Trust <b>{CFLAG:TARGET:信頼度}</b></span><span>Intimacy <b>{ABL:TARGET:親密}</b></span><span>Love exp <b>{EXP:TARGET:愛情経験}</b></span>%HOTPATCH_RELATIONSHIP_FLAGS(TARGET)%</div>"
@@ -288,6 +292,10 @@ nInput = RESULT
 CALL HOTPATCH_RELATIONSHIP_CONFIRM(0)
 CALL HOTPATCH_CONFESSION_FLOW(0)
 RESULT = nInput
+IF nInput == 993
+	CALL カレンダー
+	RETURN 0
+ENDIF
 IF !GROUPMATCH(nInput, 352, 357)
 	JUMP HOTPATCH_ORIGINAL_USERCOM
 ENDIF
@@ -500,8 +508,23 @@ IF !HOTPATCH_RELATIONSHIP_CONFIRM()
 	SIF !RESULT
 		RETURN -1
 ENDIF
+PRINTFORML You linger beside %CALLNAME:TARGET%, reluctant to let this little moment together end.
+IF TALENT:TARGET:恋人
+	PRINTFORML "I like being close to you. Could we be a little more playful together, too?"
+ELSE
+	PRINTFORML "You know, being around you makes it awfully hard to behave."
+	PRINTFORML You smile, a little shyly. "Would you like to be closer, without having to call it falling in love?"
+ENDIF
+PRINTFORMW You leave the question between you, hopeful, giving %CALLNAME:TARGET% room to answer.
 CALL HOTPATCH_RELATIONSHIP_CASUAL
 nResult = RESULT
+IF TALENT:TARGET:セフレ
+	PRINTFORML The answer brings a grin you cannot quite hide. Just being beside %CALLNAME:TARGET% feels a little different now.
+	PRINTFORMW "Then let's enjoy this, you and me. And if anything stops feeling right, tell me, okay?"
+ELSE
+	PRINTFORML You let out a small, embarrassed laugh, then soften your smile.
+	PRINTFORMW "That's okay. I'm still glad I get to spend time with you."
+ENDIF
 TALENT:TARGET:思慕 = nYearning
 CALL HOTPATCH_RELATIONSHIP_CONFIRM(0)
 RETURN nResult
@@ -749,6 +772,10 @@ CASE 7
 	sResponse '= @"You and %CALLNAME:TARGET% end your friends-with-benefits agreement. Other feelings are preserved."
 ENDSELECT
 IF INRANGE(nAction, 5, 7)
+	IF nPopup
+		PRINTFORML For a moment, you and %CALLNAME:TARGET% sit quietly with what has been said.
+		PRINTFORMW The shape of your relationship has changed. That does not make the moments you shared disappear.
+	ENDIF
 	SIF nPopup
 		CALL HOTPATCH_RELATIONSHIP_ENDING(nAction, nState, sResponse, sDetails)
 	PRINTFORML %sResponse%
@@ -839,6 +866,20 @@ ELSE
 	sResponse '= @"You ask %CALLNAME:TARGET% to marry you. They accept: you are now engaged."
 ENDIF
 IF nPopup
+	PRINTFORML You reach for %CALLNAME:TARGET%'s hand, your carefully rehearsed words suddenly nowhere to be found.
+	PRINTFORML "I keep thinking about tomorrow. And the day after that. Somehow, every time I do, you're there."
+	PRINTFORML You take a breath and look into %CALLNAME:TARGET%'s eyes.
+	PRINTFORML "The ordinary days, the wonderful ones, even the difficult ones... I want to share them with you."
+	PRINTFORML "Will you marry me?"
+	IF nAccepted
+		PRINTFORML For a heartbeat, everything seems to stand still. Then the answer comes, and the world feels warm again.
+		PRINTFORML You draw close, laughing a little through the sudden rush of happiness.
+		PRINTFORMW "Really? Oh... I love you. I can't wait for all our tomorrows."
+	ELSE
+		PRINTFORML The answer is gentle, but it is not the one you had hoped for. Your fingers go still.
+		PRINTFORML "Not yet, then," you say softly. "It hurts a little. But I love you, not just the future I imagined."
+		PRINTFORMW You take a slow breath. There will be time to talk again; for now, you stay beside each other.
+	ENDIF
 	nStart = LINECOUNT
 	HTML_PRINT @"<era-open class='era-dialog era-proposal %(nAccepted ? "era-proposal-accepted" # "era-proposal-declined")%'>"
 	CALL HOTPATCH_FACE(TARGET, 90)

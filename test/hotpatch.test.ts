@@ -448,6 +448,15 @@ test("main screen hotpatch opens and closes its panel boxes in balance", {
     const html = screen.join("");
     assert.match(html, /<div class='era-clock' data-minutes='\d+'><\/div>/);
     assert.match(html, /<era-open class='era-watch-control'>.*class='era-clock'.*era-timestop-button/);
+    const whenStart = screen.indexOf("<era-open class='era-main-when'>");
+    const whenEnd = screen.indexOf("<era-close>", whenStart);
+    const when = screen.slice(whenStart + 1, whenEnd);
+    assert.ok(when.every(text => text.trim()), "date panel has no blank HTML lines");
+    assert.equal((html.match(/value='993'/g) ?? []).length, 1, "calendar has exactly one entry point");
+    assert.ok(when.some(text => /value='993' class='era-chip-button era-calendar-button'/.test(text)),
+      "calendar is an icon button in the date panel");
+    assert.doesNotMatch(html.slice(html.indexOf("era-player-management")), /value='993'|Calendar\[993\]/,
+      "calendar is not a player management control");
     if (index === 1) {
       assert.match(html, /value='999' class='era-timestop-button era-stopped' title='Resume time'>Resume<span class='era-timestop-gauge'>/);
       assert.doesNotMatch(html, /Resume Time|Time is stopped/);
@@ -463,6 +472,106 @@ test("main screen hotpatch opens and closes its panel boxes in balance", {
   assert.ok(markup.some((text) => text.includes("era-dialog era-inventory")), "805 opens the inventory from the main screen");
   step("999");
   assert.ok(markup.some((text) => text.includes("era-player-actions")), "closing inventory returns to the player panel");
+  step("993");
+  assert.ok(markup.some(text => text.includes("era-dialog era-calendar")),
+    "993 opens the calendar from the main screen");
+  step("0");
+  assert.ok(markup.some(text => text.includes("era-player-actions")), "closing calendar returns to the player panel");
+});
+
+test("calendar popup preserves dates and work fields across views, details and season rollover", {
+  skip: !existsSync(GAME_ROOT),
+}, async () => {
+  const game = await loadGame();
+  await applyHotpatches(game);
+  for (const jit of [false, true]) {
+    const stub = emptyGame(game.root);
+    indexScript(stub, `@SYSTEM_TITLE
+ADDCHARA 0
+ADDCHARA 1
+MASTER = 0
+TARGET = 1
+DAY = 124
+DAY:2 = 4
+DAY:3 = 31
+TIME = 720
+FLAG:1007 = 1
+CFLAG:1:信頼度 = 100
+MAXBASE:1:仕事量 = 321
+TCVAR:1:仕事開始 = 123
+TCVAR:1:仕事終了 = 456
+CFLAG:1:職場 = 9
+CFLAG:1:職種 = 2
+TCVAR:1:給料 = 789
+TCVAR:1:お礼 = 12
+CALL CALENDAR
+PRINTFORML State: {DAY}, {DAY:2}, {DAY:3}, {TIME}
+PRINTFORML Work: {MAXBASE:1:仕事量}, {TCVAR:1:仕事開始}, {TCVAR:1:仕事終了}, {CFLAG:1:職場}, {CFLAG:1:職種}, {TCVAR:1:給料}, {TCVAR:1:お礼}
+QUIT`, "<calendar-popup-test>");
+    game.routines.set("SYSTEM_TITLE", stub.routines.get("SYSTEM_TITLE")!);
+    const runtime = new Runtime(game, GAME_INSTRUCTION_LIMIT, { jit });
+    let snapshot = runtime.start();
+    const check = (cards: number) => {
+      assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
+      assert.equal(snapshot.input?.kind, "integer");
+      const html = snapshot.output.flatMap(item => item.type === "html" ? [item.text] : []).join("");
+      assert.match(html, /era-dialog era-calendar/);
+      assert.equal((html.match(/<era-open class='era-calendar-day(?:'| )/g) ?? []).length, cards);
+      const opens = snapshot.output.filter(item => item.type === "html" && item.text.startsWith("<era-open")).length;
+      const closes = snapshot.output.filter(item => item.type === "html" && item.text === "<era-close>").length;
+      assert.equal(opens, closes);
+      assert.doesNotMatch(html, /┌|├|│/);
+      return html;
+    };
+    const initial = check(7);
+    assert.match(initial, /era-calendar-number'>31</);
+    assert.match(initial, /era-calendar-number'>1</);
+    for (const value of ["901", "900", "1", "-1", "9999"]) {
+      snapshot = runtime.input(value);
+      const html = check(value === "1" ? 0 : 7);
+      if (value === "1") assert.match(html, /era-calendar-detail/);
+      if (value === "9999") assert.match(html, /Choose a character, a schedule, or Return/);
+    }
+    snapshot = runtime.input("0");
+    assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
+    assert.equal(snapshot.status, "halted");
+    assert.deepEqual(snapshot.output.flatMap(item => item.type === "text" ? [item.text] : []),
+      ["State: 124, 4, 31, 720", "Work: 321, 123, 456, 9, 2, 789, 12"]);
+  }
+});
+
+test("calendar command bypasses the native home-room restriction without changing other commands", () => {
+  const patch = readFileSync(new URL("../hotpatch/RELATIONSHIPS.ERB", import.meta.url), "utf8");
+  const handler = patch.slice(patch.indexOf("@USERCOM\n"), patch.indexOf("@ASK_YN("));
+  for (const jit of [false, true]) {
+    for (const room of [0, 9]) {
+      const game = emptyGame();
+      game.names.set("CFLAG", new Map([["現在位置", 1], ["初期位置", 2]]));
+      indexScript(game, `@SYSTEM_TITLE
+ADDVOIDCHARA
+MASTER = 0
+CFLAG:MASTER:現在位置 = ${room}
+CFLAG:MASTER:初期位置 = 0
+RESULT = 993
+CALL USERCOM
+PRINTFORML Calendar: {FLAG:1}, result: {RESULT}
+RESULT = 805
+CALL USERCOM
+PRINTFORML Other command: {FLAG:2}
+QUIT
+${handler}
+@HOTPATCH_RELATIONSHIP_CONFIRM(ARG)
+@HOTPATCH_CONFESSION_FLOW(ARG)
+@カレンダー
+FLAG:1 += 1
+@HOTPATCH_ORIGINAL_USERCOM
+FLAG:2 = RESULT`, "<calendar-command-test>");
+      const snapshot = new Runtime(game, undefined, { jit }).start();
+      assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
+      assert.deepEqual(snapshot.output.flatMap(item => item.type === "text" ? [item.text] : []),
+        ["Calendar: 1, result: 0", "Other command: 805"]);
+    }
+  }
 });
 
 test("action filters and command categories share vaginal, anal, SM and service colors", {

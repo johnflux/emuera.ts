@@ -60,7 +60,38 @@ family reaching it, and no overlapping bulk resets (generic dialogue resets
 are 1000–1999; named/ranged resets use other slots). Native saves preserve this
 marker without changing layout or existing meanings.
 
+The main-screen date panel includes an icon-only Calendar button [993] at any
+location, replacing its Player management entry. The subtle black-outline,
+white-filled icon sits on the left without a button background, shared with the
+wake-up header's Calendar action [3333]. Both use a 40px square icon vertically
+aligned beside white header text using a flex row, with the icon shifted up 5px
+for visual alignment. The date panel sizes to its content, capped
+at the header width minus the watch's 239px space. Header text wraps
+to the panel width without the legacy clock-width padding or blank lines.
+
+`CALENDAR.ERB` replaces `CALENDAR` with a seven-day calendar grid popup,
+shared by the main and wake-up screens. A compact, neutral slate table has seven
+horizontal rows, a narrow date/weekday column, and a shared events/work heading.
+Today has a green date number; empty work lists take no space. Content wraps on
+narrow screens. The dialog fits its contents vertically, capped at the viewport
+height with a scrollable body. Day cells show native
+festival, banquet, stone-stacking and work schedules, with the fertility tab
+available under the native flag. Character buttons open home/work details in
+the same popup. Return, the close button and Escape close it. Date changes used
+to calculate future schedules and temporary work fields are restored before
+input, including across season boundaries.
+
 ### Romantic and casual commitment
+Relationship conversations include short, non-graphic original narration:
+Propose has a romantic question and separate tender acceptance/refusal scenes
+in the plain-text view before its result popup. FWB adds a playful invitation
+and warm acceptance or gentle refusal around the unchanged native calculation
+and character hooks. Relationship endings pause for a quiet closing beat before
+their result popup. Cancellation skips these scenes. Internal non-popup
+proposal/ending calls remain noninteractive.
+The relationship header shows Hate Marks and their current level when nonzero,
+with explanatory hover/focus help; zero is omitted. This is informational only
+and does not introduce new rejection gates or change native calculations.
 FWB propositions require current friendship (favor >= 500), but existing romantic
 feelings or a Lovers agreement do not disable them. Acceptance still uses TW's
 native calculation. Existing FWB agreements and encounter-context restrictions

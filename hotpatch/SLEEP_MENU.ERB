@@ -30,10 +30,11 @@ HTML_PRINT "<era-open class='era-layout era-shop'>"
 HTML_PRINT "<era-open class='era-main-header'>"
 CALL HOTPATCH_SKY
 HTML_PRINT "<era-open class='era-main-when'>"
+HTML_PRINT "<button value='3333' class='era-chip-button era-calendar-button' title='Calendar'><span class='era-calendar-label'>Calendar</span></button>"
 PRINTFORM %COND_STR(@"NG:{FLAG:周回数}, ", FLAG:周回数)%Day {DAY}, %PRINT_DATE_F(DAY, 1)% (
 CALL COLOR_YOUBI
 PRINTL )
-HTML_PRINT @"<div class='era-shop-wake'><span class='era-status-label'>Waking at</span>%HTML_ESCAPE(時刻表示(TIME:3))%<button value='2400' class='era-chip-button' title='Change the time you wake up'>Change</button><button value='3333' class='era-chip-button' title='The calendar of events and birthdays'>Calendar</button></div>"
+HTML_PRINT @"<div class='era-shop-wake'><span class='era-status-label'>Waking at</span>%HTML_ESCAPE(時刻表示(TIME:3))%<button value='2400' class='era-chip-button' title='Change the time you wake up'>Change</button></div>"
 HTML_PRINT "<era-close>"
 HTML_PRINT "<era-open class='era-watch-control'>"
 HTML_PRINT @"<div class='era-clock' data-minutes='{TIME:3}' title='Waking time'></div>"

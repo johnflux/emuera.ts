@@ -132,6 +132,7 @@ HTML_PRINT "<era-open class='era-layout era-main'>"
 HTML_PRINT "<era-open class='era-main-header'>"
 CALL HOTPATCH_SKY
 HTML_PRINT "<era-open class='era-main-when'>"
+HTML_PRINT "<button value='993' class='era-chip-button era-calendar-button' title='Calendar'><span class='era-calendar-label'>Calendar</span></button>"
 CALL INFO_TIME_WATCH
 SIF !天気非表示
 	CALL INFO_SHOW_WEATHER
@@ -799,7 +800,7 @@ HTML_PRINT @"<div class='era-sky %sClass%' data-minutes='{TIME}' data-season='{L
 
 ;-------------------------------------------------------------------------------
 ; QOL_INFO_SITUATION for the header without your own state, which moved to your card (HOTPATCH_PLAYER_STATUS):
-; orgasm denial, the date notices and the insertion warnings, wrapped as the original wraps them.
+; orgasm denial, the date notices and the insertion warnings. The browser wraps the header to its panel width.
 ;-------------------------------------------------------------------------------
 @HOTPATCH_SITUATION
 SIF TEQUIP:焦らしモード
@@ -827,7 +828,7 @@ IF FLAG:デート相手
 	ENDIF
 ENDIF
 CALL QOL_INSERTION_INFO
-CALL QOL_AUTOMATIC_HTML_LINEBREAK(HTML_POPPRINTINGSTR(),MAXWIDTH() - nClockCharacterLength, "`")
+HTML_PRINT HTML_POPPRINTINGSTR()
 
 ;-------------------------------------------------------------------------------
 ; Your own state as a plain "Status" line under your meters (not chips, so it doesn't read as buttons): arousal

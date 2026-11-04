@@ -420,8 +420,6 @@ ENDIF
 	
 SIF CAN_DATE(TARGET)
 	PRINTC Invite On A Date[992]
-SIF CFLAG:MASTER:現在位置 == CFLAG:MASTER:初期位置
-	PRINTC Calendar[993]
 SIF FLAG:パンツ輸送
 	PRINTC Check Pilfered Panties[994]
 IF AT_HOME(MASTER) && GETBIT(FLAG:瞬間移動, 1)

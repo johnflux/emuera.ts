@@ -283,7 +283,7 @@ test("demo previews every relationship state and supports proposals without chan
     check(runtime.input("105"));
     snapshot = check(runtime.input("3"));
     assert.match(text(snapshot), /Proposing to/);
-    snapshot = check(runtime.input("1"));
+    snapshot = settle(runtime, check(runtime.input("1")));
     assert.match(text(snapshot), /era-proposal-accepted/);
     snapshot = check(runtime.input("999"));
     assert.match(text(snapshot), /value='106'[^>]*aria-pressed='true'/);
@@ -718,6 +718,9 @@ CALL HOTPATCH_TEST_DUMP`, jit);
       assert.match(text(snapshot), /Confirm\?/);
       assert.doesNotMatch(text(snapshot), /era-proposal/);
       snapshot = check(runtime.input("1"));
+      assert.match(text(snapshot), /Will you marry me\?/);
+      assert.doesNotMatch(text(snapshot), /era-proposal/);
+      snapshot = settle(runtime, snapshot);
       const popup = text(snapshot);
       assert.ok(snapshot.input, "popup waits for dismissal");
       assert.ok(popup.includes(`era-proposal-${accepted ? "accepted" : "declined"}`));
@@ -759,7 +762,7 @@ test("demo failed-proposal preset shows a real refusal and normal Lovers restore
     const preset = check(runtime.input("116"));
     assert.match(text(preset), /value='116'[^>]*aria-pressed='true'/);
     check(runtime.input("3"));
-    const failed = check(runtime.input("1"));
+    const failed = settle(runtime, check(runtime.input("1")));
     assert.match(text(failed), /era-proposal-declined/);
     assert.match(text(failed), /250 &gt; 250/);
     assert.match(text(failed), /You remain lovers/);
@@ -767,7 +770,7 @@ test("demo failed-proposal preset shows a real refusal and normal Lovers restore
     assert.match(text(unchanged), /value='116'[^>]*aria-pressed='true'/);
     check(runtime.input("105"));
     check(runtime.input("3"));
-    assert.match(text(check(runtime.input("1"))), /era-proposal-accepted/);
+    assert.match(text(settle(runtime, check(runtime.input("1")))), /era-proposal-accepted/);
   }
 });
 
@@ -901,6 +904,7 @@ PRINTFORML Extras: contract={CFLAG:TARGET:契約セフレ}, targetbit={GETBIT(CF
         assert.doesNotMatch(text(prompt), /era-relationship-ending/);
         let snapshot = check(runtime.input(accept ? "1" : "0"));
         if (accept) {
+          snapshot = settle(runtime, snapshot);
           assert.match(text(snapshot), /era-proposal-declined era-relationship-ending/);
           assert.ok(text(snapshot).includes(title));
           assert.match(text(snapshot), /Time passed: 10 minutes/);
@@ -930,7 +934,7 @@ SETBIT CFLAG:MASTER:既成事実, 2
 CALL HOTPATCH_RELATIONSHIP_CHANGE(6, 1)
 PRINTFORML Reciprocal: lover={TALENT:MASTER:恋人}, bit={GETBIT(CFLAG:MASTER:既成事実, 2)}`, jit);
     check(runtime.start("HOTPATCH_TEST_FRIENDSHIP"));
-    check(runtime.input("1"));
+    settle(runtime, check(runtime.input("1")));
     assert.match(text(check(runtime.input("999"))), /Reciprocal: lover=0, bit=0/);
   }
 });
@@ -949,7 +953,7 @@ test("demo ending actions preserve cancellation, updated flags and former engage
       const cancelled = check(runtime.input("0"));
       assert.match(text(cancelled), new RegExp(`value='${state}'[^>]*aria-pressed='true'`));
       check(runtime.input(String(action)));
-      const result = check(runtime.input("1"));
+      const result = settle(runtime, check(runtime.input("1")));
       assert.match(text(result), /era-relationship-ending/);
       const updated = check(runtime.input("999"));
       assert.match(text(updated), new RegExp(`value='${nextState}'[^>]*aria-pressed='true'`));
@@ -1000,11 +1004,55 @@ test("casual proposition requires friendship but does not block existing romanti
 test("native casual agreement retains its character hooks, ten-minute cost and yearning", { skip: !existsSync(GAME_ROOT) }, async () => {
   const game = (await gameReady)!;
   const runtime = new Runtime(game, GAME_INSTRUCTION_LIMIT);
-  const result = settle(runtime, check(runtime.start("HOTPATCH_TEST_CASUAL")));
+  let result = check(runtime.start("HOTPATCH_TEST_CASUAL"));
+  const transcript = [text(result)];
+  for (let i = 0; result.input?.kind === "wait"; i++) {
+    assert.ok(i < 30);
+    result = check(runtime.input(""));
+    transcript.push(text(result));
+  }
   assert.match(text(result), /Result: 1/);
   assert.match(text(result), /time=110/);
   assert.match(text(result), /yearning=1, casual=1/);
-  assert.match(text(result), /Native hook: SEX_FRIEND \/ 成功/);
+  assert.match(transcript.join("\n"), /Native hook: SEX_FRIEND \/ 成功/);
+  assert.match(transcript.join("\n"), /being around you makes it awfully hard to behave/);
+  assert.match(transcript.join("\n"), /let's enjoy this, you and me/);
+});
+
+test("relationship header shows each nonzero Hate Marks level and omits the badge at zero", { skip: !existsSync(GAME_ROOT) }, async () => {
+  for (const jit of [false, true]) {
+    for (const hate of [0, 1, 2, 3]) {
+      const runtime = await friendshipRuntime(`MARK:TARGET:反発刻印 = ${hate}
+CALL HOTPATCH_RELATIONSHIP_DIALOG`, jit);
+      const result = check(runtime.start("HOTPATCH_TEST_FRIENDSHIP"));
+      if (hate) {
+        assert.match(text(result), new RegExp(`era-relationship-heading'>Test Partner</h2><span class='era-relationship-hate'[^>]*>Hate Marks ${hate}</span>`));
+      } else assert.doesNotMatch(text(result), /era-relationship-hate|Hate Marks/);
+    }
+  }
+});
+
+test("FWB refusal has a gentle text response and cancellation never starts the scene", { skip: !existsSync(GAME_ROOT) }, async () => {
+  for (const jit of [false, true]) {
+    for (const accept of [false, true]) {
+      const runtime = await friendshipRuntime(`CFLAG:TARGET:好感度 = 500
+CALL COM357
+CALL HOTPATCH_TEST_DUMP`, jit);
+      check(runtime.start("HOTPATCH_TEST_FRIENDSHIP"));
+      let snapshot = check(runtime.input(accept ? "1" : "0"));
+      const transcript = [text(snapshot)];
+      for (let i = 0; snapshot.input?.kind === "wait"; i++) {
+        assert.ok(i < 30);
+        snapshot = check(runtime.input(""));
+        transcript.push(text(snapshot));
+      }
+      const printed = transcript.join("\n");
+      assert.match(text(snapshot), new RegExp(`time=${accept ? 110 : 100}, lover=0, player=0, commitment=0`));
+      assert.match(text(snapshot), /casual=0/);
+      if (accept) assert.match(printed, /That's okay. I'm still glad I get to spend time with you/);
+      else assert.doesNotMatch(printed, /hopeful|That's okay|behave/);
+    }
+  }
 });
 
 test("engagement blocks new FWB propositions even through direct requests", { skip: !existsSync(GAME_ROOT) }, async () => {

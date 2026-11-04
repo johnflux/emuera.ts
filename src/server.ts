@@ -646,6 +646,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
         "/title/new-game.webp": "title/new-game.webp", "/title/load-game.webp": "title/load-game.webp",
         "/moon.svg": "moon.svg",
         "/relationship-icons.svg": "relationship-icons.svg",
+        "/calendar.svg": "calendar.svg",
         "/relationship-timeline.js": "relationship-timeline.js",
         "/relationship-assets/miko-ribbon.png": "relationship-assets/miko-ribbon.png",
         "/relationship-assets/marriage-laurel.png": "relationship-assets/marriage-laurel.png",

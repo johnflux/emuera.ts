@@ -18,6 +18,48 @@ test("custom action button wrappers participate directly in the action flex row"
   assert.match(css, /^\.era-actions-group span:has\(> \.era-guard-control\) \{ display: contents; \}/m);
 });
 
+test("date panel hides blank text lines and renders an accessible calendar icon", async () => {
+  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  assert.match(css, /\.era-main-when > \.line:has\(> \.is-empty:only-child\) \{ display: none; \}/);
+  assert.match(css, /\.era-main-when:has\(\.era-calendar-button\) \{ display: flex; align-items: inherit; gap: 8px;/);
+  assert.match(css, /\.era-main-when > \.line:has\(\.era-calendar-button\) \{ flex: 0 0 40px;/);
+  assert.match(css, /\.era-main-when \.output-text \{ color: #fff; \}/);
+  assert.match(css, /button\.choice\.era-calendar-button \{[^}]*width: 40px; height: 40px; padding: 0;/);
+  assert.match(css, /button\.choice\.era-calendar-button \{[^}]*border: 0;[^}]*background: transparent; box-shadow: none;/);
+  assert.match(css, /\.era-calendar-button::before \{[^}]*width: 40px; height: 40px; margin-top: -5px; background: url\("\.\/calendar\.svg"\) center \/ contain no-repeat;/);
+  assert.match(css, /\.era-main-when \{ flex: 0 1 auto; width: max-content; min-width: 0;/);
+  assert.match(css, /\.era-main-header:has\(\.era-area-art\) > \.era-main-when \{ max-width: calc\(100% - 239px\); max-height: 100%; overflow: auto; padding: 4px 12px;/);
+  assert.match(css, /\.era-calendar-label \{[^}]*clip-path: inset\(50%\);/);
+  assert.match(css, /:is\(\.era-main, \.era-shop\) \.era-main-when \.line button\.choice\.era-calendar-button/);
+  for (const [file, value] of [["MAIN_SCREEN.ERB", "993"], ["SLEEP_MENU.ERB", "3333"]]) {
+    const patch = await readFile(new URL(`../hotpatch/${file}`, import.meta.url), "utf8");
+    const button = `<button value='${value}' class='era-chip-button era-calendar-button' title='Calendar'><span class='era-calendar-label'>Calendar</span></button>`;
+    assert.ok(patch.includes(`HTML_PRINT "<era-open class='era-main-when'>"\nHTML_PRINT "${button}"`));
+    assert.equal(patch.split(`value='${value}'`).length - 1, 1, "one calendar entry per header");
+  }
+  const server = await readFile(new URL("../src/server.ts", import.meta.url), "utf8");
+  assert.match(server, /"\/calendar\.svg": "calendar\.svg"/);
+  const icon = await readFile(new URL("../web/calendar.svg", import.meta.url), "utf8");
+  assert.match(icon, /viewBox="0 0 24 24"/);
+  assert.match(icon, /stroke="#000"/);
+  assert.match(icon, /<rect[^>]*fill="#fff"/);
+});
+
+test("calendar popup presents seven day rows with a shared day and schedule heading", async () => {
+  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  assert.match(css, /\.era-calendar:popover-open \{ width: min\(1300px, calc\(100vw - 32px\)\); height: fit-content; max-height: calc\(100dvh - 32px\);/);
+  assert.match(css, /\.era-calendar \.era-inventory-body \{ flex: 0 1 auto;/);
+  assert.match(css, /\.era-calendar-table-heading, \.era-calendar-week > \.era-calendar-day \{ display: grid; grid-template-columns: var\(--calendar-day-width\) minmax\(0, 1fr\);/);
+  assert.match(css, /\.era-inventory-body \{ flex: 1; min-height: 0; overflow: auto;/);
+  const patch = await readFile(new URL("../hotpatch/CALENDAR.ERB", import.meta.url), "utf8");
+  assert.match(patch, /class='era-dialog era-calendar'/);
+  assert.match(patch, /value='0' class='era-dialog-close' title='Close calendar'/);
+  assert.match(patch, /class='era-inventory-body'/);
+  assert.match(patch, /class='era-calendar-weekday'/);
+  assert.match(patch, /class='era-calendar-table-heading'/);
+  assert.match(patch, /class='era-calendar-day-content'/);
+});
+
 test("all dialog close buttons retain accessible names without hover tooltips", async () => {
   const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
   assert.match(source, /choice\("", value, node\.classList\.contains\("era-dialog-close"\) \? "" : node\.getAttribute\("title"\) \?\? ""\)/);
@@ -288,7 +330,7 @@ test("vector clock draws exact game minutes, wraps days and rejects invalid inpu
   assert.match(css, /\.era-main-header \.era-clock \{[^}]*position: absolute; inset: 0; width: 100%; height: 100%;/);
   assert.match(css, /\.era-main-header \{[^}]*overflow: visible;/);
   assert.match(css, /\.era-sky \{[^}]*overflow: hidden; border-radius: inherit;/);
-  assert.match(css, /\.era-main-header > \.era-main-when \{ order: 0; flex: 1 1 24ch;/);
+  assert.match(css, /\.era-main-header > \.era-main-when \{ order: 0; flex: 0 1 auto;/);
   assert.match(css, /\.era-main-header > \.era-watch-control \{[^}]*width: 420px; max-width: 100%; aspect-ratio: 825 \/ 509;/);
   assert.match(css, /\.era-watch-control > \.line \{ position: static; z-index: auto;/);
   assert.match(css, /\.era-watch-control \.era-timestop-button \{ position: relative; z-index: 2; \}/);
