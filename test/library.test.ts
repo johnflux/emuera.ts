@@ -259,7 +259,7 @@ test("clean distribution discovers TW, K and Rance only after adding their folde
     const base = `http://127.0.0.1:${address.port}`;
     const patchFiles = (await readdir(HOTPATCH_ROOT)).filter((file) => /\.erb$/i.test(file));
     const patchTexts = await Promise.all(patchFiles.map((file) => readFile(path.join(HOTPATCH_ROOT, file), "utf8")));
-    const twStubs = patchTexts.flatMap((text) => [...text.matchAll(/^@(?!HOTPATCH_)(\w+)/gm)].map((match) => `@${match[1]}\nRETURN`)).join("\n");
+    const twStubs = patchTexts.flatMap((text) => [...text.matchAll(/^@(?!HOTPATCH_)([^\s(,]+)/gm)].map((match) => `@${match[1]}\nRETURN`)).join("\n");
     for (const game of GAME_CATALOG.filter((game) => ["tw", "k", "rancek"].includes(game.id))) {
       await installGame(game.archive || game.repository ? game : { ...game, repository: "fixture" }, path.join(root, "GAMES"), async (_game, destination) => {
         const gameRoot = path.join(destination, game.archive ? "archive-branch-name" : "");

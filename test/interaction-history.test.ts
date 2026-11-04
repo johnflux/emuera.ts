@@ -1131,7 +1131,7 @@ test("character tools query and change real eraTW state, and their room actions 
     why: "Reimu's feelings, less what it takes: −50 (trust) − 200 (base) − 30 (reserved) − 20 (never kissed) = −300",
     otherActivities: { sex: "firmly refuses", become_lovers: "firmly refuses" } });
   const sex = tool("check_consent", { activity: "sex" }).result as { margin: number; why: string };
-  assert.match(sex.why, /^Reimu's feelings, less what it takes: −50 \(trust\) − 350 \(base\) − 50 \(reserved\) \+ 50 \(chastity\) .*\+ \d+ \(pent-up frustration\) = −\d+$/);
+  assert.match(sex.why, /^Reimu's feelings, less what it takes: −50 \(trust\) − 350 \(base\) − 50 \(reserved\) \+ 50 \(chastity\) − 20 \(has never kissed the player\) − 50 \(no romantic feelings for the player yet\)(?: \+ \d+ \(pent-up frustration\))? = −\d+$/);
   assert.ok(sex.why.endsWith(`= −${-sex.margin}`));
   // 抱き寄せ必要値: 350 + talents, less pent-up frustration (which grows with game time).
   assert.ok(sex.margin < -400 && sex.margin >= -470, String(sex.margin));
@@ -1153,7 +1153,14 @@ test("character tools query and change real eraTW state, and their room actions 
   const scene = tool("describe_scene").result as Record<string, any>;
   assert.equal(scene.time, "07:00, Mon, 1st of Spring, Year 1");
   assert.equal(scene.me.name, "Reimu");
-  assert.deepEqual(scene.me.feelingsTowardPlayer, { favor: 50, trust: 0, marks: { hate: 1 } });
+  assert.deepEqual(scene.me.feelingsTowardPlayer, {
+    favor: 50, trust: 0, marks: { hate: 1 },
+    friendship: {
+      active: false, bonusReceived: false,
+      calculation: "Favor 50 + trust 0 + 100 (Cheerful) - 100 (Reserved) = 50; required: 200.",
+      reason: "She does not like you right now. Resolve her anger, resentment or dislike first.",
+    },
+  });
   assert.equal(scene.player.isPlayer, true);
   assert.equal(scene.othersHere, "nobody else");
   assert.ok(scene.placesOnThisMap.includes("Kitchen") && new Set(scene.placesOnThisMap).size === scene.placesOnThisMap.length);
@@ -1472,7 +1479,11 @@ RESULT = 999
   const result = internals.globals.get("RESULT", [], context), target = internals.globals.get("TARGET", [], context);
   runtime.characterTool(ruukoto.id, "say", { text: "Morning." });
   runtime.characterTool(kana.id, "say", { text: "Hello." });
-  const ownColor = (who: typeof ruukoto) => runtime.encounterHistory(who).entries[0]!.lines.at(-1)!.runs!.at(-1)!.color;
+  const ownColor = (who: typeof ruukoto) => {
+    const speech = runtime.encounterHistory(who).entries[0]!.lines.findLast((line) => line.character === who.id);
+    assert.ok(speech, `${who.name}'s own speech must be in their history`);
+    return speech.runs!.at(-1)!.color;
+  };
   assert.equal(ownColor(ruukoto), "#a0ff00", "the color routine sees the speaker as TARGET");
   assert.notEqual(ownColor(kana), "#a0ff00");
   assert.notEqual(ownColor(kana), "#c0c0c0", "a missing color routine does not leave speech as normal grey");
@@ -1647,7 +1658,7 @@ test("a player's attempt runs the game's own command, with its rejection and pen
   assert.deepEqual((tool("get_character_info").result as Record<string, any>).feelingsTowardPlayer.marks, { hate: 1 });
 });
 
-test("AI relationship attempts report unavailability and execute a proposal directly, with commitment in info and history", {
+test("AI relationship attempts skip the menu but confirm proposals and weddings, with commitment in info and history", {
   skip: !existsSync(GAME_ROOT),
 }, async () => {
   const game = await loadGame();
@@ -1672,13 +1683,24 @@ ENDIF`, "<relationship-llm-test>");
   for (let i = 0; snapshot.input?.kind === "wait" && i < 40; i++) snapshot = check(runtime.input(""));
   const id = history(snapshot).character.id;
   const tool = (activity: string) => runtime.characterTool(id, "player_attempts", { activity });
+  const settle = (result: Snapshot) => {
+    for (let i = 0; result.input?.kind === "wait"; i++) {
+      assert.ok(i < 40, "bounded relationship dialogue waits");
+      result = check(runtime.input(""));
+    }
+    return result;
+  };
   assert.match((tool("become_lovers").result as { error: string }).error, /already lovers/);
   assert.match((tool("divorce").result as { error: string }).error, /not married/);
   assert.equal(tool("propose").changed, true);
   snapshot = check(runtime.refresh());
+  assert.match(snapshot.output.map((item) => item.text ?? "").join("\n"), /Proposing to Reimu.*Confirm\?/s);
+  assert.throws(() => runtime.characterTool(id, "get_character_info", {}), /not waiting for a command/);
+  snapshot = settle(check(runtime.input("1")));
   const printed = snapshot.output.map((item) => item.text ?? "").join("\n");
   assert.match(printed, /now engaged/);
   assert.doesNotMatch(printed, /era-dialog era-relationship|Confessing to|are now.*Lovers/);
+  snapshot = settle(check(runtime.input("999")));
   const proposal = history(snapshot).entries[0]!;
   assert.equal(proposal.action.label, "Propose");
   assert.equal(Number(proposal.after.time[0]) - Number(proposal.before.time[0]), 10);
@@ -1693,11 +1715,15 @@ ENDIF`, "<relationship-llm-test>");
   assert.equal((runtime.characterTool(id, "get_character_info", {}).result as typeof info).feelingsTowardPlayer.commitment, "engaged");
   assert.equal(tool("marry").changed, true);
   snapshot = check(runtime.refresh());
+  assert.match(snapshot.output.map((item) => item.text ?? "").join("\n"), /Hold your wedding now/);
+  assert.throws(() => runtime.characterTool(id, "get_character_info", {}), /not waiting for a command/);
+  snapshot = settle(check(runtime.input("1")));
   assert.match(snapshot.output.map((item) => item.text ?? "").join("\n"), /now married/);
+  snapshot = settle(check(runtime.input("999")));
   assert.equal(history(snapshot).entries[0]!.action.label, "Get married");
 });
 
-test("AI confession runs its native attempt without opening the relationship menu", { skip: !existsSync(GAME_ROOT) }, async () => {
+test("AI confession asks for confirmation before its native attempt without opening the relationship menu", { skip: !existsSync(GAME_ROOT) }, async () => {
   const game = await loadGame();
   await applyHotpatches(game);
   const runtime = new Runtime(demoGame(game), GAME_INSTRUCTION_LIMIT);
@@ -1708,10 +1734,26 @@ test("AI confession runs its native attempt without opening the relationship men
   const id = history(snapshot).character.id;
   assert.equal(runtime.characterTool(id, "player_attempts", { activity: "become_lovers" }).changed, true);
   snapshot = check(runtime.refresh());
-  const printed = snapshot.output.map((item) => item.text ?? "").join("\n");
+  let printed = snapshot.output.map((item) => item.text ?? "").join("\n");
   assert.doesNotMatch(printed, /era-dialog era-relationship/);
-  assert.match(printed, /Confessing to Reimu/);
-  assert.match(printed, /Confession declined:/);
+  assert.match(printed, /Confess your feelings to Reimu/);
+  assert.doesNotMatch(printed, /Confession declined:/);
+  snapshot = check(runtime.input("1"));
+  for (let i = 0; snapshot.input?.kind === "wait"; i++) {
+    assert.ok(i < 40, "bounded confession dialogue waits");
+    snapshot = check(runtime.input(""));
+  }
+  printed = snapshot.output.map((item) => item.text ?? "").join("\n");
+  assert.match(printed, /era-confession era-proposal-declined/);
+  assert.match(printed, /Your confession did not meet the agreement threshold/);
+  assert.doesNotMatch(printed, /era-dialog era-relationship/);
+  snapshot = check(runtime.input("999"));
+  for (let i = 0; snapshot.input?.kind === "wait"; i++) {
+    assert.ok(i < 40, "bounded post-confession dialogue waits");
+    snapshot = check(runtime.input(""));
+  }
+  assert.equal(snapshot.input?.kind, "integer");
+  assert.equal(history(snapshot).entries[0]!.action.label, "Confess");
 });
 
 test("AI friendship info separates current favor from the one-time bonus history", {

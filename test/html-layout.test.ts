@@ -2267,7 +2267,10 @@ class Element {
   style: Record<string, string> = {};
   dataset: Record<string, string> = {};
   classes = new Set<string>();
-  classList = { add: (name: string) => this.classes.add(name) };
+  classList = {
+    add: (name: string) => this.classes.add(name),
+    contains: (name: string) => this.classes.has(name),
+  };
   constructor(public tagName: string, private attrs = new Map<string, string>(), public textContent = "") {}
   get childNodes() { return this.children; }
   getAttribute(name: string) { return this.attrs.get(name) ?? null; }

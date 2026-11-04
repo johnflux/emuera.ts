@@ -589,7 +589,7 @@ test("preprocessing, BOM, unsupported signatures and lexical report", () => {
   assert.equal(output(new Runtime(game).start()), "release");
   const report = compatibility(game);
   assert.equal(report.gaps.find((gap) => gap.feature === "Instruction: BADCOMMAND")?.count, 1);
-  assert.match(report.note, /Lexical inventory/);
+  assert.equal(report.note, "");
   indexScript(game, "@BROKEN(A,", "bad.ERB");
   assert.ok(game.diagnostics.some((d) => d.file === "bad.ERB"));
 });

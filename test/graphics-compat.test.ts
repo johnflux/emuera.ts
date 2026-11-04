@@ -10,6 +10,7 @@ import { emptyGame, indexScript, type Game } from "../src/loader.js";
 import { EraError } from "../src/model.js";
 import { Runtime, type Picture, type RuntimeOptions } from "../src/runtime.js";
 import { FileSaveStore, MemorySaveStore } from "../src/storage.js";
+import { cached, LruCache } from "../web/cache.js";
 
 function run(source: string, options: RuntimeOptions = {}, configure?: (game: Game) => void) {
   const game = emptyGame();
@@ -132,7 +133,7 @@ test("browser and server paint pen-width-scaled dashed lines rather than solid f
   const source = readFileSync(new URL("../web/app.js", import.meta.url), "utf8");
   const section = source.slice(source.indexOf("function paintPicture("), source.indexOf("/**\n * Animation sprites:"));
   const browser = vm.runInNewContext(`${section}\npaintPicture`, {
-    document: { createElement: () => createCanvas(1, 1) }, paintedPictures: new Map(),
+    document: { createElement: () => createCanvas(1, 1) }, cached, paintedPictures: new LruCache(32 * 1024 * 1024, 128),
     sourceImage: async (url: string) => { const image = new Image(); image.src = url; return image; },
   }) as (picture: Picture) => Promise<ReturnType<typeof createCanvas>>;
   const server = rasterize(picture, () => { throw new Error("Unexpected resource"); });
