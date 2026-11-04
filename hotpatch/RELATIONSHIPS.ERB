@@ -317,7 +317,7 @@ IF RESULT
 	RETURN 0
 ENDIF
 IF nAction >= 3 && nAction != 9
-	CALL HOTPATCH_RELATIONSHIP_CHANGE(nAction)
+	CALL HOTPATCH_RELATIONSHIP_CHANGE(nAction, nAction == 3)
 	RETURN 0
 ENDIF
 IF nAction == 9
@@ -539,8 +539,9 @@ SIF !TALENT:CharacterIndex:恋人 && CFLAG:CharacterIndex:7398 > 0
 	CFLAG:CharacterIndex:7398 = 0
 RETURN RESULT
 
-@HOTPATCH_RELATIONSHIP_CHANGE(nAction)
+@HOTPATCH_RELATIONSHIP_CHANGE(nAction, nPopup = 0)
 #DIM DYNAMIC nAction
+#DIM DYNAMIC nPopup
 #DIM DYNAMIC nState
 #DIM DYNAMIC nIndex
 #DIMS DYNAMIC sReason
@@ -562,17 +563,15 @@ CASE 8
 	ENDIF
 	CALL HOTPATCH_FRIENDSHIP_ACCEPT(TARGET)
 CASE 3
-	TIME += 10
-	IF EXP:TARGET:愛情経験 <= 250 + TALENT:TARGET:一線越えない * 100
-		PRINTFORML Proposal declined: love experience ({EXP:TARGET:愛情経験}) must be above {250 + TALENT:TARGET:一線越えない * 100}. You remain lovers.
-		RETURN 0
+	IF nPopup
+		PRINTFORML Proposing to %CALLNAME:TARGET%. %PARSE("You")% can only have {FLAG:追加恋人枠 + 1} \@FLAG:追加恋人枠?wives#wife\@.
+		PRINTL Confirm?
+		CALL ASK_YN("No","Propose")
+		SIF !RESULT
+			RETURN -1
 	ENDIF
-	IF BASE:TARGET:怒り > 0 || CFLAG:TARGET:不機嫌 || MARK:TARGET:反発刻印
-		PRINTL Proposal declined: resolve their anger and resentment first. You remain lovers.
-		RETURN 0
-	ENDIF
-	CFLAG:TARGET:7398 = 1
-	PRINTFORML You ask %CALLNAME:TARGET% to marry you. They accept: you are now engaged.
+	CALL HOTPATCH_RELATIONSHIP_PROPOSAL(nPopup)
+	RETURN RESULT
 CASE 4
 	TIME += 10
 	IF BASE:TARGET:怒り > 0 || CFLAG:TARGET:不機嫌 || MARK:TARGET:反発刻印
@@ -615,3 +614,51 @@ CASE 7
 	PRINTFORML You and %CALLNAME:TARGET% end your friends-with-benefits agreement. Other feelings are preserved.
 ENDSELECT
 RETURN 1
+
+@HOTPATCH_RELATIONSHIP_PROPOSAL(nPopup)
+#DIM DYNAMIC nPopup
+#DIM DYNAMIC nStart
+#DIM DYNAMIC nThreshold
+#DIM DYNAMIC nLovePass
+#DIM DYNAMIC nCalmPass
+#DIM DYNAMIC nAccepted
+#DIMS DYNAMIC sResponse
+#DIMS DYNAMIC sReserved
+nThreshold = 250 + TALENT:TARGET:一線越えない * 100
+nLovePass = EXP:TARGET:愛情経験 > nThreshold
+nCalmPass = !(BASE:TARGET:怒り > 0 || CFLAG:TARGET:不機嫌 || MARK:TARGET:反発刻印)
+nAccepted = nLovePass && nCalmPass
+TIME += 10
+IF !nLovePass
+	sResponse '= @"Proposal declined: love experience ({EXP:TARGET:愛情経験}) must be above {nThreshold}. You remain lovers."
+ELSEIF !nCalmPass
+	sResponse '= "Proposal declined: resolve their anger and resentment first. You remain lovers."
+ELSE
+	CFLAG:TARGET:7398 = 1
+	sResponse '= @"You ask %CALLNAME:TARGET% to marry you. They accept: you are now engaged."
+ENDIF
+IF nPopup
+	nStart = LINECOUNT
+	HTML_PRINT @"<era-open class='era-dialog era-proposal %(nAccepted ? "era-proposal-accepted" # "era-proposal-declined")%'>"
+	CALL HOTPATCH_FACE(TARGET, 90)
+	HTML_PRINT @"<div class='era-proposal-header'><span class='era-info-face'>%RESULTS%</span><div><span class='era-sub'>A question from the heart</span><h2>Propose to %HTML_ESCAPE(CALLNAME:TARGET)%</h2></div><button value='999' class='era-dialog-close' title='Close proposal result'>×</button></div>"
+	HTML_PRINT "<era-open class='era-proposal-body'>"
+	HTML_PRINT @"<div class='era-proposal-moment'><span class='era-proposal-jewel' aria-hidden='true'></span><span class='era-proposal-caption'>%(nAccepted ? "The next chapter, together" # "Not quite the right moment")%</span><h3>%(nAccepted ? "You are now engaged" # "You remain lovers")%</h3><span class='era-proposal-verdict'>%(nAccepted ? "Proposal accepted" # "Proposal declined")%</span></div>"
+	HTML_PRINT "<div class='era-proposal-check-heading'>The actual checks</div>"
+	HTML_PRINT @"<div class='era-proposal-check %(nCalmPass ? "era-check-pass" # "era-check-fail")%'><span>No unresolved anger or resentment</span><strong>%(nCalmPass ? "Clear" # "Unresolved")%</strong><b>%(nCalmPass ? "PASS" # "FAIL")%</b></div>"
+	HTML_PRINT @"<div class='era-proposal-check %(nLovePass ? "era-check-pass" # "era-check-fail")%'><span>Love experience</span><strong>{EXP:TARGET:愛情経験 - 100 * TALENT:TARGET:一線越えない} &gt; 250</strong><b>%(nLovePass ? "PASS" # "FAIL")%</b></div>"
+	IF TALENT:TARGET:一線越えない
+		sReserved '= @" - 100 × <span class='era-proposal-trait' title='%HTML_ESCAPE(CALLNAME:TARGET)% has a reserved, deliberate personality.'>Reserved ({TALENT:TARGET:一線越えない})</span>"
+	ENDIF
+	HTML_PRINT @"<p class='era-proposal-formula'><span class='era-proposal-love-exp' title='Accumulated love experience between %HTML_ESCAPE(CALLNAME:TARGET)% and %HTML_ESCAPE(CALLNAME:MASTER)%.'>Love experience ({EXP:TARGET:愛情経験})</span>%sReserved% = {EXP:TARGET:愛情経験 - 100 * TALENT:TARGET:一線越えない}</p>"
+	HTML_PRINT @"<div class='era-proposal-response'>%HTML_ESCAPE(sResponse)%</div>"
+	HTML_PRINT "<era-close>"
+	HTML_PRINT "<div class='era-proposal-footer'><span>Time passed: 10 minutes</span><button value='999' class='era-chip-button'>Continue</button></div>"
+	HTML_PRINT "<era-close>"
+	DO
+		INPUT
+	LOOP RESULT != 999
+	CLEARLINE LINECOUNT - nStart
+ENDIF
+PRINTFORML %sResponse%
+RETURN nAccepted

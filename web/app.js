@@ -747,6 +747,73 @@ function syncSetupNumbers(dialog) {
     });
   }
 }
+const proposalTimers = new WeakMap();
+const proposalTyping = new WeakMap();
+function typeProposalText(response, finish = false) {
+  const pending = proposalTyping.get(response);
+  if (pending !== undefined) cancelAnimationFrame(pending);
+  const text = response.dataset.proposalText ?? response.textContent;
+  response.dataset.proposalText = text;
+  response.setAttribute("aria-label", text);
+  const visual = document.createElement("span");
+  visual.className = "era-proposal-typed";
+  visual.setAttribute("aria-hidden", "true");
+  const reserve = document.createElement("span");
+  reserve.className = "era-proposal-text-reserve";
+  reserve.setAttribute("aria-hidden", "true");
+  reserve.textContent = text;
+  response.replaceChildren(reserve, visual);
+  const characters = [...text];
+  const started = performance.now();
+  const immediate = finish || matchMedia("(prefers-reduced-motion: reduce)").matches;
+  function draw() {
+    proposalTyping.delete(response);
+    if (!response.isConnected) return;
+    const count = immediate ? characters.length : Math.min(characters.length, Math.floor((performance.now() - started) / 14));
+    visual.textContent = characters.slice(0, count).join("");
+    if (count < characters.length) proposalTyping.set(response, requestAnimationFrame(draw));
+  }
+  draw();
+}
+function syncProposal(dialog, advance = false) {
+  if (advance) {
+    clearTimeout(proposalTimers.get(dialog));
+    proposalTimers.delete(dialog);
+  }
+  const step = Math.min(5, Number(dialog.dataset.proposalStep ?? 0) + (advance ? 1 : 0));
+  dialog.dataset.proposalStep = String(step);
+  const checks = dialog.querySelectorAll(".era-proposal-check");
+  for (const [index, check] of [...checks].entries()) {
+    const label = check.querySelector(":scope > span");
+    if (!label || step < index * 2) continue;
+    if (label.dataset.proposalText === undefined) typeProposalText(label);
+    if (step > index * 2 && proposalTyping.has(label)) typeProposalText(label, true);
+  }
+  const response = dialog.querySelector(".era-proposal-response");
+  const reveals = [
+    [2, checks[1]], [3, dialog.querySelector(".era-proposal-formula")],
+    [4, response], [5, dialog.querySelector(".era-proposal-moment")],
+    ...[...checks].flatMap((check, index) => [...check.querySelectorAll("strong, b")].map(element => [index * 2 + 1, element])),
+  ];
+  for (const [revealAt, element] of reveals) {
+    if (!element) continue;
+    const pending = step < revealAt;
+    element.classList.toggle("era-proposal-pending", pending);
+    element.setAttribute("aria-hidden", String(pending));
+  }
+  if (step === 4 && response && response.dataset.proposalText === undefined) {
+    typeProposalText(response);
+  }
+  if (step === 5 && response && proposalTyping.has(response)) typeProposalText(response, true);
+  const label = checks[Math.floor(step / 2)]?.querySelector(":scope > span");
+  const labelDelay = [...(label?.dataset.proposalText ?? label?.textContent ?? "")].length * 14 + 450;
+  if (step < 5 && !proposalTimers.has(dialog)) {
+    proposalTimers.set(dialog, setTimeout(() => {
+      proposalTimers.delete(dialog);
+      if (dialog.isConnected && dialog.closest(".screen.is-active")) syncProposal(dialog, true);
+    }, [labelDelay, 1250, labelDelay, 1650, Math.max(3500, [...(response?.dataset.proposalText ?? response?.textContent ?? "")].length * 14 + 800)][step]));
+  }
+}
 function syncDialogs() {
   if (!terminal.querySelector(".screen.is-active .era-inventory")) inventoryQuery = "";
   for (const dialog of terminal.querySelectorAll(".era-dialog")) {
@@ -754,6 +821,7 @@ function syncDialogs() {
     const open = !!dialog.closest(".screen.is-active");
     if (open && dialog.classList.contains("era-inventory")) syncInventory(dialog);
     if (open) {
+      if (dialog.classList.contains("era-proposal")) syncProposal(dialog);
       syncPredefinedCharacters(dialog);
       syncPlayerNames(dialog);
       syncSetupNumbers(dialog);
@@ -1699,7 +1767,7 @@ async function renderHtml(markup, parent, sprites) {
     else if (node.tagName === "DIV" && subareaAttributes.some((name) => node.hasAttribute(name))) element = subarea(node, scale = columnScale());
     else if (node.tagName === "BUTTON") {
       const value = node.getAttribute("value");
-      if (value !== null) element = choice("", value, node.getAttribute("title") ?? "");
+      if (value !== null) element = choice("", value, node.classList.contains("era-dialog-close") ? "" : node.getAttribute("title") ?? "");
       else element = document.createElement("span");
     } else if (node.tagName === "A") {
       const href = node.getAttribute("href") ?? "";
@@ -1739,7 +1807,8 @@ async function renderHtml(markup, parent, sprites) {
     const room = node.getAttribute("data-room");
     if (room !== null && /^-?\d+$/.test(room)) element.dataset.room = room;
     const title = node.getAttribute("title");
-    if ((title || element.matches(".era-setup-trait")) && !element.dataset.tooltip) describe(element, title ?? "");
+    if (element.matches(".era-dialog-close")) element.setAttribute("aria-label", title || "Close dialog");
+    else if ((title || element.matches(".era-setup-trait")) && !element.dataset.tooltip) describe(element, title ?? "");
     destination.append(element);
     if (node.tagName !== "IMG" && node.tagName !== "METER") for (const child of node.childNodes) await copy(child, node.tagName === "SHAPE" ? destination : element.subareaContent ?? element, scale);
   }

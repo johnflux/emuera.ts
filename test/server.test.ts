@@ -510,6 +510,15 @@ test("HTTP UI, isolated sessions, real image bytes, sprite metadata, errors and 
     const bowBytes = Buffer.from(await bow.arrayBuffer());
     assert.equal(bowBytes.readUInt32BE(16), 240);
     assert.equal(bowBytes.readUInt32BE(20), 162);
+    const confetti = await fetch(base + "/relationship-assets/engagement_confetti.gif");
+    assert.equal(confetti.status, 200);
+    assert.equal(confetti.headers.get("content-type"), "image/gif");
+    const confettiBytes = Buffer.from(await confetti.arrayBuffer());
+    assert.equal(confettiBytes.toString("ascii", 0, 6), "GIF89a");
+    assert.equal(confettiBytes.readUInt16LE(6), 608);
+    assert.equal(confettiBytes.readUInt16LE(8), 350);
+    assert.equal(confettiBytes.includes(Buffer.from("NETSCAPE2.0")), false, "confetti plays once rather than looping");
+    assert.equal(confettiBytes.includes(Buffer.from("ANIMEXTS1.0")), false);
     const earth = await fetch(base + "/earth.png");
     assert.equal(earth.status, 200);
     assert.equal(earth.headers.get("content-type"), "image/png");

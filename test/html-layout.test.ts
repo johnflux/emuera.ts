@@ -18,6 +18,12 @@ test("custom action button wrappers participate directly in the action flex row"
   assert.match(css, /^\.era-actions-group span:has\(> \.era-guard-control\) \{ display: contents; \}/m);
 });
 
+test("all dialog close buttons retain accessible names without hover tooltips", async () => {
+  const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
+  assert.match(source, /choice\("", value, node\.classList\.contains\("era-dialog-close"\) \? "" : node\.getAttribute\("title"\) \?\? ""\)/);
+  assert.match(source, /if \(element\.matches\("\.era-dialog-close"\)\) element\.setAttribute\("aria-label", title \|\| "Close dialog"\);\s*else if .*describe\(element, title \?\? ""\);/);
+});
+
 test("relationship avatar scales from the bottom-left within its shorter wrapper", async () => {
   const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
   assert.match(css, /\.era-relationship \.era-info-face \{[^}]*width: 99px; height: 90px; border: 0;/);
@@ -32,6 +38,139 @@ test("friendship uses a gold heart without recoloring the romance icons", async 
   assert.match(css, /\.era-relationship-icon-love \{ background-position: 20% 0; \}/);
   assert.match(icons, /viewBox="0 0 384 64"/);
   assert.match(icons, /translate\(320\)">\s*<use href="#shape" fill="url\(#gold\)"/);
+});
+
+test("proposal staggers labels and results, types the response and reveals the outcome once", async () => {
+  const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
+  const routine = source.slice(source.indexOf("const proposalTimers ="), source.indexOf("function syncDialogs("));
+  class Element {
+    isConnected = true;
+    pending = false;
+    dataset: Record<string, string> = {};
+    attributes = new Map<string, string>();
+    classList = { toggle: (_name: string, pending: boolean) => { this.pending = pending; } };
+    children: Element[] = [];
+    style = { animationDelay: "" };
+    textContent = "";
+    className = "";
+    label?: Element;
+    setAttribute(name: string, value: string) { this.attributes.set(name, value); }
+    querySelectorAll() { return this.children; }
+    querySelector() { return this.label; }
+    append(element: Element) { this.children.push(element); }
+    replaceChildren(...elements: Element[]) { this.children = elements; }
+  }
+  const checks = [new Element(), new Element()];
+  checks.forEach(check => { check.children = [new Element(), new Element()]; });
+  checks.forEach((check, index) => {
+    check.label = new Element();
+    check.label.textContent = ["No unresolved anger or resentment", "Love experience"][index]!;
+  });
+  const response = new Element();
+  response.textContent = "You ask Test Partner to marry you.";
+  const formula = new Element();
+  const moment = new Element();
+  const elements: [Element, number][] = [
+    [checks[1]!, 2], [formula, 3], [response, 4], [moment, 5],
+    ...checks.flatMap((check, index) => check.children.map(element => [element, index * 2 + 1] as [Element, number])),
+  ];
+  const button = { textContent: "Continue" };
+  const dialog = {
+    dataset: {} as Record<string, string>,
+    isConnected: true,
+    closest() { return this.isConnected ? this : null; },
+    querySelectorAll(selector: string) {
+      return selector === ".era-proposal-check" ? checks : [];
+    },
+    querySelector(selector: string) {
+      return selector === ".era-proposal-footer button" ? button
+        : selector === ".era-proposal-response" ? response
+        : selector === ".era-proposal-formula" ? formula : moment;
+    },
+  };
+  const timers = new Map<number, { callback: () => void; delay: number }>();
+  const frames = new Map<number, () => void>();
+  let nextTimer = 0;
+  let now = 0;
+  const sync = runInNewContext(`${routine}\nsyncProposal`, {
+    setTimeout(callback: () => void, delay: number) {
+      timers.set(++nextTimer, { callback, delay });
+      return nextTimer;
+    },
+    clearTimeout(id: number) { timers.delete(id); },
+    document: { createElement: () => new Element() },
+    performance: { now: () => now },
+    matchMedia: () => ({ matches: false }),
+    requestAnimationFrame(callback: () => void) { frames.set(++nextTimer, callback); return nextTimer; },
+    cancelAnimationFrame(id: number) { frames.delete(id); },
+  }) as (dialog: unknown, advance?: boolean) => void;
+  for (let step = 0; step <= 5; step++) {
+    sync(dialog, step > 0);
+    assert.equal(dialog.dataset.proposalStep, String(step));
+    assert.equal(button.textContent, "Continue");
+    elements.forEach(([element, revealAt]) => {
+      assert.equal(element.pending, step < revealAt);
+      assert.equal(element.attributes.get("aria-hidden"), String(step < revealAt));
+    });
+    sync(dialog);
+    assert.equal(dialog.dataset.proposalStep, String(step), "render sync preserves progress");
+    assert.equal(timers.size, step < 5 ? 1 : 0, "clicks replace timers; final result never auto-dismisses");
+    if (step === 4) {
+      for (const elapsed of [14, 29, 80, 160]) {
+        now = elapsed;
+        const [id, callback] = [...frames][0]!;
+        frames.delete(id);
+        callback();
+        const shown = response.children[1]!.textContent;
+        assert.equal(shown, response.textContent.slice(0, Math.floor(elapsed / 14)), "every frame is a contiguous prefix");
+      }
+      checks.forEach((check, index) => {
+        if (step < index * 2) assert.equal(check.label!.dataset.proposalText, undefined);
+        else assert.equal(check.label!.attributes.get("aria-label"), check.label!.textContent);
+        if (step > index * 2) assert.equal(check.label!.children[1]!.textContent, check.label!.textContent);
+      });
+    }
+  }
+  assert.equal(response.attributes.get("aria-label"), response.textContent);
+  assert.equal(response.children[1]!.textContent, response.textContent, "skipping finishes the text");
+  assert.equal(frames.size, 0);
+  assert.equal(response.children[0]!.attributes.get("aria-hidden"), "true");
+  sync(dialog, true);
+  assert.equal(dialog.dataset.proposalStep, "5", "extra advances cannot repeat the sequence");
+  delete dialog.dataset.proposalStep;
+  sync(dialog);
+  for (const [step, delay] of [[1, checks[0]!.label!.textContent.length * 14 + 450], [2, 1250], [3, checks[1]!.label!.textContent.length * 14 + 450], [4, 1650], [5, 3500]]) {
+    const [id, timer] = [...timers][0]!;
+    assert.equal(timer.delay, delay);
+    timers.delete(id);
+    timer.callback();
+    assert.equal(dialog.dataset.proposalStep, String(step), "timer reveals the next stage");
+  }
+  assert.equal(timers.size, 0);
+  delete dialog.dataset.proposalStep;
+  sync(dialog);
+  dialog.isConnected = false;
+  const [id, timer] = [...timers][0]!;
+  timers.delete(id);
+  timer.callback();
+  assert.equal(dialog.dataset.proposalStep, "0", "removed dialogs do not advance or reschedule");
+  assert.equal(timers.size, 0);
+  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  assert.match(css, /\.era-proposal-pending,[\s\S]*?visibility: hidden;/);
+  assert.match(css, /\.era-proposal\[data-proposal-step="5"\] \.era-proposal-verdict \{ animation: era-proposal-reveal 180ms/);
+  assert.match(css, /:not\(\.era-proposal-verdict\) \{ animation: era-proposal-reveal 1500ms 180ms/);
+  assert.match(css, /\.era-proposal-body \{ position: relative;/);
+  assert.match(css, /\.era-proposal-accepted\[data-proposal-step="5"\] \.era-proposal-body::after \{[^}]*height: 80%;[^}]*pointer-events: none;[^}]*engagement_confetti\.gif/);
+  assert.match(css, /animation: era-proposal-confetti-out 1ms 3650ms step-end forwards;/);
+  assert.match(css, /@keyframes era-proposal-confetti-out \{ to \{ visibility: hidden; \} \}/);
+  assert.match(css, /prefers-reduced-motion: reduce\) \{ \.era-proposal-accepted\[data-proposal-step="5"\] \.era-proposal-body::after \{ content: none;/);
+  assert.match(css, /\.era-proposal\[data-proposal-step="5"\] \.era-proposal-footer \{ animation: era-proposal-footer-in 400ms 3650ms ease-out both;/);
+  assert.match(css, /\.era-proposal:not\(\[data-proposal-step="5"\]\) \.era-proposal-footer \{ visibility: hidden;/);
+  assert.match(css, /\.era-proposal-declined\[data-proposal-step="5"\] \.era-proposal-footer \{ animation-delay: 1680ms;/);
+  assert.match(css, /from \{ opacity: 0; visibility: hidden; \}/);
+  assert.match(css, /prefers-reduced-motion: reduce\) \{ \.era-proposal\[data-proposal-step="5"\] \.era-proposal-footer \{ animation: none;/);
+  assert.match(css, /\.era-proposal-check :is\(strong, b\):not\(\.era-proposal-pending\) \{ animation: era-proposal-reveal 180ms/);
+  assert.match(css, /prefers-reduced-motion: reduce\) \{ \.era-proposal\[data-proposal-step="5"\] \.era-proposal-moment > \*, \.era-proposal-check :is\(strong, b\):not\(\.era-proposal-pending\) \{ animation: none;/);
 });
 
 test("vector clock draws exact game minutes, wraps days and rejects invalid input", async () => {

@@ -232,7 +232,7 @@ test("relationship dialog has direct heading actions, unavailable reasons and fr
   }
 });
 
-test("demo relationship switcher previews every state without committing actions or changing the base game", { skip: !existsSync(GAME_ROOT) }, async () => {
+test("demo previews every relationship state and supports proposals without changing the base game", { skip: !existsSync(GAME_ROOT) }, async () => {
   const game = (await gameReady)!;
   for (const jit of [false, true]) {
     const runtime = new Runtime(demoGame(game), GAME_INSTRUCTION_LIMIT, { jit });
@@ -280,6 +280,15 @@ test("demo relationship switcher previews every state without committing actions
     snapshot = check(runtime.input("107"));
     assert.match(text(snapshot), /Favor <b>1000<\/b>/);
     assert.match(text(snapshot), /era-relationship-icon-married/);
+    check(runtime.input("105"));
+    snapshot = check(runtime.input("3"));
+    assert.match(text(snapshot), /Proposing to/);
+    snapshot = check(runtime.input("1"));
+    assert.match(text(snapshot), /era-proposal-accepted/);
+    snapshot = check(runtime.input("999"));
+    assert.match(text(snapshot), /value='106'[^>]*aria-pressed='true'/);
+    assert.match(text(snapshot), /data-commitment='1'/);
+    assert.doesNotMatch(text(snapshot), />Propose</);
     assert.match(text(check(runtime.input("999"))), /Relationship dialog states/);
   }
   assert.equal(game.routines.has("DEMO_RELATIONSHIP_CONTROLS"), false, "preview controls remain demo-only");
@@ -522,6 +531,90 @@ test("commitment transitions preserve feelings, profession and other lovers whil
     for (const state of printed.split("\n").filter((line) => line.startsWith("State:"))) {
       assert.match(state, /love=1, yearning=1, casual=[01], favor=500, trust=10, brewing=2/);
     }
+  }
+});
+
+test("proposal popup shows exact checks and resolves once through the real action route", { skip: !existsSync(GAME_ROOT) }, async () => {
+  for (const jit of [false, true]) {
+    for (const [love, reserved, anger, mood, hate, accepted] of [
+      [250, 0, 0, 0, 0, 0], [251, 0, 0, 0, 0, 1],
+      [350, 1, 0, 0, 0, 0], [351, 1, 0, 0, 0, 1],
+      [400, 0, 1, 0, 0, 0], [400, 0, 0, 1, 0, 0],
+      [400, 0, 0, 0, 1, 0],
+    ]) {
+      const runtime = await friendshipRuntime(`TALENT:TARGET:恋人 = 1
+TALENT:TARGET:恋慕 = 1
+EXP:TARGET:愛情経験 = ${love}
+TALENT:TARGET:一線越えない = ${reserved}
+BASE:TARGET:怒り = ${anger}
+CFLAG:TARGET:不機嫌 = ${mood}
+MARK:TARGET:反発刻印 = ${hate}
+CALL HOTPATCH_RELATIONSHIP_REQUEST(3)
+RESULT = 352
+CALL USERCOM
+CALL HOTPATCH_TEST_DUMP`, jit);
+      let snapshot = check(runtime.start("HOTPATCH_TEST_FRIENDSHIP"));
+      assert.match(text(snapshot), /Proposing to Test Partner/);
+      assert.match(text(snapshot), /Confirm\?/);
+      assert.doesNotMatch(text(snapshot), /era-proposal/);
+      snapshot = check(runtime.input("1"));
+      const popup = text(snapshot);
+      assert.ok(snapshot.input, "popup waits for dismissal");
+      assert.ok(popup.includes(`era-proposal-${accepted ? "accepted" : "declined"}`));
+      assert.ok(popup.includes(`${love - reserved * 100} &gt; 250`));
+      assert.ok(popup.includes(accepted ? "You are now engaged" : "You remain lovers"));
+      assert.match(popup, /Time passed: 10 minutes/);
+      assert.match(popup, /Love experience/);
+      assert.ok(popup.includes(`Love experience (${love})</span>`));
+      assert.match(popup, /No unresolved anger or resentment/);
+      assert.ok(popup.indexOf("No unresolved anger or resentment") < popup.indexOf("Love experience"));
+      assert.match(popup, /era-proposal-love-exp' title='Accumulated love experience between Test Partner and /);
+      if (reserved) {
+        assert.ok(popup.includes("title='Test Partner has a reserved, deliberate personality.'"));
+        assert.ok(popup.includes(`Love experience (${love})</span> - 100`));
+        assert.ok(popup.includes(`Reserved (${reserved})</span> = ${love - reserved * 100}`));
+      } else {
+        assert.doesNotMatch(popup, /Reserved|era-proposal-trait| - 100/);
+        assert.ok(popup.includes(`Love experience (${love})</span> = ${love}`));
+      }
+      assert.doesNotMatch(popup, /The value must be strictly greater|Both checks must pass/);
+      snapshot = check(runtime.input("3"));
+      assert.ok(snapshot.input, "unrelated input cannot dismiss the proposal");
+      assert.doesNotMatch(text(snapshot), /era-proposal|Proposal declined:|You ask Test Partner/);
+      snapshot = check(runtime.input("999"));
+      const transcript = text(snapshot);
+      assert.equal(snapshot.input, null);
+      assert.doesNotMatch(transcript, /era-proposal/);
+      assert.match(transcript, new RegExp(`time=110, lover=1, player=0, commitment=${accepted}, love=1`));
+      assert.equal((transcript.match(/Proposal declined:|You ask Test Partner to marry you/g) ?? []).length, 1);
+    }
+  }
+});
+
+test("declining the plain-text proposal confirmation is free and does not show a result popup", { skip: !existsSync(GAME_ROOT) }, async () => {
+  for (const jit of [false, true]) {
+    const runtime = await friendshipRuntime(`TALENT:TARGET:恋人 = 1
+EXP:TARGET:愛情経験 = 400
+CALL HOTPATCH_RELATIONSHIP_REQUEST(3)
+RESULT = 352
+CALL USERCOM
+CALL HOTPATCH_TEST_DUMP`, jit);
+    const confirmation = check(runtime.start("HOTPATCH_TEST_FRIENDSHIP"));
+    assert.match(text(confirmation), /Proposing to Test Partner/);
+    const result = check(runtime.input("0"));
+    assert.equal(result.input, null);
+    assert.match(text(result), /time=100, lover=1, player=0, commitment=0/);
+    assert.doesNotMatch(text(result), /era-proposal|now engaged/);
+
+    const demo = new Runtime(demoGame((await gameReady)!), GAME_INSTRUCTION_LIMIT, { jit });
+    check(demo.start());
+    check(demo.input("9"));
+    check(demo.input("105"));
+    check(demo.input("3"));
+    const cancelled = check(demo.input("0"));
+    assert.match(text(cancelled), /value='105'[^>]*aria-pressed='true'/);
+    assert.match(text(cancelled), /data-commitment='0'/);
+    assert.doesNotMatch(text(cancelled), /era-proposal-accepted/);
   }
 });
 

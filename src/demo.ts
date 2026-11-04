@@ -124,7 +124,11 @@ DO
   nChoice = RESULT
   SIF !nChoice
     RETURN
-  IF nChoice == 101 || INRANGE(nChoice, 103, 108) || INRANGE(nChoice, 114, 115)
+  IF nChoice == 3
+    CALL HOTPATCH_RELATIONSHIP_CHANGE(3, 1)
+    SIF RESULT == 1
+      nState = 106
+  ELSEIF nChoice == 101 || INRANGE(nChoice, 103, 108) || INRANGE(nChoice, 114, 115)
     nState = nChoice
     CFLAG:TARGET:好感度 = 1000
     SIF nChoice == 101

@@ -650,6 +650,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
         "/relationship-assets/miko-ribbon.png": "relationship-assets/miko-ribbon.png",
         "/relationship-assets/marriage-laurel.png": "relationship-assets/marriage-laurel.png",
         "/relationship-assets/marriage-bow.png": "relationship-assets/marriage-bow.png",
+        "/relationship-assets/engagement_confetti.gif": "relationship-assets/engagement_confetti.gif",
         "/earth.png": "earth.png",
         "/underworld-lantern-mask.png": "underworld-lantern-mask.png",
         "/clock-frame.png": "clock-frame.png",

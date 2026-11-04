@@ -70,6 +70,53 @@ ends. Confess is hidden once Lovers; Propose is hidden while engaged or married.
 Lovers, Engaged and Married instead offer Reaffirm your love, which expresses love
 then routes through the native hug command (311), preserving its availability,
 character dialogue, success rolls, time cost and stat effects.
+Propose opens a dedicated pink-and-gold result popup with the character portrait,
+after a plain-text No/Propose confirmation displaying the character name and
+the NAS-style wife-limit message (additional lover slots + 1). No cancels freely,
+without running proposal checks, spending time or showing the result popup.
+The popup shows
+an animated engagement jewel, both actual check results, the strict love-experience
+threshold and its formula, and the generic response. The existing proposal rules
+run once and still cost ten minutes on acceptance or refusal; dismissing the
+popup cannot repeat the action. The response remains in the transcript afterward.
+Both check labels use the same contiguous typewriter effect as the response;
+right-hand values appear immediately at their reveal step.
+The anger/resentment check label appears first. Each check waits
+450ms after its label's typing duration before its result pops in over 180ms.
+The love-experience label follows the first result 1.25 seconds later; its
+result also reveals the compact right-aligned score formula:
+Love experience (current value) - 100 × Reserved (0 or 1) = adjusted score.
+The check compares that score strictly against 250, equivalent to the original
+threshold rule. Love experience is green and Reserved is red; both
+terms have hover/focus help.
+Tooltips use the character and player names: accumulated love experience between
+them, and a reserved, deliberate personality when Reserved is present.
+The entire Reserved term and its tooltip are omitted when the trait is absent.
+Trait labels retain the game's initial-capital naming, e.g. Reserved.
+The generic response follows after another 1.65 seconds, typed at 14ms per
+character using one contiguous text prefix per animation frame, rather than
+independently animated letters. After at least 3.5 seconds (longer if needed to finish the text), the
+verdict badge pops in over 180ms, followed by the diamond, caption and heading
+fading in over 1.5 seconds.
+The supplied engagement confetti GIF overlays the full width of the body directly
+below the header, covering its upper 80% at the accepted outcome reveal without intercepting clicks.
+Its infinite-loop GIF extension is removed so the animation plays once; CSS
+no-repeat separately prevents background tiling. The overlay is hidden after
+3.65 seconds so the last frame leaves no residual confetti. Refusals
+and reduced-motion mode omit the confetti.
+Time passed stays hidden during the checks. At the final reveal, the footer
+waits 3.65 seconds for the confetti, then Time passed and Continue fade in
+together over 400ms. Refusals wait only for the 1.68-second outcome reveal;
+reduced-motion mode shows the final footer immediately. Close remains available.
+The sequence advances automatically without intermediate action buttons.
+Only the final Continue button is shown, after the animation finishes. The final result never
+auto-dismisses. Hidden sections reserve their space to avoid moving the
+popup and are hidden from assistive technology. These presentation steps never
+submit another game command. Continue dismisses the finished result; the close
+button or Escape can dismiss it early without undoing the resolved proposal.
+The relationship demo also supports this popup from its Lovers state.
+Other relationship actions retain their current presentation. The jewel animation
+respects reduced-motion preferences and the popup adapts to narrow screens.
 
 [`RELATIONSHIPS.ERB`](../hotpatch/RELATIONSHIPS.ERB) replaces Confess with a
 relationship dialog, also accessible from the character's main-screen summary.
