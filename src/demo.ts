@@ -120,11 +120,12 @@ nRefresh = 1
 DO
   IF nRefresh
     CLEARBIT TFLAG:一日一回, 12
-    TALENT:TARGET:恋人 = INRANGE(nState, 105, 107)
+    TALENT:TARGET:恋人 = INRANGE(nState, 105, 107) || nState == 116
     TALENT:MASTER:恋人 = TALENT:TARGET:恋人 ? NO:TARGET # 0
     TALENT:TARGET:恋慕 = nState == 103 || nState == 114 || nState == 115
     TALENT:TARGET:セフレ = nState == 104 || nState == 114
     CFLAG:TARGET:7398 = nState == 106 ? 1 # nState == 107 ? 2 # nState == 108 || nState == 115 ? -2 # 0
+    EXP:TARGET:愛情経験 = nState == 116 ? 250 + 100 * TALENT:TARGET:一線越えない # 400
   ENDIF
   nRefresh = 0
   DEMO_RELATIONSHIP_STATE = nState
@@ -158,7 +159,7 @@ DO
         ENDIF
       ENDSELECT
     ENDIF
-  ELSEIF nChoice == 101 || INRANGE(nChoice, 103, 108) || INRANGE(nChoice, 114, 115)
+  ELSEIF nChoice == 101 || INRANGE(nChoice, 103, 108) || INRANGE(nChoice, 114, 116)
     nRefresh = 1
     nState = nChoice
     CFLAG:TARGET:好感度 = 1000
@@ -205,6 +206,7 @@ FOR nIndex, 0, 14
   nState = ORDER:nIndex
   HTML_PRINT @"<button value='{nState}' class='era-chip-button era-relationship-demo-state' aria-pressed='%(DEMO_RELATIONSHIP_STATE == nState ? "true" # "false")%'>%(nState >= 114 ? MIXED_LABELS:(nState - 114) # nState < 109 ? LABELS:(nState == 101 ? 0 # nState - 102) # FAVOR_LABELS:(nState - 109))%</button>"
 NEXT
+HTML_PRINT @"<button value='116' class='era-chip-button era-relationship-demo-state' aria-pressed='%(DEMO_RELATIONSHIP_STATE == 116 ? "true" # "false")%'>Lovers (proposal fails)</button>"
 HTML_PRINT "<era-close>"
 
 @SCENARIOS

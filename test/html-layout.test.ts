@@ -83,6 +83,11 @@ test("confession shares the staged reveal but uses the Lovers emblem and standal
   assert.match(css, /\.era-confession \.era-proposal-jewel \{ background-image: url\("\/relationship-assets\/icon-lovers.svg"\); \}/);
 });
 
+test("declined proposals show the remaining outcome and footer without further animation", async () => {
+  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  assert.match(css, /\.era-proposal-declined:not\(\.era-confession, \.era-relationship-ending\)\[data-proposal-step="5"\] \.era-proposal-moment > :not\(\.era-proposal-verdict\),\s*\.era-proposal-declined:not\(\.era-confession, \.era-relationship-ending\)\[data-proposal-step="5"\] \.era-proposal-footer \{ animation: none; \}/);
+});
+
 test("proposal staggers labels and results, types the response and reveals the outcome once", async () => {
   const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
   const routine = source.slice(source.indexOf("const proposalTimers ="), source.indexOf("function syncDialogs("));
@@ -120,6 +125,7 @@ test("proposal staggers labels and results, types the response and reveals the o
   const button = { textContent: "Continue" };
   const dialog = {
     dataset: {} as Record<string, string>,
+    matches() { return false; },
     isConnected: true,
     closest() { return this.isConnected ? this : null; },
     querySelectorAll(selector: string) {
@@ -198,6 +204,14 @@ test("proposal staggers labels and results, types the response and reveals the o
   timer.callback();
   assert.equal(dialog.dataset.proposalStep, "0", "removed dialogs do not advance or reschedule");
   assert.equal(timers.size, 0);
+  dialog.isConnected = true;
+  dialog.matches = () => true;
+  dialog.dataset.proposalStep = "3";
+  sync(dialog, true);
+  assert.equal(dialog.dataset.proposalStep, "5", "declined proposal skips the response-to-outcome delay");
+  assert.equal(timers.size, 0);
+  assert.equal(response.children[1]!.textContent, response.textContent, "declined response shows immediately");
+  dialog.matches = () => false;
   const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
   assert.match(css, /\.era-proposal-pending,[\s\S]*?visibility: hidden;/);
   assert.match(css, /\.era-proposal\[data-proposal-step="5"\] \.era-proposal-verdict \{ animation: era-proposal-reveal 180ms/);

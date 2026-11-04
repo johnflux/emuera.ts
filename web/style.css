@@ -827,6 +827,8 @@ body:has(.menu-panel:not([hidden])) .clock-overhang { visibility: hidden; }
 .era-proposal:not([data-proposal-step="5"]) .era-proposal-footer { visibility: hidden; }
 .era-proposal[data-proposal-step="5"] .era-proposal-footer { animation: era-proposal-footer-in 400ms 3650ms ease-out both; }
 .era-proposal-declined[data-proposal-step="5"] .era-proposal-footer { animation-delay: 1680ms; }
+.era-proposal-declined:not(.era-confession, .era-relationship-ending)[data-proposal-step="5"] .era-proposal-moment > :not(.era-proposal-verdict),
+.era-proposal-declined:not(.era-confession, .era-relationship-ending)[data-proposal-step="5"] .era-proposal-footer { animation: none; }
 @keyframes era-proposal-footer-in {
   from { opacity: 0; visibility: hidden; }
   to { opacity: 1; visibility: visible; }

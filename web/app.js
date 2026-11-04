@@ -776,11 +776,13 @@ function typeProposalText(response, finish = false) {
   draw();
 }
 function syncProposal(dialog, advance = false) {
+  const declinedProposal = dialog.matches(".era-proposal-declined:not(.era-confession, .era-relationship-ending)");
   if (advance) {
     clearTimeout(proposalTimers.get(dialog));
     proposalTimers.delete(dialog);
   }
-  const step = Math.min(5, Number(dialog.dataset.proposalStep ?? 0) + (advance ? 1 : 0));
+  let step = Math.min(5, Number(dialog.dataset.proposalStep ?? 0) + (advance ? 1 : 0));
+  if (declinedProposal && step === 4) step = 5;
   dialog.dataset.proposalStep = String(step);
   const checks = dialog.querySelectorAll(".era-proposal-check");
   for (const [index, check] of [...checks].entries()) {
@@ -790,6 +792,7 @@ function syncProposal(dialog, advance = false) {
     if (step > index * 2 && proposalTyping.has(label)) typeProposalText(label, true);
   }
   const response = dialog.querySelector(".era-proposal-response");
+  if (declinedProposal && step === 5 && response && response.dataset.proposalText === undefined) typeProposalText(response, true);
   const reveals = [
     [2, checks[1]], [3, dialog.querySelector(".era-proposal-formula")],
     [4, response], [5, dialog.querySelector(".era-proposal-moment")],

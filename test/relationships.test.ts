@@ -240,7 +240,7 @@ test("demo previews every relationship state and supports proposals without chan
     let snapshot = check(runtime.input("9"));
     assert.equal(snapshot.input?.kind, "integer");
     assert.deepEqual([...text(snapshot).matchAll(/class='era-chip-button era-relationship-demo-state'[^>]*>([^<]+)<\/button>/g)].map((match) => match[1]),
-      ["None", "Acquaintance", "Friendship", "Close Friend", "Best Friend", "Almost Family", "In love", "FWB", "Lovers", "Engaged", "Married", "Divorced", "In love + FWB", "In love + Divorced"]);
+      ["None", "Acquaintance", "Friendship", "Close Friend", "Best Friend", "Almost Family", "In love", "FWB", "Lovers", "Engaged", "Married", "Divorced", "In love + FWB", "In love + Divorced", "Lovers (proposal fails)"]);
     assert.doesNotMatch(text(snapshot), /Preview only|Use the states below|action buttons do not change/);
     assert.doesNotMatch(text(snapshot), /class='era-relationship-icon /);
     for (const [state, icon] of [[103, "love"], [104, "casual"], [105, "love"], [106, "engaged"], [107, "married"], [108, "divorced"], [101, null]] as const) {
@@ -748,6 +748,26 @@ CALL HOTPATCH_TEST_DUMP`, jit);
       assert.match(transcript, new RegExp(`time=110, lover=1, player=0, commitment=${accepted}, love=1`));
       assert.equal((transcript.match(/Proposal declined:|You ask Test Partner to marry you/g) ?? []).length, 1);
     }
+  }
+});
+
+test("demo failed-proposal preset shows a real refusal and normal Lovers restores acceptance", { skip: !existsSync(GAME_ROOT) }, async () => {
+  for (const jit of [false, true]) {
+    const runtime = new Runtime(demoGame((await gameReady)!), GAME_INSTRUCTION_LIMIT, { jit });
+    check(runtime.start());
+    check(runtime.input("9"));
+    const preset = check(runtime.input("116"));
+    assert.match(text(preset), /value='116'[^>]*aria-pressed='true'/);
+    check(runtime.input("3"));
+    const failed = check(runtime.input("1"));
+    assert.match(text(failed), /era-proposal-declined/);
+    assert.match(text(failed), /250 &gt; 250/);
+    assert.match(text(failed), /You remain lovers/);
+    const unchanged = check(runtime.input("999"));
+    assert.match(text(unchanged), /value='116'[^>]*aria-pressed='true'/);
+    check(runtime.input("105"));
+    check(runtime.input("3"));
+    assert.match(text(check(runtime.input("1"))), /era-proposal-accepted/);
   }
 });
 

@@ -128,7 +128,10 @@ no-repeat separately prevents background tiling. The overlay is hidden after
 and reduced-motion mode omit the confetti.
 Time passed stays hidden during the checks. At the final reveal, the footer
 waits 3.65 seconds for the confetti, then Time passed and Continue fade in
-together over 400ms. Refusals wait only for the 1.68-second outcome reveal;
+together over 400ms. Declined proposals retain the verdict's short pop-in,
+but show the remaining outcome and footer immediately without further animation;
+they also skip the typed-response stage and its pause before the outcome.
+confession refusals and relationship endings retain their 1.68-second reveal.
 reduced-motion mode shows the final footer immediately. Close remains available.
 The sequence advances automatically without intermediate action buttons.
 Only the final Continue button is shown, after the animation finishes. The final result never
@@ -137,6 +140,10 @@ popup and are hidden from assistive technology. These presentation steps never
 submit another game command. Continue dismisses the finished result; the close
 button or Escape can dismiss it early without undoing the resolved proposal.
 The relationship demo also supports this popup from its Lovers state.
+The Lovers (proposal fails) demo preset sets love experience exactly at the
+Reserved-adjusted threshold: the strict greater-than check fails through the
+real Propose action. Selecting a normal preset restores the demo's 400 love
+experience, so the regular Lovers proposal remains accepted.
 Get married opens a plain-text No/Marry confirmation, followed by two short,
 generic wedding narration beats using the native text view. No cancels without
 spending time or changing engagement. The existing anger/resentment safeguard
