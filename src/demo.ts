@@ -92,6 +92,7 @@ GOTO MENU
 @RELATIONSHIP_PREVIEW
 #DIM DYNAMIC nState
 #DIM DYNAMIC nChoice
+#DIM DYNAMIC nRefresh
 #DIM FAVOR_LEVELS, 5 = 100, 500, 1000, 10000, 30000
 RESETDATA
 CALL MAKE_TALENT_MAP
@@ -113,27 +114,51 @@ CFLAG:TARGET:ブチギレ = 0
 MARK:TARGET:反発刻印 = 0
 RELATION:TARGET:(NO:MASTER) = 100
 nState = 101
+nRefresh = 1
 DO
-  TALENT:TARGET:恋人 = INRANGE(nState, 105, 107)
-  TALENT:MASTER:恋人 = TALENT:TARGET:恋人 ? NO:TARGET # 0
-  TALENT:TARGET:恋慕 = nState == 103 || nState == 114 || nState == 115
-  TALENT:TARGET:セフレ = nState == 104 || nState == 114
-  CFLAG:TARGET:7398 = nState == 106 ? 1 # nState == 107 ? 2 # nState == 108 || nState == 115 ? -2 # 0
+  IF nRefresh
+    TALENT:TARGET:恋人 = INRANGE(nState, 105, 107)
+    TALENT:MASTER:恋人 = TALENT:TARGET:恋人 ? NO:TARGET # 0
+    TALENT:TARGET:恋慕 = nState == 103 || nState == 114 || nState == 115
+    TALENT:TARGET:セフレ = nState == 104 || nState == 114
+    CFLAG:TARGET:7398 = nState == 106 ? 1 # nState == 107 ? 2 # nState == 108 || nState == 115 ? -2 # 0
+  ENDIF
+  nRefresh = 0
   DEMO_RELATIONSHIP_STATE = nState
   CALL HOTPATCH_RELATIONSHIP_DIALOG(1)
   nChoice = RESULT
   SIF !nChoice
     RETURN
-  IF nChoice == 3
-    CALL HOTPATCH_RELATIONSHIP_CHANGE(3, 1)
-    SIF RESULT == 1
-      nState = 106
+  IF INRANGE(nChoice, 3, 7)
+    CALL HOTPATCH_RELATIONSHIP_CHANGE(nChoice, 1)
+    IF RESULT == 1
+      SELECTCASE nChoice
+      CASE 3, 4
+        nState = nChoice == 3 ? 106 # 107
+      CASE 5
+        nState = 105
+      CASE 6, 7
+        IF TALENT:TARGET:恋人
+          nState = CFLAG:TARGET:7398 == 2 ? 107 # CFLAG:TARGET:7398 == 1 ? 106 # 105
+        ELSEIF CFLAG:TARGET:7398 == -2
+          nState = TALENT:TARGET:恋慕 ? 115 # 108
+        ELSEIF TALENT:TARGET:セフレ
+          nState = TALENT:TARGET:恋慕 ? 114 # 104
+        ELSEIF TALENT:TARGET:恋慕
+          nState = 103
+        ELSE
+          nState = CFLAG:TARGET:好感度 >= 30000 ? 113 # CFLAG:TARGET:好感度 >= 10000 ? 112 # CFLAG:TARGET:好感度 >= 1000 ? 111 # CFLAG:TARGET:好感度 >= 500 ? 110 # CFLAG:TARGET:好感度 >= 100 ? 109 # 101
+        ENDIF
+      ENDSELECT
+    ENDIF
   ELSEIF nChoice == 101 || INRANGE(nChoice, 103, 108) || INRANGE(nChoice, 114, 115)
+    nRefresh = 1
     nState = nChoice
     CFLAG:TARGET:好感度 = 1000
     SIF nChoice == 101
       CFLAG:TARGET:好感度 = 20
   ELSEIF INRANGE(nChoice, 109, 113)
+    nRefresh = 1
     nState = nChoice
     CFLAG:TARGET:好感度 = FAVOR_LEVELS:(nChoice - 109)
   ENDIF

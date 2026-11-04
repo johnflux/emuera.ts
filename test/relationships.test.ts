@@ -618,6 +618,168 @@ CALL HOTPATCH_TEST_DUMP`, jit);
   }
 });
 
+test("wedding runs a confirmed text ceremony then celebrates once without a second love check", { skip: !existsSync(GAME_ROOT) }, async () => {
+  for (const jit of [false, true]) {
+    const runtime = await friendshipRuntime(`TALENT:TARGET:恋人 = 1
+TALENT:TARGET:恋慕 = 1
+CFLAG:TARGET:7398 = 1
+EXP:TARGET:愛情経験 = 0
+CALL HOTPATCH_RELATIONSHIP_REQUEST(4)
+RESULT = 352
+CALL USERCOM
+CALL HOTPATCH_TEST_DUMP`, jit);
+    let snapshot = check(runtime.start("HOTPATCH_TEST_FRIENDSHIP"));
+    assert.match(text(snapshot), /Hold your wedding now\?/);
+    snapshot = check(runtime.input("1"));
+    assert.match(text(snapshot), /make your wedding vows/);
+    assert.doesNotMatch(text(snapshot), /era-wedding|now married/);
+    snapshot = check(runtime.input(""));
+    assert.match(text(snapshot), /beginning of your married life/);
+    snapshot = check(runtime.input(""));
+    assert.match(text(snapshot), /era-proposal-accepted era-wedding/);
+    assert.match(text(snapshot), /Wedding with Test Partner/);
+    assert.match(text(snapshot), /You are now married/);
+    assert.match(text(snapshot), /Time passed: 10 minutes/);
+    assert.doesNotMatch(text(snapshot), /era-proposal-check|PASS|FAIL|Love experience/);
+    snapshot = check(runtime.input("4"));
+    assert.ok(snapshot.input, "unrelated input cannot repeat or dismiss the wedding");
+    snapshot = check(runtime.input("999"));
+    assert.equal(snapshot.input, null);
+    assert.match(text(snapshot), /time=110, lover=1, player=0, commitment=2, love=1, yearning=1, casual=0, favor=0, trust=0, brewing=2/);
+    assert.equal((text(snapshot).match(/You are now married/g) ?? []).length, 1);
+  }
+});
+
+test("wedding cancellation is free and unresolved resentment preserves engagement", { skip: !existsSync(GAME_ROOT) }, async () => {
+  for (const jit of [false, true]) {
+    for (const safeguard of ["", "BASE:TARGET:怒り = 1", "CFLAG:TARGET:不機嫌 = 1", "MARK:TARGET:反発刻印 = 1"]) {
+      const runtime = await friendshipRuntime(`TALENT:TARGET:恋人 = 1
+CFLAG:TARGET:7398 = 1
+${safeguard}
+CALL HOTPATCH_RELATIONSHIP_REQUEST(4)
+RESULT = 352
+CALL USERCOM
+CALL HOTPATCH_TEST_DUMP`, jit);
+      let snapshot = check(runtime.start("HOTPATCH_TEST_FRIENDSHIP"));
+      if (!safeguard) snapshot = check(runtime.input("0"));
+      else assert.match(text(snapshot), /resolve their anger and resentment/);
+      assert.equal(snapshot.input, null);
+      assert.match(text(snapshot), new RegExp(`time=${safeguard ? 110 : 100}, lover=1, player=0, commitment=1`));
+      assert.doesNotMatch(text(snapshot), /era-wedding|now married|make your wedding vows/);
+    }
+  }
+});
+
+test("demo wedding cancellation stays engaged and completion selects Married", { skip: !existsSync(GAME_ROOT) }, async () => {
+  for (const jit of [false, true]) {
+    const runtime = new Runtime(demoGame((await gameReady)!), GAME_INSTRUCTION_LIMIT, { jit });
+    check(runtime.start());
+    check(runtime.input("9"));
+    check(runtime.input("106"));
+    check(runtime.input("4"));
+    assert.match(text(check(runtime.input("0"))), /value='106'[^>]*aria-pressed='true'/);
+    check(runtime.input("4"));
+    check(runtime.input("1"));
+    check(runtime.input(""));
+    assert.match(text(check(runtime.input(""))), /era-wedding/);
+    const married = check(runtime.input("999"));
+    assert.match(text(married), /value='107'[^>]*aria-pressed='true'/);
+    assert.match(text(married), /data-commitment='2'/);
+    assert.doesNotMatch(text(married), /Get married/);
+  }
+});
+
+test("relationship endings confirm freely and resolve once while preserving independent agreements", { skip: !existsSync(GAME_ROOT) }, async () => {
+  for (const jit of [false, true]) {
+    for (const [action, commitment, title] of [
+      [5, 1, "Engagement ended"], [6, 0, "Romantic relationship ended"],
+      [6, 1, "Romantic relationship ended"], [6, 2, "You are now divorced"],
+      [7, 0, "FWB agreement ended"], [7, 2, "FWB agreement ended"],
+    ] as const) {
+      for (const accept of [false, true]) {
+        const runtime = await friendshipRuntime(`TALENT:TARGET:恋人 = 1
+TALENT:MASTER:恋人 = NO:TARGET
+TALENT:2:恋人 = 1
+TALENT:TARGET:恋慕 = 1
+TALENT:TARGET:思慕 = 0
+TALENT:TARGET:セフレ = 2
+CFLAG:TARGET:契約セフレ = 1
+CFLAG:TARGET:好感度 = 500
+CFLAG:TARGET:信頼度 = 10
+CFLAG:TARGET:7398 = ${commitment}
+SETBIT CFLAG:TARGET:既成事実, 2
+SETBIT CFLAG:MASTER:既成事実, 2
+CALL HOTPATCH_RELATIONSHIP_REQUEST(${action})
+RESULT = 352
+CALL USERCOM
+CALL HOTPATCH_TEST_DUMP
+PRINTFORML Extras: contract={CFLAG:TARGET:契約セフレ}, targetbit={GETBIT(CFLAG:TARGET:既成事実, 2)}, playerbit={GETBIT(CFLAG:MASTER:既成事実, 2)}, otherlover={TALENT:2:恋人}`, jit);
+        const prompt = check(runtime.start("HOTPATCH_TEST_FRIENDSHIP"));
+        assert.ok(prompt.input);
+        assert.match(text(prompt), /(?:with|to) Test Partner\?/);
+        assert.match(text(prompt), /preserved|unchanged/);
+        assert.doesNotMatch(text(prompt), /era-relationship-ending/);
+        let snapshot = check(runtime.input(accept ? "1" : "0"));
+        if (accept) {
+          assert.match(text(snapshot), /era-proposal-declined era-relationship-ending/);
+          assert.ok(text(snapshot).includes(title));
+          assert.match(text(snapshot), /Time passed: 10 minutes/);
+          assert.doesNotMatch(text(snapshot), /era-proposal-accepted|era-proposal-check|PASS|FAIL/);
+          snapshot = check(runtime.input(String(action)));
+          assert.ok(snapshot.input, "unrelated input does not dismiss or repeat the action");
+          snapshot = check(runtime.input("999"));
+        }
+        assert.equal(snapshot.input, null);
+        const lover = accept && action === 6 ? 0 : 1;
+        const expectedCommitment = !accept || action === 7 ? commitment
+          : action === 5 || commitment === 1 ? -1 : commitment === 2 ? -2 : 0;
+        const printed = text(snapshot);
+        assert.match(printed, new RegExp(`time=${accept ? 110 : 100}, lover=${lover}, player=${lover ? 42 : 43}, commitment=${expectedCommitment}, love=1, yearning=${accept && action === 7 ? 1 : 0}, casual=${accept && action === 7 ? 0 : 2}, favor=500, trust=10, brewing=2`));
+        assert.match(printed, new RegExp(`Extras: contract=${accept && action === 7 ? 0 : 1}, targetbit=${lover}, playerbit=1, otherlover=1`));
+        assert.doesNotMatch(printed, /era-relationship-ending/);
+      }
+    }
+  }
+});
+
+test("ending the only romantic agreement clears the player's reciprocal lover state", { skip: !existsSync(GAME_ROOT) }, async () => {
+  for (const jit of [false, true]) {
+    const runtime = await friendshipRuntime(`TALENT:TARGET:恋人 = 1
+TALENT:MASTER:恋人 = NO:TARGET
+SETBIT CFLAG:MASTER:既成事実, 2
+CALL HOTPATCH_RELATIONSHIP_CHANGE(6, 1)
+PRINTFORML Reciprocal: lover={TALENT:MASTER:恋人}, bit={GETBIT(CFLAG:MASTER:既成事実, 2)}`, jit);
+    check(runtime.start("HOTPATCH_TEST_FRIENDSHIP"));
+    check(runtime.input("1"));
+    assert.match(text(check(runtime.input("999"))), /Reciprocal: lover=0, bit=0/);
+  }
+});
+
+test("demo ending actions preserve cancellation, updated flags and former engagement history", { skip: !existsSync(GAME_ROOT) }, async () => {
+  for (const jit of [false, true]) {
+    for (const [state, action, nextState, commitment] of [
+      [106, 5, 105, -1], [106, 6, 111, -1], [107, 6, 108, -2],
+      [105, 6, 111, 0], [104, 7, 111, 0], [114, 7, 103, 0],
+    ]) {
+      const runtime = new Runtime(demoGame((await gameReady)!), GAME_INSTRUCTION_LIMIT, { jit });
+      check(runtime.start());
+      check(runtime.input("9"));
+      check(runtime.input(String(state)));
+      check(runtime.input(String(action)));
+      const cancelled = check(runtime.input("0"));
+      assert.match(text(cancelled), new RegExp(`value='${state}'[^>]*aria-pressed='true'`));
+      check(runtime.input(String(action)));
+      const result = check(runtime.input("1"));
+      assert.match(text(result), /era-relationship-ending/);
+      const updated = check(runtime.input("999"));
+      assert.match(text(updated), new RegExp(`value='${nextState}'[^>]*aria-pressed='true'`));
+      if (commitment) assert.match(text(updated), new RegExp(`data-commitment='${commitment}'`));
+      if (action === 7) assert.doesNotMatch(text(updated), /era-relationship-flag-fwb|>End FWB</);
+      if (action === 5) assert.match(text(updated), /era-relationship-flag-lovers'>Lovers/);
+    }
+  }
+});
+
 test("confession preserves a casual agreement even after native turn reset clears the success flag", { skip: !existsSync(GAME_ROOT) }, async () => {
   const game = (await gameReady)!;
   for (const jit of [false, true]) {

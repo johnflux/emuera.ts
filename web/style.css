@@ -792,6 +792,12 @@ body:has(.menu-panel:not([hidden])) .clock-overhang { visibility: hidden; }
 .era-proposal-body { position: relative; flex: none; padding: 20px 28px 24px; }
 .era-proposal-moment { text-align: center; padding-bottom: 22px; white-space: normal; }
 .era-proposal-jewel { display: block; width: 116px; height: 116px; margin: 0 auto; background: url("/relationship-assets/icon-engaged.svg") center / contain no-repeat; filter: drop-shadow(0 0 16px #f4a8d1); }
+.era-wedding .era-proposal-jewel { background-image: url("/relationship-assets/icon-married.svg"); }
+.era-wedding-message { color: #ead9e4; text-align: center; white-space: normal; line-height: 1.7; }
+.era-relationship-ending .era-proposal-jewel { background-image: url("/relationship-assets/icon-divorced.svg"); }
+.era-relationship-ending-5 .era-proposal-jewel { background-image: url("/relationship-assets/icon-engaged.svg"); }
+.era-relationship-ending-7 .era-proposal-jewel { background-image: url("/relationship-assets/icon-fwb.svg"); }
+.era-ending-details { color: #b6a7b3; text-align: center; white-space: normal; line-height: 1.6; font-size: .85em; }
 .era-proposal-pending,
 .era-proposal:not([data-proposal-step]) :is(.era-proposal-check, .era-proposal-formula, .era-proposal-response, .era-proposal-moment) { visibility: hidden; }
 .era-proposal[data-proposal-step="5"] .era-proposal-verdict { animation: era-proposal-reveal 180ms ease-out both; }
@@ -866,8 +872,11 @@ body:has(.menu-panel:not([hidden])) .clock-overhang { visibility: hidden; }
   .is-married.is-reached > text { filter: none; transform: translateY(-16px); font-size: 18px; }
   .era-relationship-timeline .era-timeline-badge { fill: #17151e; filter: none; }
   .era-relationship-timeline .era-timeline-fill, .era-relationship-timeline .era-timeline-branch { filter: none; }
-  .era-relationship .line .era-relationship-select { --relationship-button-background: #493040; min-height: 44px; border: 1px solid #986779; background: #493040; font-size: 1em; }
-  .era-relationship .line button.choice.era-relationship-select:enabled:is(:hover, :focus-visible) { border-color: #986779; }
+  .era-relationship-option { --relationship-button-background: #493040; --relationship-button-border: #b97d9b; }
+  .era-relationship-action-3, .era-relationship-action-4 { --relationship-button-background: #3e304f; --relationship-button-border: #a68abc; }
+  .era-relationship-downgrade { --relationship-button-background: #492832; --relationship-button-border: #b16c7b; }
+  .era-relationship .line .era-relationship-select { min-height: 44px; border: 1px solid var(--relationship-button-border); background: var(--relationship-button-background); font-size: 1em; }
+  .era-relationship .line button.choice.era-relationship-select:enabled:is(:hover, :focus-visible) { border-color: var(--relationship-button-border); }
   .era-relationship .line .era-relationship-select:is(:disabled, span) { background: #23232b; border-color: #514850; }
   .era-relationship-header .era-relationship-icon { width: 32px; height: 32px; }
   .era-relationship-header .era-dialog-close { margin-right: 8px; }

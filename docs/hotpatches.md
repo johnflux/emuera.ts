@@ -115,6 +115,31 @@ popup and are hidden from assistive technology. These presentation steps never
 submit another game command. Continue dismisses the finished result; the close
 button or Escape can dismiss it early without undoing the resolved proposal.
 The relationship demo also supports this popup from its Lovers state.
+Get married opens a plain-text No/Marry confirmation, followed by two short,
+generic wedding narration beats using the native text view. No cancels without
+spending time or changing engagement. The existing anger/resentment safeguard
+remains; there is no second love-experience roll. Completing the ceremony marks
+the couple married and costs ten minutes once, without changing affection,
+trust, names, profession or other relationship agreements.
+A wedding popup then shows the married emblem and confetti, with Time passed
+and Continue appearing after the confetti finishes, just as for engagement.
+Closing the popup does not undo or repeat the wedding. The marriage confirmation
+remains in the transcript. The demo supports this from its Engaged state.
+This is a TW adaptation, not a port of a NAS character scene or scheduled banquet.
+NAS's legacy wedding banquet is not connected to its current banquet scheduler;
+no reception, guests or automatic banquet scheduling are added here.
+Divorce, End the engagement, End the romantic relationship and End FWB now ask
+for explicit plain-text confirmation, explaining what ends and what is preserved.
+No cancels freely. Confirming applies the existing transition once and costs ten
+minutes, then shows a subdued result popup without confetti or pass/fail checks.
+The footer fades in after the result reveal; reduced motion shows it immediately.
+Closing or continuing only dismisses the result, which remains in the transcript.
+Ending engagement keeps Lovers; divorce/breakup removes Lovers and records
+former commitment while preserving affection, trust, friendship and FWB.
+Ending FWB clears its agreement and contract, preserving romantic commitment
+and the native yearning conversion for a type-2 FWB agreement.
+The demo runs these same actions and retains their resulting flags and history,
+rather than overwriting them with a preset on the next dialog.
 Other relationship actions retain their current presentation. The jewel animation
 respects reduced-motion preferences and the popup adapts to narrow screens.
 

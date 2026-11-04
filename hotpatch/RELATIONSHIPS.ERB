@@ -317,7 +317,7 @@ IF RESULT
 	RETURN 0
 ENDIF
 IF nAction >= 3 && nAction != 9
-	CALL HOTPATCH_RELATIONSHIP_CHANGE(nAction, nAction == 3)
+	CALL HOTPATCH_RELATIONSHIP_CHANGE(nAction, INRANGE(nAction, 3, 7))
 	RETURN 0
 ENDIF
 IF nAction == 9
@@ -545,6 +545,9 @@ RETURN RESULT
 #DIM DYNAMIC nState
 #DIM DYNAMIC nIndex
 #DIMS DYNAMIC sReason
+#DIMS DYNAMIC sResponse
+#DIMS DYNAMIC sTitle
+#DIMS DYNAMIC sDetails
 sReason '= HOTPATCH_RELATIONSHIP_REASON(nAction, TARGET)
 IF STRLENS(sReason)
 	PRINTFORML Relationship unchanged: %sReason%
@@ -552,6 +555,28 @@ IF STRLENS(sReason)
 ENDIF
 CALL CHARA_ATTITUDE
 nState = HOTPATCH_RELATIONSHIP_STATE(TARGET)
+IF nPopup && INRANGE(nAction, 5, 7)
+	SELECTCASE nAction
+	CASE 5
+		sTitle '= "End engagement"
+		sDetails '= "You will remain lovers. Your feelings and any FWB agreement will be unchanged."
+	CASE 6
+		sTitle '= nState == 2 ? "Divorce" # "End romantic relationship"
+		sDetails '= "You will no longer be lovers. Affection, trust, friendship and any FWB agreement will be preserved."
+	CASE 7
+		sTitle '= "End FWB"
+		sDetails '= "Only the FWB agreement will end. Your feelings and any romantic commitment will be preserved."
+	ENDSELECT
+	IF nAction == 6 && nState == 2
+		PRINTFORML End your marriage to %CALLNAME:TARGET%?
+	ELSE
+		PRINTFORML %sTitle% with %CALLNAME:TARGET%?
+	ENDIF
+	PRINTFORML %sDetails%
+	CALL ASK_YN("No", sTitle)
+	SIF !RESULT
+		RETURN -1
+ENDIF
 SELECTCASE nAction
 CASE 8
 	TIME += 10
@@ -573,17 +598,12 @@ CASE 3
 	CALL HOTPATCH_RELATIONSHIP_PROPOSAL(nPopup)
 	RETURN RESULT
 CASE 4
-	TIME += 10
-	IF BASE:TARGET:怒り > 0 || CFLAG:TARGET:不機嫌 || MARK:TARGET:反発刻印
-		PRINTL Marriage declined: resolve their anger and resentment first. You remain engaged.
-		RETURN 0
-	ENDIF
-	CFLAG:TARGET:7398 = 2
-	PRINTFORML You and %CALLNAME:TARGET% confirm your marriage. You are now married.
+	CALL HOTPATCH_RELATIONSHIP_WEDDING(nPopup)
+	RETURN RESULT
 CASE 5
 	CFLAG:TARGET:7398 = -1
 	TIME += 10
-	PRINTFORML You and %CALLNAME:TARGET% end your engagement. You remain lovers; your feelings are unchanged.
+	sResponse '= @"You and %CALLNAME:TARGET% end your engagement. You remain lovers; your feelings are unchanged."
 CASE 6
 	TALENT:TARGET:恋人 = 0
 	CFLAG:TARGET:7398 = nState == 2 ? -2 # nState == 1 ? -1 # MIN(nState, 0)
@@ -601,9 +621,9 @@ CASE 6
 		CLEARBIT CFLAG:MASTER:既成事実, 2
 	TIME += 10
 	IF nState == 2
-		PRINTFORML You and %CALLNAME:TARGET% divorce. Formal commitment has ended; affection, trust and other feelings are preserved.
+		sResponse '= @"You and %CALLNAME:TARGET% divorce. Formal commitment has ended; affection, trust and other feelings are preserved."
 	ELSE
-		PRINTFORML You and %CALLNAME:TARGET% stop being lovers. Affection, trust and other feelings are preserved.
+		sResponse '= @"You and %CALLNAME:TARGET% stop being lovers. Affection, trust and other feelings are preserved."
 	ENDIF
 CASE 7
 	SIF TALENT:TARGET:セフレ == 2
@@ -611,8 +631,74 @@ CASE 7
 	TALENT:TARGET:セフレ = 0
 	CFLAG:TARGET:契約セフレ = 0
 	TIME += 10
-	PRINTFORML You and %CALLNAME:TARGET% end your friends-with-benefits agreement. Other feelings are preserved.
+	sResponse '= @"You and %CALLNAME:TARGET% end your friends-with-benefits agreement. Other feelings are preserved."
 ENDSELECT
+IF INRANGE(nAction, 5, 7)
+	SIF nPopup
+		CALL HOTPATCH_RELATIONSHIP_ENDING(nAction, nState, sResponse, sDetails)
+	PRINTFORML %sResponse%
+ENDIF
+RETURN 1
+
+@HOTPATCH_RELATIONSHIP_ENDING(nAction, nState, sResponse, sDetails)
+#DIM DYNAMIC nAction
+#DIM DYNAMIC nState
+#DIM DYNAMIC nStart
+#DIMS DYNAMIC sResponse
+#DIMS DYNAMIC sDetails
+#DIMS DYNAMIC sTitle
+sTitle '= nAction == 5 ? "Engagement ended" # nAction == 7 ? "FWB agreement ended" # nState == 2 ? "You are now divorced" # "Romantic relationship ended"
+nStart = LINECOUNT
+HTML_PRINT @"<era-open class='era-dialog era-proposal era-proposal-declined era-relationship-ending era-relationship-ending-{nAction}'>"
+CALL HOTPATCH_FACE(TARGET, 90)
+HTML_PRINT @"<div class='era-proposal-header'><span class='era-info-face'>%RESULTS%</span><div><span class='era-sub'>A change in your relationship</span><h2>%HTML_ESCAPE(CALLNAME:TARGET)%</h2></div><button value='999' class='era-dialog-close' title='Close relationship result'>×</button></div>"
+HTML_PRINT "<era-open class='era-proposal-body'>"
+HTML_PRINT @"<div class='era-proposal-moment'><span class='era-proposal-jewel' aria-hidden='true'></span><h3>%sTitle%</h3></div>"
+HTML_PRINT @"<p class='era-wedding-message'>%HTML_ESCAPE(sResponse)%</p><p class='era-ending-details'>%HTML_ESCAPE(sDetails)%</p>"
+HTML_PRINT "<era-close>"
+HTML_PRINT "<div class='era-proposal-footer'><span>Time passed: 10 minutes</span><button value='999' class='era-chip-button'>Continue</button></div>"
+HTML_PRINT "<era-close>"
+DO
+	INPUT
+LOOP RESULT != 999
+CLEARLINE LINECOUNT - nStart
+RETURN 1
+
+@HOTPATCH_RELATIONSHIP_WEDDING(nPopup)
+#DIM DYNAMIC nPopup
+#DIM DYNAMIC nStart
+IF BASE:TARGET:怒り > 0 || CFLAG:TARGET:不機嫌 || MARK:TARGET:反発刻印
+	TIME += 10
+	PRINTL Marriage declined: resolve their anger and resentment first. You remain engaged.
+	RETURN 0
+ENDIF
+IF nPopup
+	PRINTFORML You and %CALLNAME:TARGET% are engaged. Hold your wedding now?
+	CALL ASK_YN("No","Marry")
+	SIF !RESULT
+		RETURN -1
+	PRINTFORMW You and %CALLNAME:TARGET% take a quiet moment together to make your wedding vows.
+	PRINTFORMW You promise to share the days ahead, and mark the beginning of your married life together.
+ENDIF
+TIME += 10
+CFLAG:TARGET:7398 = 2
+IF nPopup
+	nStart = LINECOUNT
+	HTML_PRINT "<era-open class='era-dialog era-proposal era-proposal-accepted era-wedding'>"
+	CALL HOTPATCH_FACE(TARGET, 90)
+	HTML_PRINT @"<div class='era-proposal-header'><span class='era-info-face'>%RESULTS%</span><div><span class='era-sub'>A promise for the days ahead</span><h2>Wedding with %HTML_ESCAPE(CALLNAME:TARGET)%</h2></div><button value='999' class='era-dialog-close' title='Close wedding celebration'>×</button></div>"
+	HTML_PRINT "<era-open class='era-proposal-body'>"
+	HTML_PRINT "<div class='era-proposal-moment'><span class='era-proposal-jewel' aria-hidden='true'></span><span class='era-proposal-caption'>The next chapter, together</span><h3>You are now married</h3><span class='era-proposal-verdict'>Wedding vows exchanged</span></div>"
+	HTML_PRINT @"<p class='era-wedding-message'>You and %HTML_ESCAPE(CALLNAME:TARGET)% begin your married life together.</p>"
+	HTML_PRINT "<era-close>"
+	HTML_PRINT "<div class='era-proposal-footer'><span>Time passed: 10 minutes</span><button value='999' class='era-chip-button'>Continue</button></div>"
+	HTML_PRINT "<era-close>"
+	DO
+		INPUT
+	LOOP RESULT != 999
+	CLEARLINE LINECOUNT - nStart
+ENDIF
+PRINTFORML You and %CALLNAME:TARGET% confirm your marriage. You are now married.
 RETURN 1
 
 @HOTPATCH_RELATIONSHIP_PROPOSAL(nPopup)

@@ -821,6 +821,7 @@ function syncDialogs() {
     const open = !!dialog.closest(".screen.is-active");
     if (open && dialog.classList.contains("era-inventory")) syncInventory(dialog);
     if (open) {
+      if (dialog.matches(".era-wedding, .era-relationship-ending")) dialog.dataset.proposalStep = "5";
       if (dialog.classList.contains("era-proposal")) syncProposal(dialog);
       syncPredefinedCharacters(dialog);
       syncPlayerNames(dialog);

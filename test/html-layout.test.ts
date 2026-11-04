@@ -40,6 +40,36 @@ test("friendship uses a gold heart without recoloring the romance icons", async 
   assert.match(icons, /translate\(320\)">\s*<use href="#shape" fill="url\(#gold\)"/);
 });
 
+test("compact relationship actions preserve pink, lavender and danger palettes", async () => {
+  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  const compact = css.slice(css.indexOf("@media (max-width: 1100px)"), css.indexOf(".era-sheet-header {"));
+  assert.match(compact, /\.era-relationship-option \{ --relationship-button-background: #493040; --relationship-button-border: #b97d9b; \}/);
+  assert.match(compact, /\.era-relationship-action-3, \.era-relationship-action-4 \{ --relationship-button-background: #3e304f; --relationship-button-border: #a68abc; \}/);
+  assert.match(compact, /\.era-relationship-downgrade \{ --relationship-button-background: #492832; --relationship-button-border: #b16c7b; \}/);
+  assert.match(compact, /background: var\(--relationship-button-background\);/);
+  assert.match(compact, /:enabled:is\(:hover, :focus-visible\) \{ border-color: var\(--relationship-button-border\); \}/);
+  assert.match(compact, /:is\(:disabled, span\) \{ background: #23232b; border-color: #514850; \}/);
+});
+
+test("wedding skips proposal checks and reuses the celebratory outcome with a married emblem", async () => {
+  const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
+  assert.match(source, /if \(dialog\.matches\("\.era-wedding, \.era-relationship-ending"\)\) dialog\.dataset\.proposalStep = "5";\s*if \(dialog\.classList\.contains\("era-proposal"\)\) syncProposal\(dialog\);/);
+  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  assert.match(css, /\.era-wedding \.era-proposal-jewel \{ background-image: url\("\/relationship-assets\/icon-married.svg"\); \}/);
+});
+
+test("relationship endings use subdued action-specific emblems without celebratory confetti", async () => {
+  const script = await readFile(new URL("../hotpatch/RELATIONSHIPS.ERB", import.meta.url), "utf8");
+  const ending = script.slice(script.indexOf("@HOTPATCH_RELATIONSHIP_ENDING("), script.indexOf("@HOTPATCH_RELATIONSHIP_WEDDING("));
+  for (const line of ending.split("\n").filter(line => line.includes("HTML_PRINT") && line.includes("<era-open"))) {
+    assert.match(line, /^HTML_PRINT @?"<era-open [^>]+>"$/, "box markers must be standalone HTML_PRINT calls");
+  }
+  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  assert.match(css, /\.era-relationship-ending \.era-proposal-jewel \{ background-image: url\("\/relationship-assets\/icon-divorced.svg"\); \}/);
+  assert.match(css, /\.era-relationship-ending-5 \.era-proposal-jewel \{ background-image: url\("\/relationship-assets\/icon-engaged.svg"\); \}/);
+  assert.match(css, /\.era-relationship-ending-7 \.era-proposal-jewel \{ background-image: url\("\/relationship-assets\/icon-fwb.svg"\); \}/);
+});
+
 test("proposal staggers labels and results, types the response and reveals the outcome once", async () => {
   const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
   const routine = source.slice(source.indexOf("const proposalTimers ="), source.indexOf("function syncDialogs("));
