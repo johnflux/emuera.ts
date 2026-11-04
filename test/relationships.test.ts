@@ -207,8 +207,9 @@ test("relationship dialog has direct heading actions, unavailable reasons and fr
     const runtime = new Runtime(game, GAME_INSTRUCTION_LIMIT, { jit });
     let snapshot = check(runtime.start("HOTPATCH_TEST_DIALOG"));
     assert.match(text(snapshot), /era-dialog era-relationship/);
+    assert.match(text(snapshot), /Intimacy <b>0<\/b>/);
     assert.match(text(snapshot), /test-portrait.png/);
-    assert.match(text(snapshot), /class='era-relationship-timeline' data-favor='300' data-lover='0' data-in-love='0' data-casual='0' data-commitment='0'/);
+    assert.match(text(snapshot), /class='era-relationship-timeline' data-favor='300' data-intimacy='0' data-lover='0' data-in-love='0' data-casual='0' data-commitment='0'/);
     assert.match(text(snapshot), /need to be lovers first/);
     assert.doesNotMatch(text(snapshot), /End the engagement|End the romantic relationship|End FWB|Get married/);
     assert.doesNotMatch(text(snapshot), /Commitment is a choice|era-relationship-status/);
@@ -296,6 +297,23 @@ PRINTFORML Friendship: marker={CFLAG:TARGET:7399}, favor={CFLAG:TARGET:好感度
 QUIT`, "<friendship-test>");
   return new Runtime(game, GAME_INSTRUCTION_LIMIT, { jit, ...(saves ? { saves } : {}) });
 }
+
+test("one-time friendship bonus adds up to two intimacy toward five only when awarding favor", { skip: !existsSync(GAME_ROOT) }, async () => {
+  for (const [marker, intimacy, expected] of [[0, 0, 2], [0, 2, 4], [0, 4, 5], [0, 5, 5], [0, 8, 8], [1, 1, 1], [-1, 0, 0]]) {
+    const runtime = await friendshipRuntime(`CFLAG:TARGET:7399 = ${marker}
+CFLAG:TARGET:好感度 = 500
+ABL:TARGET:親密 = ${intimacy}
+CALL HOTPATCH_FRIENDSHIP_ACCEPT(TARGET)
+PRINTFORML First intimacy: {ABL:TARGET:親密}
+ABL:TARGET:親密 = 1
+CALL HOTPATCH_FRIENDSHIP_ACCEPT(TARGET)
+PRINTFORML Second intimacy: {ABL:TARGET:親密}`);
+    const printed = text(check(runtime.start("HOTPATCH_TEST_FRIENDSHIP")));
+    assert.ok(printed.includes(`First intimacy: ${expected}`));
+    assert.match(printed, /Second intimacy: 1/);
+    assert.ok(printed.includes(`favor=${marker === 0 ? 600 : 500},`));
+  }
+});
 
 test("friendship uses exact favor/trust boundaries and trait modifiers with transparent refusals", { skip: !existsSync(GAME_ROOT) }, async () => {
   const cases: [string, string][] = [
@@ -392,19 +410,18 @@ PRINTFORML Bonus received: {HOTPATCH_FRIENDSHIP_BONUS_RECEIVED(TARGET)}`, jit);
   }
 });
 
-test("friendship offers start at 400, declining sets 399 and stops repetition, accepting awards exactly 100", { skip: !existsSync(GAME_ROOT) }, async () => {
+test("automatic introductions start at favor 400 or intimacy five without prompts or repeated bonuses", { skip: !existsSync(GAME_ROOT) }, async () => {
   for (const jit of [false, true]) {
-    for (const [favor, choice, expected] of [[399, null, 399], [400, "1", 399], [499, "1", 399], [400, "0", 500], [500, null, 600]] as const) {
+    for (const [favor, intimacy, expected] of [[399, 4, 399], [400, 0, 500], [499, 0, 599], [500, 0, 600], [0, 5, 100], [399, 5, 499]] as const) {
       const runtime = await friendshipRuntime(`CFLAG:TARGET:好感度 = ${favor}
 CALL HOTPATCH_FRIENDSHIP_SYNC
+ABL:TARGET:親密 = ${intimacy}
+PRINTFORML Eligible: [%HOTPATCH_FRIENDSHIP_REASON(TARGET)%]
 CALL HOTPATCH_FRIENDSHIP_OFFER
 CALL HOTPATCH_FRIENDSHIP_OFFER`, jit);
-      let snapshot = check(runtime.start("HOTPATCH_TEST_FRIENDSHIP"));
-      if (choice !== null) {
-        assert.match(text(snapshot), /asks: "Would you like to be friends/);
-        assert.equal(snapshot.input?.kind, "integer");
-        snapshot = check(runtime.input(choice));
-      }
+      const snapshot = check(runtime.start("HOTPATCH_TEST_FRIENDSHIP"));
+      assert.doesNotMatch(text(snapshot), /Would you like to be friends|You decline/);
+      if (intimacy >= 5 && favor < 500) assert.match(text(snapshot), /Eligible: \[\]/);
       assert.equal(snapshot.input, null);
       assert.match(text(snapshot), new RegExp(`favor=${expected},`));
       assert.match(text(snapshot), /time=100/);

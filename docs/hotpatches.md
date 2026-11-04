@@ -21,25 +21,28 @@ Actual requests and AI character information expose the calculation and refusal
 reason; the rules are documented below. An actual request
 takes 10 minutes, including refusal; browsing is free.
 
-First acceptance gives **+100 favor**, exactly once per character:
+First acceptance gives **+100 favor** and increases native **Intimacy by up to 2
+toward level 5**, preserving levels already above 5,
+exactly once per character. Automatic recognition uses the same bonus path.
+Repeat acceptance and legacy bonus markers never raise Intimacy again:
 
 - At **500 favor**, recognition and the bonus are automatic on the next room
   redraw (including existing saves).
-- At **400–499**, the selected character offers friendship when the room is
-  shown and they can talk. Accepting grants the bonus; declining sets favor
-  to **399**, without a second saved marker or an offer cooldown.
-- Below **400**, anger, hate, active dislike (nonzero affinity below 60%),
+- At **favor >=400 or Intimacy >=5**, the selected character's eligible
+  introduction grants the bonus automatically when the room is shown and they
+  can talk, without a Yes/No prompt.
+- Below **400 favor and Intimacy 5**, anger, hate, active dislike (nonzero affinity below 60%),
   favor below -50 or trust below -50 gives the dislike refusal.
 - Otherwise negative favor or trust gives the unfamiliarity refusal.
 - Otherwise acceptance requires **favor + trust + 100 if Cheerful
   + 100 if the player is Charming - 100 if Reserved - 100 if Misanthrope
   (the native distrustful trait) >= 200**.
 
-The 400+ thresholds bypass the below-400 willingness calculation. Physical
+Either introduction threshold bypasses the lower-level willingness calculation. Physical
 conversation restrictions (sleep, stopped time, another scene, etc.) still
 apply to offers and requests. Automatic recognition costs no time.
 Falling below 500 removes current friendship; reaching 500 restores it.
-Anger and hate affect introduction willingness below 400, not the current
+Anger and hate affect introduction willingness below both thresholds, not the current
 friendship threshold or bonus history. Accepting at low favor grants +100 but
 does not declare a separate friendship state if the resulting favor is below 500.
 Characters who already received the bonus do not repeat unsolicited introductions.
@@ -71,7 +74,9 @@ character dialogue, success rolls, time cost and stat effects.
 [`RELATIONSHIPS.ERB`](../hotpatch/RELATIONSHIPS.ERB) replaces Confess with a
 relationship dialog, also accessible from the character's main-screen summary.
 It shows the existing portrait, commitment, favor, trust and love experience.
-The relationship timeline uses favor to fill Strangers → Acquaintances (100)
+The relationship timeline fills Strangers → Acquaintances using the greater of
+Favor/100 and Intimacy/2: either Favor >=100 or Intimacy >=2 reaches Acquaintances.
+The next segment remains favor-based
 → Friends (500). Once friends, romantically committed, FWB or divorced, the
 main path becomes Strangers → Friends → Lovers → Engaged → Married.
 Romantic lines highlight only current commitments, not acceptance predictions.
@@ -137,7 +142,8 @@ at 40×27 beneath the marriage circle.
 Mobile restores the ordinary badge size and omits the bow, leaves and halo.
 Its incoming filled track is champagne and slightly thicker;
 future or scorched marriage milestones do not receive this emphasis.
-Mobile omits the frame, ribbon, portrait, decorative images and action divider,
+The compact layout at viewport widths <=1100px omits the frame, ribbon, portrait,
+decorative images and action divider,
 while retaining timeline labels, flags, actions and unavailable reasons.
 The desktop portrait renders at 99×99px in a 99×90px wrapper, anchored
 bottom-left so its top protrudes 9px without shifting horizontally.
@@ -148,6 +154,8 @@ Action hover brightens the SVG skin without an additional outline or background;
 keyboard focus uses a stronger brightness and glow treatment.
 The summary uses icon pills, and the concise Confess/FWB/End FWB actions retain
 the same gameplay checks and unavailable reasons.
+The numeric summary includes native Intimacy alongside Favor, Trust and Love exp;
+Intimacy is independent of the favor-based friendship classification.
 Divorce scorches the former Lovers → Engaged → Married route; a saved former
 engagement scorches Engaged → Married. Feelings, friendship and FWB are not burnt
 away by either state. Ordinary breakup history is not reliably saved, so absence

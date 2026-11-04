@@ -7,6 +7,15 @@ import { relationshipTimelineModel } from "../web/relationship-timeline.js";
 const model = (favor: number, lover = false, casual = false, commitment = 0) =>
   relationshipTimelineModel({ favor, lover, casual, commitment });
 
+test("acquaintance milestone follows either favor or intimacy without granting friendship", () => {
+  for (const [favor, intimacy, reached] of [[99, 1, false], [100, 0, true], [0, 2, true], [-50, 5, true]] as const) {
+    const state = relationshipTimelineModel({ favor, intimacy, lover: false, casual: false, commitment: 0 });
+    assert.equal(state.nodes[1]!.reached, reached);
+    assert.equal(state.nodes[2]!.reached, false);
+    if (reached) assert.equal(state.progress[0], 1);
+  }
+});
+
 test("relationship timeline fills exact favor intervals and clamps negative favor", () => {
   for (const [favor, progress] of [[-50, [0, 0]], [0, [0, 0]], [50, [.5, 0]],
     [100, [1, 0]], [300, [1, .5]], [499, [1, .9975]]] as const) {
@@ -97,7 +106,7 @@ test("timeline renderer draws partial lines, boost rings and non-overlapping bra
     document: { createElement: (tag: string) => new Element(tag), createElementNS: (_namespace: string, tag: string) => new Element(tag) },
   });
   const node = (values: Record<string, string>) => ({ getAttribute: (key: string) => values[key.slice(5)] ?? null });
-  const attrs = { favor: "30000", lover: "0", "in-love": "0", casual: "1", commitment: "-2" };
+  const attrs = { favor: "30000", intimacy: "0", lover: "0", "in-love": "0", casual: "1", commitment: "-2" };
   const root = render(node(attrs)) as Element;
   assert.equal(root.className, "era-relationship-timeline is-casual", "FWB without current romance uses a plain lavender frame");
   for (const [favor, frame] of [["20", "is-early"], ["100", "is-early"], ["500", "is-friendship"], ["10000", "is-friendship"]]) {

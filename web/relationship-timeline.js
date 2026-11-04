@@ -1,6 +1,6 @@
 const clamp = (value) => Math.max(0, Math.min(1, value));
 
-export function relationshipTimelineModel({ favor, lover, casual, commitment, inLove = false }) {
+export function relationshipTimelineModel({ favor, lover, casual, commitment, inLove = false, intimacy = 0 }) {
   const friends = favor >= 500;
   const early = !friends && !lover && !inLove && !casual && commitment === 0;
   const tiers = [[30000, "Almost Family"], [10000, "Best Friend"], [1000, "Close Friend"], [500, "Friends"]];
@@ -9,14 +9,14 @@ export function relationshipTimelineModel({ favor, lover, casual, commitment, in
   const boost = tier < 0 ? 0 : 3 - tier;
   const nodes = early
     ? [{ label: "Strangers", icon: "seed", reached: true },
-      { label: "Acquaintances", icon: "sprout", reached: favor >= 100 },
+      { label: "Acquaintances", icon: "sprout", reached: favor >= 100 || intimacy >= 2 },
       { label: "Friends", icon: "flower", reached: false }]
     : [{ label: "Strangers", icon: "seed", reached: true },
       { label: friendship, icon: "flower", reached: friends, boost },
       { label: "Lovers", icon: "heart", reached: lover },
       { label: "Engaged", icon: "diamond", reached: commitment > 0 },
       { label: "Married", icon: "rings", reached: commitment === 2 }];
-  const progress = early ? [clamp(favor / 100), clamp((favor - 100) / 400)]
+  const progress = early ? [clamp(Math.max(favor / 100, intimacy / 2)), clamp((favor - 100) / 400)]
     : [clamp(favor / 500), lover ? 1 : 0, commitment > 0 ? 1 : 0, commitment === 2 ? 1 : 0];
   if (inLove) {
     nodes.splice(2, 0, { label: "In love", icon: "love", reached: true });
@@ -64,7 +64,7 @@ export function relationshipTimeline(node) {
   };
   const commitment = integer("commitment");
   if (commitment < -2 || commitment > 2) throw new Error(`Invalid relationship timeline commitment: ${commitment}`);
-  const model = relationshipTimelineModel({ favor: integer("favor"), lover: flag("lover"), inLove: flag("in-love"), casual: flag("casual"), commitment });
+  const model = relationshipTimelineModel({ favor: integer("favor"), intimacy: integer("intimacy"), lover: flag("lover"), inLove: flag("in-love"), casual: flag("casual"), commitment });
   const host = document.createElement("div");
   const plainFrame = !flag("lover") && !flag("in-love") && !flag("casual") && commitment <= 0;
   const frameClass = plainFrame ? integer("favor") >= 500 ? " is-friendship" : " is-early"

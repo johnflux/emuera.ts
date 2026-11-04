@@ -782,7 +782,7 @@ body:has(.menu-panel:not([hidden])) .clock-overhang { visibility: hidden; }
 .era-friendship-formula { padding: 8px; border-left: 2px solid #78c9c4; background: #102629; color: #b7eeea; }
 .era-relationship-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 24px; border-top: 1px solid #413540; border-radius: 0 0 10px 10px; color: #a9b6bf; font-size: .9em; }
 @media (max-width: 900px) { .era-relationship-options { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 600px) {
+@media (max-width: 1100px) {
   .era-relationship:popover-open:has(.era-relationship-demo) { margin-top: 230px; max-height: calc(100dvh - 246px); }
   .era-relationship-demo { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; font-size: .75em; }
   .era-relationship-demo > .line > span { display: contents; }

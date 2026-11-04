@@ -227,8 +227,8 @@ DO
 	CALL HOTPATCH_FACE(TARGET, 90)
 	HTML_PRINT @"<div class='era-relationship-header'><span class='era-info-face'>%RESULTS%</span>%HOTPATCH_RELATIONSHIP_ICON(TARGET)%<div><span class='era-sub'>Your relationship with</span><h2 class='era-relationship-heading'>%HTML_ESCAPE(CALLNAME:TARGET)%</h2></div><button value='999' class='era-dialog-close' title='Close relationship dialog'>×</button></div>"
 	HTML_PRINT "<era-open class='era-relationship-body'>"
-	HTML_PRINT @"<div class='era-relationship-timeline' data-favor='{CFLAG:TARGET:好感度}' data-lover='{TALENT:TARGET:恋人 != 0}' data-in-love='{TALENT:TARGET:恋慕 != 0}' data-casual='{TALENT:TARGET:セフレ != 0}' data-commitment='{HOTPATCH_RELATIONSHIP_STATE(TARGET)}'></div>"
-	HTML_PRINT @"<div class='era-relationship-summary'><span>Favor <b>{CFLAG:TARGET:好感度}</b></span><span>Trust <b>{CFLAG:TARGET:信頼度}</b></span><span>Love exp <b>{EXP:TARGET:愛情経験}</b></span>%HOTPATCH_RELATIONSHIP_FLAGS(TARGET)%</div>"
+	HTML_PRINT @"<div class='era-relationship-timeline' data-favor='{CFLAG:TARGET:好感度}' data-intimacy='{ABL:TARGET:親密}' data-lover='{TALENT:TARGET:恋人 != 0}' data-in-love='{TALENT:TARGET:恋慕 != 0}' data-casual='{TALENT:TARGET:セフレ != 0}' data-commitment='{HOTPATCH_RELATIONSHIP_STATE(TARGET)}'></div>"
+	HTML_PRINT @"<div class='era-relationship-summary'><span>Favor <b>{CFLAG:TARGET:好感度}</b></span><span>Trust <b>{CFLAG:TARGET:信頼度}</b></span><span>Intimacy <b>{ABL:TARGET:親密}</b></span><span>Love exp <b>{EXP:TARGET:愛情経験}</b></span>%HOTPATCH_RELATIONSHIP_FLAGS(TARGET)%</div>"
 	IF STRLENS(sError)
 		HTML_PRINT @"<p class='era-relationship-error' role='alert'>%HTML_ESCAPE(sError)%</p>"
 	ENDIF

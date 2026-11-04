@@ -20,7 +20,7 @@ RETURNF CFLAG:nChara:好感度 >= 500
 #DIM DYNAMIC nChara
 SIF HOTPATCH_FRIENDSHIP_ACTIVE(nChara)
 	RETURNF "You are already friends."
-SIF CFLAG:nChara:好感度 >= 400
+SIF CFLAG:nChara:好感度 >= 400 || ABL:nChara:親密 >= 5
 	RETURNF ""
 SIF HOTPATCH_FRIENDSHIP_DISLIKE(nChara)
 	RETURNF "They do not like you right now. Resolve their anger, resentment or dislike first."
@@ -65,9 +65,9 @@ RETURNF sResult + @" = {HOTPATCH_FRIENDSHIP_SCORE(nChara)}; required: 200."
 #DIMS DYNAMIC sReason
 sReason '= HOTPATCH_FRIENDSHIP_REASON(nChara)
 HTML_PRINT @"<p class='era-friendship-formula'>%HTML_ESCAPE(HOTPATCH_FRIENDSHIP_DETAILS(nChara))%</p>"
-HTML_PRINT "<p>Score = favor + trust + 100 if Cheerful + 100 if you are Charming - 100 if Reserved - 100 if Misanthrope (distrustful). Required below 400 favor: at least 200.</p>"
-HTML_PRINT "<p>Below 400 favor: anger, a hate mark, active dislike (affinity below 60%, excluding the unset neutral value), favor below -50 or trust below -50 blocks acceptance. Otherwise, negative favor or trust means they do not really know you yet; with both nonnegative, the score must be at least 200.</p>"
-HTML_PRINT "<p>At 400 favor they offer an introduction without the score requirement. Declining sets favor to 399. Current friendship depends only on favor being at least 500. First acceptance, including automatic recognition, gives +100 favor once; the saved marker records only that bonus history.</p>"
+HTML_PRINT "<p>Score = favor + trust + 100 if Cheerful + 100 if you are Charming - 100 if Reserved - 100 if Misanthrope (distrustful). Required below both 400 favor and Intimacy 5: at least 200.</p>"
+HTML_PRINT "<p>Below both 400 favor and Intimacy 5: anger, a hate mark, active dislike (affinity below 60%, excluding the unset neutral value), favor below -50 or trust below -50 blocks acceptance. Otherwise, negative favor or trust means they do not really know you yet; with both nonnegative, the score must be at least 200.</p>"
+HTML_PRINT "<p>At 400 favor or Intimacy 5, an eligible introduction happens automatically without the score requirement or a confirmation prompt. Current friendship depends only on favor being at least 500. First acceptance, including automatic recognition, gives +100 favor and up to +2 Intimacy toward level 5 once, preserving higher levels; the saved marker records only that bonus history.</p>"
 IF STRLENS(sReason)
 	HTML_PRINT @"<p class='era-relationship-error'>Current answer: %HTML_ESCAPE(sReason)%</p>"
 ELSE
@@ -81,7 +81,8 @@ nBonus = !HOTPATCH_FRIENDSHIP_BONUS_RECEIVED(nChara)
 CFLAG:nChara:7399 = 1
 IF nBonus
 	CFLAG:nChara:好感度 += 100
-	PRINTFORML %CALLNAME:nChara% accepts your friendship introduction. Favor +100.
+	ABL:nChara:親密 = MAX(ABL:nChara:親密, MIN(ABL:nChara:親密 + 2, 5))
+	PRINTFORML %CALLNAME:nChara% accepts your friendship introduction. Favor +100. Intimacy: {ABL:nChara:親密}.
 ELSE
 	PRINTFORML %CALLNAME:nChara% accepts your friendship introduction. The introduction bonus has already been received.
 ENDIF
@@ -99,7 +100,7 @@ NEXT
 
 @HOTPATCH_FRIENDSHIP_OFFER
 #DIMS DYNAMIC sReason
-SIF HOTPATCH_FRIENDSHIP_BONUS_RECEIVED(TARGET) || CFLAG:TARGET:好感度 < 400 || HOTPATCH_FRIENDSHIP_ACTIVE(TARGET)
+SIF HOTPATCH_FRIENDSHIP_BONUS_RECEIVED(TARGET) || (CFLAG:TARGET:好感度 < 400 && ABL:TARGET:親密 < 5) || HOTPATCH_FRIENDSHIP_ACTIVE(TARGET)
 	RETURN 0
 sReason '= HOTPATCH_RELATIONSHIP_REASON(8, TARGET)
 SIF STRLENS(sReason)
@@ -107,13 +108,5 @@ SIF STRLENS(sReason)
 sReason '= HOTPATCH_FRIENDSHIP_REASON(TARGET)
 SIF STRLENS(sReason)
 	RETURN 0
-PRINTFORML %CALLNAME:TARGET% asks: "Would you like to be friends?"
-PRINTL Accepting gives +100 favor on first acceptance. Declining sets favor to 399.
-CALL ASK_YN("Yes, let's be friends", "No, not right now")
-IF RESULT == 0
-	CALL HOTPATCH_FRIENDSHIP_ACCEPT(TARGET)
-ELSE
-	CFLAG:TARGET:好感度 = 399
-	PRINTFORML You decline %CALLNAME:TARGET%'s offer. Favor is now 399.
-ENDIF
+CALL HOTPATCH_FRIENDSHIP_ACCEPT(TARGET)
 RETURN 1
