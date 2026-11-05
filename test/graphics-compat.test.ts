@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
 import vm from "node:vm";
 import { createCanvas, Image } from "@napi-rs/canvas";
-import { decodePicture, pictureColor, rasterize } from "../src/graphics.js";
+import { decodePicture, pictureColor, PixelCache, rasterize } from "../src/graphics.js";
 import { emptyGame, indexScript, type Game } from "../src/loader.js";
 import { EraError } from "../src/model.js";
 import { Runtime, type Picture, type RuntimeOptions } from "../src/runtime.js";
@@ -129,6 +129,7 @@ test("browser and server paint pen-width-scaled dashed lines rather than solid f
     { op: "line", color: "#ff0000", width: 2, from: [2, 4], to: [42, 4], dashStyle: 1, dashCap: 0 },
     { op: "line", color: "#00ff00", width: 2, from: [2, 9], to: [42, 9] },
     { op: "line", color: "#0000ff", width: 2, from: [2, 1], to: [42, 1], dashStyle: 5 },
+    { op: "pixels", colors: { [4 * 48 + 4]: 0, [1 * 48 + 4]: 0xff00ffff } },
   ] };
   const source = readFileSync(new URL("../web/app.js", import.meta.url), "utf8");
   const section = source.slice(source.indexOf("function paintPicture("), source.indexOf("/**\n * Animation sprites:"));
@@ -140,9 +141,91 @@ test("browser and server paint pen-width-scaled dashed lines rather than solid f
   const client = await browser(picture);
   for (const canvas of [server, client]) {
     const ctx = canvas.getContext("2d");
-    assert.equal(ctx.getImageData(4, 4, 1, 1).data[3], 255);
+    assert.equal(ctx.getImageData(4, 4, 1, 1).data[3], 0);
     assert.equal(ctx.getImageData(9, 4, 1, 1).data[3], 0);
     assert.equal(ctx.getImageData(9, 9, 1, 1).data[3], 255);
-    assert.equal(ctx.getImageData(4, 1, 1, 1).data[3], 0);
+    assert.deepEqual([...ctx.getImageData(4, 1, 1, 1).data], [0, 255, 255, 255]);
   }
+});
+
+test("pixel scans decode each resource once and compact writes preserve copied pictures", () => {
+  const image = createCanvas(256, 256);
+  image.getContext("2d").fillRect(0, 0, 256, 256);
+  const bytes = image.toBuffer("image/png");
+  let reads = 0;
+  const resolve = () => { reads++; return bytes; };
+  const picture: Picture = { width: 256, height: 256, ops: [
+    { op: "image", url: "/resource.png", src: [0, 0, 256, 256], dest: [0, 0, 256, 256] },
+  ] };
+  const cache = new PixelCache();
+  for (let y = 0; y < 256; y++)
+    for (let x = 0; x < 256; x++) assert.equal(pictureColor(picture, x, y, resolve, cache), 0xff000000n);
+  assert.equal(reads, 1);
+  assert.deepEqual(run(`GCREATE 1, 10, 10
+GSETCOLOR 1, 0x01123456, 1, 1
+GCREATE 2, 10, 10
+GDRAWG 2, 1, 0, 0, 10, 10, 0, 0, 10, 10
+GSETCOLOR 1, 0, 1, 1
+PRINTFORML COPY {GGETCOLOR(2, 1, 1)} LIVE {GGETCOLOR(1, 1, 1)}`), ["COPY 17970262 LIVE 0"]);
+});
+
+test("matrix readback reuses the rasterized base while pixel batches grow and invalidates after drawing", () => {
+  const image = createCanvas(32, 32);
+  image.getContext("2d").fillRect(0, 0, 32, 32);
+  const bytes = image.toBuffer("image/png");
+  let reads = 0;
+  const resolve = () => { reads++; return bytes; };
+  const picture: Picture = { width: 32, height: 32, ops: [
+    { op: "image", url: "/matrix.png", src: [0, 0, 32, 32], dest: [0, 0, 32, 32],
+      matrix: [[1, 0, 0, 0, 0], [0, 1, 0, 0, 0], [0, 0, 1, 0, 0], [0, 0, 0, 1, 0], [0, 0, 0, 0, 1]] },
+  ] };
+  const cache = new PixelCache();
+  const colors: Record<number, number> = {};
+  picture.ops.push({ op: "pixels", colors });
+  for (let x = 0; x < 32; x++) {
+    assert.equal(pictureColor(picture, x, 0, resolve, cache), 0xff000000n);
+    colors[x] = 0;
+    assert.equal(pictureColor(picture, x, 0, resolve, cache), 0n);
+  }
+  assert.equal(reads, 1);
+  picture.ops.push({ op: "fill", color: "rgba(255, 0, 0, 1)", rect: [0, 0, 1, 1], replace: true });
+  assert.equal(pictureColor(picture, 0, 0, resolve, cache), 0xffff0000n);
+  assert.equal(reads, 2);
+});
+
+const twOutline = new URL("../GAMES/anon-tw-anon-tw_eng-modding/ERB/ステータス表示関連/縁取り.ERB", import.meta.url);
+test("AnonTW's original image-border routine finishes without an operation per pixel", { skip: !existsSync(twOutline) }, () => {
+  const game = emptyGame();
+  indexScript(game, readFileSync(twOutline, "utf8"), "tw-outline.erb");
+  indexScript(game, `@GET_EMPTY_G(WIDTH, HEIGHT)
+#FUNCTION
+#DIM WIDTH
+#DIM HEIGHT
+#DIM INDEX
+FOR INDEX, 2, 100
+ IF !GCREATED(INDEX)
+  GCREATE INDEX, WIDTH, HEIGHT
+  RETURNF INDEX
+ ENDIF
+NEXT
+THROW No free graphics
+@SYSTEM_TITLE
+GCREATE 1, 256, 256
+GSETBRUSH 1, 0x01123456
+GFILLRECTANGLE 1, 0, 0, 256, 256
+GSETCOLOR 1, 0xFFFFFFFF, 128, 128
+SPRITECREATE "TEST", 1
+LOCAL = OUTLINE_SPR("TEST", 0x88FFFF00)
+PRINTFORML CENTER {GGETCOLOR(LOCAL, 128, 128)} CLEAR {GGETCOLOR(LOCAL, 0, 0)}
+CBGSETG LOCAL, 0, 0, 1
+QUIT`, "outline-regression.erb");
+  const started = performance.now();
+  const snapshot = new Runtime(game, 5_000_000).start();
+  assert.equal(snapshot.status, "halted", JSON.stringify(snapshot.error));
+  assert.ok(performance.now() - started < 5000, "256x256 image border must finish within five seconds");
+  assert.match(JSON.stringify(snapshot.output), /CENTER 4294967295 CLEAR 0/);
+  const graphics = snapshot.cbg![0]!.picture!;
+  const count = (picture: Picture): number => picture.ops.reduce((n, op) =>
+    n + 1 + (op.op === "graphics" ? count(op.source) : op.op === "mask" ? count(op.source) + count(op.mask) : 0), 0);
+  assert.ok(count(graphics) < 100, "Pixel cleanup must not generate 65,536 fill operations");
 });

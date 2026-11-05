@@ -1747,3 +1747,17 @@ main:has(.screen.is-active .era-launch) { padding: 0; background: #000; }
   .confirm p.llm-config-hint, .llm-config-check { grid-column: 1; }
   .llm-config-actions { padding: 12px 16px; }
 }
+#local-translation {
+  padding: 0.5rem 1rem;
+  border-top: 1px solid currentColor;
+}
+#local-translation h2 {
+  font-size: 1rem;
+  margin: 0;
+}
+#local-translation-text {
+  white-space: pre-wrap;
+  max-height: 30vh;
+  overflow: auto;
+  font: inherit;
+}

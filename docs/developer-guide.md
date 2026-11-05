@@ -88,6 +88,14 @@ title state, clearing variables, characters, runtime containers, graphics,
 and console history while retaining saved files and the current browser
 display settings. Interpreter and JIT paths are covered by command regressions.
 
+Graphics pixel scans reuse a runtime-local, size-bounded decoded-image cache.
+Consecutive `GSETCOLOR` writes form one sparse `pixels` operation; snapshots copy
+the pixel batch so later writes cannot change earlier `GDRAWG` sources. Server
+and browser rasterizers replay that operation as absolute replacement pixels,
+preserving straight ARGB readback, including transparent colors. Readback of
+transformed pictures caches the rasterized base between writes. AnonTW's original
+image-border routine is regression-tested at 256x256 with a five-second limit.
+
 **eraNAS:** the installed `GAMES/pops-tw` has no lexical compatibility gaps or
 loader diagnostics.
 `FORCE_QUIT_AND_RESTART` uses the same full runtime reset as

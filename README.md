@@ -32,6 +32,25 @@ Going past the newest entry restores your unfinished input. History lasts until
 the page is reloaded. Recalled commands show their button label as a non-editable
 hint (for example, `400 [Move]`); editing the input hides the hint.
 
+## Translation and clipboard
+
+Both options below are off by default and available in the menu:
+
+- **Auto-copy game text** copies the latest printed output as plain text, before
+  translation, for tools such as Luna Translator. Desktop builds use the native
+  clipboard; browser builds need clipboard permission and may require focus.
+- **Translation model…** configures a local OpenAI-compatible server. In LM
+  Studio, load your model (for example Gemma 3 12B), start its API server, set the
+  base URL to `http://127.0.0.1:1234/v1`, and use **Load models** to select its ID.
+  Save, then turn on **Local-model translation**. Translations appear below the
+  game output without changing game buttons or saves. Original text is sent only
+  to the configured localhost server. New output cancels an outdated translation.
+
+These settings are saved in the current browser. Local-model translation uses
+separate settings from character chat and disables the browser's on-device
+translation when switched on. **Translate Japanese** remains available for
+browsers with the on-device Translator API.
+
 ## Desktop builds
 
 The Electron desktop app bundles the interpreter but not third-party games.

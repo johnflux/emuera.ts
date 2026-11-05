@@ -24,7 +24,7 @@ test("static resources revalidate, versioned art stays fresh and APIs remain unc
       assert.ok(address && typeof address !== "string");
       const base = `http://127.0.0.1:${address.port}`;
       try {
-        for (const route of ["/", "/app.js", "/cache.js", "/style.css", "/fonts/BIZUDGothic-Regular.ttf", "/resources/pixel.png"]) {
+        for (const route of ["/", "/app.js", "/output-tools.js", "/cache.js", "/style.css", "/fonts/BIZUDGothic-Regular.ttf", "/resources/pixel.png"]) {
           const first = await fetch(base + route);
           assert.equal(first.status, 200, route);
           assert.equal(first.headers.get("cache-control"), "private, no-cache");

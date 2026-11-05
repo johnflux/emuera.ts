@@ -1,10 +1,24 @@
-const { app, BrowserWindow, dialog, shell } = require("electron");
+const { app, BrowserWindow, clipboard, dialog, ipcMain, shell } = require("electron");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 const gamePaths = require("./game-paths.cjs");
 
 let server;
 let window;
+
+ipcMain.handle("era:write-clipboard", (event, text) => {
+  const address = server?.address();
+  if (!window || event.sender !== window.webContents || !address || typeof address === "string"
+    || event.senderFrame?.url !== `http://127.0.0.1:${address.port}/`) {
+    console.error("Clipboard request rejected: unexpected sender");
+    throw new Error("Clipboard access is only available from the game window");
+  }
+  if (typeof text !== "string" || text.length > 1_000_000) {
+    console.error("Clipboard request rejected: invalid text");
+    throw new Error("Clipboard text must be a string of at most 1,000,000 characters");
+  }
+  clipboard.writeText(text);
+});
 
 async function createWindow() {
   const { installDirectory, searchDirectories } = gamePaths(
@@ -17,6 +31,7 @@ async function createWindow() {
     minHeight: 560,
     show: false,
     webPreferences: {
+      preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,

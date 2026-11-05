@@ -6,6 +6,37 @@ type Rect = [number, number, number, number];
 export type ImageSource = (url: string) => Buffer;
 export class InvalidGraphicsImage extends Error {}
 
+export class PixelCache {
+  private entries = new Map<string, ReturnType<typeof imagePixels>>();
+  private pictures = new WeakMap<Picture, { ops: Picture["ops"]; count: number; data: Uint8ClampedArray }>();
+  private bytes = 0;
+  get(url: string, resolve: ImageSource) {
+    let entry = this.entries.get(url);
+    if (entry) return entry;
+    entry = imagePixels(url, resolve);
+    while (this.bytes + entry.rgba.byteLength > 64 * 1024 * 1024 && this.entries.size) {
+      const oldest = this.entries.keys().next().value!;
+      this.bytes -= this.entries.get(oldest)!.rgba.byteLength;
+      this.entries.delete(oldest);
+    }
+    if (entry.rgba.byteLength <= 64 * 1024 * 1024) {
+      this.entries.set(url, entry);
+      this.bytes += entry.rgba.byteLength;
+    }
+    return entry;
+  }
+  picture(picture: Picture, resolve: ImageSource): Uint8ClampedArray {
+    // A trailing pixel batch is mutable, but unmodified coordinates still read the same base picture.
+    const count = picture.ops.length - (picture.ops.at(-1)?.op === "pixels" ? 1 : 0);
+    const cached = this.pictures.get(picture);
+    if (cached?.ops === picture.ops && cached.count === count) return cached.data;
+    const data = rasterize({ ...picture, ops: picture.ops.slice(0, count) }, resolve)
+      .getContext("2d").getImageData(0, 0, picture.width, picture.height).data;
+    if (data.byteLength <= 64 * 1024 * 1024) this.pictures.set(picture, { ops: picture.ops, count, data });
+    return data;
+  }
+}
+
 export function decodePicture(bytes: Buffer): Picture {
   let image: ReturnType<Transformer["metadataSync"]>;
   try { image = new Transformer(bytes).metadataSync(); }
@@ -83,6 +114,15 @@ export function rasterize(picture: Picture, resolve: ImageSource): Canvas {
   const canvas = createCanvas(picture.width, picture.height), context = canvas.getContext("2d");
   for (const op of picture.ops) {
     switch (op.op) {
+      case "pixels": {
+        const data = context.getImageData(0, 0, picture.width, picture.height);
+        for (const [index, color] of Object.entries(op.colors)) {
+          const p = Number(index) * 4;
+          data.data.set([color >>> 16 & 255, color >>> 8 & 255, color & 255, color >>> 24], p);
+        }
+        context.putImageData(data, 0, 0);
+        break;
+      }
       case "rotate": {
         const previous = context.getTransform();
         context.resetTransform();
@@ -146,22 +186,22 @@ export function rasterize(picture: Picture, resolve: ImageSource): Canvas {
   return canvas;
 }
 
-export function pictureColor(picture: Picture | undefined, x: number, y: number, resolve: ImageSource): bigint {
+export function pictureColor(picture: Picture | undefined, x: number, y: number, resolve: ImageSource, images = new PixelCache()): bigint {
   if (!picture || x < 0 || y < 0 || x >= picture.width || y >= picture.height) return -1n;
-  const [r, g, b, a] = sample(picture, x, y, resolve, new Map()) ??
-    rasterize(picture, resolve).getContext("2d").getImageData(x, y, 1, 1).data;
+  const [r, g, b, a] = sample(picture, x, y, resolve, images) ??
+    images.picture(picture, resolve).subarray((y * picture.width + x) * 4, (y * picture.width + x) * 4 + 4);
   return BigInt((a! * 0x1000000 + r! * 0x10000 + g! * 0x100 + b!) >>> 0);
 }
 
-export function resourceColor(url: string, x: number, y: number, resolve: ImageSource): bigint {
-  const { width, height, rgba } = imagePixels(url, resolve);
+export function resourceColor(url: string, x: number, y: number, resolve: ImageSource, images = new PixelCache()): bigint {
+  const { width, height, rgba } = images.get(url, resolve);
   if (x < 0 || y < 0 || x >= width || y >= height) return 0x00ffffffn;
   const p = (y * width + x) * 4;
   return BigInt((rgba[p + 3]! * 0x1000000 + rgba[p]! * 0x10000 + rgba[p + 1]! * 0x100 + rgba[p + 2]!) >>> 0);
 }
 
 type RGBA = [number, number, number, number];
-type Images = Map<string, ReturnType<typeof imagePixels>>;
+type Images = PixelCache;
 function blend(destination: RGBA, source: RGBA): RGBA {
   if (!source[3]) return destination;
   if (source[3] === 255 || !destination[3]) return source;
@@ -172,9 +212,18 @@ function blend(destination: RGBA, source: RGBA): RGBA {
 
 /** Preserve straight ARGB for pixel operations: Canvas's premultiplication loses low-alpha RGB. */
 function sample(picture: Picture, x: number, y: number, resolve: ImageSource, images: Images): RGBA | undefined {
+  const last = picture.ops.at(-1);
+  if (last?.op === "pixels") {
+    const color = last.colors[y * picture.width + x];
+    if (color !== undefined) return [color >>> 16 & 255, color >>> 8 & 255, color & 255, color >>> 24];
+  }
   let pixel: RGBA = [0, 0, 0, 0], transformed = false;
   for (const op of picture.ops) {
-    if (op.op === "rotate") { transformed = true; continue; }
+    if (op.op === "pixels") {
+      const color = op.colors[y * picture.width + x];
+      if (color !== undefined) pixel = [color >>> 16 & 255, color >>> 8 & 255, color & 255, color >>> 24];
+      continue;
+    } else if (op.op === "rotate") { transformed = true; continue; }
     if (op.op === "fill") {
       if (transformed && !op.absolute) return undefined;
       const [rx, ry, rw, rh] = op.rect;
@@ -194,8 +243,7 @@ function sample(picture: Picture, x: number, y: number, resolve: ImageSource, im
         if (px < 0 || py < 0 || px >= op.source.width || py >= op.source.height) continue;
         color = sample(op.source, px, py, resolve, images);
       } else {
-        let decoded = images.get(op.url);
-        if (!decoded) { decoded = imagePixels(op.url, resolve); images.set(op.url, decoded); }
+        const decoded = images.get(op.url, resolve);
         if (px < 0 || py < 0 || px >= decoded.width || py >= decoded.height) continue;
         color = Array.from(decoded.rgba.subarray((py * decoded.width + px) * 4, (py * decoded.width + px) * 4 + 4)) as RGBA;
       }
@@ -208,7 +256,7 @@ function sample(picture: Picture, x: number, y: number, resolve: ImageSource, im
 
 export function encodePicture(picture: Picture, resolve: ImageSource): Buffer {
   const data = rasterize(picture, resolve).getContext("2d").getImageData(0, 0, picture.width, picture.height).data;
-  const images: Images = new Map();
+  const images = new PixelCache();
   for (let y = 0; y < picture.height; y++)
     for (let x = 0; x < picture.width; x++) {
       const exact = sample(picture, x, y, resolve, images);

@@ -3,7 +3,8 @@ import { createLibrary } from "./library.js";
 import { sky, prepareSkyArt } from "./sky.js";
 import { disposeCharacterChats, sendInlineChat, setHistoryTranslator, setupInlineChat } from "./interaction-history.js";
 import { relationshipTimeline } from "./relationship-timeline.js";
-import { activeLlm, PROVIDERS, setupLlmConfig } from "./llm.js";
+import { activeLlm, listModels, PROVIDERS, setupLlmConfig, translateGameText } from "./llm.js";
+import { createOutputTools, gameOutputText } from "./output-tools.js";
 import { encountersEnabled, gossipEnabled, memoriesEnabled, runEncounters, runGossip, runMemories, writeMemory } from "./encounters.js";
 import { cached, LruCache } from "./cache.js";
 import { profiling, profileStart, profileEnd } from "./performance.js";
@@ -52,6 +53,13 @@ const report = document.querySelector("#compatibility");
 const tooltip = document.querySelector("#game-tooltip");
 let tooltipTarget = null;
 const translation = createTranslation({ onChange: (status) => showTranslation(status) });
+const outputTools = createOutputTools({
+  writeClipboard: (text) => globalThis.eraDesktop
+    ? globalThis.eraDesktop.writeClipboard(text)
+    : navigator.clipboard.writeText(text),
+  translate: translateGameText,
+  onChange: showOutputTools,
+});
 setHistoryTranslator((root) => translation.translateTree(root));
 const demoButton = document.querySelector("#demo");
 /** The menu's run buttons: the demo, then one per game (#game is the default game's; see showGames()). */
@@ -1182,6 +1190,12 @@ async function paintOps(picture) {
       context.rotate(op.angle * Math.PI / 180);
       context.translate(-op.x, -op.y);
       context.transform(previous.a, previous.b, previous.c, previous.d, previous.e, previous.f);
+    } else if (op.op === "pixels") {
+      const data = context.getImageData(0, 0, picture.width, picture.height);
+      for (const [index, color] of Object.entries(op.colors)) {
+        data.data.set([color >>> 16 & 255, color >>> 8 & 255, color & 255, color >>> 24], Number(index) * 4);
+      }
+      context.putImageData(data, 0, 0);
     } else if (op.op === "fill") {
       if (op.absolute) { context.save(); context.setTransform(1, 0, 0, 1, 0, 0); }
       const [x, y, width, height] = op.rect;
@@ -1900,6 +1914,8 @@ async function renderSteps(steps, fresh = false, keepFocus = false, toBottom = f
     markMapLabels();
     profileEnd("render.layout", phaseStarted);
     phaseStarted = profileStart();
+    const printed = gameOutputText(steps.flatMap(({ snapshot }) => snapshot.output ?? []));
+    if (printed || fresh) outputTools.publish(printed);
     translation.translateTree(terminal);
     profileEnd("render.translation", phaseStarted);
     phaseStarted = profileStart();
@@ -2983,6 +2999,61 @@ llmConfig.addEventListener("close", () => {
   showLlmState();
   document.dispatchEvent(new Event("era-llm-changed"));
 });
+function showOutputTools({ config, text, translating, error }) {
+  if (config) {
+    document.querySelector("#clipboard-toggle").setAttribute("aria-pressed", String(config.clipboard));
+    document.querySelector("#local-translate-toggle").setAttribute("aria-pressed", String(config.local));
+    document.querySelector("#local-translation").hidden = !config.local;
+  }
+  if (text !== undefined) document.querySelector("#local-translation-text").textContent = text;
+  document.querySelector("#local-translation-status").textContent = error ?? (translating ? "Translating..." : "");
+  if (error) message(error, true);
+}
+showOutputTools({ config: outputTools.config() });
+document.querySelector("#clipboard-toggle").addEventListener("click", () => {
+  outputTools.configure({ clipboard: !outputTools.config().clipboard });
+});
+const translationConfig = document.querySelector("#translation-config");
+const translationFields = translationConfig.querySelector("form").elements;
+const translationConfigStatus = document.querySelector("#translation-config-status");
+function openTranslationConfig() {
+  const config = outputTools.config();
+  for (const name of ["endpoint", "model", "language"]) translationFields[name].value = config[name];
+  translationConfigStatus.textContent = "";
+  translationConfig.showModal();
+}
+document.querySelector("#local-translate-toggle").addEventListener("click", () => {
+  if (!outputTools.config().model.trim()) { openTranslationConfig(); return; }
+  const local = !outputTools.config().local;
+  if (local && translation.enabled()) translation.setEnabled(false);
+  outputTools.configure({ local });
+});
+document.querySelector("#local-translate-configure").addEventListener("click", openTranslationConfig);
+document.querySelector("#translation-load-models").addEventListener("click", async (event) => {
+  event.currentTarget.disabled = true;
+  translationConfigStatus.textContent = "Loading models...";
+  try {
+    const url = new URL(translationFields.endpoint.value);
+    if (!["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)) throw new Error("Use a localhost API base URL");
+    const ids = await listModels({ provider: "local", endpoint: translationFields.endpoint.value });
+    document.querySelector("#translation-models").replaceChildren(...ids.map((id) => Object.assign(document.createElement("option"), { value: id })));
+    translationConfigStatus.textContent = ids.length ? `Found ${ids.length} models.` : "The server listed no models.";
+  } catch (error) { translationConfigStatus.textContent = `Could not load models: ${error.message}`; }
+  finally { document.querySelector("#translation-load-models").disabled = false; }
+});
+translationConfig.querySelector("form").addEventListener("submit", (event) => {
+  if (event.submitter?.value !== "save") return;
+  try {
+    const endpoint = translationFields.endpoint.value.trim();
+    const url = new URL(endpoint);
+    if (!["http:", "https:"].includes(url.protocol) || !["localhost", "127.0.0.1", "[::1]"].includes(url.hostname))
+      throw new Error("Use a localhost API base URL");
+    const model = translationFields.model.value.trim(), language = translationFields.language.value.trim();
+    if (!model || !language) throw new Error("Choose a translation model and target language");
+    outputTools.configure({ endpoint, model, language });
+  } catch (error) { event.preventDefault(); translationConfigStatus.textContent = error.message; }
+});
+translationConfig.addEventListener("keydown", (event) => event.stopPropagation());
 const settingsPanel = document.querySelector("#settings");
 document.querySelector("#settings-toggle").addEventListener("click", (event) => {
   settingsPanel.hidden = !settingsPanel.hidden;

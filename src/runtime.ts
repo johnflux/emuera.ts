@@ -20,7 +20,7 @@ import { ASYNC, Jit, type CallAnalysis } from "./jit.js";
 import { readNativeSave, writeNativeSave, type NativeSave, type SavedContainers, type SaveMetadata } from "./save-format.js";
 import { fixHistoryHtml, SHARP_METHODS, supportedSharpCall, translateHistoryDate } from "./plugin-compat.js";
 import { regexCharacterClasses, regexGroupOrder, replaceRegex } from "./regex.js";
-import { decodePicture, encodePicture, InvalidGraphicsImage, pictureColor, resourceColor } from "./graphics.js";
+import { decodePicture, encodePicture, InvalidGraphicsImage, pictureColor, PixelCache, resourceColor } from "./graphics.js";
 import { TwInteractionHistory, type CharacterHistory, type Encounter, type Gossip, type HistoryCharacter, type Memory } from "./interaction-history.js";
 import { runCharacterTool, toolCallSummary, unquoteSpeech, type CharacterAction, type ToolHost } from "./character-tools.js";
 import { characterVoice, MemoryVoiceStore, type CharacterVoice, type EditableVoice, type VoiceStore } from "./character-voice.js";
@@ -31,6 +31,7 @@ type Rect = [x: number, y: number, width: number, height: number];
 type ColorMatrix = number[][];
 /** Paint operations, replayed in order on a transparent canvas of the picture's size. */
 export type GraphicOp =
+  | { op: "pixels"; colors: Record<number, number> }
   | { op: "rotate"; angle: number; x: number; y: number }
   | { op: "image"; url: string; src: Rect; dest: Rect; matrix?: ColorMatrix }
   | { op: "graphics"; source: Picture; src: Rect; dest: Rect; matrix?: ColorMatrix }
@@ -468,6 +469,7 @@ export class Runtime {
   private waits = 0;
   /** G canvases (GCREATE) as display lists the browser paints; see Picture. */
   private graphics = new Map<bigint, Canvas>();
+  private graphicPixels = new PixelCache();
   /** SPRITECREATE sprites reference their G by id, live like Emuera's SpriteG; SPRITEANIMECREATE sprites have no graphics. */
   private dynamicSprites = new Map<string, SpriteInfo>();
   private spriteSizes = new Map<string, SpriteInfo>();
@@ -1394,7 +1396,8 @@ export class Runtime {
   /** The current content of a G; later drawing to that G does not change it. */
   private picture(id: bigint): Picture | undefined {
     const canvas = this.graphics.get(id);
-    return canvas && { width: canvas.width, height: canvas.height, ops: canvas.ops.slice() };
+    return canvas && { width: canvas.width, height: canvas.height,
+      ops: canvas.ops.map((op) => op.op === "pixels" ? { ...op, colors: { ...op.colors } } : op) };
   }
   private graphicImage = (url: string): Buffer => {
     if (!this.game.root || !url.startsWith(this.game.resourceBase)) throw new EraError("Graphics resource is unavailable");
@@ -2496,7 +2499,7 @@ export class Runtime {
           case "GWIDTH": return BigInt(this.graphics.get(argInt(args, name, 0))?.width ?? 0);
           case "GHEIGHT": return BigInt(this.graphics.get(argInt(args, name, 0))?.height ?? 0);
           case "GDISPOSE": return this.graphics.delete(argInt(args, name, 0)) ? 1n : 0n;
-          case "GGETCOLOR": return pictureColor(this.picture(argInt(args, name, 0)), Number(argInt(args, name, 1)), Number(argInt(args, name, 2)), this.graphicImage);
+          case "GGETCOLOR": return pictureColor(this.graphics.get(argInt(args, name, 0)), Number(argInt(args, name, 1)), Number(argInt(args, name, 2)), this.graphicImage, this.graphicPixels);
           case "SPRITEGETCOLOR": {
             const sprite = this.sprite(argText(args, name, 0));
             if (!sprite) return -1n;
@@ -2504,9 +2507,9 @@ export class Runtime {
             if (x < 0 || y < 0 || x >= sprite.width || y >= sprite.height) return -1n;
             if (sprite.frames) throw new EraError("SPRITEGETCOLOR does not support animation sprites");
             if (sprite.graphics !== undefined && sprite.rect)
-              return pictureColor(this.picture(sprite.graphics), x + sprite.rect[0], y + sprite.rect[1], this.graphicImage);
+              return pictureColor(this.graphics.get(sprite.graphics), x + sprite.rect[0], y + sprite.rect[1], this.graphicImage, this.graphicPixels);
             if (sprite.url && sprite.src)
-              return resourceColor(sprite.url, x + sprite.src[0], y + sprite.src[1], this.graphicImage);
+              return resourceColor(sprite.url, x + sprite.src[0], y + sprite.src[1], this.graphicImage, this.graphicPixels);
             // Sprite positions affect drawing, not coordinates within the underlying sprite.
             const draw = this.spriteOp({ ...sprite, x: 0, y: 0 }, [0, 0, sprite.width, sprite.height]);
             return pictureColor({ width: sprite.width, height: sprite.height, ops: draw ? [draw] : [] },
@@ -2563,8 +2566,14 @@ export class Runtime {
             if (!canvas) return 0n;
             const x = Number(argInt(args, name, 2)), y = Number(argInt(args, name, 3));
             if (x < 0 || y < 0 || x >= canvas.width || y >= canvas.height) return 0n;
-            canvas.ops.push({ op: "fill", color: argbColor(argInt(args, name, 1), name), rect: [x, y, 1, 1], replace: true,
-              ...(canvas.ops.some((op) => op.op === "rotate") ? { absolute: true } : {}) });
+            const color = argInt(args, name, 1);
+            argbColor(color, name);
+            let pixels = canvas.ops.at(-1);
+            if (pixels?.op !== "pixels") {
+              pixels = { op: "pixels", colors: {} };
+              canvas.ops.push(pixels);
+            }
+            pixels.colors[y * canvas.width + x] = Number(color);
             return 1n;
           }
           case "GSETBRUSH": {
