@@ -33,19 +33,19 @@ test("desktop packaging loads the installed native libraries for the host target
   });
 });
 
-test("portable games use the original executable directory, not its extraction directory", () => {
+test("Windows ZIP games download and save beside the extracted executable", () => {
   const userData = path.resolve("appdata");
   const portableDirectory = path.resolve("usb");
-  assert.deepEqual(gamePaths(userData, path.resolve("temporary", "Era.exe"), portableDirectory), {
+  assert.deepEqual(gamePaths(userData, path.join(portableDirectory, "Era.exe"), "win32"), {
     installDirectory: path.join(portableDirectory, "GAMES"),
     searchDirectories: [path.join(portableDirectory, "GAMES"), path.join(userData, "GAMES")],
   });
 });
 
-test("installed games download to AppData and also search beside the executable", () => {
+test("Mac games download to application data and also search beside the executable", () => {
   const userData = path.resolve("appdata");
   const executable = path.resolve("installed", "Era.exe");
-  assert.deepEqual(gamePaths(userData, executable, undefined), {
+  assert.deepEqual(gamePaths(userData, executable, "darwin"), {
     installDirectory: path.join(userData, "GAMES"),
     searchDirectories: [path.join(userData, "GAMES"), path.join(path.dirname(executable), "GAMES")],
   });

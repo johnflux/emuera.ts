@@ -35,12 +35,15 @@ hint (for example, `400 [Move]`); editing the input hides the hint.
 ## Desktop builds
 
 The Electron desktop app bundles the interpreter but not third-party games.
-Both Windows builds look for games in `GAMES/` beside the executable and in the
+The Windows ZIP build looks for games in `GAMES/` beside the executable and in the
 app's application-data directory (`%APPDATA%\era-typescript\GAMES` on Windows).
-The portable build downloads games beside the original portable `.exe`, not in
-its temporary extraction folder. Installed builds download games to application
-data, avoiding write-permission issues in Program Files. If the same game is in
-both locations, the download location takes precedence. Refresh the library
+Extract the whole ZIP to a writable folder, then run `emuera-ts.exe`. On first launch,
+it automatically downloads and extracts eraToho The World into the adjacent
+`GAMES/` folder using the same installer as the library button. An existing TW
+installation in either location is kept; nothing is overwritten. Failed downloads
+show an error and can be retried from the library or by restarting the app.
+Other game downloads also go beside `emuera-ts.exe`; Mac downloads still use application
+data. If the same game is in both locations, the download location takes precedence. Refresh the library
 after adding games manually. Saves remain in each game's normal save directory.
 
 Install dependencies with `npm install`, then build on the target operating
@@ -52,14 +55,14 @@ npm run dist:win
 ```
 
 `dist:mac` produces macOS DMG and ZIP packages for the Mac's native architecture;
-`dist:win` produces `Era-<version>-install.exe` and `Era-<version>-portable.exe`
-for Windows x64. Build
+`dist:win` produces `EraTs-<version>-win-x64.zip` containing the Windows x64 app;
+there is no Windows installer or self-extracting executable. Build
 on the target OS and architecture: the graphics libraries need platform-specific
 native bindings, so a Windows package built with Mac dependencies will not run.
 Use `dist:mac:x64` on an Intel Mac or `dist:mac:arm64` on Apple silicon.
 Packaging rejects mismatched targets and checks that the native libraries load.
 Outputs go to `release/`. For distribution outside personal use,
-sign/notarize the macOS app and sign the Windows installer.
+sign/notarize the macOS app and sign the Windows executable.
 
 To build and publish a GitHub Release automatically, first commit your changes,
 then run:

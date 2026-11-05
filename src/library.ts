@@ -112,6 +112,15 @@ const prepareGame: PrepareGame = async (game, destination) => {
   ], { timeout: 10 * 60_000, maxBuffer: 1024 * 1024, env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } });
 };
 
+export async function installStarterGame(gamesDir: string, searchDirectories: readonly string[], prepare: PrepareGame = prepareGame): Promise<void> {
+  const starter = GAME_CATALOG.find((game) => game.id === "tw")!;
+  for (const directory of searchDirectories) {
+    const root = path.join(directory, starter.folder);
+    if (isGameRoot(root) || discoverGames(root, []).some((game) => isGameRoot(game.root))) return;
+  }
+  await installGame(starter, gamesDir, prepare);
+}
+
 /** Prepare out of the discovery/watch tree; publish only a complete game and never replace a user's folder. */
 export async function installGame(game: CatalogGame, gamesDir: string, prepare: PrepareGame = prepareGame): Promise<void> {
   if (!game.repository && !game.archive) throw new Error("This game requires a manual download.");

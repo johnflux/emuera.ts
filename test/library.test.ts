@@ -5,9 +5,46 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { runInNewContext } from "node:vm";
-import { downloadedCatalogGames, GAME_CATALOG, installGame } from "../src/library.js";
+import { downloadedCatalogGames, GAME_CATALOG, installGame, installStarterGame, type PrepareGame } from "../src/library.js";
 import { createApp, startServer } from "../src/server.js";
 import { discoverGames, HOTPATCH_ROOT, loadGame } from "../src/loader.js";
+
+test("first launch installs TW adjacent once, keeps AppData installations, and retries failures safely", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "era-starter-"));
+  const adjacent = path.join(root, "adjacent", "GAMES");
+  const appData = path.join(root, "appdata", "GAMES");
+  const starter = GAME_CATALOG.find((game) => game.id === "tw")!;
+  let downloads = 0;
+  const prepare: PrepareGame = async (game, destination) => {
+    downloads++;
+    assert.equal(game.id, "tw");
+    assert.ok(game.archive);
+    await mkdir(path.join(destination, "archive", "ERB"), { recursive: true });
+    await mkdir(path.join(destination, "archive", "CSV"));
+    await writeFile(path.join(destination, "archive", "ERB", "start.erb"), "@SYSTEM_TITLE\nINPUT");
+  };
+  try {
+    await assert.rejects(installStarterGame(adjacent, [adjacent, appData], async () => {
+      throw new Error("Network failure");
+    }), /Network failure/);
+    assert.deepEqual(await readdir(adjacent), []);
+    await installStarterGame(adjacent, [adjacent, appData], prepare);
+    await installStarterGame(adjacent, [adjacent, appData], prepare);
+    assert.equal(downloads, 1);
+    assert.ok((await readdir(path.join(adjacent, starter.folder))).includes("ERB"));
+    await rm(path.join(adjacent, starter.folder), { recursive: true });
+    const existing = path.join(appData, starter.folder, "archive-main");
+    await mkdir(path.join(existing, "ERB"), { recursive: true });
+    await mkdir(path.join(existing, "CSV"));
+    await installStarterGame(adjacent, [adjacent, appData], prepare);
+    assert.equal(downloads, 1);
+    assert.deepEqual(await readdir(adjacent), []);
+    await rm(path.join(appData, starter.folder), { recursive: true });
+    await mkdir(path.join(adjacent, starter.folder));
+    await assert.rejects(installStarterGame(adjacent, [adjacent, appData], prepare), /already exists/);
+    assert.equal(downloads, 1);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
 
 test("library loads and refreshes without the optional starter panel", async () => {
   let tabs: Element[] = [];
