@@ -23,6 +23,7 @@
     "desktop": "npm run build && electron .",
     "dist:mac": "npm run build && electron-builder --mac dmg zip --x64 --arm64",
     "dist:win": "npm run build && electron-builder --win nsis portable --x64",
+    "release": "npm version --message \"Release v%s\n\nCo-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>\"",
     "check": "tsc --noEmit",
     "test": "tsx --test test/*.test.ts",
     "compat": "tsx src/compat.ts",

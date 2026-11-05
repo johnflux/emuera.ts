@@ -53,6 +53,21 @@ each platform on its own OS (macOS for Mac releases and Windows for Windows
 releases). Outputs go to `release/`. For distribution outside personal use,
 sign/notarize the macOS app and sign the Windows installer.
 
+To build and publish a GitHub Release automatically, first commit your changes,
+then run:
+
+```sh
+npm run release -- patch
+git push --follow-tags
+```
+
+Use `minor`, `major`, or an explicit version such as `0.2.0` instead of `patch`
+as needed. The release command updates `package.json` and `package-lock.json`,
+commits them, and creates a matching tag such as `v0.1.1`. It requires a clean
+working tree. Pushing the tag triggers GitHub Actions to build Windows and macOS
+packages and attach them to a GitHub Release. Package filenames use that version.
+The command does not push anything automatically.
+
 To run the desktop app during development, use `npm run desktop`. This builds
 the server and opens the app window.
 
