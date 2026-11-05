@@ -48,7 +48,8 @@ npm run dist:win
 ```
 
 `dist:mac` produces macOS DMG and ZIP packages for the Mac's native architecture;
-`dist:win` produces a Windows installer and portable executable for x64. Build
+`dist:win` produces `Era-<version>-install.exe` and `Era-<version>-portable.exe`
+for Windows x64. Build
 on the target OS and architecture: the graphics libraries need platform-specific
 native bindings, so a Windows package built with Mac dependencies will not run.
 Use `dist:mac:x64` on an Intel Mac or `dist:mac:arm64` on Apple silicon.
