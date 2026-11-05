@@ -20,6 +20,21 @@ import { LLM_REQUEST_BYTES, LlmRequestError, proxyLlm } from "./llm.js";
 
 type BrowserSnapshot = ReturnType<typeof patchTitleImage>;
 
+function libraryDirectories(installDirectory: string, additionalDirectories: readonly string[]): string[] {
+  return [...new Set([installDirectory, ...additionalDirectories].map((directory) => path.resolve(directory)))];
+}
+
+function discoverLibraryGames(directories: readonly string[]) {
+  const games = new Map<string, ReturnType<typeof discoverGames>[number]>();
+  for (const directory of directories) {
+    const known = KNOWN_GAMES.map((game) => ({ ...game, root: path.join(directory, path.relative(GAMES_DIR, game.root)) }));
+    for (const game of discoverGames(directory, known)) {
+      if (isGameRoot(game.root) && !games.has(game.id)) games.set(game.id, game);
+    }
+  }
+  return [...games.values()];
+}
+
 const WEB_ROOT = fileURLToPath(new URL("../web/", import.meta.url));
 /** Drop-in pictures that replace the game's text maps: web/maps/<map key>.(webp|svg|png|jpg) plus optional <key>.json. */
 const MAP_PICTURE = /^([a-z0-9-]+)\.(webp|svg|png|jpg)$/;
@@ -203,8 +218,13 @@ function clientState(value: unknown): ClientState | undefined {
  * Emuera save directory, and its resources/ images are served at /resources/ (the default game) or
  * /games/<id>/resources/.
  */
-export function createApp(games: Game | readonly GameEntry[], development = false, gamesDir = GAMES_DIR) {
+export function createApp(games: Game | readonly GameEntry[], development = false, gamesDir = GAMES_DIR, additionalGamesDirs: readonly string[] = []) {
   gamesDir = path.resolve(gamesDir);
+  const searchDirectories = libraryDirectories(gamesDir, additionalGamesDirs);
+  const libraryDirectoryFor = (root: string) => searchDirectories.find((directory) => {
+    const relative = path.relative(directory, root);
+    return relative !== ".." && !relative.startsWith(".." + path.sep) && !path.isAbsolute(relative);
+  }) ?? gamesDir;
   const list = Array.isArray(games) ? games as readonly GameEntry[] : [{ id: "game", title: "Game", game: games as Game }];
   function register(entry: GameEntry, index: number) {
     const { game } = entry;
@@ -216,7 +236,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
       store: entry.store ?? (saveDirectory ? new FileGlobalStore(path.join(saveDirectory, "global.sav")) : new MemoryGlobalStore()),
       saves: entry.saves ?? (saveDirectory ? new FileSaveStore(saveDirectory, path.join(game.root, "dat")) : new MemorySaveStore()),
       voices: entry.voices ?? (saveDirectory ? new CardVoiceStore(
-        path.join(path.dirname(gamesDir), "character-cards", entry.id),
+        path.join(path.dirname(libraryDirectoryFor(game.root)), "character-cards", entry.id),
         new FileVoiceStore(path.join(saveDirectory, "llm-voices.json")),
       ) : new MemoryVoiceStore()),
       report: undefined as ReturnType<typeof compatibility> | undefined,
@@ -295,10 +315,8 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
   const instance = randomUUID();
   let installing = false;
   async function refreshGames() {
-    const known = KNOWN_GAMES.map((game) => ({ ...game, root: path.join(gamesDir, path.relative(GAMES_DIR, game.root)) }));
-    for (const definition of discoverGames(gamesDir, known)) {
-      if (!isGameRoot(definition.root) || [...entries.values()].some((entry) => entry.game.root === definition.root)) continue;
-      if (entries.has(definition.id)) throw new HttpError(409, `Game id already in use: ${definition.id}`);
+    for (const definition of discoverLibraryGames(searchDirectories)) {
+      if (entries.has(definition.id) || [...entries.values()].some((entry) => entry.game.root === definition.root)) continue;
       const load = async (debug = false) => {
         const game = await loadGame(definition.root, { debug });
         if (definition.hotpatch) await applyHotpatches(game, definition.hotpatch);
@@ -322,11 +340,11 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
       if (request.method === "GET" && url.pathname === "/api/library") {
         json(response, {
           installed: [...entries.values()].map(({ id, title, game }) => {
-            const relative = path.relative(gamesDir, game.root);
+            const relative = path.relative(libraryDirectoryFor(game.root), game.root);
             const catalog = GAME_CATALOG.find((item) => item.id === id || relative.split(path.sep)[0]?.toLowerCase() === item.folder.toLowerCase());
             return { id, title: catalog?.title ?? title, blurb: catalog?.blurb ?? "A locally installed ERB game.", genre: catalog?.genre ?? "Local game", catalogId: catalog?.id, monogram: catalog?.monogram };
           }),
-          downloaded: await downloadedCatalogGames(gamesDir),
+          downloaded: [...new Set((await Promise.all(searchDirectories.map(downloadedCatalogGames))).flat())],
           catalog: GAME_CATALOG,
           catalogUpdated: CATALOG_UPDATED,
         });
@@ -697,11 +715,10 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
     });
   });
 }
-export async function startServer(port = 3003, gamesDir = GAMES_DIR, development = false): Promise<Server> {
+export async function startServer(port = 3003, gamesDir = GAMES_DIR, development = false, additionalGamesDirs: readonly string[] = []): Promise<Server> {
   gamesDir = path.resolve(gamesDir);
-  const known = KNOWN_GAMES.map((game) => ({ ...game, root: path.join(gamesDir, path.relative(GAMES_DIR, game.root)) }));
   const loaded: GameEntry[] = [];
-  for (const definition of discoverGames(gamesDir, known).filter((game) => isGameRoot(game.root))) {
+  for (const definition of discoverLibraryGames(libraryDirectories(gamesDir, additionalGamesDirs))) {
     console.log(`Loading ${definition.title} from ${definition.root} ...`);
     const game = await loadGame(definition.root);
     const patched = definition.hotpatch ? await applyHotpatches(game, definition.hotpatch) : [];
@@ -717,7 +734,7 @@ export async function startServer(port = 3003, gamesDir = GAMES_DIR, development
       },
     });
   }
-  const app = createApp(loaded, development, gamesDir);
+  const app = createApp(loaded, development, gamesDir, additionalGamesDirs);
   await new Promise<void>((resolve, reject) => {
     const onError = (error: Error) => reject(error);
     app.once("error", onError);

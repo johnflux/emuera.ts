@@ -6,7 +6,7 @@ import path from "node:path";
 import { test } from "node:test";
 import { runInNewContext } from "node:vm";
 import { downloadedCatalogGames, GAME_CATALOG, installGame } from "../src/library.js";
-import { createApp } from "../src/server.js";
+import { createApp, startServer } from "../src/server.js";
 import { discoverGames, HOTPATCH_ROOT, loadGame } from "../src/loader.js";
 
 test("library loads and refreshes without the optional starter panel", async () => {
@@ -282,4 +282,64 @@ test("clean distribution discovers TW, K and Rance only after adding their folde
     app.close();
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("desktop libraries discover both locations at startup and refresh, preferring the install location", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "era-library-locations-"));
+  try {
+    for (const portable of [false, true]) {
+      const adjacent = path.join(root, String(portable), "adjacent", "GAMES");
+      const appData = path.join(root, String(portable), "appdata", "GAMES");
+      const primary = portable ? adjacent : appData;
+      const secondary = portable ? appData : adjacent;
+      const fixture = async (directory: string, folder: string, text: string) => {
+        const gameRoot = path.join(directory, folder);
+        await mkdir(path.join(gameRoot, "ERB"), { recursive: true });
+        await mkdir(path.join(gameRoot, "CSV"));
+        await writeFile(path.join(gameRoot, "ERB", "start.erb"), `@SYSTEM_TITLE\nPRINTL ${text}\nINPUT`);
+      };
+      await fixture(primary, "shared", "Primary copy");
+      await fixture(secondary, "shared", "Secondary copy");
+      await fixture(secondary, "eraAS", "Secondary catalog game");
+      await mkdir(path.join(secondary, ".downloads", "erauma"), { recursive: true });
+      const app = await startServer(0, primary, false, [primary, secondary]);
+      try {
+        const address = app.address();
+        assert.ok(address && typeof address !== "string");
+        const base = `http://127.0.0.1:${address.port}`;
+        const library = await (await fetch(base + "/api/library")).json();
+        assert.deepEqual(library.installed.map((game: { id: string }) => game.id), ["shared", "eraas"]);
+        assert.equal(library.installed[1].catalogId, "eraas");
+        assert.deepEqual(library.downloaded, ["erauma"]);
+        for (const [game, text] of [["shared", "Primary copy"], ["eraas", "Secondary catalog game"]]) {
+          const response = await fetch(base + "/api/start", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ mode: "game", game }),
+          });
+          assert.equal(response.status, 200);
+          assert.match(JSON.stringify((await response.json()).output), new RegExp(text!));
+        }
+        const catalogGame = { id: "fixture", title: "Fixture", folder: "downloaded", genre: "Test", blurb: "", source: "", repository: "fixture" };
+        await installGame(catalogGame, primary, async (_game, destination) => {
+          await mkdir(path.join(destination, "ERB"), { recursive: true });
+          await mkdir(path.join(destination, "CSV"));
+          await writeFile(path.join(destination, "ERB", "start.erb"), "@SYSTEM_TITLE\nPRINTL Downloaded\nINPUT");
+        });
+        assert.ok((await readdir(primary)).includes("downloaded"));
+        assert.ok(!(await readdir(secondary)).includes("downloaded"));
+        await fixture(secondary, "manual", "Added after startup");
+        for (let refresh = 0; refresh < 2; refresh++) {
+          const response = await fetch(base + "/api/library/refresh", {
+            method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+          });
+          assert.equal(response.status, 200);
+          const refreshed = await (await fetch(base + "/api/library")).json();
+          assert.deepEqual(refreshed.installed.map((game: { id: string }) => game.id), ["shared", "eraas", "downloaded", "manual"]);
+        }
+      } finally {
+        app.closeAllConnections();
+        await new Promise<void>((resolve, reject) => app.close((error) => error ? reject(error) : resolve()));
+      }
+    }
+  } finally { await rm(root, { recursive: true, force: true }); }
 });

@@ -5,6 +5,7 @@ import path from "node:path";
 
 const require = createRequire(import.meta.url);
 const beforePack = require("../electron/before-pack.cjs");
+const gamePaths = require("../electron/game-paths.cjs");
 const { Arch } = require("electron-builder");
 const appDir = path.resolve(import.meta.dirname, "..");
 
@@ -29,5 +30,23 @@ test("desktop packaging loads the installed native libraries for the host target
     electronPlatformName: process.platform,
     arch: Arch[process.arch],
     packager: { info: { appDir } },
+  });
+});
+
+test("portable games use the original executable directory, not its extraction directory", () => {
+  const userData = path.resolve("appdata");
+  const portableDirectory = path.resolve("usb");
+  assert.deepEqual(gamePaths(userData, path.resolve("temporary", "Era.exe"), portableDirectory), {
+    installDirectory: path.join(portableDirectory, "GAMES"),
+    searchDirectories: [path.join(portableDirectory, "GAMES"), path.join(userData, "GAMES")],
+  });
+});
+
+test("installed games download to AppData and also search beside the executable", () => {
+  const userData = path.resolve("appdata");
+  const executable = path.resolve("installed", "Era.exe");
+  assert.deepEqual(gamePaths(userData, executable, undefined), {
+    installDirectory: path.join(userData, "GAMES"),
+    searchDirectories: [path.join(userData, "GAMES"), path.join(path.dirname(executable), "GAMES")],
   });
 });

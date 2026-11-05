@@ -51,6 +51,7 @@
       "web/**/*",
       "hotpatch/**/*",
       "electron/main.cjs",
+      "electron/game-paths.cjs",
       "package.json",
       "!GAMES/**",
       "!test/**",

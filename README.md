@@ -34,10 +34,14 @@ hint (for example, `400 [Move]`); editing the input hides the hint.
 
 ## Desktop builds
 
-The Electron desktop app bundles the interpreter but not third-party games. It
-stores imported and downloaded games under the operating system's application
-data directory, keeping game files and saves writable and separate from the
-installed app.
+The Electron desktop app bundles the interpreter but not third-party games.
+Both Windows builds look for games in `GAMES/` beside the executable and in the
+app's application-data directory (`%APPDATA%\era-typescript\GAMES` on Windows).
+The portable build downloads games beside the original portable `.exe`, not in
+its temporary extraction folder. Installed builds download games to application
+data, avoiding write-permission issues in Program Files. If the same game is in
+both locations, the download location takes precedence. Refresh the library
+after adding games manually. Saves remain in each game's normal save directory.
 
 Install dependencies with `npm install`, then build on the target operating
 system:

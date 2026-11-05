@@ -1,14 +1,17 @@
 const { app, BrowserWindow, dialog, shell } = require("electron");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
+const gamePaths = require("./game-paths.cjs");
 
 let server;
 let window;
 
 async function createWindow() {
-  const gamesDir = path.join(app.getPath("userData"), "GAMES");
+  const { installDirectory, searchDirectories } = gamePaths(
+    app.getPath("userData"), app.getPath("exe"), process.env.PORTABLE_EXECUTABLE_DIR,
+  );
   const serverModule = await import(pathToFileURL(path.join(app.getAppPath(), "dist", "server.js")).href);
-  server = await serverModule.startServer(0, gamesDir);
+  server = await serverModule.startServer(0, installDirectory, false, searchDirectories);
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("Desktop server did not bind to a TCP port");
 
