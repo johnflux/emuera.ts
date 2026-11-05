@@ -1,6 +1,6 @@
 {
   "name": "era-typescript",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "A browser-based interpreter for Emuera/ERB games.",
   "private": true,
   "type": "module",
