@@ -19,7 +19,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci --include=optional
-      - run: npm run dist:win
+      - run: npm run dist:win -- --publish never
       - name: Check packaged native bindings
         shell: pwsh
         run: |
@@ -52,7 +52,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci --include=optional
-      - run: npm run dist:mac:${{ matrix.arch }}
+      - run: npm run dist:mac:${{ matrix.arch }} -- --publish never
       - name: Check packaged native bindings
         env:
           ELECTRON_RUN_AS_NODE: "1"
