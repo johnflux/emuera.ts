@@ -1567,6 +1567,14 @@ declarations and the expression evaluator. No single routine dominates.
 
 The compatibility inventory tracks recognized opcodes. Runtime support depends
 on their expressions, argument forms, and reachable paths.
+Its **Check syntax** action parses every loaded, active routine, including paths
+not yet played, without executing scripts or changing game state. It checks block
+structure, declarations, parameters, assignments, expressions and FORM text, and
+lists file/line diagnostics. Unsupported instructions are counted separately.
+Results are cached until the game is reloaded. Preprocessor-disabled code is
+excluded, just as it is during play. This is a syntax check, not execution:
+variable types and bounds, missing dynamic call targets, and regex patterns or
+expressions constructed at runtime can still fail while playing.
 For example, this game uses millions of instructions, macros, game-save loading,
 character-management operations, additional engine lifecycle transitions, drawing
 APIs, and extensions that are not implemented yet.

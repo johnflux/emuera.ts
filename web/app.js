@@ -3006,6 +3006,7 @@ document.querySelector("#report").addEventListener("click", async () => {
     return;
   }
   try {
+    const reportGame = runGame;
     const data = await api(`/api/compatibility${runGame ? `?game=${encodeURIComponent(runGame)}` : ""}`);
     report.replaceChildren();
     const heading = document.createElement("h2");
@@ -3029,7 +3030,24 @@ document.querySelector("#report").addEventListener("click", async () => {
     }
     const diagnostics = document.createElement("pre");
     diagnostics.textContent = `Loader diagnostics: ${data.diagnosticCount}\n` + data.diagnostics.map((d) => `${d.file}:${d.line}: ${d.message}`).join("\n");
-    report.append(heading, summary, note, table, diagnostics);
+    const syntaxButton = document.createElement("button");
+    syntaxButton.textContent = "Check syntax";
+    const syntaxResults = document.createElement("pre");
+    syntaxResults.setAttribute("role", "status");
+    syntaxButton.addEventListener("click", async () => {
+      syntaxButton.disabled = true;
+      syntaxResults.textContent = "Checking syntax...";
+      try {
+        const result = await api("/api/compatibility/syntax", reportGame ? { game: reportGame } : {});
+        syntaxResults.textContent = `${result.routines} routines / ${result.lines} lines / ${result.diagnostics.length} errors`
+          + (result.skippedLines ? ` / ${result.skippedLines} unsupported lines not checked` : "")
+          + "\n" + result.diagnostics.map((d) => `${d.file}:${d.line}: ${d.message}`).join("\n");
+      } catch (error) {
+        syntaxResults.textContent = `Syntax check failed: ${error.message}`;
+        message(error.message, true);
+      } finally { syntaxButton.disabled = false; }
+    });
+    report.append(heading, summary, note, syntaxButton, syntaxResults, table, diagnostics);
     showReport(true);
     report.scrollIntoView({ block: "start" });
   } catch (error) { message(error.message, true); }

@@ -23,7 +23,11 @@ const precedence: Record<string, number> = {
 let macros: ReadonlyMap<string, string> = new Map();
 const IDENTIFIER = /^[^ \t\r\n+\-*/%=!<>|&^~?#)}\]\[,:({$\\'"@.;\u3000]+/u;
 /** Activates a game's #DEFINE table; Emuera expands macros only inside expressions. */
-export function useMacros(table: ReadonlyMap<string, string>): void { macros = table; }
+export function useMacros(table: ReadonlyMap<string, string>): ReadonlyMap<string, string> {
+  const previous = macros;
+  macros = table;
+  return previous;
+}
 /** Expand before splitting statement expression arguments, since a macro may supply commas. */
 export function expandArgumentMacros(source: string, table: ReadonlyMap<string, string>, depth = 0): string {
   if (!table.size) return source;

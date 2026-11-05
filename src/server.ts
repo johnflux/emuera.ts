@@ -5,6 +5,7 @@ import { writeSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { compatibility } from "./compatibility.js";
+import { checkSyntax } from "./syntax-check.js";
 import { demoGame } from "./demo.js";
 import { applyHotpatches, displayDefaults, displayMetrics, discoverGames, emptyGame, gameDirectory, GAMES_DIR, KNOWN_GAMES, isGameRoot, loadGame, stillFrame, type DisplaySettings, type Game } from "./loader.js";
 import { CATALOG_UPDATED, downloadedCatalogGames, GAME_CATALOG, installGame } from "./library.js";
@@ -219,6 +220,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
         new FileVoiceStore(path.join(saveDirectory, "llm-voices.json")),
       ) : new MemoryVoiceStore()),
       report: undefined as ReturnType<typeof compatibility> | undefined,
+      syntax: undefined as ReturnType<typeof checkSyntax> | undefined,
       debugGame: undefined as Promise<Game> | undefined,
     };
   }
@@ -367,6 +369,16 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
       if (request.method === "GET" && url.pathname === "/api/compatibility") {
         const entry = entryFor(url.searchParams.get("game"));
         json(response, entry.report ??= compatibility(entry.game));
+        return;
+      }
+      if (request.method === "POST" && url.pathname === "/api/compatibility/syntax") {
+        const data = await body(request);
+        const entry = entryFor(data.game);
+        entry.syntax ??= checkSyntax(entry.game).catch((error: unknown) => {
+          entry.syntax = undefined;
+          throw error;
+        });
+        json(response, await entry.syntax);
         return;
       }
       if (request.method === "POST" && url.pathname === "/api/start") {

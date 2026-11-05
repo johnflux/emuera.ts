@@ -6,6 +6,7 @@ import { readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { allowsFullWidthSpace, characterField, EraError, EVENT_FUNCTIONS, integer, integerLiteral, numericString, INTEGER_LITERAL, key, splitArguments, stripComment, text, type Diagnostic, type Routine, type Source, type Value } from "./model.js";
 import { symbolTable, Variables, type GlobalData, type SaveData } from "./variables.js";
 import { parseFormat } from "./format.js";
+import { formNameEnd, parseAssignment, parseCallTarget, parseCaseTests, type Assignment, type CallTarget, type CaseTest } from "./statement-parser.js";
 import { MemoryGlobalStore, MemorySaveStore, StagedStores, type GlobalStore, type SaveStore } from "./storage.js";
 import { randomInt, randomUUID } from "node:crypto";
 import { escapeHtml, type ColoredText, htmlButtons, htmlLineBreaks, htmlLineCount, htmlSpriteNames, htmlTagSplit, htmlWidth, plainHtml } from "./html.js";
@@ -159,10 +160,6 @@ interface RoutineInfo {
   references: boolean[];
   parameters: { target: Extract<Expr, { kind: "variable" }>; defaultSource: string | undefined }[];
 }
-type CaseTest =
-  | { kind: "range"; from: string; to: string }
-  | { kind: "compare"; op: string; operand: string }
-  | { kind: "value"; source: string };
 function argInt(args: (Value | undefined)[], name: string, i: number): bigint {
   const value = args[i];
   if (value === undefined) throw new EraError(`Missing argument for ${name}`);
@@ -174,8 +171,6 @@ function argText(args: (Value | undefined)[], name: string, i: number): string {
   return text(value);
 }
 interface Evaluators { ev(source: string): Value; num(source: string): bigint; lineNum(instruction: Instruction): bigint }
-interface Assignment { reference: Extract<Expr, { kind: "variable" }>; operator: string; value: string; expressionValue: string }
-interface CallTarget { name: string; parameters: string }
 const NO_VARIABLES: EvaluationContext = {
   get() { throw new EraError("Unexpected variable"); },
   call() { throw new EraError("Unexpected call"); },
@@ -304,20 +299,6 @@ function currentTime(): [bigint, string] {
   const date = `${now.getFullYear()}/${pad(now.getMonth() + 1)}/${pad(now.getDate())}`;
   const time = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
   return [BigInt(`${date}${time}${pad(now.getMilliseconds(), 3)}`.replace(/\D/g, "")), `${date} ${time}`];
-}
-/** End of a CALLFORM-style function name: the first top-level "(" or "," outside %...% and {...}. */
-function formNameEnd(source: string): number {
-  let braces = 0, percent = false, quote = false;
-  for (let i = 0; i < source.length; i++) {
-    const c = source[i]!;
-    if (quote) { if (c === "\\") i++; else if (c === '"') quote = false; continue; }
-    if (c === '"' && (braces || percent)) quote = true;
-    else if (c === "{") braces++;
-    else if (c === "}") braces--;
-    else if (c === "%" && !braces) percent = !percent;
-    else if (!braces && !percent && (c === "(" || c === ",")) return i;
-  }
-  return source.length;
 }
 function optionalInteger(expr: Expr | undefined, fallback: number, context: EvaluationContext): number {
   return expr && expr.kind !== "omitted" ? Number(integer(evaluate(expr, context))) : fallback;
@@ -3217,46 +3198,14 @@ export class Runtime {
   private assignment(source: string): Assignment {
     let assignment = this.assignmentCache.get(source);
     if (assignment) return assignment;
-    const prefix = /^(\+\+|--)\s*(.+)$/.exec(source);
-    if (prefix) {
-      const reference = this.parse(prefix[2]!);
-      if (reference.kind !== "variable") throw new EraError("Invalid assignment target");
-      assignment = { reference, operator: prefix[1]!, value: "", expressionValue: "" };
-      this.assignmentCache.set(source, assignment);
-      return assignment;
-    }
-    // The operator is the first one outside parentheses/strings, so `A:(N++) = X` targets A.
-    let depth = 0, quoted = false, match: RegExpExecArray | null = null, at = 0;
-    for (; at < source.length; at++) {
-      const c = source[at]!;
-      if (quoted) { if (c === "\\") at++; else if (c === '"') quoted = false; continue; }
-      if (c === '"') quoted = true;
-      else if (c === "(") depth++;
-      else if (c === ")") depth--;
-      else if (depth === 0 && (match = (this.fullWidthSpace ? /^(\+\+|--|'=|==|<<=|>>=|[+\-*/%&|^]?=)\s*/ : /^(\+\+|--|'=|==|<<=|>>=|[+\-*/%&|^]?=)[ \t]*/).exec(source.slice(at)))) break;
-    }
-    if (!match) throw new EraError("Invalid assignment");
-    const operator = match[1]!;
-    let target = source.slice(0, at).trim();
-    if (/^(?:<<|>>|[+\-*/%&|^])=$/.test(operator)) target = target.replace(/,$/, "").trimEnd();
-    if (splitArguments(target).length > 1) throw new EraError("Left side of assignment has an extra ','");
-    const reference = this.parse(target);
-    if (reference.kind !== "variable") throw new EraError("Invalid assignment target");
-    const value = source.slice(at + match[0].length);
-    assignment = { reference, operator: operator === "==" ? "=" : operator, value, expressionValue: stripComment(value, this.fullWidthSpace) };
+    assignment = parseAssignment(source, this.fullWidthSpace, (value) => this.parse(value));
     this.assignmentCache.set(source, assignment);
     return assignment;
   }
   private callTarget(source: string): CallTarget | null {
     let target = this.callCache.get(source);
     if (target !== undefined) return target;
-    const match = /^([^\s,(]+)\s*(.*)$/.exec(source);
-    if (match) {
-      let parameters = match[2]!.trim();
-      if (parameters.startsWith("(") && parameters.endsWith(")")) parameters = parameters.slice(1, -1);
-      else parameters = parameters.replace(/^,/, "");
-      target = { name: key(match[1]!), parameters: parameters.trim() };
-    } else target = null;
+    target = parseCallTarget(source);
     this.callCache.set(source, target);
     return target;
   }
@@ -3281,14 +3230,7 @@ export class Runtime {
   private caseTests(source: string): CaseTest[] {
     let tests = this.caseCache.get(source);
     if (tests) return tests;
-    tests = this.arguments(source).filter((part) => part !== "").map((part): CaseTest => {
-      const range = /^(.*?)\s+TO\s+(.*)$/i.exec(part);
-      if (range) return { kind: "range", from: range[1]!, to: range[2]! };
-      // Emuera accepts any binary operator after IS; the case matches when `value op operand` is non-zero.
-      const comparison = /^IS\s*(==|!=|<=|>=|<<|>>|&&|\|\||\^\^|!&|!\||<|>|&|\||\^|\+|-|\*|\/|%)\s*(.*)$/i.exec(part);
-      if (comparison) return { kind: "compare", op: comparison[1]!, operand: comparison[2]! };
-      return { kind: "value", source: part };
-    });
+    tests = parseCaseTests(this.arguments(source));
     this.caseCache.set(source, tests);
     return tests;
   }
