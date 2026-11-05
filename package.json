@@ -1,6 +1,6 @@
 {
   "name": "era-typescript",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A browser-based interpreter for Emuera/ERB games.",
   "private": true,
   "type": "module",
@@ -56,10 +56,16 @@
     ],
     "mac": {
       "category": "public.app-category.games",
-      "target": ["dmg", "zip"]
+      "target": [
+        "dmg",
+        "zip"
+      ]
     },
     "win": {
-      "target": ["nsis", "portable"]
+      "target": [
+        "nsis",
+        "portable"
+      ]
     },
     "nsis": {
       "oneClick": false,
