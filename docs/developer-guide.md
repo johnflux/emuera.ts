@@ -1581,6 +1581,29 @@ Its **Check syntax** action parses every loaded, active routine, including paths
 not yet played, without executing scripts or changing game state. It checks block
 structure, declarations, parameters, assignments, expressions and FORM text, and
 lists file/line diagnostics. Unsupported instructions are counted separately.
+Ignored duplicate routine definitions are marked with an info symbol and counted
+as info rather than errors; calls continue to use the first definition.
+Informational diagnostics are dimmed in both report sections. Unsupported
+`CALLSHARP` entries include the called method name; supported replacements
+remain excluded from the gaps.
+Invalid character CSV integers that use the native fallback value of 1 are also
+informational; numeric overflow remains an error.
+The Wine-verified `native-conformance-fl-syntax.erb` covers eraFL's omitted
+`FOR` start (zero) and statement-form `ENCODETOUNI`, whose argument is FORM
+text, not a string expression. Quotes in that statement are literal; the
+expression function `ENCODETOUNI(...)` still takes a string expression.
+Prefix increments and decrements strip trailing comments from their targets,
+while string assignments continue to preserve literal semicolons.
+The same scan returns a separate `references` list of reference warnings,
+without adding them to the syntax-error count. Variable references recognize
+built-ins, ERH globals, and declarations in the current routine (including
+REF, DYNAMIC and inline declarations); callers' locals and other routines'
+locals are not in scope. CSV/ERD index names and command keywords are not
+treated as variables. Static CALL/JUMP targets and expression function calls
+are checked against loaded routines and built-ins, as appropriate for the
+instruction. Missing optional TRY/FUNC targets are not warned about, and
+generated FORM target names are not resolved. All checks inspect parsed
+expressions without evaluating initializers or executing game code.
 Results are cached until the game is reloaded. Preprocessor-disabled code is
 excluded, just as it is during play. This is a syntax check, not execution:
 variable types and bounds, missing dynamic call targets, and regex patterns or

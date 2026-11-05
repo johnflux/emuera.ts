@@ -1528,7 +1528,7 @@ ENCODETOUNI "AB"
 PRINTFORML {RESULT} {RESULT:1} {RESULT:2}
 QUIT
 `).start();
-  assert.deepEqual(texts(result), ["1 0 1 0", "16711680 -1 66051", "12356 -1 0", "2 65 66"]);
+  assert.deepEqual(texts(result), ["1 0 1 0", "16711680 -1 66051", "12356 -1 0", "4 34 65"]);
 });
 
 test("INRANGEARRAY, INRANGECARRAY and STRJOIN", () => {

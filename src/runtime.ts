@@ -486,7 +486,7 @@ export class Runtime {
     if (options.client) this.setClient(options.client);
     this.display = { ...displayDefaults(game), ...options.display };
     this.style = { color: this.display.foreground, background: this.display.background, alignment: "left", fontStyle: 0 };
-    this.globals = this.createGlobals();
+    this.globals = Runtime.createGlobals(game);
     const stain = game.replacements.get("汚れの初期値");
     this.stainDefault = stain ? stain.split("/").map((n) => /^-?\d+$/.test(n.trim()) ? BigInt(n.trim()) : 0n) : [0n, 0n, 2n, 1n, 8n];
     const maxShopItem = Number(game.replacements.get("販売アイテム数") ?? 100);
@@ -536,8 +536,7 @@ export class Runtime {
       debug: !!game.debug,
     });
   }
-  private createGlobals(): Variables {
-    const game = this.game;
+  static createGlobals(game: Game): Variables {
     const globals = new Variables(game);
     const numeric = ["RESULT", "FLAG", "TFLAG", "GLOBAL", "DAY", "TIME", "MONEY", "ITEM", "TARGET", "MASTER", "PLAYER", "ASSI", "COUNT", ...Array.from("ABCDEFGHIJKLMNOPQRSTUVWXYZ")];
     numeric.forEach((name) => globals.define(name, false, game.variableSizes.get(name) ?? [name === "FLAG" ? 10000 : 1000]));
@@ -646,7 +645,7 @@ export class Runtime {
     this.statics.clear();
     this.contexts = new WeakMap();
     this.evaluatorCache = new WeakMap();
-    this.globals = this.createGlobals();
+    this.globals = Runtime.createGlobals(this.game);
     this.seedDefaults();
     this.maps.clear();
     this.xmlDocuments.clear();
@@ -1932,7 +1931,7 @@ export class Runtime {
     const match = INTEGER_LITERAL.exec(/^[+-]/.test(source) ? source.slice(1) : source);
     if (!match) {
       if (source && !this.game.diagnostics.some((d) => d.file === file && d.message === `Invalid character CSV integer defaults to 1: ${source}`))
-        this.game.diagnostics.push({ file, line: 0, message: `Invalid character CSV integer defaults to 1: ${source}` });
+        this.game.diagnostics.push({ file, line: 0, severity: "info", message: `Invalid character CSV integer defaults to 1: ${source}` });
       return 1n;
     }
     let value: bigint;
@@ -3674,7 +3673,7 @@ export class Runtime {
               state = { variable: this.parse(parts[0]!), end: num(parts[2]!), step: parts[3] ? num(parts[3]) : 1n };
               if (state.step === 0n) throw new EraError("FOR step cannot be zero");
               loopStates.set(pc, state);
-              this.assign(frame, state.variable, num(parts[1]!));
+              this.assign(frame, state.variable, parts[1] ? num(parts[1]) : 0n);
             }
             const value = integer(evaluate(state.variable, frame.context));
             if (state.step > 0n ? value >= state.end : value <= state.end) { loopStates.delete(pc); next = target + 1; }
@@ -4172,7 +4171,7 @@ export class Runtime {
           }
           case "ENCODETOUNI": {
             // RESULT:0 is the UTF-16 length and RESULT:1~ the code points.
-            const source = text(ev(args));
+            const source = this.formatted(args, frame);
             const points = [...source].map((c) => BigInt(c.codePointAt(0)!));
             this.globals.set("RESULT", [], BigInt(source.length), frame.context);
             this.writeArray(this.globals, frame.context, { kind: "variable", name: "RESULT", indices: [literal(1n)] }, points);

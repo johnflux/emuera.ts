@@ -432,7 +432,7 @@ WAIT`).start();
   const game = emptyGame();
   const r = runtime('@SYSTEM_TITLE\nCALLSHARP "plugin"', true, game);
   assert.match(r.start().error?.message ?? "", /native .NET plugin/);
-  assert.deepEqual(compatibility(game).gaps.map((gap) => gap.feature), ["Instruction: CALLSHARP"]);
+  assert.deepEqual(compatibility(game).gaps.map((gap) => gap.feature), ['Instruction: CALLSHARP "plugin"']);
   const mixed = emptyGame();
   indexScript(mixed, `@SYSTEM_TITLE
 CALLSHARP LAUNCH_BROWSER("https://example.com/")
@@ -440,7 +440,7 @@ CALLSHARP FixHTML("text", RESULTS)
 CALLSHARP TranslateDate("text", RESULTS)
 CALLSHARP UnknownPlugin()`, "mixed.ERB");
   assert.deepEqual(compatibility(mixed).gaps.map(({ feature, count }) => ({ feature, count })),
-    [{ feature: "Instruction: CALLSHARP", count: 1 }]);
+    [{ feature: "Instruction: CALLSHARP UnknownPlugin", count: 1 }]);
 });
 
 test("allowlisted CALLSHARP repairs history with writable outputs in interpreted and warmed JIT execution", () => {

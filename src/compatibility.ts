@@ -45,7 +45,7 @@ export function compatibility(game: Game) {
         instructions++;
         // Builtin functions written as statements store their value in RESULT/RESULTS.
         if (op === "ASSIGN" || isSupported(op) || (op === "CALLSHARP" && supportedSharpCall(args)) || (BUILTIN_FUNCTIONS.has(op) && !game.routines.has(op))) supported++;
-        else record(`Instruction: ${op}`, line);
+        else record(`Instruction: ${op}${op === "CALLSHARP" ? ` ${args.split("(")[0]!.trim()}` : ""}`, line);
       }
     }
   }

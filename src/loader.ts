@@ -368,7 +368,7 @@ export function indexScript(game: Game, source: string, file: string, header = f
       const list = game.routines.get(routine.name) ?? [];
       // Like Emuera, a non-event function defined again keeps its first definition; the later one is parsed but unused.
       if (list.length && !EVENT_FUNCTIONS.has(routine.name))
-        game.diagnostics.push({ ...line, message: `Function @${routine.label} is already defined (${list[0]!.file}:${list[0]!.line}); this definition is ignored` });
+        game.diagnostics.push({ ...line, severity: "info", message: `Function @${routine.label} is already defined (${list[0]!.file}:${list[0]!.line}); this definition is ignored` });
       else {
         list.push(routine);
         game.routines.set(routine.name, list);

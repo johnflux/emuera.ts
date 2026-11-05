@@ -3029,7 +3029,16 @@ document.querySelector("#report").addEventListener("click", async () => {
       table.append(row);
     }
     const diagnostics = document.createElement("pre");
-    diagnostics.textContent = `Loader diagnostics: ${data.diagnosticCount}\n` + data.diagnostics.map((d) => `${d.file}:${d.line}: ${d.message}`).join("\n");
+    const renderDiagnostics = (element, summary, items) => {
+      element.textContent = summary;
+      for (const d of items) {
+        const line = document.createElement("span");
+        if (d.severity === "info") line.className = "diagnostic-info";
+        line.textContent = `\n${d.severity === "info" ? "\u2139 " : ""}${d.file}:${d.line}: ${d.message}`;
+        element.append(line);
+      }
+    };
+    renderDiagnostics(diagnostics, `Loader diagnostics: ${data.diagnosticCount}`, data.diagnostics);
     const syntaxButton = document.createElement("button");
     syntaxButton.textContent = "Check syntax";
     const syntaxResults = document.createElement("pre");
@@ -3039,9 +3048,16 @@ document.querySelector("#report").addEventListener("click", async () => {
       syntaxResults.textContent = "Checking syntax...";
       try {
         const result = await api("/api/compatibility/syntax", reportGame ? { game: reportGame } : {});
-        syntaxResults.textContent = `${result.routines} routines / ${result.lines} lines / ${result.diagnostics.length} errors`
-          + (result.skippedLines ? ` / ${result.skippedLines} unsupported lines not checked` : "")
-          + "\n" + result.diagnostics.map((d) => `${d.file}:${d.line}: ${d.message}`).join("\n");
+        const infos = result.diagnostics.filter((d) => d.severity === "info").length;
+        const references = result.references ?? [];
+        const summary = `${result.routines} routines / ${result.lines} lines / ${result.diagnostics.length - infos} errors`
+          + (infos ? ` / ${infos} info` : "")
+          + (references.length ? ` / ${references.length} reference warnings` : "")
+          + (result.skippedLines ? ` / ${result.skippedLines} unsupported lines not checked` : "");
+        renderDiagnostics(syntaxResults, summary, [
+          ...result.diagnostics,
+          ...references.map((d) => ({ ...d, message: `Reference: ${d.message}` })),
+        ]);
       } catch (error) {
         syntaxResults.textContent = `Syntax check failed: ${error.message}`;
         message(error.message, true);

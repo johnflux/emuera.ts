@@ -32,7 +32,7 @@ export interface ExecutionContext {
   deferredEvents: number;
   lastLoadedSlot: string;
 }
-export interface Diagnostic extends Source { message: string; trace?: string[]; context?: ExecutionContext }
+export interface Diagnostic extends Source { message: string; severity?: "info"; trace?: string[]; context?: ExecutionContext }
 export class EraError extends Error {
   /** Calling lines, innermost caller first, recorded as the error unwinds. */
   trace: Source[] = [];

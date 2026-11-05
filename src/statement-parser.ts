@@ -17,7 +17,7 @@ export function statementExpression(source: string, macros?: ReadonlyMap<string,
 export function parseAssignment(source: string, fullWidthSpace: boolean, parse = parseExpression): Assignment {
   const prefix = /^(\+\+|--)\s*(.+)$/.exec(source);
   if (prefix) {
-    const reference = parse(prefix[2]!);
+    const reference = parse(stripComment(prefix[2]!, fullWidthSpace));
     if (reference.kind !== "variable") throw new EraError("Invalid assignment target");
     return { reference, operator: prefix[1]!, value: "", expressionValue: "" };
   }

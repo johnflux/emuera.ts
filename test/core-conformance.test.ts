@@ -49,6 +49,7 @@ for (const jit of [false, true]) {
     ]);
   });
   for (const [fixture, expected] of [
+    ["fl-syntax", ["FORM 2 65 66", "QUOTED 4 34 65 66 34", "LOOP 0", "LOOP 1", "LOOP 2"]],
     ["commas", [
       "SIF TRUE", "ELSEIF TRUE", "LOOP ONCE", "REPEAT ONCE", "SELECT MATCH",
       "NUMBER 10", "STRING [literal]", "FORM [name]", "COMMA [,]", "FUNCTION 17",

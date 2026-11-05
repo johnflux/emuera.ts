@@ -266,7 +266,11 @@ test("erafl new game loads schemas and reaches companion selection with tooltip 
 }, async () => {
   const value = await loadGame(root);
   const gaps = compatibility(value).gaps;
-  assert.deepEqual(gaps.map((gap) => [gap.feature, gap.count]), [["Instruction: CALLSHARP", 3]]);
+  assert.deepEqual(gaps.map((gap) => [gap.feature, gap.count]), [
+    ["Instruction: CALLSHARP CALL_GEMINI", 1],
+    ["Instruction: CALLSHARP CALL_GENERIC_LLM_API", 1],
+    ["Instruction: CALLSHARP CALL_OLLAMA", 1],
+  ]);
   assert.equal(value.config.get("LOADTEXTとSAVETEXTで使える拡張子"), "txt,xml");
   const runtime = new Runtime(value, GAME_INSTRUCTION_LIMIT);
   const title = runtime.start();

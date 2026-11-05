@@ -60,7 +60,8 @@ LOCALS = native %TEXT%
 STR:0 = plain text
 LOCAL '= PAIR
 LOCAL += (3 + 2)
-++LOCAL
+++LOCAL ;刻印数加算
+--LOCAL ; decrement comment
 LOCAL--
 LOCAL:(LOCAL++) = 1
 TIMES LOCAL, 1.25
@@ -106,6 +107,138 @@ test("syntax checks include loader diagnostics and count unsupported lines separ
   assert.equal(result.lines, 2);
   assert.equal(result.diagnostics.length, 2);
   assert.deepEqual(result.diagnostics[0], game.diagnostics[0]);
+});
+
+test("syntax checks accept native eraFL FORM encoding and omitted FOR starts", async () => {
+  const game = emptyGame();
+  indexScript(game, await readFile(new URL("./fixtures/native-conformance-fl-syntax.erb", import.meta.url), "utf8"), "fl-syntax.ERB");
+  assert.deepEqual((await checkSyntax(game)).diagnostics, []);
+});
+
+test("reference checks recognize globals, routine locals, macros and CSV indices without execution", async () => {
+  const game = emptyGame();
+  game.names.set("TALENT", new Map([["NAMED", 1]]));
+  game.names.set("MATRIX@2", new Map([["COLUMN", 1]]));
+  game.names.set("STRNAME", new Map([["SAVED_COMMENT", 1]]));
+  indexScript(game, `#DIM SHARED
+#DIM MATRIX, 2, 2
+#DEFINE SHARED_MACRO SHARED
+`, "global.ERH", true);
+  indexScript(game, `@FIRST(ARG, ARGS)
+#DIM PRIVATE
+#DIMS MESSAGE
+#DIM REF REFERENCE
+#DIM DYNAMIC TEMPORARY
+PRIVATE = SHARED_MACRO + ARG + TALENT:NAMED + MATRIX:0:COLUMN
+REFERENCE:0 = TEMPORARY
+VARI INLINE = PRIVATE
+VARS WORDS = "text"
+MESSAGE = literal UNKNOWN_TEXT %WORDS% {INLINE}
+PRINTFORML {RAND:2} {LINECOUNT} {LASTLOAD_VERSION} {LASTLOAD_NO} %LASTLOAD_TEXT%
+PRINTFORML {__INT_MAX__} {__INT_MIN__} %__FILE__% %__FUNCTION__% {__LINE__} %DRAWLINESTR%
+PRINTFORML {GAMEBASE_GAMECODE}
+PRINTFORML %MONEYLABEL% %STR:SAVED_COMMENT%
+ARRAYSORT MATRIX, BACK
+SORTCHARA NO, FORWARD
+SORTCHARA BACK
+DT_COLUMN_OPTIONS "table", "column", DEFAULT, SHARED
+PRINTFORML {DT_COLUMN_OPTIONS("table", "column", DEFAULT, SHARED)}
+CALL KNOWN
+CALLF MAX(1, 2)
+TRYCALL ABSENT, UNUSED_OPTIONAL_ARGUMENT
+TRYCALLF ABSENT_METHOD(UNUSED_OPTIONAL_ARGUMENT)
+CALLFORM KNOWN
+CALLSHARP UnknownPlugin(SHARED)
+TRYCALLLIST
+FUNC ABSENT
+ENDFUNC
+@KNOWN
+RETURN 0
+`, "first.ERB");
+  assert.deepEqual((await checkSyntax(game)).references, []);
+  indexScript(game, `@SECOND
+PRIVATE = SHARED
+PRINTFORML {MISSING_FUNCTION(MISSING_VARIABLE)}
+CALL MISSING_ROUTINE
+CALLFORM MISSING_FORM_ROUTINE
+CALLF MISSING_METHOD()
+TALENT:UNKNOWN_INDEX = 1
+`, "second.ERB");
+  const report = await checkSyntax(game);
+  assert.deepEqual(report.diagnostics, []);
+  assert.deepEqual(report.references.map((d) => [d.file, d.line, d.message]), [
+    ["second.ERB", 2, "Unknown variable: PRIVATE"],
+    ["second.ERB", 3, "Unknown function: MISSING_FUNCTION"],
+    ["second.ERB", 3, "Unknown variable: MISSING_VARIABLE"],
+    ["second.ERB", 4, "Unknown routine: MISSING_ROUTINE"],
+    ["second.ERB", 5, "Unknown routine: MISSING_FORM_ROUTINE"],
+    ["second.ERB", 6, "Unknown routine: MISSING_METHOD"],
+    ["second.ERB", 7, "Unknown variable: UNKNOWN_INDEX"],
+  ]);
+});
+
+test("reference checks inspect declarations and defaults, deduplicate per line and skip literal/dynamic targets", async () => {
+  const game = emptyGame();
+  indexScript(game, "#DIM GLOBAL_VALUE = UNKNOWN_INITIAL", "globals.ERH", true);
+  indexScript(game, `@CHECK(ARG = UNKNOWN_DEFAULT)
+#DIM LOCAL_VALUE, UNKNOWN_SIZE
+LOCAL_VALUE = UNKNOWN + UNKNOWN
+PRINT literal {UNKNOWN_LITERAL}
+LOCALS = literal UNKNOWN_LITERAL
+CALLFORM OPTIONAL_%LOCALS%
+PRINTFORML {KNOWN(LOCAL_VALUE)}
+RETURN
+@KNOWN(ARG)
+#FUNCTION
+RETURNF ARG
+`, "refs.ERB");
+  const report = await checkSyntax(game);
+  assert.deepEqual(report.diagnostics, []);
+  assert.deepEqual(report.references.map((d) => d.message), [
+    "Unknown variable: UNKNOWN_INITIAL",
+    "Unknown variable: UNKNOWN_DEFAULT",
+    "Unknown variable: UNKNOWN_SIZE",
+    "Unknown variable: UNKNOWN",
+  ]);
+});
+test("ignored duplicate routines are informational and preserve the first definition", async () => {
+  const game = emptyGame();
+  indexScript(game, "@SYSTEM_TITLE\nCALL DUPLICATE\nQUIT\n@DUPLICATE\nPRINTL first\n@DUPLICATE\nTHROW ignored", "duplicates.ERB");
+  const report = await checkSyntax(game);
+  assert.equal(report.diagnostics.length, 1);
+  assert.equal(report.diagnostics[0]!.severity, "info");
+  assert.match(report.diagnostics[0]!.message, /this definition is ignored/);
+  const result = new Runtime(game).start();
+  assert.equal(result.status, "halted");
+  assert.ok(result.output.some((item) => item.text === "first"));
+});
+
+test("relationship hotpatch treats demo-only controls as an optional reference", async () => {
+  const game = emptyGame();
+  indexScript(game, await readFile(new URL("../hotpatch/RELATIONSHIPS.ERB", import.meta.url), "utf8"), "hotpatch/RELATIONSHIPS.ERB");
+  assert.equal(game.routines.has("DEMO_RELATIONSHIP_CONTROLS"), false);
+  const dialog = game.routines.get("HOTPATCH_RELATIONSHIP_DIALOG")![0]!;
+  assert.ok(dialog.lines.some((line) => line.text === "TRYCALL DEMO_RELATIONSHIP_CONTROLS"));
+  const report = await checkSyntax(game);
+  assert.ok(!report.references.some((d) => d.message.includes("DEMO_RELATIONSHIP_CONTROLS")));
+});
+
+test("native character CSV integer fallbacks are informational without hiding fatal numeric errors", async () => {
+  const game = emptyGame();
+  game.characters.set(2, { file: "Chara2.csv", rows: [["NO", "2"], ["CFLAG", "3", ".."]] });
+  indexScript(game, "@SYSTEM_TITLE\nADDCHARA 2\nPRINTFORML {CFLAG:0:3}", "character.ERB");
+  const result = new Runtime(game).start();
+  assert.equal(result.status, "halted");
+  assert.ok(result.output.some((item) => item.text === "1"));
+  const report = await checkSyntax(game);
+  assert.deepEqual(report.diagnostics, [{
+    file: "Chara2.csv", line: 0, severity: "info", message: "Invalid character CSV integer defaults to 1: ..",
+  }]);
+  game.characters.set(2, { file: "Chara2.csv", rows: [["NO", "2"], ["CFLAG", "3", "9223372036854775808"]] });
+  const failed = new Runtime(game).start();
+  assert.equal(failed.status, "error");
+  assert.match(failed.error!.message, /out of range/);
+  assert.notEqual(failed.error!.severity, "info");
 });
 
 test("syntax checks match native comma tolerance but reject missing values and extra left commas", async () => {
@@ -205,7 +338,10 @@ test("compatibility screen runs a game-specific syntax check and exposes results
   const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
   const handler = source.slice(source.indexOf('document.querySelector("#report").addEventListener'), source.indexOf("const library = createLibrary("));
   class Element {
-    textContent = "";
+    private content = "";
+    className = "";
+    get textContent(): string { return this.content + this.children.map((child) => child.textContent).join(""); }
+    set textContent(value: string) { this.content = value; this.children = []; }
     disabled = false;
     hidden = true;
     children: Element[] = [];
@@ -219,6 +355,7 @@ test("compatibility screen runs a game-specific syntax check and exposes results
   const toggle = new Element(), report = new Element();
   let game = "selected", fail = false;
   const calls: unknown[] = [], messages: unknown[] = [];
+  const info = { file: "duplicate.ERB", line: 9, message: "Duplicate definition ignored", severity: "info" };
   runInNewContext(handler, {
     document: { querySelector: () => toggle, createElement: () => new Element() },
     report, get runGame() { return game; }, gameTitle: (id: string) => id,
@@ -227,10 +364,11 @@ test("compatibility screen runs a game-specific syntax check and exposes results
     api: async (url: string, data: unknown) => {
       calls.push([url, data]);
       if (url.startsWith("/api/compatibility?")) return {
-        scriptFiles: 1, functions: 2, csvTables: 0, sprites: 0, note: "", gaps: [], diagnostics: [], diagnosticCount: 0,
+        scriptFiles: 1, functions: 2, csvTables: 0, sprites: 0, note: "", gaps: [], diagnostics: [info], diagnosticCount: 1,
       };
       if (fail) throw new Error("scan unavailable");
-      return { routines: 2, lines: 12, skippedLines: 1, diagnostics: [{ file: "<script>.ERB", line: 8, message: "Expected value" }] };
+      return { routines: 2, lines: 12, skippedLines: 1, diagnostics: [{ file: "<script>.ERB", line: 8, message: "Expected value" }, info],
+        references: [{ file: "refs.ERB", line: 3, message: "Unknown variable: TYPO" }] };
     },
   });
   await toggle.listeners.get("click")!();
@@ -243,8 +381,16 @@ test("compatibility screen runs a game-specific syntax check and exposes results
   await pending;
   assert.equal(button.disabled, false);
   assert.equal(JSON.stringify(calls.at(-1)), JSON.stringify(["/api/compatibility/syntax", { game: "selected" }]));
-  assert.match(result.textContent, /2 routines \/ 12 lines \/ 1 errors \/ 1 unsupported lines not checked/);
+  assert.match(result.textContent, /2 routines \/ 12 lines \/ 1 errors \/ 1 info \/ 1 reference warnings \/ 1 unsupported lines not checked/);
+  assert.match(result.textContent, /refs\.ERB:3: Reference: Unknown variable: TYPO/);
   assert.match(result.textContent, /<script>\.ERB:8: Expected value/);
+  assert.ok(result.textContent.includes("\u2139 duplicate.ERB:9: Duplicate definition ignored"));
+  assert.ok(report.children.at(-1)!.textContent.includes("\u2139 duplicate.ERB:9: Duplicate definition ignored"));
+  assert.equal(result.children[0]!.className, "");
+  assert.equal(result.children[1]!.className, "diagnostic-info");
+  assert.equal(report.children.at(-1)!.children[0]!.className, "diagnostic-info");
+  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  assert.match(css, /#compatibility \.diagnostic-info \{ color: #666; \}/);
   fail = true;
   await button.listeners.get("click")!();
   assert.equal(button.disabled, false);

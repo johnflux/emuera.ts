@@ -53,10 +53,10 @@ RETURN
 #DIM TOTAL, 3
 LOCAL = 1
 TOTAL :LOCAL += 2
-++TOTAL:1
---TOTAL :1
+++TOTAL:1 ; increment comment
+--TOTAL :1 ; decrement comment
 LOCAL :2 = TOTAL :LOCAL
-++LOCAL:2
+++LOCAL:2 ;刻印数加算
 LOCAL :2--
 RETURN LOCAL:2`, "test.ERB");
     assert.deepEqual(compatibility(game).gaps, []);

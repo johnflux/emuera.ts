@@ -363,7 +363,7 @@ class Generator {
         const f = state(k), end = `e${k}`, step = `s${k}`, value = this.temp();
         const stepCode = parts[3] ? `H.int(${this.expr(this.parse(parts[3]))})` : "1n";
         return `${p} if (!${f}) { ${end} = H.int(${this.expr(this.parse(parts[2]!))}); ${step} = ${stepCode}; ` +
-          `if (${step} === 0n) throw new H.EraError("FOR step cannot be zero"); ${f} = true; ${this.write(variable, `H.int(${this.expr(this.parse(parts[1]!))})`)} } ` +
+          `if (${step} === 0n) throw new H.EraError("FOR step cannot be zero"); ${f} = true; ${this.write(variable, parts[1] ? `H.int(${this.expr(this.parse(parts[1]))})` : "0n")} } ` +
           `${value} = H.int(${this.read(variable)}); if (${step} > 0n ? ${value} >= ${end} : ${value} <= ${end}) { ${f} = false; ${jump(target + 1)} }`;
       }
       case "NEXT": case "REND": {
