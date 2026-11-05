@@ -47,10 +47,13 @@ npm run dist:mac
 npm run dist:win
 ```
 
-`dist:mac` produces macOS DMG and ZIP packages for Intel and Apple silicon;
+`dist:mac` produces macOS DMG and ZIP packages for the Mac's native architecture;
 `dist:win` produces a Windows installer and portable executable for x64. Build
-each platform on its own OS (macOS for Mac releases and Windows for Windows
-releases). Outputs go to `release/`. For distribution outside personal use,
+on the target OS and architecture: the graphics libraries need platform-specific
+native bindings, so a Windows package built with Mac dependencies will not run.
+Use `dist:mac:x64` on an Intel Mac or `dist:mac:arm64` on Apple silicon.
+Packaging rejects mismatched targets and checks that the native libraries load.
+Outputs go to `release/`. For distribution outside personal use,
 sign/notarize the macOS app and sign the Windows installer.
 
 To build and publish a GitHub Release automatically, first commit your changes,
@@ -66,6 +69,8 @@ as needed. The release command updates `package.json` and `package-lock.json`,
 commits them, and creates a matching tag such as `v0.1.1`. It requires a clean
 working tree. Pushing the tag triggers GitHub Actions to build Windows and macOS
 packages and attach them to a GitHub Release. Package filenames use that version.
+The workflow uses separate Windows x64, macOS Intel, and macOS Apple-silicon
+runners and checks native bindings inside each packaged app before publishing.
 The command does not push anything automatically.
 
 To run the desktop app during development, use `npm run desktop`. This builds

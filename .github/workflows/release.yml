@@ -18,8 +18,14 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
+      - run: npm ci --include=optional
       - run: npm run dist:win
+      - name: Check packaged native bindings
+        shell: pwsh
+        run: |
+          $env:ELECTRON_RUN_AS_NODE = "1"
+          & "./release/win-unpacked/Era.exe" -e "const {createRequire}=require('node:module'); const r=createRequire(require('node:path').resolve('release/win-unpacked/resources/app.asar/package.json')); r('@napi-rs/canvas'); r('@napi-rs/image'); console.log('Packaged native bindings loaded');"
+          if ($LASTEXITCODE -ne 0) { throw "Packaged native bindings failed to load" }
       - uses: actions/upload-artifact@v4
         with:
           name: windows-release
@@ -29,18 +35,33 @@ jobs:
           if-no-files-found: error
 
   build-macos:
-    runs-on: macos-latest
+    strategy:
+      matrix:
+        include:
+          - runner: macos-15-intel
+            arch: x64
+            output: mac
+          - runner: macos-latest
+            arch: arm64
+            output: mac-arm64
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
-      - run: npm run dist:mac
+      - run: npm ci --include=optional
+      - run: npm run dist:mac:${{ matrix.arch }}
+      - name: Check packaged native bindings
+        env:
+          ELECTRON_RUN_AS_NODE: "1"
+          MAC_OUTPUT: ${{ matrix.output }}
+        run: |
+          "release/$MAC_OUTPUT/Era.app/Contents/MacOS/Era" -e "const {createRequire}=require('node:module'); const r=createRequire(require('node:path').resolve('release',process.env.MAC_OUTPUT,'Era.app/Contents/Resources/app.asar/package.json')); r('@napi-rs/canvas'); r('@napi-rs/image'); console.log('Packaged native bindings loaded');"
       - uses: actions/upload-artifact@v4
         with:
-          name: macos-release
+          name: macos-${{ matrix.arch }}-release
           path: |
             release/*.dmg
             release/*.zip

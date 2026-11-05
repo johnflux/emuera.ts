@@ -21,7 +21,9 @@
     "start": "npm run dev",
     "start:prod": "node dist/server.js",
     "desktop": "npm run build && electron .",
-    "dist:mac": "npm run build && electron-builder --mac dmg zip --x64 --arm64",
+    "dist:mac": "npm run build && electron-builder --mac dmg zip",
+    "dist:mac:x64": "npm run build && electron-builder --mac dmg zip --x64",
+    "dist:mac:arm64": "npm run build && electron-builder --mac dmg zip --arm64",
     "dist:win": "npm run build && electron-builder --win nsis portable --x64",
     "release": "npm version --message \"Release v%s\n\nCo-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>\"",
     "check": "tsc --noEmit",
@@ -43,6 +45,7 @@
     "appId": "org.emuera.era",
     "productName": "Era",
     "asar": true,
+    "beforePack": "electron/before-pack.cjs",
     "files": [
       "dist/**/*",
       "web/**/*",
