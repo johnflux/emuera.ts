@@ -1,4 +1,4 @@
-import { parseExpression, type Expr } from "./expression.js";
+import { expandArgumentMacros, parseExpression, type Expr } from "./expression.js";
 import { EraError, key, splitArguments, stripComment } from "./model.js";
 import { conditionalEnd, quotedEnd } from "./strings.js";
 
@@ -8,6 +8,11 @@ export type CaseTest =
   | { kind: "range"; from: string; to: string }
   | { kind: "compare"; op: string; operand: string }
   | { kind: "value"; source: string };
+
+/** Native single-expression statements tolerate trailing empty arguments; expressions themselves do not. */
+export function statementExpression(source: string, macros?: ReadonlyMap<string, string>): string {
+  return (macros ? expandArgumentMacros(source, macros) : source).replace(/(?:,\s*)+$/, "").trimEnd();
+}
 
 export function parseAssignment(source: string, fullWidthSpace: boolean, parse = parseExpression): Assignment {
   const prefix = /^(\+\+|--)\s*(.+)$/.exec(source);
@@ -29,7 +34,7 @@ export function parseAssignment(source: string, fullWidthSpace: boolean, parse =
   if (!match) throw new EraError("Invalid assignment");
   const operator = match[1]!;
   let target = source.slice(0, at).trim();
-  if (/^(?:<<|>>|[+\-*/%&|^])=$/.test(operator)) target = target.replace(/,$/, "").trimEnd();
+  if (operator.endsWith("=")) target = target.replace(/,$/, "").trimEnd();
   if (splitArguments(target).length > 1) throw new EraError("Left side of assignment has an extra ','");
   const reference = parse(target);
   if (reference.kind !== "variable") throw new EraError("Invalid assignment target");

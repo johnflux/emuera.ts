@@ -49,6 +49,11 @@ for (const jit of [false, true]) {
     ]);
   });
   for (const [fixture, expected] of [
+    ["commas", [
+      "SIF TRUE", "ELSEIF TRUE", "LOOP ONCE", "REPEAT ONCE", "SELECT MATCH",
+      "NUMBER 10", "STRING [literal]", "FORM [name]", "COMMA [,]", "FUNCTION 17",
+      "STRING_VALUE [,]", "BODY 17",
+    ]],
     ["shifts", [
       "CONST 1 2 4 -4", "NEG -9223372036854775808 -1 1",
       "LARGE -9223372036854775808 8", "VAR 2 4", "ASSIGN 6",

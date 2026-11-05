@@ -8,6 +8,7 @@
 import { isPrintData, printVariant, type Compiled, type Instruction } from "./compiler.js";
 import { evaluate, repeatString, type EvaluationContext, type Expr } from "./expression.js";
 import { parseFormat } from "./format.js";
+import { statementExpression } from "./statement-parser.js";
 import { EraError, integer, key, text, type Routine, type Value } from "./model.js";
 import { stringWidth } from "./strings.js";
 import { GENERATION, indexNumber, indexSymbols, locate, readElement, writeElement, type Resolved, type Variables } from "./variables.js";
@@ -302,7 +303,8 @@ class Generator {
     const v = this.temp();
     return `{ ${v} = ${sync ? "H.step(R, F, " + k + ", ST)" : "yield* R.runFrame(F, " + k + ", ST)"}; if (ST.next < 0) return ${v}; if (ST.next !== ${k + 1}) { pc = ST.next; continue; } }`;
   }
-  condition(line: Instruction): string { return `H.int(${this.expr(this.parse(line.args))})`; }
+  statement(source: string): Expr { return this.parse(statementExpression(this.arguments(source).join(","))); }
+  condition(line: Instruction): string { return `H.int(${this.expr(this.statement(line.args))})`; }
   instruction(k: number): string {
     const { code, labels, loops } = this.compiled;
     const line = code[k]!;
@@ -335,7 +337,7 @@ class Generator {
       case "SIF": return `${p} if (${this.condition(line)} === 0n) { ${jump(k + 2)} }`;
       case "SELECTCASE": {
         const value = this.temp();
-        let body = `${p} ${value} = ${this.expr(this.parse(args))};`;
+        let body = `${p} ${value} = ${this.expr(this.statement(args))};`;
         let branch = target;
         while (code[branch]!.op !== "ENDSELECT") {
           const candidate = code[branch]!;
@@ -352,7 +354,7 @@ class Generator {
         return `${body} ${jump(branch + 1)}`;
       }
       case "FOR": case "REPEAT": {
-        const values = this.arguments(args);
+        const values = op === "REPEAT" ? [statementExpression(this.arguments(args).join(","))] : this.arguments(args);
         if (op === "REPEAT" && values.length !== 1) throw new Unsupported();
         const parts = op === "FOR" ? values : ["COUNT", "0", values[0]!];
         if (parts.length < 3 || parts.length > 4) throw new Unsupported();
@@ -407,7 +409,7 @@ class Generator {
       }
       case "RETURNF": {
         let value = "";
-        if (args) { try { value = this.expr(this.parse(args)); } catch { return this.single(k); } }
+        if (args) { try { value = this.expr(this.statement(args)); } catch { return this.single(k); } }
         const v = this.temp();
         return `${p} if (!F.returnType) throw new H.EraError("RETURNF outside an expression function"); ` +
           `${v} = ${value || `F.returnType === "string" ? "" : 0n`}; return F.returnType === "string" ? H.txt(${v}) : H.int(${v});`;

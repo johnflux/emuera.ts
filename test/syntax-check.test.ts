@@ -108,6 +108,25 @@ test("syntax checks include loader diagnostics and count unsupported lines separ
   assert.deepEqual(result.diagnostics[0], game.diagnostics[0]);
 });
 
+test("syntax checks match native comma tolerance but reject missing values and extra left commas", async () => {
+  const game = emptyGame();
+  indexScript(game, await readFile(new URL("./fixtures/native-conformance-commas.erb", import.meta.url), "utf8"), "commas.ERB");
+  assert.deepEqual((await checkSyntax(game)).diagnostics, []);
+  indexScript(game, "@INVALID\n#DIM VALUE\nVALUE ,= ,\nVALUE ,,= 7\nSIF 1 +,\nRETURN", "invalid.ERB");
+  const errors = (await checkSyntax(game)).diagnostics;
+  assert.deepEqual(errors.map((d) => d.line), [3, 4, 5]);
+  assert.match(errors[0]!.message, /Assignment requires a value/);
+  assert.match(errors[1]!.message, /extra ','/);
+  for (const jit of [false, true]) {
+    const invalid = emptyGame();
+    indexScript(invalid, "@SYSTEM_TITLE\n#DIM VALUE\nVALUE ,= ,", "missing.ERB");
+    const result = new Runtime(invalid, { jit }).start();
+    assert.equal(result.status, "error");
+    assert.match(result.error!.message, /Assignment requires a value/);
+  }
+  assert.throws(() => parseExpression("1,"), /Unexpected ','/, "expressions are still strict outside statement argument lists");
+});
+
 test("large concurrent scans yield without leaking game macros into active runtimes", async () => {
   const first = emptyGame(), second = emptyGame();
   first.macros.set("TOKEN", "1");

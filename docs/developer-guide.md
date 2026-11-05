@@ -992,6 +992,16 @@ Emuera 1.824 assembly's `LexicalAnalyzer.ReadString` under Mono, then .NET
 and the local tty parser independently corroborates `\s`, `\S`, and
 unknown-escape handling.
 
+`native-conformance-commas.erb` was run with the standalone Emuera.NET
+1.824+v24+EMv18+EEv56 executable under Wine. Native control-flow statements and
+`RETURNF` accept trailing empty comma arguments. A single comma before `=` is
+also accepted for numeric and string assignments, including FORM text; a comma
+on the right of a plain string assignment is literal text. Negative probes
+confirmed that `VALUE ,= ,` succeeds with `#DIMS VALUE`, but fails for a missing
+numeric value with `#DIM VALUE`, and
+`VALUE ,,= 9` fails for an extra left-hand comma. Expression syntax remains
+strict outside these statement argument forms.
+
 The core conformance fixtures verify native shift-count masking (low six bits,
 including negative counts), inclusive string `CASE ... TO ...` ranges, and
 default built-in array dimensions. `CASE IS` deliberately retains the native

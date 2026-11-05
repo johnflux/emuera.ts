@@ -1717,10 +1717,10 @@ SPRITECREATE "X", 1
 PRINTFORML {RESULT} {SPRITEWIDTH("X")}
 GETCOLOR
 CURRENTREDRAW
-VALUE ,= ,`).start();
+A ,= ,`).start();
   assert.equal(result.status, "error");
   assert.deepEqual(result.output.flatMap((item) => "text" in item ? [item.text] : []).slice(0, 7), ["1", "2", "1", "[pad]", "1", "1", "1 10"]);
-  assert.match(result.error!.message, /extra ','/);
+  assert.match(result.error!.message, /Assignment requires a value/);
 });
 test("GCLEAR accepts only its two- and six-argument forms", () => {
   const result = runtime(`@SYSTEM_TITLE

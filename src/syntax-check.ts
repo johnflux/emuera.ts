@@ -5,7 +5,7 @@ import { parseFormat } from "./format.js";
 import type { Game } from "./loader.js";
 import { allowsFullWidthSpace, EraError, key, splitArguments, type Diagnostic, type Line, type Source } from "./model.js";
 import { BUILTIN_FUNCTIONS } from "./runtime.js";
-import { formNameEnd, parseAssignment, parseCallTarget, parseCaseTests } from "./statement-parser.js";
+import { formNameEnd, parseAssignment, parseCallTarget, parseCaseTests, statementExpression } from "./statement-parser.js";
 
 const RAW = new Set([
   "DATA", "PRINTPLAIN", "CUSTOMDRAWLINE", "STRLEN", "STRLENU", "DEBUGPRINT", "DEBUGPRINTL",
@@ -19,7 +19,7 @@ const FORM = new Set([
   "INPUTS", "ONEINPUTS",
 ]);
 const SINGLE_EXPRESSION = new Set([
-  "IF", "ELSEIF", "SIF", "SELECTCASE", "WHILE", "LOOP", "REPEAT", "ASSERT",
+  "IF", "ELSEIF", "SIF", "SELECTCASE", "WHILE", "LOOP", "REPEAT",
 ]);
 const CALL = /^(?:(?:TRY|TRYC)?(?:CALL|JUMP)(?:FORM)?F?|FUNC)$/;
 const BUILTIN_STRINGS = [
@@ -109,7 +109,11 @@ function checkLine(line: Line, game: Game, strings: Map<string, boolean>): boole
     if (inline.initializer) parseExpression(inline.initializer);
     return true;
   }
-  if (SINGLE_EXPRESSION.has(op)) { parseExpression(args); return true; }
+  if (SINGLE_EXPRESSION.has(op) || op === "RETURNF" && args) {
+    parseExpression(statementExpression(args, game.macros));
+    return true;
+  }
+  if (op === "ASSERT") { parseExpression(args); return true; }
   if (op === "CASE") {
     for (const test of parseCaseTests(argumentsFor(args, game))) {
       if (test.kind === "range") { parseExpression(test.from); parseExpression(test.to); }

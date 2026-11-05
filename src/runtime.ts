@@ -6,7 +6,7 @@ import { readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { allowsFullWidthSpace, characterField, EraError, EVENT_FUNCTIONS, integer, integerLiteral, numericString, INTEGER_LITERAL, key, splitArguments, stripComment, text, type Diagnostic, type Routine, type Source, type Value } from "./model.js";
 import { symbolTable, Variables, type GlobalData, type SaveData } from "./variables.js";
 import { parseFormat } from "./format.js";
-import { formNameEnd, parseAssignment, parseCallTarget, parseCaseTests, type Assignment, type CallTarget, type CaseTest } from "./statement-parser.js";
+import { formNameEnd, parseAssignment, parseCallTarget, parseCaseTests, statementExpression, type Assignment, type CallTarget, type CaseTest } from "./statement-parser.js";
 import { MemoryGlobalStore, MemorySaveStore, StagedStores, type GlobalStore, type SaveStore } from "./storage.js";
 import { randomInt, randomUUID } from "node:crypto";
 import { escapeHtml, type ColoredText, htmlButtons, htmlLineBreaks, htmlLineCount, htmlSpriteNames, htmlTagSplit, htmlWidth, plainHtml } from "./html.js";
@@ -2944,7 +2944,7 @@ export class Runtime {
         this.currentSource = line;
         try {
           if (++this.steps > this.maxSteps) throw new EraError("Instruction limit exceeded between inputs", line);
-          const value = evaluate(line.parsed ??= this.parse(line.args), frame.context);
+          const value = evaluate(line.parsed ??= this.parse(statementExpression(line.args, this.game.macros)), frame.context);
           return frame.returnType === "string" ? text(value) : integer(value);
         } catch (error) {
           if (error instanceof EraError) {
@@ -3534,7 +3534,7 @@ export class Runtime {
       helpers = {
         ev,
         num: (source) => integer(ev(source)),
-        lineNum: (instruction) => integer(evaluate(instruction.parsed ??= this.parse(instruction.args), context)),
+        lineNum: (instruction) => integer(evaluate(instruction.parsed ??= this.parse(statementExpression(instruction.args, this.game.macros)), context)),
       };
       this.evaluatorCache.set(context, helpers);
     }
@@ -3653,7 +3653,7 @@ export class Runtime {
           case "ELSE": case "ELSEIF": next = this.blockEnd(code, pc) + 1; break;
           case "SIF": if (lineNum(line) === 0n) next++; break;
           case "SELECTCASE": {
-            const value = evaluate(line.parsed ??= this.parse(args), frame.context);
+            const value = evaluate(line.parsed ??= this.parse(statementExpression(args, this.game.macros)), frame.context);
             let branch = target;
             while (code[branch]!.op !== "ENDSELECT") {
               const candidate = code[branch]!;
@@ -3665,7 +3665,7 @@ export class Runtime {
           }
           case "CASE": case "CASEELSE": next = this.blockEnd(code, pc) + 1; break;
           case "FOR": case "REPEAT": {
-            const values = this.arguments(args);
+            const values = op === "REPEAT" ? [statementExpression(args, this.game.macros)] : this.arguments(args);
             if (op === "REPEAT" && values.length !== 1) throw new EraError("REPEAT expects a count");
             const parts = op === "FOR" ? values : ["COUNT", "0", values[0]!];
             if (parts.length < 3 || parts.length > 4) throw new EraError("FOR expects variable, start, end[, step]");
@@ -3688,7 +3688,7 @@ export class Runtime {
           }
           case "RETURNF": {
             if (!frame.returnType) throw new EraError("RETURNF outside an expression function");
-            const value = args ? evaluate(line.parsed ??= this.parse(args), frame.context) : frame.returnType === "string" ? "" : 0n;
+            const value = args ? evaluate(line.parsed ??= this.parse(statementExpression(args, this.game.macros)), frame.context) : frame.returnType === "string" ? "" : 0n;
             return frame.returnType === "string" ? text(value) : integer(value);
           }
           case "ARRAYREMOVE": {
@@ -4091,10 +4091,10 @@ export class Runtime {
             yield { output };
             break;
           }
-          case "WHILE": if (num(args) === 0n) next = target + 1; break;
+          case "WHILE": if (lineNum(line) === 0n) next = target + 1; break;
           case "WEND": next = target; break;
           case "DO": break;
-          case "LOOP": if (num(args) !== 0n) next = target; break;
+          case "LOOP": if (lineNum(line) !== 0n) next = target; break;
           case "BREAK": case "CONTINUE": {
             const loop = loops.filter((loop) => loop.start < pc && loop.end > pc).sort((a, b) => b.start - a.start)[0];
             if (!loop) throw new EraError(`${op} outside a loop`);
