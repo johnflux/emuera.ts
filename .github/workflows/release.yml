@@ -24,8 +24,9 @@ jobs:
         shell: pwsh
         run: |
           $env:ELECTRON_RUN_AS_NODE = "1"
-          & "./release/win-unpacked/Era.exe" -e "const {createRequire}=require('node:module'); const r=createRequire(require('node:path').resolve('release/win-unpacked/resources/app.asar/package.json')); r('@napi-rs/canvas'); r('@napi-rs/image'); console.log('Packaged native bindings loaded');"
-          if ($LASTEXITCODE -ne 0) { throw "Packaged native bindings failed to load" }
+          $check = "const {createRequire}=require('node:module'); const r=createRequire(require('node:path').resolve('release/win-unpacked/resources/app.asar/package.json')); r('@napi-rs/canvas'); r('@napi-rs/image'); console.log('Packaged native bindings loaded');"
+          $process = Start-Process -FilePath "./release/win-unpacked/Era.exe" -ArgumentList @("-e", "`"$check`"") -NoNewWindow -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "Packaged native bindings failed to load (exit code $($process.ExitCode))" }
       - uses: actions/upload-artifact@v4
         with:
           name: windows-release
