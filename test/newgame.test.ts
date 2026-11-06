@@ -205,9 +205,9 @@ PRINTFORML [{7,3}] [%@"日",4,LEFT%] %TOSTR(255,"X6")%
 PRINTFORML {GROUPMATCH(2,1,2,2)} {INRANGE(4,1,5)} {ISNUMERIC("42")}
 PRINTFORML %HTML_ESCAPE("<tag>")% %TOUPPER("test")%
 PRINTFORML {RAND:1}
+PRINTFORML {RAND:0} {RAND:-5}
 REDRAW 0
 PRINTFORML {CURRENTREDRAW()}`,
   "", (game) => game.renames.set("VALUE", "4"));
-  assert.deepEqual(printed(result), ["1 0 1", "[  7] [日  ] 0000FF", "2 1 1", "&lt;tag&gt; TEST", "0", "0"]);
-  assert.equal(run("@SYSTEM_TITLE\nA=RAND:0").status, "error");
+  assert.deepEqual(printed(result), ["1 0 1", "[  7] [日  ] 0000FF", "2 1 1", "&lt;tag&gt; TEST", "0", "0 0", "0"]);
 });

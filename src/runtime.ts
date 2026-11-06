@@ -1823,7 +1823,7 @@ export class Runtime {
   // Character list operations follow uEmuera's VariableEvaluator; only PICKUPCHARA remaps TARGET/ASSI/MASTER.
   /** Uniform integer in [0, bound) from a seedable SplitMix64 stream (RANDOMIZE/DUMPRAND/INITRAND). */
   private random(bound: bigint): bigint {
-    if (bound <= 0n) throw new EraError("Random bound must be positive");
+    if (bound <= 0n) return 0n;
     const limit = (1n << 64n) - (1n << 64n) % bound;
     for (;;) {
       this.randomState = BigInt.asUintN(64, this.randomState + 0x9e3779b97f4a7c15n);
@@ -1973,10 +1973,9 @@ export class Runtime {
           if (version && version !== "proto" && !/^-?\d+$/.test(version)) throw new EraError(`Non-numeric GameBase version is not yet supported: ${version}`);
         }
         if (name === "RAND") {
-          if (indices.length !== 1) throw new EraError("RAND expects one positive bound");
+          if (indices.length !== 1) throw new EraError("RAND expects one bound");
           const bound = integer(evaluate(indices[0]!, context));
-          if (bound <= 0n) throw new EraError("RAND bound must be a positive integer");
-          return this.random(bound);
+          return bound <= 0n ? 0n : this.random(bound);
         }
         return variables.get(name, indices, context);
       },

@@ -1326,7 +1326,8 @@ declarations and the expression evaluator. No single routine dominates.
   `_Rename.csv` substitutions are applied before script indexing.
 - Character CSV queries (`EXISTCSV`, `CSVNAME`, `CSVCALLNAME`, `CSVNICKNAME`,
   `CSVMASTERNAME`, `CSVBASE`, `CSVABL`, `CSVTALENT`, `CSVEXP`, `CSVRELATION`,
-  `CSVFLAG`, `CSVCFLAG`, `CSVMARK`, `CSVJUEL`, `CSVEQUIP`, `CSVCSTR`), bounded `RAND:n`,
+  `CSVFLAG`, `CSVCFLAG`, `CSVMARK`, `CSVJUEL`, `CSVEQUIP`, `CSVCSTR`), bounded `RAND:n`
+  (non-positive bounds return 0),
   `FINDELEMENT`, `ARRAYREMOVE`, bit manipulation, FORM field padding,
   hexadecimal `TOSTR`, Unicode/string/HTML helpers support new-game setup.
   Character CSV numeric fields follow Emuera's leading-integer parsing, allowing
