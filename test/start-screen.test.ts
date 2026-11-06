@@ -59,15 +59,16 @@ QUIT`, "TEST_BODY_BULK_FEEDBACK.ERB");
   const saves = new MemorySaveStore();
   const runtime = new Runtime(game, GAME_INSTRUCTION_LIMIT, { columns: 180, saves });
   const title = runtime.start();
+  assert.deepEqual(title.input?.buttonValues, ["0", "1"]);
   assert.match(markup(title), /era-launch-version/);
   assert.doesNotMatch(markup(title), /era-launch-title|eraThe World AnonTW/);
   assert.match(markup(title), /era-launch-art/);
   assert.equal(patchTitleImage(game, title).output.filter((item) => item.type === "title-image").length, 1,
     "the launch screen retains the complete original TW artwork as one cropped image");
   assert.match(markup(runtime.input("1")), /era-dialog era-load/);
-  assert.match(markup(runtime.input("1002")), /Page 2 \/ 10/);
-  assert.match(markup(runtime.input("1000")), /Page 1 \/ 10/);
-  assert.match(markup(runtime.input("0")), /era-save-empty/);
+  assert.match(markup(runtime.input("1002")), /Page 2 \/ 20/);
+  assert.match(markup(runtime.input("1000")), /Page 1 \/ 20/);
+  assert.throws(() => runtime.input("0"), /displayed button/, "empty slots are not selectable");
   assert.match(markup(runtime.input("999")), /era-launch-version/);
   const initialSetup = markup(runtime.input("0"));
   assert.match(initialSetup, /era-dialog era-setup/);
@@ -390,11 +391,42 @@ QUIT`, "TEST_BODY_BULK_FEEDBACK.ERB");
   const resumed = new Runtime(game, GAME_INSTRUCTION_LIMIT, { columns: 180, saves });
   resumed.start();
   const picker = markup(resumed.input("1"));
+  assert.equal((picker.match(/class='era-save-(?:slot|slot era-save-empty)'/g) ?? []).length, 10);
   assert.match(picker, /value='0' class='era-save-slot'/);
   assert.doesNotMatch(picker, /Select slot to save|Overwrite/);
   const loaded = settle(resumed, resumed.input("0"));
   assert.equal(loaded.error, null, JSON.stringify(loaded.error));
   assert.doesNotMatch(markup(loaded), /era-dialog era-load/, "selecting a native save leaves the picker");
+
+  indexScript(game, `@TEST_SAVE_PICKER
+CALL ADDCHARA_INIT(0)
+CALL LOAD_SAVE(1)
+INPUTS
+QUIT`, "TEST_SAVE_PICKER.ERB");
+  const saving = new Runtime(game, GAME_INSTRUCTION_LIMIT, { columns: 180, saves });
+  let savePicker = saving.start("TEST_SAVE_PICKER");
+  assert.match(markup(savePicker), /Save game/);
+  assert.equal(savePicker.input?.buttonValues?.filter((value) => Number(value) < 200).length, 10);
+  assert.match(markup(saving.input("1002")), /Page 2 \/ 20/);
+  assert.match(markup(saving.input("1000")), /Page 1 \/ 20/);
+  assert.match(markup(saving.input("0")), /Overwrite this save/);
+  assert.match(markup(saving.input("1")), /Save game/);
+  assert.match(markup(saving.input("998")), /Delete save/);
+  assert.match(markup(saving.input("0")), /Delete this save/);
+  assert.match(markup(saving.input("1")), /Delete save/);
+  assert.ok(saves.read("save00.sav"), "canceling delete preserves the save");
+  assert.match(markup(saving.input("997")), /Save game/);
+  savePicker = settle(saving, saving.input("9"));
+  assert.equal(savePicker.error, null, JSON.stringify(savePicker.error));
+  assert.equal(savePicker.input?.kind, "string", "saving an empty slot exits the picker");
+  assert.ok(saves.read("save09.sav"), "the selected empty slot is written");
+  const deleting = new Runtime(game, GAME_INSTRUCTION_LIMIT, { columns: 180, saves });
+  deleting.start("TEST_SAVE_PICKER");
+  assert.match(markup(deleting.input("998")), /Delete save/);
+  assert.match(markup(deleting.input("9")), /Delete this save/);
+  assert.match(markup(settle(deleting, deleting.input("0"))), /Delete save/);
+  assert.equal(saves.read("save09.sav"), null, "confirmed deletion removes only the selected slot");
+  assert.ok(saves.read("save00.sav"), "other slots are preserved");
 
   const configured = new Runtime(game, GAME_INSTRUCTION_LIMIT, { columns: 180 });
   configured.start();

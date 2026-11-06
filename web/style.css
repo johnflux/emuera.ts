@@ -208,6 +208,14 @@ a { color: #8ddaff; }
 .controller-menu-actions { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
 .controller-menu-actions button { min-height: 48px; font-size: 20px; text-align: center; border-radius: 6px; }
 .has-controller .screen.is-active button.era-timestop-button:enabled:not(.is-stale)::after { content: "Y"; position: absolute; top: -.4em; right: -.4em; display: grid; place-items: center; width: 1.4em; height: 1.4em; border: 1px solid #e8c85b; border-radius: 50%; background: #171923; color: #ffe083; font: bold 12px system-ui, sans-serif; pointer-events: none; }
+.has-controller :is(dialog[open], .screen.is-active .era-dialog:popover-open) :is(button:enabled, a[href], input[type="checkbox"]:enabled, input[type="radio"]:enabled):focus { outline: 2px solid #8ddaff; outline-offset: 2px; }
+.has-controller :is(dialog[open], .screen.is-active .era-dialog:popover-open) :is(button:enabled, a[href]):focus:not([data-controller-hint]):not(.era-dialog-close) { position: relative; }
+.has-controller :is(dialog[open], .screen.is-active .era-dialog:popover-open) :is(button:enabled, a[href]):focus:not([data-controller-hint]):not(.era-dialog-close)::after,
+.has-controller :is(dialog[open], .screen.is-active .era-dialog:popover-open) :is(button[data-controller-hint]:enabled, button.era-dialog-close:enabled)::after {
+  content: "A"; display: inline-grid; place-items: center; width: 1.4em; height: 1.4em; margin-left: .5em; border: 1px solid #8ed7a7; border-radius: 50%; color: #a4efbb; font: bold 12px system-ui, sans-serif; vertical-align: middle; pointer-events: none;
+}
+.has-controller :is(dialog[open], .screen.is-active .era-dialog:popover-open) :is(button[data-controller-hint="B"]:enabled, button.era-dialog-close:enabled)::after { content: "B"; border-color: #e89a96; color: #ffb8b2; }
+.has-controller :is(dialog[open], .screen.is-active .era-dialog:popover-open) :is(button:enabled, a[href]):focus:not([data-controller-hint]):not(.era-dialog-close)::after { position: absolute; top: -.5em; right: -.5em; margin: 0; background: #101923; }
 #demo-tools { flex-shrink: 0; padding: 8px 56px 8px 12px; }
 #demo-tools[hidden] { display: none; }
 #settings h2 { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; color: #e9f5f7; font-size: 17px; letter-spacing: .03em; }
@@ -224,6 +232,7 @@ a { color: #8ddaff; }
 #settings-reset:hover:enabled, #settings-reset:focus-visible { border-color: #69c9b5; background: #183a43; color: #d7f4ed; }
 #input-form { order: 1; flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding: 0 10px; font-size: var(--font-size); line-height: var(--line-height, 1.25); }
 #input-form[hidden] { display: none; }
+main:has(> #terminal.is-waiting):not(:has(.screen.is-active :is(.era-main, .era-shop, .era-dialog, .era-launch))) > #input-form[hidden] { display: flex; visibility: hidden; }
 .command-field { position: relative; flex: 1; min-width: 0; }
 #command { display: block; width: 100%; min-width: 0; background: transparent; border: 0; padding: 0; line-height: inherit; outline: none; }
 .command-hint-overlay { position: absolute; inset: 0; display: flex; align-items: center; overflow: hidden; white-space: pre; pointer-events: none; user-select: none; }
@@ -1053,7 +1062,7 @@ main:has(.screen.is-active .era-launch) { padding: 0; background: #000; }
 .era-launch-art { display: flex; flex: none; flex-direction: column; justify-content: center; padding: 0 12px 10px; }
 .era-launch-art .title-image { width: min(100%, var(--era-title-width)); margin: 0 auto; }
 .era-launch-art .title-image .sprite { display: block; }
-.era-launch-version { position: absolute; top: 0; right: 0; max-width: 100%; padding: 8px 14px; background: #000; color: #8a9c92; font-size: min(.75em, 3dvh); text-align: right; overflow-wrap: anywhere; }
+.era-launch-version { position: absolute; top: 0; right: 41px; max-width: calc(100% - 41px); padding: 8px 14px; background: #000; color: #8a9c92; font-size: min(.75em, 3dvh); text-align: right; overflow-wrap: anywhere; }
 .era-launch-eyebrow { display: block; margin-bottom: 6px; color: #63d3f6; font-size: .75em; letter-spacing: .12em; }
 .era-launch-actions { display: flex; flex-direction: column; width: min(calc(100% - 24px), calc(var(--era-title-width) * .75)); margin: 0 auto; padding: 0 0 12px; }
 .era-setup .line button.choice.era-launch-primary { padding: 9px 22px; border: 1px solid #4bb9b4; border-radius: 6px; background: linear-gradient(135deg, #163d42, #16303a); color: #b6f3e7; }
@@ -1340,6 +1349,7 @@ main:has(.screen.is-active .era-launch) { padding: 0; background: #000; }
 .era-room-stage .line button.choice.era-occupant-label { padding: 1px 4px; border: 0; border-radius: 0; background: transparent; text-shadow: 0 1px 3px #000, 0 0 5px #000; }
 .screen.is-active .era-room-stage .line button.choice.era-occupant-label:enabled:is(:hover, :focus-visible) { background: transparent; text-decoration: underline; }
 .era-room-stage .era-occupant-state { color: #c1ccd3; text-shadow: 0 1px 3px #000, 0 0 5px #000; }
+.era-room-stage .era-occupant .era-occupant-text .era-occupant-name { color: #fff; text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 2px 3px #000; }
 .era-room-stage .era-occupant:has(.era-portrait) { flex-basis: auto; min-width: 180px; width: max-content; }
 .era-room-stage .era-occupant-caged { flex-basis: 110px; gap: 6px; padding-bottom: 5px; font-size: .85em; }
 .era-room-stage .era-occupant-caged > .era-occupant-text { position: static; }
@@ -1527,6 +1537,7 @@ main:has(.screen.is-active .era-launch) { padding: 0; background: #000; }
 .era-actions-group > .line > span:has(> .era-actions-title) { flex-basis: 100%; }
 .era-actions-title { color: #8a949c; font-size: .85em; text-transform: uppercase; letter-spacing: .06em; }
 .era-actions-group :is(.print-cell, .era-guard-control) { position: relative; white-space: normal; padding: 2px 10px; border: 1px solid #333c44; border-radius: 8px; background: #182027; }
+.era-actions-group :is(.print-cell, .era-guard-control) .choice { vertical-align: middle; }
 .era-actions-group .print-cell .choice { margin-left: .75ch; color: #6c7780 !important; font-size: .8em; }
 .era-actions-group .print-cell .choice::after { content: ""; position: absolute; inset: 0; }
 .era-actions-group .print-cell .interactive-label { text-decoration-line: none; }

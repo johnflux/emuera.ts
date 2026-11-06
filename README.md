@@ -138,6 +138,21 @@ variables; no launch options or Steamworks integration are needed.
 Desktop windows fit the display's available area, including the Deck's
 1280 x 800 screen. During gameplay at viewport heights of 800 px or less, the
 header is hidden and a floating burger button keeps the menu accessible.
+Errors appear in a bar at the top, beside the menu button.
+Handheld gameplay removes bottom panel padding and keeps the command row compact.
+Button-only GUI dialogs hide the command row entirely; inline setup fields remain
+editable, and separate text or numeric-amount prompts still show the command row.
+Main gameplay and the home/shop screen hide the command row, as do
+click-to-continue pauses. Text-only pauses retain the invisible row's spacing,
+while GUI screens collapse it. Click or press Enter to continue during pauses.
+Small-screen and handheld layouts hide the inline interaction history, use smaller
+watch-button text, and keep action headings inline to save space.
+Number-hidden action tiles retain a 36 px minimum height with centered labels.
+At handheld widths of at least 1000 px, the home/shop screen is bounded to the
+viewport and long panels scroll independently. Setup and character-sheet tabs
+keep focus when their contents redraw.
+The room panel uses content height in compact layouts; occupant names are white
+with a dark outline for contrast over portraits.
 The library retains its header. The menu stays within the viewport and scrolls
 when needed; **Game library** remains available there.
 
@@ -148,9 +163,22 @@ or the device reports touch support or a coarse pointer. Other devices,
 including non-touch Macs, can enable it manually. The toggle is saved
 and overrides the automatic default without changing your normal font setting.
 
-At viewport widths of 1280 px or less, or when a touch pointer is available,
+In handheld layout, at viewport sizes of 1280 x 800 px or less, or when a touch pointer is available,
 named game buttons hide their bracketed command numbers. Number-only buttons
 remain visible; command values and typed-input history are unchanged.
+In handheld mode or with touch input, Up/Down in the command field move focus
+instead of recalling typed-input history.
+When a command-number button has a separate tile label, its hidden-number control
+covers the whole tile without leaving a blank gap or a separate focus outline.
+In every layout, keyboard focus outlines only the labeled tile, not its inner
+command-number button.
+The Load game dialog initially focuses the first selectable save on the page,
+or Close if the page has no saves.
+Load, save, and delete use 10 manual slots per page (20 pages), with autosave
+available separately. Previous/Next retain focus after paging; L1/R1 page backward
+and forward with controller hints. Compact GUI screens remove outer gutters.
+When a separate text or amount prompt appears, focus moves into its input field.
+Handheld relationship actions use uniform-height buttons with one clear focus ring.
 
 Keyboard navigation works on every platform, so it can be tested on a Mac:
 
@@ -182,6 +210,10 @@ menu for keyboard testing (some Macs need Fn+F10). Press Menu/Start again or
 Escape to close it. While a dialog is open, the controller D-pad navigates,
 A confirms a focused button, and B goes back. These bindings also work in
 Settings and confirmation dialogs; editable fields keep their native behavior.
+Game dialogs such as Inventory, Calendar, character sheets, and new-game setup
+also accept direct D-pad/A/B input. Controller hints show **B** on Close/Cancel
+and **A** on the focused button or link: A activates that focused control, not
+an unfocused Save/Accept button. Checkboxes can also be toggled with A.
 With a standard-mapped controller connected, **Y** activates **Wake Up** or
 **Time Stop / Resume**, whichever is available on the current screen. A circular
 **Y** hint appears on that button. Holding Y does not repeat the action; release
@@ -198,6 +230,17 @@ saved and only affects hints, not controller input. F10 remains available for
 testing the centered menu. Handheld Settings uses a compact two-column layout
 to fit the Steam Deck's 1280×800 screen without scrolling; smaller screens can
 still scroll to keep every setting accessible.
+Handheld layouts also compact the library cards, artwork and translation
+dialogs, character-sheet gauges, and movement maps. Long inventories, character
+lists, and history still scroll inside their panels; headers and close controls
+remain accessible. Text maps use smaller map glyphs while their destination
+list retains normal-sized controls.
+
+LLM configuration is unavailable when the viewport is both at most 1280 pixels
+wide and at most 800 pixels high, regardless of handheld layout. Its Settings
+and chat configuration buttons are hidden, and resizing an open configuration
+dialog down to that size closes it without saving. Larger screens retain the
+full configuration form.
 Restart, Library, and Exit retain unsaved-progress confirmations. Exit quits
 the desktop app and is disabled with an explanation in browser builds.
 The STEAM and “…” buttons remain reserved for Steam. A Steam Input layout that

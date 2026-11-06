@@ -20,6 +20,10 @@ export function decorateCommandNumbers(element) {
   const markers = [...text.matchAll(/\[\s*(-?\d+)\s*\]/g)].filter((match) => BigInt(match[1]) === BigInt(value));
   const label = element.closest(".print-cell, .era-guard-control")?.textContent ?? text;
   if (!markers.length || !label.replace(/\[\s*-?\d+\s*\]/g, "").trim()) return;
+  if (!text.replace(/\[\s*-?\d+\s*\]/g, "").trim()) {
+    element.classList.add("command-number-only");
+    element.setAttribute("aria-label", label.replace(/\[\s*-?\d+\s*\]/g, "").trim());
+  }
   const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
   const nodes = [];
   let offset = 0;
@@ -103,6 +107,10 @@ export function directionalTarget(rects, current, key) {
 
 export function setupKeyboardNavigation({ terminal, command, canNavigate }) {
   let usingChoices = false;
+  let inputWasHidden = null;
+  let pageAction = null;
+  const tabGroups = [".era-start-tabs", ".era-player-tabs", ".era-sheet-pages", ".era-sheet-subpages"];
+  let tabAction = null;
   function activeDialog() {
     return document.activeElement?.closest("dialog[open]") ?? document.querySelector("dialog[open]");
   }
@@ -122,6 +130,13 @@ export function setupKeyboardNavigation({ terminal, command, canNavigate }) {
     });
   }
   document.addEventListener("pointerdown", () => { usingChoices = false; }, true);
+  document.addEventListener("click", (event) => {
+    const page = event.target.closest(".era-page-prev, .era-page-next");
+    pageAction = page ? page.matches(".era-page-prev") ? ".era-page-prev" : ".era-page-next" : null;
+    const tab = event.target.closest("button[data-value]");
+    const group = tab && tabGroups.find((selector) => tab.closest(selector));
+    tabAction = group ? { group, value: tab.dataset.value } : null;
+  }, true);
   document.addEventListener("focusin", (event) => {
     if (event.target.closest(EDITABLE)) usingChoices = false;
   });
@@ -141,10 +156,12 @@ export function setupKeyboardNavigation({ terminal, command, canNavigate }) {
       }
       return;
     }
-    const touchCommand = target === command && touchInput()
+    const touchCommand = target === command && (touchInput() || document.body.classList.contains("is-handheld"))
       && (event.key === "ArrowUp" || event.key === "ArrowDown");
     if (!["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key)
       || target.closest(EDITABLE) && !touchCommand || target.closest("[role=tablist]")) return;
+    pageAction = null;
+    tabAction = null;
     const root = scope();
     if (!root || root.closest("#terminal") && !canNavigate()) return;
     const items = controls(root);
@@ -162,8 +179,15 @@ export function setupKeyboardNavigation({ terminal, command, canNavigate }) {
   return {
     focusInput() {
       if (activeDialog()) return;
-      const next = usingChoices ? controls(scope())[0] : null;
-      (next ?? command).focus({ preventScroll: true });
+      const hiddenInput = command.closest("[hidden]") !== null;
+      const inputAppeared = inputWasHidden === true && !hiddenInput;
+      inputWasHidden = hiddenInput;
+      if (inputAppeared) usingChoices = false;
+      const items = usingChoices || hiddenInput ? controls(scope()) : [];
+      const next = items.find((element) => pageAction && element.matches(pageAction))
+        ?? items.find((element) => tabAction && element.closest(tabAction.group) && element.dataset.value === tabAction.value)
+        ?? items.find((element) => element.matches(".era-load .era-save-slot")) ?? items[0];
+      (next ?? (hiddenInput ? terminal : command)).focus({ preventScroll: true });
     },
   };
 }

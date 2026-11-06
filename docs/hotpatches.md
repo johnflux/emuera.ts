@@ -7,6 +7,26 @@ Unlike [game patches](game-patches.md), which fix genuine bugs in the game, a
 hotpatch normally only changes presentation. `INTIMACY_COMMANDS.ERB` and
 `RELATIONSHIPS.ERB` also make deliberate gameplay changes.
 
+## GUI input
+
+Choice-only title/load/save/delete, predefined-character, Inventory, Calendar, character-sheet,
+and relationship dialogs use `BINPUT`. The runtime supplies `buttonValues` and
+rejects values not in the displayed choices; the browser hides the bottom command
+bar for these requests and focuses a visible control instead.
+
+The save picker uses 10 manual slots per page plus autosave, keeping all 200 manual
+slots accessible. `GLOBAL:999` retains its native 20-slot page meaning; the picker
+maps it to two smaller pages. Save overwrite and delete require confirmation.
+Title-side loading cannot switch to save/delete modes. Paging controls carry
+`era-page-prev`/`era-page-next` classes for focus restoration and L1/R1 shortcuts.
+
+New-game setup keeps `INPUT` because its inline name and number fields submit
+values that are not button choices. Its bottom command bar is hidden only while
+the latest output is inside the main setup dialog. Separate name/amount prompts,
+including legacy editors, keep the command bar. Movement maps retain their
+mixed string commands and timed refresh input. Do not blanket-replace `INPUT`
+or `TINPUT` in these mixed-input flows.
+
 ## Relationships
 
 ### Friendship

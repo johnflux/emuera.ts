@@ -260,6 +260,7 @@ export function renderCharacterHistory(parent, history, { loadAll, embedded = fa
       const tabs = text("div", "", header, "era-history-tabs");
       const close = text("button", "Close", header);
       close.type = "button";
+      close.setAttribute("data-controller-hint", "B");
       const pane = text("div", "", dialog, "era-history-pane");
       const content = text("div", "Loading history...", pane);
       const cleanup = [];
@@ -574,7 +575,7 @@ function setupChat({ dialog, tabs, pane, content, history, loadAll, chat, cleanu
   stop.hidden = true;
   const actions = element("div", "era-llm-composer-actions");
   const state = element("span", "era-llm-state");
-  const configure = element("button", "", "LLM settings…");
+  const configure = element("button", "era-llm-configure", "LLM settings…");
   configure.type = "button";
   actions.append(state, configure);
   const row = element("div", "era-llm-composer-row");

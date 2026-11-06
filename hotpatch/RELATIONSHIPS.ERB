@@ -295,7 +295,7 @@ DO
 	HTML_PRINT "<era-close>"
 	HTML_PRINT "<div class='era-relationship-footer'><button value='999' class='era-chip-button'>Close</button></div>"
 	HTML_PRINT "<era-close>"
-	INPUT
+	BINPUT
 	sError '= ""
 	SELECTCASE RESULT
 	CASE 101 TO 116
@@ -527,7 +527,7 @@ HTML_PRINT "<era-close>"
 HTML_PRINT "<div class='era-proposal-footer'><span>Confession attempt: 10 minutes</span><button value='999' class='era-chip-button'>Continue</button></div>"
 HTML_PRINT "<era-close>"
 DO
-	INPUT
+	BINPUT
 LOOP RESULT != 999
 CLEARLINE LINECOUNT - nStart
 PRINTFORML %sResponse%
@@ -843,7 +843,7 @@ HTML_PRINT "<era-close>"
 HTML_PRINT "<div class='era-proposal-footer'><span>Time passed: 10 minutes</span><button value='999' class='era-chip-button'>Continue</button></div>"
 HTML_PRINT "<era-close>"
 DO
-	INPUT
+	BINPUT
 LOOP RESULT != 999
 CLEARLINE LINECOUNT - nStart
 RETURN 1
@@ -878,7 +878,7 @@ IF nPopup
 	HTML_PRINT "<div class='era-proposal-footer'><span>Time passed: 10 minutes</span><button value='999' class='era-chip-button'>Continue</button></div>"
 	HTML_PRINT "<era-close>"
 	DO
-		INPUT
+		BINPUT
 	LOOP RESULT != 999
 	CLEARLINE LINECOUNT - nStart
 ENDIF
@@ -940,7 +940,7 @@ IF nPopup
 	HTML_PRINT "<div class='era-proposal-footer'><span>Time passed: 10 minutes</span><button value='999' class='era-chip-button'>Continue</button></div>"
 	HTML_PRINT "<era-close>"
 	DO
-		INPUT
+		BINPUT
 	LOOP RESULT != 999
 	CLEARLINE LINECOUNT - nStart
 ENDIF

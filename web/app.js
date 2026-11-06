@@ -347,7 +347,13 @@ function updateControls() {
     : input.kind === "integer" ? "Enter a whole number" : input.kind === "wait" ? "Press Enter to continue" : "Enter text";
   startButtons.forEach((button) => { button.setAttribute("aria-disabled", String(busy)); });
   restartButton.setAttribute("aria-disabled", String(busy));
-  document.querySelector("#input-form").hidden = !input || input.kind === "mousekey";
+  // Setup's inline fields use unrestricted INPUT; a prompt printed after the dialog still needs the command bar.
+  const inlineSetup = input?.kind === "integer"
+    && lastOutputLine()?.closest(".screen.is-active .era-setup:not(.era-setup-editor)");
+  const mainMenu = input?.kind === "integer"
+    && terminal.querySelector(".screen.is-active .era-main, .screen.is-active .era-shop");
+  document.querySelector("#input-form").hidden = !input || input.kind === "mousekey" || input.kind === "wait"
+    || input.buttonValues !== undefined || !!inlineSetup || !!mainMenu;
   command.placeholder = input?.kind === "wait" ? "" : input?.defaultValue !== undefined
     ? `Enter for ${JSON.stringify(input.defaultValue)}` : chatting ? "Command number, or say something…" : input ? lastCommand : "";
   terminal.querySelectorAll("button.choice").forEach((button) => {
@@ -1769,7 +1775,8 @@ async function renderHtml(markup, parent, sprites) {
     if (node.nodeType === Node.TEXT_NODE) { destination.append(document.createTextNode(node.textContent)); return; }
     if (!(node instanceof Element)) return;
     let element;
-    if (node.tagName === "IMG") element = await image(node, token, sprites?.[node.getAttribute("src")], scale, sprites?.[node.getAttribute("srcb")]);
+    if (node.tagName === "IMG") element = await image(node, token, sprites?.[node.getAttribute("src")], scale, sprites?.[node.getAttribute("srcb")],
+      !!destination.closest(".era-info-head .era-info-face"));
     else if (node.tagName === "SHAPE") {
       const type = node.getAttribute("type")?.toLowerCase();
       const fontSize = Number.parseFloat(getComputedStyle(terminal).fontSize);
@@ -1938,6 +1945,7 @@ async function renderSteps(steps, fresh = false, keepFocus = false, toBottom = f
     updateControls();
     if (followBottom) terminal.scrollTop = terminal.scrollHeight;
     else terminal.scrollTop = scrollTop;
+    if (terminal.querySelector(".screen.is-active :is(.era-main, .era-shop)")) terminal.scrollLeft = 0;
     scheduleTimedWait();
     if (clickingThrough && input && input.kind !== "wait") settle();
     profileEnd("render.controls", phaseStarted);
@@ -2244,6 +2252,7 @@ async function renderSnapshot(snapshot, advanceScreen) {
     for (const screen of continuedScreens) if (screen !== currentScreen && screen.parentElement === outputRoot) retireScreen(screen);
     continuedScreens = [];
   }
+  outputRoot.querySelectorAll("button.choice").forEach(decorateCommandNumbers);
   markTarget(snapshot.target);
   for (const main of outputRoot.querySelectorAll(".screen.is-active .era-main")) setupMainSidebar(main);
   lastCharacterHistory = snapshot.characterHistory ?? null;
@@ -2534,7 +2543,7 @@ function setupMainSidebar(main) {
 }
 
 function mainChatInput(request, host) {
-  return !!host && request?.kind === "integer" && !request.singleCharacter && !request.blocking;
+  return !!host && !!activeLlm() && request?.kind === "integer" && !request.singleCharacter && !request.blocking;
 }
 
 function routesToCharacter(value, selectedChoice, request, host) {
@@ -2841,7 +2850,7 @@ function rememberCommand(value, selectedChoice) {
   showCommandHint();
 }
 command.addEventListener("keydown", (event) => {
-  if (touchInput()) return;
+  if (touchInput() || document.body.classList.contains("is-handheld")) return;
   if (event.defaultPrevented || event.isComposing || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey
     || (event.key !== "ArrowUp" && event.key !== "ArrowDown") || !commandHistory.length) return;
   event.preventDefault();
@@ -3013,7 +3022,18 @@ translateToggle.addEventListener("click", () => {
   translation.translateTree(terminal);
 });
 const llmConfig = document.querySelector("#llm-config");
-const openLlmConfig = setupLlmConfig(llmConfig);
+const showLlmConfig = setupLlmConfig(llmConfig);
+const smallLlmScreen = matchMedia("(max-width: 1280px) and (max-height: 800px)");
+function openLlmConfig() {
+  if (smallLlmScreen.matches) {
+    message("LLM configuration requires a viewport larger than 1280×800.", true);
+    return;
+  }
+  showLlmConfig();
+}
+smallLlmScreen.addEventListener("change", () => {
+  if (smallLlmScreen.matches && llmConfig.open) llmConfig.close();
+});
 function showLlmState() {
   const llm = activeLlm();
   document.querySelector("#llm-state").textContent = llm ? `(${PROVIDERS[llm.provider].label}: ${llm.model})` : "(not set up)";
@@ -3024,6 +3044,7 @@ document.querySelector("#llm-toggle").addEventListener("click", openLlmConfig);
 document.addEventListener("era-llm-configure", openLlmConfig);
 llmConfig.addEventListener("close", () => {
   showLlmState();
+  updateControls();
   document.dispatchEvent(new Event("era-llm-changed"));
 });
 function showOutputTools({ config, text, translating, error }) {

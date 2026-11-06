@@ -67,7 +67,7 @@ DO
 	HTML_PRINT "<era-close>"
 	HTML_PRINT @"<div class='era-inventory-footer'><button value='0' class='era-chip-button'>0 - Return</button><span class='era-tone-red'>%HTML_ESCAPE(sError)%</span></div>"
 	HTML_PRINT "<era-close>"
-	INPUT
+	BINPUT
 	sError '= ""
 	SELECTCASE RESULT
 	CASE 0

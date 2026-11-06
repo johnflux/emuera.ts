@@ -993,6 +993,8 @@ test("last command is a placeholder, never input data, and defaults and waits ta
   let chatHost: object | null = null;
   const routing = source.slice(source.indexOf("function mainChatInput("), source.indexOf("async function submit("));
   const context = {
+    activeLlm: (): object | null => ({}),
+    lastOutputLine: () => null,
     terminal: { ...element, querySelectorAll: () => [], querySelector: () => chatHost },
     command: field, send: { ...element, disabled: false, textContent: "" },
     document: { querySelector: () => ({ hidden: false }) },
@@ -1023,6 +1025,10 @@ test("last command is a placeholder, never input data, and defaults and waits ta
   update();
   assert.equal(field.placeholder, "Command number, or say something…");
   assert.match(field.title, /command number.*text to speak/);
+  context.activeLlm = () => null;
+  update();
+  assert.equal(field.placeholder, "", "disabled LLM does not advertise chat input");
+  assert.equal(field.title, "Enter a whole number");
   context.input.kind = "string";
   update();
   assert.equal(field.title, "Enter text", "game text prompts keep their original meaning");
@@ -1124,7 +1130,10 @@ test("shared main-screen input routes text to chat without changing other game p
   const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
   const start = source.indexOf("function mainChatInput(");
   const end = source.indexOf("async function submit(", start);
-  const route = runInNewContext(`${source.slice(start, end)}\nroutesToCharacter`);
+  let enabled = true;
+  const route = runInNewContext(`${source.slice(start, end)}\nroutesToCharacter`, {
+    activeLlm: () => enabled ? {} : null,
+  });
   const mainRequest = { kind: "integer" };
   for (const value of ["Hello", "*waves*", "300 hello", "1.5"]) {
     assert.equal(route(value, null, mainRequest, {}), true, value);
@@ -1138,6 +1147,8 @@ test("shared main-screen input routes text to chat without changing other game p
   }
   assert.equal(route("Hello", {}, mainRequest, {}), false, "clicking a choice always remains game input");
   assert.equal(route("Hello", null, mainRequest, null), false, "no selected character means no chat routing");
+  enabled = false;
+  assert.equal(route("Hello", null, mainRequest, {}), false, "disabled LLM never routes commands to chat");
 });
 
 test("history text clicks bubble for continuation while history controls remain local", async () => {

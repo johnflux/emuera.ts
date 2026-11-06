@@ -55,7 +55,7 @@ DO
 		HTML_PRINT @"<div class='era-inventory-footer'><button value='889' class='era-chip-button'>Back to items</button><span class='era-tone-red'>%HTML_ESCAPE(sError)%</span><button value='999' class='era-chip-button'>Return</button></div>"
 	ENDIF
 	HTML_PRINT "<era-close>"
-	INPUT
+	BINPUT
 	sError '= ""
 	SELECTCASE RESULT
 	CASE 999

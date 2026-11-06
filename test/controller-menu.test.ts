@@ -16,12 +16,14 @@ function harness(canExit = true, savedHints = "auto", legacyForce = "0", deck = 
   let keyHandler = (_event: Key) => {};
   let focused: ReturnType<typeof control> | null = null;
   let nested = false;
+  let popover = false;
   let hidden = false;
   let nextId = 0;
   const frames = new Map<number, () => void>();
   const calls = [0, 0, 0, 0];
   const errors: Error[] = [];
   const events: string[] = [];
+  const pages = [0, 0];
   let hasController = false;
   let yActions = 0;
   let hintsClick = () => {};
@@ -50,6 +52,15 @@ function harness(canExit = true, savedHints = "auto", legacyForce = "0", deck = 
     showModal() { this.open = true; },
     close() { this.open = false; closeListener(); },
     querySelectorAll: () => actions,
+    querySelector: (selector: string) => {
+      const index = selector === ".era-page-prev:enabled" ? 0 : 1;
+      return {
+        closest: () => null,
+        getClientRects: () => [1],
+        focus: () => {},
+        click: () => { pages[index]!++; },
+      };
+    },
     contains: (item: unknown) => actions.some((action) => action === item),
     addEventListener: (_type: string, listener: () => void) => { closeListener = listener; },
   };
@@ -73,6 +84,7 @@ function harness(canExit = true, savedHints = "auto", legacyForce = "0", deck = 
         if (selector === "#controller-menu") return dialog;
         if (selector === "#controller-menu-close") return { addEventListener: (_type: string, listener: () => void) => { closeClick = listener; } };
         if (selector === "dialog[open]") return nested || dialog.open ? dialog : null;
+        if (selector === ".screen.is-active .era-dialog:popover-open") return popover ? dialog : null;
         throw new Error(`Unexpected selector: ${selector}`);
       },
       addEventListener(type: string, listener: (() => void) | ((event: Key) => void)) {
@@ -114,7 +126,7 @@ function harness(canExit = true, savedHints = "auto", legacyForce = "0", deck = 
     callback();
   }
   return {
-    dialog, actions, calls, errors, events, frames, handlers, key, poll,
+    dialog, actions, calls, errors, events, frames, handlers, key, poll, pages,
     close: () => closeClick(),
     focus: (index: number) => actions[index]!.focus(),
     get focused() { return focused; },
@@ -124,6 +136,7 @@ function harness(canExit = true, savedHints = "auto", legacyForce = "0", deck = 
     get hintsLabel() { return hintsToggle.textContent; },
     storage,
     set nested(value: boolean) { nested = value; },
+    set popover(value: boolean) { popover = value; },
     set hidden(value: boolean) { hidden = value; },
     set restartable(value: boolean) { restartable = value; },
     set failExit(value: boolean) { failExit = value; },
@@ -135,6 +148,19 @@ function harness(canExit = true, savedHints = "auto", legacyForce = "0", deck = 
     },
   };
 }
+
+test("L1 and R1 page dialogs once per press and do nothing without a dialog", () => {
+  const h = harness();
+  h.poll([4, 5]);
+  assert.deepEqual(h.pages, [0, 0]);
+  h.popover = true;
+  h.poll([]);
+  h.poll([4]);
+  h.poll([4]);
+  assert.deepEqual(h.pages, [1, 0]);
+  h.poll([5]);
+  assert.deepEqual(h.pages, [1, 1]);
+});
 
 test("F10 toggles the centered menu, ignores repeats/modifiers, and does not cover another modal", () => {
   const h = harness();
@@ -305,6 +331,32 @@ test("menu actions close before running, disable unavailable actions, and report
   desktop.key();
   await desktop.actions[3]!.click();
   assert.equal(desktop.errors[0]!.message, "Quit IPC failed");
+});
+
+test("game popovers receive D-pad, A and B instead of the background Y action", async () => {
+  const h = harness();
+  h.popover = true;
+  h.focus(1);
+  h.poll([13, 1, 3]);
+  assert.deepEqual(h.events, ["ArrowDown", "Escape"]);
+  assert.equal(h.yActions, 0);
+  h.poll([0]);
+  await Promise.resolve();
+  assert.equal(h.calls[1], 1);
+});
+
+test("app Close and Cancel buttons carry Back hints without changing their form values", () => {
+  const html = readFileSync(new URL("../web/index.html", import.meta.url), "utf8");
+  for (const id of ["controller-menu-close", "settings-close", "art-demo-close"]) {
+    const tag = html.match(new RegExp(`<button\\b[^>]*id="${id}"[^>]*>`))?.[0];
+    assert.ok(tag, id);
+    assert.match(tag, /data-controller-hint="B"/);
+  }
+  const cancels = [...html.matchAll(/<button\b[^>]*value="cancel"[^>]*>/g)];
+  assert.equal(cancels.length, 3);
+  for (const [tag] of cancels) assert.match(tag, /data-controller-hint="B"/);
+  const css = readFileSync(new URL("../web/style.css", import.meta.url), "utf8");
+  assert.match(css, /\.has-controller :is\(dialog\[open\], \.screen\.is-active \.era-dialog:popover-open\).*:focus:not\(\[data-controller-hint\]\):not\(\.era-dialog-close\)::after/);
 });
 
 test("controller polling stops when hidden or disconnected and resumes on connection", () => {

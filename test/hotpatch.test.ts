@@ -511,8 +511,12 @@ TCVAR:1:お礼 = 12
 CALL CALENDAR
 PRINTFORML State: {DAY}, {DAY:2}, {DAY:3}, {TIME}
 PRINTFORML Work: {MAXBASE:1:仕事量}, {TCVAR:1:仕事開始}, {TCVAR:1:仕事終了}, {CFLAG:1:職場}, {CFLAG:1:職種}, {TCVAR:1:給料}, {TCVAR:1:お礼}
-QUIT`, "<calendar-popup-test>");
+QUIT
+@CHARA_HOLIDAY(ARG, ARG:1)
+#FUNCTION
+RETURNF 0`, "<calendar-popup-test>");
     game.routines.set("SYSTEM_TITLE", stub.routines.get("SYSTEM_TITLE")!);
+    game.routines.set("CHARA_HOLIDAY", stub.routines.get("CHARA_HOLIDAY")!);
     const runtime = new Runtime(game, GAME_INSTRUCTION_LIMIT, { jit });
     let snapshot = runtime.start();
     const check = (cards: number) => {
@@ -558,12 +562,14 @@ QUIT`, "<calendar-popup-test>");
     assert.match(check(7), /This is the first season/);
     snapshot = runtime.input("-9403");
     check(7);
-    for (const value of ["901", "900", "1", "-1", "9999"]) {
+    for (const value of ["901", "900", "1", "-1"]) {
+      assert.ok(snapshot.input?.buttonValues?.includes(value), `${value}: ${snapshot.input?.buttonValues}`);
       snapshot = runtime.input(value);
       const html = check(value === "1" ? 0 : 7);
       if (value === "1") assert.match(html, /era-calendar-detail/);
-      if (value === "9999") assert.match(html, /Choose a character, a schedule, or Return/);
     }
+    assert.ok(snapshot.input?.buttonValues?.includes("0"));
+    assert.throws(() => runtime.input("9999"), /displayed button/);
     snapshot = runtime.input("0");
     assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
     assert.equal(snapshot.status, "halted");
@@ -1148,8 +1154,7 @@ WAIT`, "<inventory-test>");
   assert.match(automatic.output.flatMap((item) => "text" in item ? [item.text] : []).join(""), /Choose which items to use/);
   html = markup(runtime.input("-1"));
   assert.match(html, /2 item types/, "closing Auto Items returns to the current inventory");
-  html = markup(runtime.input("-1"));
-  assert.match(html, /Invalid Input/);
+  assert.throws(() => runtime.input("-1"), /displayed button/);
   const snapshot = runtime.input("999");
   assert.equal(snapshot.error, null);
   assert.match(snapshot.output.flatMap((item) => "text" in item ? [item.text] : []).join(""), /Returned: 3, 1/);

@@ -78,12 +78,22 @@ export function setupControllerMenu({ restart, library, settings, exit, canResta
         toggle();
         continue;
       }
-      const modal = document.activeElement?.closest("dialog[open]") ?? document.querySelector("dialog[open]");
+      const modal = document.activeElement?.closest("dialog[open]")
+        ?? document.querySelector("dialog[open]")
+        ?? document.querySelector(".screen.is-active .era-dialog:popover-open");
       if (!modal) {
         if (down(3)) onY();
         continue;
       }
-      // Only consume the standard D-pad, confirm and back buttons while a modal is open.
+      for (const [button, selector] of [[4, ".era-page-prev:enabled"], [5, ".era-page-next:enabled"]]) {
+        if (!down(button)) continue;
+        const page = modal.querySelector(selector);
+        if (page && !page.closest("[hidden], [inert]") && page.getClientRects().length) {
+          page.focus({ preventScroll: true });
+          page.click();
+        }
+      }
+      // Only consume the standard D-pad, confirm and back buttons while a dialog is open.
       const keys = [[12, "ArrowUp"], [13, "ArrowDown"], [14, "ArrowLeft"], [15, "ArrowRight"], [1, "Escape"]];
       for (const [button, key] of keys) {
         if (down(button)) (document.activeElement ?? modal).dispatchEvent(
@@ -92,7 +102,8 @@ export function setupControllerMenu({ restart, library, settings, exit, canResta
       }
       if (down(0)) {
         const focused = document.activeElement;
-        if (focused?.matches("button:enabled, a[href]") && modal.contains(focused)) focused.click();
+        if (focused?.matches('button:enabled, a[href], input[type="checkbox"]:enabled, input[type="radio"]:enabled')
+          && modal.contains(focused)) focused.click();
       }
     }
     for (const index of held.keys()) if (!connected.has(index)) held.delete(index);

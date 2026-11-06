@@ -168,15 +168,18 @@ test("Items can move right into the sidebar and Rest moves down within Activitie
 });
 
 test("number decoration preserves numeric-only controls and wraps only the button's command value", () => {
-  for (const [text, value, expected] of [
+  for (const [text, value, expected, surroundingLabel] of [
     ["Locations Table [412]", "412", "[412]"],
     ["[150]", "150", null],
     ["Music [2] Collection [106]", "106", "[106]"],
     ["Room [12]", "13", null],
     ["Text choice", "hello", null],
+    ["[300]", "300", "[300]", "Conversation [300]"],
   ]) {
     const node = { textContent: text };
     let wrapped: string | null = null;
+    let numberOnly = false;
+    let accessibleLabel = "";
     let start = 0, end = 0;
     const decorate = runInNewContext(`${source}\ndecorateCommandNumbers`, {
       NodeFilter: { SHOW_TEXT: 4 },
@@ -199,16 +202,36 @@ test("number decoration preserves numeric-only controls and wraps only the butto
     });
     const element = {
       matches: () => true,
-      closest: () => null,
+      closest: () => surroundingLabel ? { textContent: surroundingLabel } : null,
       querySelector: () => null,
       textContent: text,
       dataset: { value },
+      classList: { add: (name: string) => { assert.equal(name, "command-number-only"); numberOnly = true; } },
+      setAttribute: (name: string, value: string) => { assert.equal(name, "aria-label"); accessibleLabel = value; },
     };
     decorate(element);
     assert.equal(wrapped, expected);
     assert.equal(element.textContent, text);
     assert.equal(element.dataset.value, value);
+    assert.equal(numberOnly, !!surroundingLabel && expected !== null);
+    if (numberOnly) assert.equal(accessibleLabel, "Conversation");
   }
+});
+
+test("hidden number-only action buttons cover their labeled tile without taking layout space", () => {
+  const css = readFileSync(new URL("../web/handheld.css", import.meta.url), "utf8");
+  const rule = "button.choice.command-number-only { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; margin: 0; padding: 0; border-radius: inherit; }";
+  assert.ok(css.includes(`.is-handheld .era-actions-group ${rule}`));
+  assert.ok(css.includes(`  .era-actions-group ${rule}`));
+  const tile = ".era-actions-group :is(.print-cell, .era-guard-control):has(.command-number-only) { display: inline-flex; align-items: center; min-height: 36px; box-sizing: border-box; }";
+  assert.ok(css.includes(`.is-handheld ${tile}`));
+  assert.ok(css.includes(`  ${tile}`));
+});
+
+test("number-only controls use one tile focus outline in desktop and handheld layouts", () => {
+  const css = readFileSync(new URL("../web/handheld.css", import.meta.url), "utf8");
+  assert.ok(css.includes(".line :is(.print-cell, .era-guard-control) button.choice.command-number-only:focus-visible { outline: none; }"));
+  assert.ok(css.includes(".line :is(.print-cell, .era-guard-control):has(button.choice.command-number-only:focus-visible) { outline: 2px solid #8ddaff; outline-offset: 2px; }"));
 });
 
 test("navigation measures the labeled tile rather than its right-aligned numeric button", () => {
@@ -227,19 +250,170 @@ test("navigation measures the labeled tile rather than its right-aligned numeric
   ], 0, "ArrowDown"), 1);
 });
 
-test("compact command numbers are hidden at the exact width threshold or with touch input", () => {
+test("command numbers hide on handheld, at 1280 by 800 or smaller, or with touch input", () => {
   const css = readFileSync(new URL("../web/handheld.css", import.meta.url), "utf8");
-  assert.match(css, /@media \(max-width: 1280px\), \(any-pointer: coarse\) \{\s*\.command-number \{ display: none; \}/);
+  assert.match(css, /\.is-handheld \.command-number \{ display: none; \}/);
+  assert.match(css, /@media \(max-width: 1280px\) and \(max-height: 800px\), \(any-pointer: coarse\) \{\s*\.command-number \{ display: none; \}/);
+});
+
+test("launch version leaves room for the burger menu", () => {
+  const css = readFileSync(new URL("../web/style.css", import.meta.url), "utf8");
+  assert.match(css, /\.era-launch-version \{[^}]*right: 41px;[^}]*max-width: calc\(100% - 41px\);/);
 });
 
 test("compact-height gameplay positions the artwork watch at minus 20 pixels", () => {
   const css = readFileSync(new URL("../web/handheld.css", import.meta.url), "utf8");
   assert.match(css, /@media \(max-height: 800px\) \{\s*body:not\(\.is-home\) :is\(\.era-main, \.era-shop\) \.era-main-header:has\(\.era-area-art\) > \.era-watch-control \{ top: -20px; \}/);
+  assert.match(css, /\.era-watch-control \{ right: 0; \}/);
+});
+
+test("compact home screens bound their height and scroll long cards instead of the whole screen", () => {
+  const css = readFileSync(new URL("../web/handheld.css", import.meta.url), "utf8");
+  assert.match(css, /\.is-handheld \.screen\.is-active \.era-shop \{ height: max\(540px, calc\(100cqh - 8px\)\); min-height: 0;/);
+  assert.match(css, /\.era-shop > :is\(\.era-shop-home, \.era-shop-menu, \.era-shop-system\) \{ min-height: 0; overflow: auto;/);
+  const app = readFileSync(new URL("../web/app.js", import.meta.url), "utf8");
+  assert.ok(app.includes('if (terminal.querySelector(".screen.is-active :is(.era-main, .era-shop)")) terminal.scrollLeft = 0;'));
+});
+
+test("compact gameplay errors appear at the top without covering the menu button", () => {
+  const css = readFileSync(new URL("../web/handheld.css", import.meta.url), "utf8");
+  assert.match(css, /body:not\(\.is-home\) > header > #status\.error \{[^}]*position: fixed; top: 8px; bottom: auto; left: 8px; right: 56px;/);
+});
+
+test("handheld command input stays compact without bottom panel padding", () => {
+  const css = readFileSync(new URL("../web/handheld.css", import.meta.url), "utf8");
+  assert.match(css, /\.is-handheld main \{ padding: 0; \}/);
+  assert.match(css, /\.is-handheld #input-form :is\(input, button\) \{ min-height: 0; \}/);
+});
+
+test("main and game-output focus do not outline the whole content panel", () => {
+  const css = readFileSync(new URL("../web/handheld.css", import.meta.url), "utf8");
+  assert.ok(css.includes(":is(main, #terminal):focus { outline: none; }"));
+  assert.match(css, /:is\(button, a\[href\], input, select, textarea\):focus-visible \{\s*outline: 2px solid #8ddaff;/);
+});
+
+test("text-only pauses preserve an invisible command-row spacer but GUI screens collapse it", () => {
+  const css = readFileSync(new URL("../web/style.css", import.meta.url), "utf8");
+  assert.ok(css.includes("main:has(> #terminal.is-waiting):not(:has(.screen.is-active :is(.era-main, .era-shop, .era-dialog, .era-launch))) > #input-form[hidden] { display: flex; visibility: hidden; }"));
+  assert.match(css, /#input-form\[hidden\] \{ display: none; \}/);
+});
+
+test("action tile controls remain vertically centered when their command numbers are hidden", () => {
+  const css = readFileSync(new URL("../web/style.css", import.meta.url), "utf8");
+  assert.match(css, /\.era-actions-group :is\(\.print-cell, \.era-guard-control\) \.choice \{ vertical-align: middle; \}/);
+});
+
+test("compact gameplay hides interaction history, shrinks watch text, and keeps action headings inline", () => {
+  const css = readFileSync(new URL("../web/handheld.css", import.meta.url), "utf8");
+  assert.match(css, /\.is-handheld \.era-main-chat \{ display: none; \}/);
+  assert.match(css, /\.is-handheld \.era-watch-control \.era-timestop-button \{ font-size: 19px; \}/);
+  assert.match(css, /\.is-handheld \.era-actions-group > \.line > span:has\(> \.era-actions-title\) \{ flex-basis: auto; \}/);
+  const compact = css.slice(css.indexOf("@media (max-width: 1280px) and (max-height: 800px) {"));
+  assert.match(compact, /\.era-main-chat \{ display: none; \}/);
+  assert.match(compact, /\.era-watch-control \.era-timestop-button \{ font-size: 19px; \}/);
+  assert.match(compact, /\.era-actions-group > \.line > span:has\(> \.era-actions-title\) \{ flex-basis: auto; \}/);
+});
+
+test("compact save pickers remove outer gutters and relationship actions use equal-height flat buttons", () => {
+  const css = readFileSync(new URL("../web/handheld.css", import.meta.url), "utf8");
+  assert.ok(css.includes('body:not(.is-home) #terminal:has(.screen.is-active :is(.era-main, .era-shop, .era-dialog)) { padding: 0; scrollbar-gutter: auto; }'));
+  assert.match(css, /\.is-handheld \.era-relationship \.line \.era-relationship-select \{ height: 56px; min-height: 56px;[^}]*background: #493040;/);
+  assert.match(css, /\.era-relationship \.line \.era-relationship-select:is\(:disabled, span\) \{ background: #23232b;/);
+  assert.ok(css.includes('.has-controller .screen.is-active .era-relationship:popover-open .line button.choice.era-relationship-select:focus { filter: none; outline: 2px solid #8ddaff; outline-offset: 2px; }'));
+});
+
+test("render decorates command numbers after buttons have their surrounding labels", () => {
+  const app = readFileSync(new URL("../web/app.js", import.meta.url), "utf8");
+  assert.match(app, /outputRoot\.querySelectorAll\("button\.choice"\)\.forEach\(decorateCommandNumbers\);\s*markTarget/);
+});
+
+test("compact room uses content height instead of reserving hidden chat space", () => {
+  const css = readFileSync(new URL("../web/handheld.css", import.meta.url), "utf8");
+  assert.match(css, /\.is-handheld \.screen\.is-active \.era-main \{[^}]*grid-template-rows: auto auto minmax\(160px, 1fr\) auto auto;/);
+  assert.match(css, /\.is-handheld \.era-character:has\(\.era-main-chat\) \{ grid-template-rows: auto; \}/);
+});
+
+test("room occupant names are white with a dark outline and summary portraits fit their frame", () => {
+  const css = readFileSync(new URL("../web/style.css", import.meta.url), "utf8");
+  assert.match(css, /\.era-room-stage \.era-occupant \.era-occupant-text \.era-occupant-name \{ color: #fff; text-shadow: -1px -1px 0 #000,/);
+  const app = readFileSync(new URL("../web/app.js", import.meta.url), "utf8");
+  assert.match(app, /await image\(node,[\s\S]*?!!destination\.closest\("\.era-info-head \.era-info-face"\)\)/);
+});
+
+test("command bar hides for button-only input and inline setup but preserves free text and amount prompts", () => {
+  const app = readFileSync(new URL("../web/app.js", import.meta.url), "utf8");
+  const start = app.indexOf("  const inlineSetup =");
+  const end = app.indexOf("  command.placeholder =", start);
+  assert.ok(start > 0 && end > start);
+  for (const { input, setup, main = false, llm = false, expected } of [
+    { input: null, setup: false, expected: true },
+    { input: { kind: "integer", buttonValues: ["0", "1"] }, setup: false, expected: true },
+    { input: { kind: "string", buttonValues: ["MAP1", "Back"] }, setup: false, expected: true },
+    { input: { kind: "integer" }, setup: true, expected: true },
+    { input: { kind: "integer" }, setup: false, expected: false },
+    { input: { kind: "string" }, setup: true, expected: false },
+    { input: { kind: "wait" }, setup: true, expected: true },
+    { input: { kind: "mousekey" }, setup: false, expected: true },
+    { input: { kind: "integer" }, setup: false, main: true, expected: true },
+    { input: { kind: "integer" }, setup: false, main: true, llm: true, expected: true },
+    { input: { kind: "string" }, setup: false, main: true, expected: false },
+    { input: { kind: "wait" }, setup: false, main: true, expected: true },
+  ]) {
+    const form = { hidden: false };
+    runInNewContext(app.slice(start, end), {
+      input,
+      activeLlm: () => llm ? {} : null,
+      terminal: { querySelector: (selector: string) => {
+        assert.equal(selector, ".screen.is-active .era-main, .screen.is-active .era-shop");
+        return main ? {} : null;
+      } },
+      lastOutputLine: () => ({ closest: (selector: string) => {
+        if (selector === ".screen.is-active .era-setup:not(.era-setup-editor)") return setup ? {} : null;
+        assert.fail(`Unexpected selector: ${selector}`);
+      } }),
+      document: { querySelector: () => form },
+    });
+    assert.equal(form.hidden, expected, JSON.stringify({ input, setup }));
+  }
+});
+
+test("small screens hide LLM configuration and the opener blocks all entry points", () => {
+  const css = readFileSync(new URL("../web/handheld.css", import.meta.url), "utf8");
+  assert.match(css, /@media \(max-width: 1280px\) and \(max-height: 800px\) \{\s*#llm-toggle, \.era-llm-configure \{ display: none; \}/);
+  const app = readFileSync(new URL("../web/app.js", import.meta.url), "utf8");
+  const wiring = app.slice(app.indexOf("const llmConfig ="), app.indexOf("function showLlmState"));
+  let matches = true, opened = 0, closed = 0, changed = () => {};
+  const errors: string[] = [];
+  const dialog = { open: false, close: () => { closed++; dialog.open = false; } };
+  const open = runInNewContext(`${wiring}\nopenLlmConfig`, {
+    document: { querySelector: () => dialog },
+    setupLlmConfig: () => () => { opened++; dialog.open = true; },
+    matchMedia: (query: string) => {
+      assert.equal(query, "(max-width: 1280px) and (max-height: 800px)");
+      return {
+        get matches() { return matches; },
+        addEventListener: (_type: string, callback: () => void) => { changed = callback; },
+      };
+    },
+    message: (text: string, error: boolean) => { assert.equal(error, true); errors.push(text); },
+  });
+  open();
+  assert.equal(opened, 0);
+  assert.match(errors[0]!, /LLM configuration requires/);
+  matches = false;
+  open();
+  assert.equal(opened, 1);
+  matches = true;
+  changed();
+  assert.equal(closed, 1);
+  assert.equal(dialog.open, false);
 });
 
 function navigationHarness() {
   type Control = {
     tabIndex: number; hidden: boolean; editable: boolean; visible: boolean; scrolled: boolean;
+    saveSlot: boolean; page: string; tabGroup: string; dataset: { value: string };
+    matches(selector: string): boolean;
     closest(selector: string): unknown;
     focus(): void;
     scrollIntoView(): void;
@@ -247,12 +421,16 @@ function navigationHarness() {
     getBoundingClientRect(): { left: number; top: number; width: number; height: number };
   };
   const handlers = new Map<string, (event: ReturnType<typeof event>) => void>();
-  const state = { activeElement: null as Control | null, allowed: true, home: false, modal: false, closed: false, touch: false,
+  const state = { activeElement: null as Control | null, allowed: true, home: false, modal: false, closed: false, touch: false, handheld: false,
     nestedClosed: false };
   function control(left: number, top: number, editable = false): Control {
     return {
-      tabIndex: 0, hidden: false, editable, visible: true, scrolled: false,
+      tabIndex: 0, hidden: false, editable, visible: true, scrolled: false, saveSlot: false, page: "", tabGroup: "", dataset: { value: "" },
+      matches(selector) { return selector === ".era-load .era-save-slot" ? this.saveSlot : selector === this.page; },
       closest(selector) {
+        if (selector === ".era-page-prev, .era-page-next") return this.page ? this : null;
+        if (selector === "button[data-value]") return this;
+        if (selector === this.tabGroup) return this;
         if (selector.includes("input")) return this.editable ? this : null;
         if (selector.includes("[hidden]")) return this.hidden ? this : null;
         return null;
@@ -273,7 +451,7 @@ function navigationHarness() {
   const menu = { hidden: true };
   const document = {
     get activeElement() { return state.activeElement; },
-    body: { classList: { contains: () => state.home } },
+    body: { classList: { contains: (name: string) => name === "is-handheld" ? state.handheld : state.home } },
     querySelector(selector: string) {
       if (selector === "dialog[open]") return state.modal ? {
         ...root, close: () => { state.closed = true; state.modal = false; },
@@ -322,6 +500,75 @@ test("arrows focus visible choices, preserve keyboard mode after a command, and 
   assert.equal(state.activeElement, command);
 });
 
+test("hidden command input focuses a visible choice instead and stays out of arrow navigation", () => {
+  const { state, items, command, navigation, key } = navigationHarness();
+  command.hidden = true;
+  navigation.focusInput();
+  assert.equal(state.activeElement, items[0]);
+  key("ArrowDown");
+  assert.equal(state.activeElement, items[2]);
+  key("ArrowDown");
+  assert.equal(state.activeElement, items[2]);
+});
+
+test("a newly visible input prompt takes focus instead of returning to choices", () => {
+  const { state, command, navigation, key } = navigationHarness();
+  command.hidden = true;
+  navigation.focusInput();
+  key("ArrowRight");
+  command.hidden = false;
+  navigation.focusInput();
+  assert.equal(state.activeElement, command);
+});
+
+test("paging preserves the activated previous or next control across redraws", () => {
+  for (const page of [".era-page-prev", ".era-page-next"]) {
+    const { state, command, items, navigation, handlers, event } = navigationHarness();
+    command.hidden = true;
+    items[1]!.saveSlot = true;
+    items[3]!.page = page;
+    handlers.get("click")!(event("", items[3]));
+    state.activeElement = null;
+    navigation.focusInput();
+    assert.equal(state.activeElement, items[3]);
+    navigation.focusInput();
+    assert.equal(state.activeElement, items[3], "subsequent completion focus does not undo restoration");
+  }
+});
+
+test("load dialog focuses its first selectable save rather than Close, with an empty-page fallback", () => {
+  const { state, items, command, navigation } = navigationHarness();
+  command.hidden = true;
+  items[1]!.saveSlot = true;
+  items[2]!.saveSlot = true;
+  navigation.focusInput();
+  assert.equal(state.activeElement, items[1]);
+  items[1]!.visible = false;
+  navigation.focusInput();
+  assert.equal(state.activeElement, items[2]);
+  items[2]!.hidden = true;
+  navigation.focusInput();
+  assert.equal(state.activeElement, items[0]);
+});
+
+test("redrawn setup and sheet tabs retain focus, but other commands clear the preference", () => {
+  for (const group of [".era-start-tabs", ".era-player-tabs", ".era-sheet-pages", ".era-sheet-subpages"]) {
+    const { state, items, command, navigation, handlers, event } = navigationHarness();
+    command.hidden = true;
+    items[2]!.tabGroup = group;
+    items[2]!.dataset.value = "101";
+    handlers.get("click")!(event("", items[2]));
+    state.activeElement = null;
+    navigation.focusInput();
+    assert.equal(state.activeElement, items[2]);
+    navigation.focusInput();
+    assert.equal(state.activeElement, items[2]);
+    handlers.get("click")!(event("", items[1]));
+    navigation.focusInput();
+    assert.equal(state.activeElement, items[0]);
+  }
+});
+
 test("touch command input uses Up for focus navigation rather than history, while Left stays native", () => {
   const { state, command, items, key } = navigationHarness();
   state.touch = true;
@@ -329,6 +576,17 @@ test("touch command input uses Up for focus navigation rather than history, whil
   assert.equal(key("ArrowUp", command).defaultPrevented, true);
   assert.equal(state.activeElement, items[2]);
   command.focus();
+  assert.equal(key("ArrowLeft", command).defaultPrevented, false);
+});
+
+test("handheld command input navigates on Up and Down even without a touch pointer", () => {
+  const { state, command, items, key } = navigationHarness();
+  state.handheld = true;
+  command.focus();
+  assert.equal(key("ArrowUp", command).defaultPrevented, true);
+  assert.equal(state.activeElement, items[2]);
+  assert.equal(key("ArrowDown").defaultPrevented, true);
+  assert.equal(state.activeElement, command);
   assert.equal(key("ArrowLeft", command).defaultPrevented, false);
 });
 

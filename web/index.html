@@ -99,7 +99,7 @@
     </aside>
   </main>
     <dialog id="controller-menu" class="confirm controller-menu" aria-labelledby="controller-menu-heading">
-      <div class="dialog-heading"><h2 id="controller-menu-heading">Menu</h2><button id="controller-menu-close" type="button" aria-label="Close menu">Close</button></div>
+      <div class="dialog-heading"><h2 id="controller-menu-heading">Menu</h2><button id="controller-menu-close" type="button" aria-label="Close menu" data-controller-hint="B">Close</button></div>
       <div class="controller-menu-actions">
         <button id="controller-restart" type="button">Restart</button>
         <button id="controller-library" type="button">Library</button>
@@ -110,7 +110,7 @@
     <dialog id="settings" class="confirm settings-dialog" aria-labelledby="settings-heading">
       <div class="dialog-heading">
       <h2 id="settings-heading">Settings</h2>
-      <button id="settings-close" type="button" aria-label="Close settings">Close</button>
+      <button id="settings-close" type="button" aria-label="Close settings" data-controller-hint="B">Close</button>
       </div>
       <h3>Display</h3>
       <div class="settings-actions">
@@ -137,7 +137,7 @@
       </div>
     </dialog>
     <dialog id="art-demo" class="confirm art-demo" aria-labelledby="art-demo-heading">
-      <div class="dialog-heading"><h2 id="art-demo-heading">Artwork demo</h2><button id="art-demo-close" type="button">Close</button></div>
+      <div class="dialog-heading"><h2 id="art-demo-heading">Artwork demo</h2><button id="art-demo-close" type="button" data-controller-hint="B">Close</button></div>
       <form id="art-controls">
         <label>Location
           <select id="location" name="location">
@@ -168,7 +168,7 @@
       <h2 id="confirm-title"></h2>
       <p id="confirm-text"></p>
       <div class="confirm-actions">
-        <button value="cancel" autofocus>Cancel</button>
+        <button value="cancel" autofocus data-controller-hint="B">Cancel</button>
         <button value="ok" id="confirm-ok" class="danger"></button>
       </div>
     </form>
@@ -189,7 +189,7 @@
         </div>
         <p id="translation-config-status" role="status"></p>
       </div>
-      <div class="confirm-actions"><button value="cancel" formnovalidate>Cancel</button><button value="save">Save</button></div>
+      <div class="confirm-actions"><button value="cancel" formnovalidate data-controller-hint="B">Cancel</button><button value="save">Save</button></div>
     </form>
   </dialog>
   <dialog id="llm-config" class="confirm llm-config" aria-labelledby="llm-config-title" aria-describedby="llm-config-description">
@@ -249,7 +249,7 @@
         </fieldset>
       </div>
       <div class="confirm-actions llm-config-actions">
-        <button value="cancel" formnovalidate>Cancel</button>
+        <button value="cancel" formnovalidate data-controller-hint="B">Cancel</button>
         <button value="save">Save</button>
       </div>
     </form>

@@ -67,7 +67,7 @@ SIF STRCOUNT(OP, "「最終確認」")
 	HTML_PRINT "<div class='era-sheet-footer'><button value='1' class='era-sheet-choose'>[1] Choose this character</button><button value='0'>[0] Return</button></div>"
 HTML_PRINT "<era-close>"
 DO
-	INPUT
+	BINPUT
 	SELECTCASE RESULT
 	CASE 0
 		RETURN 0
@@ -183,7 +183,7 @@ SIF STRCOUNT(OP, "「最終確認」")
 HTML_PRINT "<era-close>"
 
 DO
-	INPUT
+	BINPUT
 	SELECTCASE RESULT
 	CASE 0
 		RETURN 0
