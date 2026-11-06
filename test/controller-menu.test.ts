@@ -7,7 +7,7 @@ import { createApp } from "../src/server.js";
 
 const source = readFileSync(new URL("../web/controller-menu.js", import.meta.url), "utf8").replace(/^export /gm, "");
 
-function harness(canExit = true) {
+function harness(canExit = true, savedHints = "auto", legacyForce = "0", deck = false) {
   type Key = {
     key: string; repeat?: boolean; ctrlKey?: boolean; defaultPrevented: boolean; stopped: boolean;
     preventDefault(): void; stopImmediatePropagation(): void;
@@ -22,6 +22,15 @@ function harness(canExit = true) {
   const calls = [0, 0, 0, 0];
   const errors: Error[] = [];
   const events: string[] = [];
+  let hasController = false;
+  let yActions = 0;
+  let hintsClick = () => {};
+  const hintsToggle = {
+    textContent: "",
+    addEventListener: (_type: string, listener: () => void) => { hintsClick = listener; },
+  };
+  const storage = new Map([["era-typescript.controller-hints", savedHints], ["era-typescript.force-controller", legacyForce]]);
+  if (!savedHints) storage.delete("era-typescript.controller-hints");
   function control(index: number) {
     let click = async () => {};
     return {
@@ -47,10 +56,20 @@ function harness(canExit = true) {
   let closeClick = () => {};
   let pads: ({ index: number; connected: boolean; mapping: string; buttons: { pressed: boolean }[] } | null)[] = [];
   const setup = runInNewContext(`${source}\nsetupControllerMenu`, {
+    eraDesktop: { handheld: deck },
+    localStorage: {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+    },
     document: {
+      body: { classList: { toggle: (name: string, value: boolean) => {
+        assert.equal(name, "has-controller");
+        hasController = value;
+      } } },
       get hidden() { return hidden; },
       get activeElement() { return focused; },
       querySelector(selector: string) {
+        if (selector === "#controller-hints-toggle") return hintsToggle;
         if (selector === "#controller-menu") return dialog;
         if (selector === "#controller-menu-close") return { addEventListener: (_type: string, listener: () => void) => { closeClick = listener; } };
         if (selector === "dialog[open]") return nested || dialog.open ? dialog : null;
@@ -77,6 +96,7 @@ function harness(canExit = true) {
     canRestart: () => restartable,
     canExit,
     onError: (error: Error) => errors.push(error),
+    onY: () => { yActions++; },
   });
   function key(repeat = false, ctrlKey = false) {
     const event: Key = {
@@ -98,6 +118,11 @@ function harness(canExit = true) {
     close: () => closeClick(),
     focus: (index: number) => actions[index]!.focus(),
     get focused() { return focused; },
+    get hasController() { return hasController; },
+    get yActions() { return yActions; },
+    cycleHints: () => hintsClick(),
+    get hintsLabel() { return hintsToggle.textContent; },
+    storage,
     set nested(value: boolean) { nested = value; },
     set hidden(value: boolean) { hidden = value; },
     set restartable(value: boolean) { restartable = value; },
@@ -124,6 +149,113 @@ test("F10 toggles the centered menu, ignores repeats/modifiers, and does not cov
   h.key();
   assert.equal(h.dialog.open, false);
   assert.equal(h.key(false, true).defaultPrevented, false);
+});
+
+test("Y triggers once per press only outside modals and supported controllers control the hint", () => {
+  const h = harness();
+  h.poll([3], "");
+  assert.equal(h.yActions, 0);
+  assert.equal(h.hasController, false);
+  h.poll([3]);
+  assert.equal(h.hasController, true);
+  assert.equal(h.yActions, 1);
+  h.poll([3]);
+  assert.equal(h.yActions, 1);
+  h.poll([]);
+  h.poll([3]);
+  assert.equal(h.yActions, 2);
+  h.key();
+  h.poll([]);
+  h.poll([3]);
+  assert.equal(h.yActions, 2);
+  h.disconnect();
+  assert.equal(h.hasController, false);
+});
+
+test("controller hints cycle Auto/On/Off, persist, and follow detection only in Auto", () => {
+  const h = harness();
+  assert.equal(h.hasController, false);
+  assert.equal(h.hintsLabel, "Controller hints: Auto (Off)");
+  h.poll([]);
+  assert.equal(h.hasController, true);
+  assert.equal(h.hintsLabel, "Controller hints: Auto (On)");
+  h.disconnect();
+  h.cycleHints();
+  assert.equal(h.hasController, true);
+  assert.equal(h.hintsLabel, "Controller hints: On");
+  assert.equal(h.storage.get("era-typescript.controller-hints"), "on");
+  h.poll([], "");
+  assert.equal(h.hasController, true);
+  h.poll([]);
+  h.disconnect();
+  assert.equal(h.hasController, true);
+  h.cycleHints();
+  assert.equal(h.hasController, false);
+  assert.equal(h.hintsLabel, "Controller hints: Off");
+  assert.equal(h.storage.get("era-typescript.controller-hints"), "off");
+  h.poll([]);
+  assert.equal(h.hasController, false);
+  h.cycleHints();
+  assert.equal(h.hasController, true);
+  assert.equal(h.storage.get("era-typescript.controller-hints"), "auto");
+  h.disconnect();
+  assert.equal(h.hasController, false);
+  assert.equal(harness(true, "on").hasController, true);
+  const restoredOff = harness(true, "off");
+  restoredOff.poll([]);
+  assert.equal(restoredOff.hasController, false);
+  assert.equal(harness(true, "", "1").hasController, true);
+  assert.equal(harness(true, "", "0").hintsLabel, "Controller hints: Auto (Off)");
+});
+
+test("Auto controller hints stay on for Steam Deck without a gamepad but explicit Off wins", () => {
+  const h = harness(true, "auto", "0", true);
+  assert.equal(h.hasController, true);
+  assert.equal(h.hintsLabel, "Controller hints: Auto (On)");
+  h.poll([]);
+  h.disconnect();
+  assert.equal(h.hasController, true);
+  const off = harness(true, "off", "0", true);
+  assert.equal(off.hasController, false);
+  off.poll([]);
+  assert.equal(off.hasController, false);
+  off.cycleHints();
+  assert.equal(off.hasController, true);
+  assert.equal(off.hintsLabel, "Controller hints: Auto (On)");
+});
+
+test("Y selects the active visible Wake Up or Time Stop/Resume button, not historical or unavailable actions", () => {
+  for (const name of ["Wake Up", "Time Stop", "Resume"]) {
+    let clicks = 0;
+    let home = false, overlay = false, unavailable = false, hidden = false, inert = false;
+    const activate = runInNewContext(`${source}\nactivateControllerAction`, {
+      document: {
+        body: { classList: { contains: () => home } },
+        querySelector(selector: string) {
+          if (selector.startsWith("dialog[open]")) return overlay ? {} : null;
+          assert.equal(selector, ".screen.is-active button.era-timestop-button:enabled:not(.is-stale)");
+          return unavailable ? null : {
+            textContent: name,
+            closest: () => inert ? {} : null,
+            getClientRects: () => hidden ? [] : [1],
+            click: () => { clicks++; },
+          };
+        },
+      },
+      getComputedStyle: () => ({ visibility: "visible", display: "block" }),
+    });
+    activate();
+    assert.equal(clicks, 1, name);
+    for (const state of ["home", "overlay", "unavailable", "hidden", "inert"]) {
+      home = state === "home";
+      overlay = state === "overlay";
+      unavailable = state === "unavailable";
+      hidden = state === "hidden";
+      inert = state === "inert";
+      activate();
+      assert.equal(clicks, 1, `${name}: ${state}`);
+    }
+  }
 });
 
 test("standard Menu/Start is edge-triggered with release required and nonstandard pads ignored", () => {
@@ -215,16 +347,20 @@ test("app menu reuses Restart and Library actions and confirms Exit before quitt
   assert.ok(start >= 0 && end > start);
   let options: {
     restart(): void; library(): void; settings(): void; exit(): Promise<void>;
-    canRestart(): boolean; canExit: boolean;
+    canRestart(): boolean; canExit: boolean; onY(): void;
   } | undefined;
   let active: string | null = "session";
   let busy = false;
   let confirmed = false;
   let restarts = 0, libraries = 0, settings = 0, quits = 0, confirmations = 0;
+  let yActions = 0;
+  let input: { blocking: boolean } | null = { blocking: false };
   runInNewContext(app.slice(start, end + 4), {
     setupControllerMenu: (config: typeof options) => { options = config; },
     get session() { return active; },
     get busy() { return busy; },
+    get input() { return input; },
+    activateControllerAction: () => { yActions++; },
     runMode: "game", runGame: "tw",
     chooseRun: (mode: string, game: string) => {
       assert.equal(mode, "game"); assert.equal(game, "tw"); restarts++;
@@ -245,9 +381,18 @@ test("app menu reuses Restart and Library actions and confirms Exit before quitt
   });
   assert.equal(options!.canExit, true);
   assert.equal(options!.canRestart(), true);
+  options!.onY();
+  assert.equal(yActions, 1);
   busy = true;
+  options!.onY();
+  assert.equal(yActions, 1);
   assert.equal(options!.canRestart(), false);
   busy = false;
+  input = { blocking: true };
+  options!.onY();
+  input = null;
+  options!.onY();
+  assert.equal(yActions, 1);
   options!.restart();
   options!.library();
   options!.settings();

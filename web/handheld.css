@@ -16,12 +16,24 @@
 .is-handheld .time-effect { top: 52px; }
 .is-handheld :is(dialog, .era-dialog) { max-height: calc(100dvh - 32px); }
 .is-handheld .settings-actions button { min-height: 44px; font-size: 16px; }
+.is-handheld #settings { width: min(900px, calc(100vw - 32px)); padding: 14px 18px; }
+.is-handheld #settings h3 { margin: 10px 0 8px; }
+.is-handheld #settings > p { margin: 8px 0; line-height: 1.4; }
+.is-handheld #settings .settings-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.is-handheld #settings .settings-actions button { min-width: 0; overflow-wrap: anywhere; }
+.is-handheld #settings .menu-font { grid-column: 1 / -1; margin: 0; padding: 4px 0; border: 0; min-height: 36px; }
+.is-handheld #settings-form label { padding: 6px 10px; }
+.is-handheld #settings-form label:has(input[type="text"]) { grid-template-columns: auto minmax(0, 1fr); }
+.is-handheld #settings .menu-state { white-space: normal; overflow-wrap: anywhere; }
+@media (max-width: 600px) {
+  .is-handheld #settings .settings-actions { grid-template-columns: minmax(0, 1fr); }
+}
 .is-handheld .line button.choice:focus-visible { outline: 2px solid #8ddaff; outline-offset: 2px; }
 @media (max-width: 1280px), (any-pointer: coarse) {
   .command-number { display: none; }
 }
 @media (max-height: 800px) {
-  body:not(.is-home) :is(.era-main, .era-shop) .era-main-header:has(.era-area-art) > .era-watch-control { top: 0; }
+  body:not(.is-home) :is(.era-main, .era-shop) .era-main-header:has(.era-area-art) > .era-watch-control { top: -20px; }
   body:not(.is-home) > header { height: 0; padding: 0; border: 0; }
   body:not(.is-home) > header > :not(.menu) { display: none; }
   body:not(.is-home) > header .menu { position: fixed; top: 8px; right: 8px; }

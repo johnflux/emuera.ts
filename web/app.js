@@ -10,7 +10,7 @@ import { cached, LruCache } from "./cache.js";
 import { profiling, profileStart, profileEnd } from "./performance.js";
 import { decorateCommandNumbers, setupHandheld, setupKeyboardNavigation, touchInput } from "./handheld.js";
 import { setupArtworkDemo } from "./art-demo.js";
-import { setupControllerMenu } from "./controller-menu.js";
+import { activateControllerAction, setupControllerMenu } from "./controller-menu.js";
 
 const terminal = document.querySelector("#terminal");
 const timeEffect = document.querySelector("#time-effect");
@@ -3083,6 +3083,7 @@ translationConfig.querySelector("form").addEventListener("submit", (event) => {
 translationConfig.addEventListener("keydown", (event) => event.stopPropagation());
 const settingsPanel = document.querySelector("#settings");
 setupControllerMenu({
+  onY: () => { if (!busy && input && !input.blocking) activateControllerAction(); },
   restart: () => chooseRun(runMode, runGame),
   library: () => document.querySelector("#library-toggle").click(),
   settings: () => settingsPanel.showModal(),

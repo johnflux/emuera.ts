@@ -45,7 +45,9 @@ export function decorateCommandNumbers(element) {
 export function setupHandheld(onChange) {
   const toggle = document.querySelector("#handheld-toggle");
   const saved = localStorage.getItem(HANDHELD_KEY);
-  let enabled = saved === null ? globalThis.eraDesktop?.handheld === true : saved === "1";
+  let enabled = saved === null
+    ? globalThis.eraDesktop?.handheld === true || touchInput() || (globalThis.navigator?.maxTouchPoints ?? 0) > 0
+    : saved === "1";
   function apply() {
     document.body.classList.toggle("is-handheld", enabled);
     toggle.setAttribute("aria-pressed", String(enabled));

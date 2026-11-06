@@ -25,12 +25,16 @@ test("server serves handheld module and stylesheet with their correct content ty
   }
 });
 
-test("handheld layout defaults on for Deck and preserves explicit preferences elsewhere", () => {
-  for (const { deck, saved, expected } of [
+test("handheld layout defaults on for Deck or touch and preserves explicit preferences", () => {
+  for (const { deck, saved, expected, coarse = false, touchPoints = 0 } of [
     { deck: false, saved: null, expected: false },
     { deck: true, saved: null, expected: true },
     { deck: true, saved: "0", expected: false },
     { deck: false, saved: "1", expected: true },
+    { deck: false, saved: null, coarse: true, expected: true },
+    { deck: false, saved: null, touchPoints: 5, expected: true },
+    { deck: false, saved: "0", coarse: true, touchPoints: 5, expected: false },
+    { deck: true, saved: "0", coarse: true, expected: false },
   ]) {
     let click = () => {};
     let stored = saved;
@@ -39,6 +43,11 @@ test("handheld layout defaults on for Deck and preserves explicit preferences el
     let changes = 0;
     const setup = runInNewContext(`${source}\nsetupHandheld`, {
       eraDesktop: { handheld: deck },
+      navigator: { maxTouchPoints: touchPoints },
+      matchMedia: (query: string) => {
+        assert.equal(query, "(any-pointer: coarse)");
+        return { matches: coarse };
+      },
       localStorage: {
         getItem: () => stored,
         setItem(key: string, value: string) {
@@ -221,6 +230,11 @@ test("navigation measures the labeled tile rather than its right-aligned numeric
 test("compact command numbers are hidden at the exact width threshold or with touch input", () => {
   const css = readFileSync(new URL("../web/handheld.css", import.meta.url), "utf8");
   assert.match(css, /@media \(max-width: 1280px\), \(any-pointer: coarse\) \{\s*\.command-number \{ display: none; \}/);
+});
+
+test("compact-height gameplay positions the artwork watch at minus 20 pixels", () => {
+  const css = readFileSync(new URL("../web/handheld.css", import.meta.url), "utf8");
+  assert.match(css, /@media \(max-height: 800px\) \{\s*body:not\(\.is-home\) :is\(\.era-main, \.era-shop\) \.era-main-header:has\(\.era-area-art\) > \.era-watch-control \{ top: -20px; \}/);
 });
 
 function navigationHarness() {

@@ -143,8 +143,9 @@ when needed; **Game library** remains available there.
 
 **Settings…** opens the display, character, LLM, clipboard, and translation
 controls in a scrollable dialog. **Handheld layout** there increases text to at least
-20 px and enlarges controls. It defaults on when Steam reports `SteamDeck=1`;
-other platforms, including macOS, can enable it manually. The toggle is saved
+20 px and enlarges controls. It defaults on when Steam reports `SteamDeck=1`
+or the device reports touch support or a coarse pointer. Other devices,
+including non-touch Macs, can enable it manually. The toggle is saved
 and overrides the automatic default without changing your normal font setting.
 
 At viewport widths of 1280 px or less, or when a touch pointer is available,
@@ -181,6 +182,22 @@ menu for keyboard testing (some Macs need Fn+F10). Press Menu/Start again or
 Escape to close it. While a dialog is open, the controller D-pad navigates,
 A confirms a focused button, and B goes back. These bindings also work in
 Settings and confirmation dialogs; editable fields keep their native behavior.
+With a standard-mapped controller connected, **Y** activates **Wake Up** or
+**Time Stop / Resume**, whichever is available on the current screen. A circular
+**Y** hint appears on that button. Holding Y does not repeat the action; release
+it before pressing again. The shortcut is inactive while menus/dialogs are open,
+the game is busy, or the action is unavailable. Detection uses the Gamepad API,
+not the screen size or Steam launch status; browsers may require a controller
+button press before exposing the connected device. The hint disappears when
+the last supported controller disconnects, unless Steam Deck is detected or
+hints are explicitly set to On.
+**Settings > Controller hints** cycles through **Auto**, **On**, and **Off**.
+Auto (the default) detects a gamepad or Steam Deck, On shows hints without a controller
+for testing, and Off hides them even with a controller connected. The choice is
+saved and only affects hints, not controller input. F10 remains available for
+testing the centered menu. Handheld Settings uses a compact two-column layout
+to fit the Steam Deck's 1280×800 screen without scrolling; smaller screens can
+still scroll to keep every setting accessible.
 Restart, Library, and Exit retain unsaved-progress confirmations. Exit quits
 the desktop app and is disabled with an explanation in browser builds.
 The STEAM and “…” buttons remain reserved for Steam. A Steam Input layout that

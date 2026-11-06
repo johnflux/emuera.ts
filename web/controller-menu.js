@@ -1,4 +1,32 @@
-export function setupControllerMenu({ restart, library, settings, exit, canRestart, canExit, onError }) {
+export function activateControllerAction() {
+  if (document.body.classList.contains("is-home")
+    || document.querySelector("dialog[open], .era-dialog:popover-open, #menu-panel:not([hidden])")) return;
+  const action = document.querySelector(".screen.is-active button.era-timestop-button:enabled:not(.is-stale)");
+  if (!action || action.closest("[hidden], [inert]") || !action.getClientRects().length) return;
+  const style = getComputedStyle(action);
+  if (style.visibility === "hidden" || style.display === "none") return;
+  action.click();
+}
+
+export function setupControllerMenu({ restart, library, settings, exit, canRestart, canExit, onError, onY = activateControllerAction }) {
+  const hintsKey = "era-typescript.controller-hints";
+  const hintsToggle = document.querySelector("#controller-hints-toggle");
+  const saved = localStorage.getItem(hintsKey)
+    ?? (localStorage.getItem("era-typescript.force-controller") === "1" ? "on" : "auto");
+  const modes = ["auto", "on", "off"];
+  let mode = modes.includes(saved) ? saved : "auto";
+  let detected = false;
+  function applyControllerMode() {
+    const enabled = mode === "on" || (mode === "auto" && (detected || globalThis.eraDesktop?.handheld === true));
+    document.body.classList.toggle("has-controller", enabled);
+    hintsToggle.textContent = `Controller hints: ${mode === "auto" ? `Auto (${enabled ? "On" : "Off"})` : mode === "on" ? "On" : "Off"}`;
+  }
+  applyControllerMode();
+  hintsToggle.addEventListener("click", () => {
+    mode = modes[(modes.indexOf(mode) + 1) % modes.length];
+    localStorage.setItem(hintsKey, mode);
+    applyControllerMode();
+  });
   const dialog = document.querySelector("#controller-menu");
   const actions = [...dialog.querySelectorAll(".controller-menu-actions button")];
   let previousFocus = null;
@@ -51,7 +79,10 @@ export function setupControllerMenu({ restart, library, settings, exit, canResta
         continue;
       }
       const modal = document.activeElement?.closest("dialog[open]") ?? document.querySelector("dialog[open]");
-      if (!modal) continue;
+      if (!modal) {
+        if (down(3)) onY();
+        continue;
+      }
       // Only consume the standard D-pad, confirm and back buttons while a modal is open.
       const keys = [[12, "ArrowUp"], [13, "ArrowDown"], [14, "ArrowLeft"], [15, "ArrowRight"], [1, "Escape"]];
       for (const [button, key] of keys) {
@@ -65,6 +96,8 @@ export function setupControllerMenu({ restart, library, settings, exit, canResta
       }
     }
     for (const index of held.keys()) if (!connected.has(index)) held.delete(index);
+    detected = connected.size > 0;
+    applyControllerMode();
     if (connected.size) frame = requestAnimationFrame(poll);
   }
   function start() {
