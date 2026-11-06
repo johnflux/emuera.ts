@@ -25,6 +25,7 @@
     "dist:mac:x64": "npm run build && electron-builder --mac dmg zip --x64",
     "dist:mac:arm64": "npm run build && electron-builder --mac dmg zip --arm64",
     "dist:win": "npm run build && electron-builder --win zip --x64",
+    "dist:linux": "npm run build && electron-builder --linux tar.gz --x64",
     "release": "npm version --message \"Release v%s\n\nCo-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>\"",
     "check": "tsc --noEmit",
     "test": "tsx --test test/*.test.ts",
@@ -71,6 +72,14 @@
       "artifactName": "EraTs-${version}-win-x64.${ext}",
       "target": [
         "zip"
+      ]
+    },
+    "linux": {
+      "executableName": "emuera-ts",
+      "artifactName": "EraTs-${version}-linux-${arch}.${ext}",
+      "category": "Game",
+      "target": [
+        "tar.gz"
       ]
     },
     "directories": {

@@ -9,6 +9,17 @@ const gamePaths = require("../electron/game-paths.cjs");
 const { Arch } = require("electron-builder");
 const appDir = path.resolve(import.meta.dirname, "..");
 
+test("Linux distribution uses a native x64 archive with a stable executable name", () => {
+  const { scripts, build } = require("../package.json");
+  assert.equal(scripts["dist:linux"], "npm run build && electron-builder --linux tar.gz --x64");
+  assert.deepEqual(build.linux, {
+    executableName: "emuera-ts",
+    artifactName: "EraTs-${version}-linux-${arch}.${ext}",
+    category: "Game",
+    target: ["tar.gz"],
+  });
+});
+
 test("desktop packaging rejects dependencies from another operating system", async () => {
   await assert.rejects(beforePack({
     electronPlatformName: process.platform === "win32" ? "darwin" : "win32",
@@ -46,6 +57,15 @@ test("Mac games download to application data and also search beside the executab
   const userData = path.resolve("appdata");
   const executable = path.resolve("installed", "Era.exe");
   assert.deepEqual(gamePaths(userData, executable, "darwin"), {
+    installDirectory: path.join(userData, "GAMES"),
+    searchDirectories: [path.join(userData, "GAMES"), path.join(path.dirname(executable), "GAMES")],
+  });
+});
+
+test("Linux games download to application data and also search beside the executable", () => {
+  const userData = path.resolve("config", "era-typescript");
+  const executable = path.resolve("installed", "emuera-ts");
+  assert.deepEqual(gamePaths(userData, executable, "linux"), {
     installDirectory: path.join(userData, "GAMES"),
     searchDirectories: [path.join(userData, "GAMES"), path.join(path.dirname(executable), "GAMES")],
   });
