@@ -10,11 +10,13 @@ or one level down (e.g. an unzipped `name/name-master`), titled and identified
 by the folder name. Use **Refresh library** after adding a game; a restart is not required.
 Standard folder names are matched case-insensitively, including `erb/`, `csv/`,
 `Resources/` and `Sound/`, on Linux as well as macOS/Windows. Files are not renamed.
-ERB files load in each directory before its subdirectories, matching the native
-EE engine checked under Wine. `SearchSubdirectory` (Japanese:
+ERB files normally load in each directory before its subdirectories.
+`SearchSubdirectory` (Japanese:
 `サブディレクトリを検索する`) controls recursion and defaults to off; config layers
 apply before discovery. Filenames currently use deterministic case-insensitive
 code-unit order, not full .NET culture collation or EE's `#`-folder priority.
+An EEv56 Wine probe confirmed that scripts under `#` folders can run before
+root scripts. The AnonTW installation checked here has no such ERB folders.
 Script and data CSV reads use batches of up to 16 files, with indexing and errors
 still processed in discovery order. Headers are indexed before scripts, and
 duplicate-function/character precedence is unchanged. Read-ahead source text is
@@ -990,6 +992,11 @@ writes `emuera.log` with `OUTPUTLOG` and ends at `DONE`; compare its printed
 lines with the expectations in the TypeScript test. Do not run these probes
 inside an installed game's directory. The browser runtime additionally prints
 its existing `Log written to emuera.log` notification.
+
+EEv56 Wine probes confirm that `FORM中の三連記号を展開しない:YES` preserves
+`***`, `+++`, `===`, `///`, and `$$$` literally, including in formatted string
+literals, as this interpreter currently does. With that setting `NO`, native
+Emuera expands them to character names; this mode is not yet implemented.
 
 `native-string-escapes.erb` covers ordinary versus formatted string escapes,
 eraTW's input-trim pattern, and regex operators that must stay literal.

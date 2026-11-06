@@ -174,6 +174,31 @@ test(".NET regex classes work inside character classes and leave escaped backsla
   }
 });
 
+test("native FORM triple-symbol ignore setting preserves literal characters", () => {
+  for (const jit of [false, true]) {
+    const game = emptyGame();
+    game.config.set("FORM中の三連記号を展開しない", "YES");
+    indexScript(game, `@SYSTEM_TITLE
+FOR A, 0, 4
+CALL PROBE
+NEXT
+QUIT
+@PROBE
+PRINTFORML TRIPLE [***] [+++] [===] [///] [$$$]
+PRINTFORML MIX [x***y] [****] [***+++]
+PRINTFORML LITERAL %@"*** +++ === /// $$$"%
+RETURN`, "triple-symbols.erb");
+    const snapshot = new Runtime(game, 50_000, { jit }).start();
+    assert.equal(snapshot.status, "halted", JSON.stringify(snapshot.error));
+    assert.deepEqual(snapshot.output.filter((line) => line.type === "text").map((line) => line.text),
+      Array.from({ length: 4 }, () => [
+        "TRIPLE [***] [+++] [===] [///] [$$$]",
+        "MIX [x***y] [****] [***+++]",
+        "LITERAL *** +++ === /// $$$",
+      ]).flat());
+  }
+});
+
 test("script discovery honors layered subdirectory config and loads root definitions before nested ones", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "era-native-loader-"));
   try {
