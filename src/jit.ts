@@ -123,9 +123,8 @@ const H = {
   rd: (b: Binding, C: EvaluationContext, count: number, n0: number, n1: number, n2: number): Value => readElement(b.s, locate(b.s, C, count, n0, n1, n2)),
   get: (b: Binding, index: number): Value => readElement(b.s, index),
   wr: (b: Binding, index: number, value: Value): void => writeElement(b.s, index, value),
-  rand(R: { random(bound: bigint): bigint }, value: Value): bigint {
-    const bound = integer(value);
-    return bound <= 0n ? 0n : R.random(bound);
+  rand(R: { pseudoRandom(bound: bigint): bigint }, value: Value): bigint {
+    return R.pseudoRandom(integer(value));
   },
   fc(R: { expressionFunction(name: string, args: unknown[]): Value }, C: EvaluationContext, name: string, user: boolean, args: (Value | undefined)[]): Value {
     return user ? R.expressionFunction(name, args) : C.call(name, args);

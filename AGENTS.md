@@ -33,3 +33,23 @@
   rather than working around the renderer's current limitations. Keep rendering
   safe and errors explicit.
 - This does not relax the native Emuera save-compatibility requirements above.
+
+# Native Emuera spot checks (Wine)
+
+- For behavior parity questions, prefer a direct run of native Emuera before
+  changing runtime semantics.
+- In this repo, the known binary path is
+  `GAMES/anon-tw-anon-tw_eng-modding/Emuera.exe`.
+- Make a throwaway folder with empty `CSV/`, an `ERB/` containing one test
+  script, and a copy of the executable. Do not modify an installed game.
+- Write the script under `@SYSTEM_TITLE`, use `OUTPUTLOG` before and after each
+  probe, and end with `PRINTL DONE`, `OUTPUTLOG`, and `QUIT`. Check
+  `emuera.log`, including errors, rather than relying on Wine's console output.
+- Set `システム関数の上書きを許可する:YES` in `emuera.config`, then launch
+  Wine from the throwaway folder:
+  `WINEDEBUG=-all wine ./Emuera.exe`
+- Parenthesize negative pseudo-variable indices, for example `RAND:(-5)`.
+  Test `CompatiRAND` separately: default mode rejects non-positive bounds;
+  eraMaker compatibility mode accepts them.
+- Stop the Wine process after inspecting the log and remove temporary files.
+  See `docs/developer-guide.md` for the existing native fixture procedure.

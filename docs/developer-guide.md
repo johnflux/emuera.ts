@@ -1326,13 +1326,16 @@ declarations and the expression evaluator. No single routine dominates.
   `_Rename.csv` substitutions are applied before script indexing.
 - Character CSV queries (`EXISTCSV`, `CSVNAME`, `CSVCALLNAME`, `CSVNICKNAME`,
   `CSVMASTERNAME`, `CSVBASE`, `CSVABL`, `CSVTALENT`, `CSVEXP`, `CSVRELATION`,
-  `CSVFLAG`, `CSVCFLAG`, `CSVMARK`, `CSVJUEL`, `CSVEQUIP`, `CSVCSTR`), bounded `RAND:n`
-  (non-positive bounds return 0),
+  `CSVFLAG`, `CSVCFLAG`, `CSVMARK`, `CSVJUEL`, `CSVEQUIP`, `CSVCSTR`), bounded `RAND:n`,
   `FINDELEMENT`, `ARRAYREMOVE`, bit manipulation, FORM field padding,
   hexadecimal `TOSTR`, Unicode/string/HTML helpers support new-game setup.
   Character CSV numeric fields follow Emuera's leading-integer parsing, allowing
   trailing notes; omitted values mean 1. Invalid nonempty values that default to
   1 are explicitly recorded in diagnostics.
+- `RAND:n` rejects non-positive bounds by default. With `CompatiRAND` enabled,
+  zero returns 0 and other bounds use a random number from 0 to 32767 modulo
+  the bound's absolute value, matching Emuera's eraMaker compatibility mode.
+  The `RAND()` function still rejects non-positive bounds in either mode.
 - Session-local data tables: `DT_CREATE`, `DT_EXIST`, `DT_RELEASE`, `DT_CLEAR`,
   `DT_COLUMN_ADD`, `DT_ROW_ADD`, `DT_ROW_LENGTH`, `DT_COLUMN_LENGTH`,
   `DT_CELL_GET`, `DT_CELL_GETS`, `DT_CELL_ISNULL`, `DT_CELL_SET`, and

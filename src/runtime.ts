@@ -1823,7 +1823,7 @@ export class Runtime {
   // Character list operations follow uEmuera's VariableEvaluator; only PICKUPCHARA remaps TARGET/ASSI/MASTER.
   /** Uniform integer in [0, bound) from a seedable SplitMix64 stream (RANDOMIZE/DUMPRAND/INITRAND). */
   private random(bound: bigint): bigint {
-    if (bound <= 0n) return 0n;
+    if (bound <= 0n) throw new EraError("Random bound must be positive");
     const limit = (1n << 64n) - (1n << 64n) % bound;
     for (;;) {
       this.randomState = BigInt.asUintN(64, this.randomState + 0x9e3779b97f4a7c15n);
@@ -1833,6 +1833,14 @@ export class Runtime {
       z ^= z >> 31n;
       if (z < limit) return z % bound;
     }
+  }
+  private pseudoRandom(bound: bigint): bigint {
+    if (integer(this.configValue("CompatiRAND"))) {
+      if (bound === 0n) return 0n;
+      return this.random(32768n) % (bound < 0n ? -bound : bound);
+    }
+    if (bound <= 0n) throw new EraError("RAND bound must be a positive integer");
+    return this.random(bound);
   }
   private characterOperation(op: string, values: number[], context: EvaluationContext): void {
     const count = this.globals.characterCount();
@@ -1975,7 +1983,7 @@ export class Runtime {
         if (name === "RAND") {
           if (indices.length !== 1) throw new EraError("RAND expects one bound");
           const bound = integer(evaluate(indices[0]!, context));
-          return bound <= 0n ? 0n : this.random(bound);
+          return this.pseudoRandom(bound);
         }
         return variables.get(name, indices, context);
       },

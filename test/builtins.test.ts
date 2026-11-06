@@ -793,6 +793,48 @@ PRINTFORML {LOCAL:2 >= 10 && LOCAL:2 < 20} {RAND(10, 20) == LOCAL:2 && RAND:1000
   assert.deepEqual(texts(result), ["125 -3", "[*....]", "[****]", "[...]", "21", "91203", "03219 032", "12305 abcxy 1", "42 07755", "1 1"]);
 });
 
+test("RAND pseudo-variable follows native bounds and eraMaker compatibility mode in interpreter and JIT", () => {
+  for (const jit of [false, true]) {
+    for (const bound of ["0", "(-5)"]) {
+      const bad = runtime(`@SYSTEM_TITLE
+CALL DRAW(1)
+CALL DRAW(1)
+CALL DRAW(${bound})
+@DRAW(ARG)
+LOCAL = RAND:ARG`, undefined, { jit }).start();
+      assert.equal(bad.status, "error");
+      assert.match(bad.error!.message, /RAND bound must be a positive integer/);
+    }
+
+    const compat = (game: Game) => game.config.set("CompatiRAND", "YES");
+    const result = runtime(`@SYSTEM_TITLE
+RANDOMIZE 5
+DUMPRAND
+LOCAL = RAND:0
+LOCAL:1 = RAND:100000
+INITRAND
+LOCAL:2 = RAND:32768
+PRINTFORML {LOCAL} {LOCAL:1 == LOCAL:2} {LOCAL:1 < 32768}
+FOR A, 0, 5
+CALL DRAW
+NEXT
+RETURN
+@DRAW
+DUMPRAND
+LOCAL = RAND:(-5)
+INITRAND
+LOCAL:1 = RAND:32768
+PRINTFORML {LOCAL == LOCAL:1 % 5} {LOCAL >= 0 && LOCAL < 5} {RAND:(-1)} {RAND:(__INT_MIN__) >= 0}`, compat, { jit }).start();
+    assert.deepEqual(texts(result), ["0 1 1", ...Array(5).fill("1 1 0 1")]);
+
+    for (const expression of ["RAND(0)", "RAND(-5)"]) {
+      const bad = runtime(`@SYSTEM_TITLE\nA = ${expression}`, compat, { jit }).start();
+      assert.equal(bad.status, "error");
+      assert.match(bad.error!.message, /RAND maximum must exceed its minimum/);
+    }
+  }
+});
+
 test("SKIPDISP hides output and waits, NOSKIP restores display, REUSELASTLINE is replaced, CVARSET and color names", () => {
   const result = runtime(`@SYSTEM_TITLE
 PRINTL shown
