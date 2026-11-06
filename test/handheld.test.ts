@@ -292,8 +292,9 @@ test("main and game-output focus do not outline the whole content panel", () => 
   assert.match(css, /:is\(button, a\[href\], input, select, textarea\):focus-visible \{\s*outline: 2px solid #8ddaff;/);
 });
 
-test("text-only pauses preserve an invisible command-row spacer but GUI screens collapse it", () => {
+test("text-only pauses and processing preserve an invisible command-row spacer but GUI screens collapse it", () => {
   const css = readFileSync(new URL("../web/style.css", import.meta.url), "utf8");
+  assert.ok(css.includes("body.is-busy main:not(:has(.screen.is-active :is(.era-main, .era-shop, .era-dialog, .era-launch))) > #input-form[hidden],\n"));
   assert.ok(css.includes("main:has(> #terminal.is-waiting):not(:has(.screen.is-active :is(.era-main, .era-shop, .era-dialog, .era-launch))) > #input-form[hidden] { display: flex; visibility: hidden; }"));
   assert.match(css, /#input-form\[hidden\] \{ display: none; \}/);
 });

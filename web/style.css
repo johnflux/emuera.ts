@@ -232,6 +232,7 @@ a { color: #8ddaff; }
 #settings-reset:hover:enabled, #settings-reset:focus-visible { border-color: #69c9b5; background: #183a43; color: #d7f4ed; }
 #input-form { order: 1; flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding: 0 10px; font-size: var(--font-size); line-height: var(--line-height, 1.25); }
 #input-form[hidden] { display: none; }
+body.is-busy main:not(:has(.screen.is-active :is(.era-main, .era-shop, .era-dialog, .era-launch))) > #input-form[hidden],
 main:has(> #terminal.is-waiting):not(:has(.screen.is-active :is(.era-main, .era-shop, .era-dialog, .era-launch))) > #input-form[hidden] { display: flex; visibility: hidden; }
 .command-field { position: relative; flex: 1; min-width: 0; }
 #command { display: block; width: 100%; min-width: 0; background: transparent; border: 0; padding: 0; line-height: inherit; outline: none; }

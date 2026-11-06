@@ -143,7 +143,7 @@ Handheld gameplay removes bottom panel padding and keeps the command row compact
 Button-only GUI dialogs hide the command row entirely; inline setup fields remain
 editable, and separate text or numeric-amount prompts still show the command row.
 Main gameplay and the home/shop screen hide the command row, as do
-click-to-continue pauses. Text-only pauses retain the invisible row's spacing,
+click-to-continue pauses. Text-only pauses and processing retain the invisible row's spacing,
 while GUI screens collapse it. Click or press Enter to continue during pauses.
 Small-screen and handheld layouts hide the inline interaction history, use smaller
 watch-button text, and keep action headings inline to save space.
