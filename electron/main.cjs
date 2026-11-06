@@ -2,6 +2,7 @@ const { app, BrowserWindow, clipboard, dialog, ipcMain, shell } = require("elect
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 const gamePaths = require("./game-paths.cjs");
+const isSteamLaunch = require("./steam-launch.cjs");
 
 let server;
 let window;
@@ -29,6 +30,7 @@ async function createWindow() {
     height: 850,
     minWidth: 760,
     minHeight: 560,
+    fullscreen: isSteamLaunch(),
     show: false,
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),

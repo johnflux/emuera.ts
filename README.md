@@ -130,6 +130,11 @@ the server and opens the app window.
    Input layout with left-click and Enter bindings. **Steam + X** opens the
    on-screen keyboard for typed commands.
 
+Launching through Steam automatically starts the app fullscreen, including
+non-Steam shortcuts in Desktop Mode and Gaming Mode. Launching directly stays
+windowed. Detection uses Steam's `SteamGameId` or `SteamAppId` environment
+variables; no launch options or Steamworks integration are needed.
+
 Linux downloads go to `~/.config/era-typescript/GAMES` (or
 `$XDG_CONFIG_HOME/era-typescript/GAMES` when configured). The app also searches
 `GAMES/` beside `emuera-ts`, with the application-data copy taking precedence.

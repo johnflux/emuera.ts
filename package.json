@@ -54,6 +54,7 @@
       "electron/main.cjs",
       "electron/preload.cjs",
       "electron/game-paths.cjs",
+      "electron/steam-launch.cjs",
       "package.json",
       "!GAMES/**",
       "!test/**",
