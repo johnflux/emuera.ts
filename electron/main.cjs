@@ -1,4 +1,4 @@
-const { app, BrowserWindow, clipboard, dialog, ipcMain, shell } = require("electron");
+const { app, BrowserWindow, clipboard, dialog, ipcMain, screen, shell } = require("electron");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 const gamePaths = require("./game-paths.cjs");
@@ -7,13 +7,22 @@ const isSteamLaunch = require("./steam-launch.cjs");
 let server;
 let window;
 
-ipcMain.handle("era:write-clipboard", (event, text) => {
+function requireGameWindow(event, action) {
   const address = server?.address();
   if (!window || event.sender !== window.webContents || !address || typeof address === "string"
     || event.senderFrame?.url !== `http://127.0.0.1:${address.port}/`) {
-    console.error("Clipboard request rejected: unexpected sender");
-    throw new Error("Clipboard access is only available from the game window");
+    console.error(`${action} request rejected: unexpected sender`);
+    throw new Error(`${action} is only available from the game window`);
   }
+}
+
+ipcMain.handle("era:quit", (event) => {
+  requireGameWindow(event, "Exit");
+  app.quit();
+});
+
+ipcMain.handle("era:write-clipboard", (event, text) => {
+  requireGameWindow(event, "Clipboard access");
   if (typeof text !== "string" || text.length > 1_000_000) {
     console.error("Clipboard request rejected: invalid text");
     throw new Error("Clipboard text must be a string of at most 1,000,000 characters");
@@ -25,18 +34,24 @@ async function createWindow() {
   const { installDirectory, searchDirectories } = gamePaths(
     app.getPath("userData"), app.getPath("exe"),
   );
+  const { width, height } = screen.getPrimaryDisplay().workAreaSize;
+  const steamLaunch = isSteamLaunch();
   window = new BrowserWindow({
-    width: 1200,
-    height: 850,
-    minWidth: 760,
-    minHeight: 560,
-    fullscreen: isSteamLaunch(),
+    width: Math.min(1200, width),
+    height: Math.min(850, height),
+    minWidth: Math.min(760, width),
+    minHeight: Math.min(560, height),
+    fullscreen: steamLaunch,
     show: false,
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      additionalArguments: [
+        ...(steamLaunch ? ["--era-steam"] : []),
+        ...(process.env.SteamDeck === "1" ? ["--era-handheld"] : []),
+      ],
     },
   });
   window.once("ready-to-show", () => window.show());

@@ -34,7 +34,12 @@ test("desktop packages include Steam launch detection", () => {
 test("desktop window applies fullscreen only when launched through Steam", async () => {
   const source = readFileSync(path.join(appDir, "electron", "main.cjs"), "utf8");
   const desktopRequire = createRequire(path.join(appDir, "electron", "main.cjs"));
-  for (const steamLaunch of [false, true]) {
+  for (const { steamLaunch, deck, width, height } of [
+    { steamLaunch: false, deck: false, width: 1920, height: 1080 },
+    { steamLaunch: true, deck: false, width: 1920, height: 1080 },
+    { steamLaunch: true, deck: true, width: 1280, height: 800 },
+    { steamLaunch: false, deck: false, width: 640, height: 480 },
+  ]) {
     const stopped = new Error("Stop after checking window options");
     const electron = {
       app: {
@@ -43,9 +48,21 @@ test("desktop window applies fullscreen only when launched through Steam", async
         on: () => {},
       },
       ipcMain: { handle: () => {} },
+      screen: { getPrimaryDisplay: () => ({ workAreaSize: { width, height } }) },
       BrowserWindow: class {
-        constructor(options: { fullscreen: boolean }) {
+        constructor(options: {
+          fullscreen: boolean; width: number; height: number; minWidth: number; minHeight: number;
+          webPreferences: { additionalArguments: string[] };
+        }) {
           assert.equal(options.fullscreen, steamLaunch);
+          assert.equal(options.width, Math.min(1200, width));
+          assert.equal(options.height, Math.min(850, height));
+          assert.equal(options.minWidth, Math.min(760, width));
+          assert.equal(options.minHeight, Math.min(560, height));
+          assert.equal(options.webPreferences.additionalArguments.join(), [
+            ...(steamLaunch ? ["--era-steam"] : []),
+            ...(deck ? ["--era-handheld"] : []),
+          ].join());
           throw stopped;
         }
       },
@@ -59,8 +76,32 @@ test("desktop window applies fullscreen only when launched through Steam", async
         return desktopRequire(id);
       },
       __dirname: path.join(appDir, "electron"),
+      process: { env: deck ? { SteamDeck: "1" } : {} },
     });
     await assert.rejects(startup, (error) => error === stopped);
+  }
+});
+
+test("preload exposes the handheld default only with the desktop launch argument", () => {
+  const source = readFileSync(path.join(appDir, "electron", "preload.cjs"), "utf8");
+  for (const { handheld, steam } of [
+    { handheld: false, steam: false },
+    { handheld: false, steam: true },
+    { handheld: true, steam: true },
+  ]) {
+    runInNewContext(source, {
+      process: { argv: ["electron", ...(handheld ? ["--era-handheld"] : []), ...(steam ? ["--era-steam"] : [])] },
+      require: () => ({
+        ipcRenderer: {},
+        contextBridge: {
+          exposeInMainWorld(name: string, bridge: { handheld: boolean; steam: boolean }) {
+            assert.equal(name, "eraDesktop");
+            assert.equal(bridge.handheld, handheld);
+            assert.equal(bridge.steam, steam);
+          },
+        },
+      }),
+    });
   }
 });
 

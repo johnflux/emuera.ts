@@ -39,6 +39,7 @@ async function inputHarness() {
     setSelectionRange(start: number, end: number) { this.selectionStart = start; this.selectionEnd = end; },
   };
   const state = {
+    touch: false,
     busy: false, expiring: false,
     input: { kind: "string", singleCharacter: false, blocking: false },
     queuedSubmit: null as { value: string; choice?: string } | null,
@@ -52,6 +53,7 @@ async function inputHarness() {
     source.slice(submitStart, submitEnd), "sent.push(value);\n}",
     source.slice(start, end), "\nsubmit;",
   ].join("\n"), {
+    touchInput: () => state.touch,
     command,
     sent,
     terminal: { querySelectorAll: () => choices },
@@ -111,6 +113,17 @@ test("recalled commands show a non-editable label that disappears on edits and s
   assert.deepEqual(sent, ["400", "400"]);
 });
 
+test("touchscreen input does not recall command history", async () => {
+  const { state, command, send, key } = await inputHarness();
+  send("400");
+  state.touch = true;
+  command.value = "draft";
+  assert.equal(key("ArrowUp").defaultPrevented, false);
+  assert.equal(command.value, "draft");
+  state.touch = false;
+  key("ArrowUp");
+  assert.equal(command.value, "400");
+});
 test("typed commands capture matching button labels without adding labels to the submitted value", async () => {
   const { command, choices, hint, send, key } = await inputHarness();
   choices.push(choice("400", "[Move]"));

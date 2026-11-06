@@ -945,7 +945,8 @@ All preview buttons are mutually exclusive presets. Relationship presets use
 
 ### Area pictures
 
-Open **Artwork demo** from the game library, or visit `/art-demo`, to preview the header without starting a game.
+Start **Conformance demo** from the menu, then choose **Artwork demo** above its output
+to preview the header in an embedded dialog. It no longer has a separate page.
 Controls select location, season/day, exact time (or a time scrubber), and weather.
 Header ambience follows the area, not whether the current room is indoors or outdoors.
 The artwork selector can follow the time automatically or force day/night images independently of the sky,

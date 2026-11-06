@@ -34,12 +34,12 @@ hint (for example, `400 [Move]`); editing the input hides the hint.
 
 ## Translation and clipboard
 
-Both options below are off by default and available in the menu:
+Both options below are off by default and available under **Settings…**:
 
 - **Auto-copy game text** copies the latest printed output as plain text, before
   translation, for tools such as Luna Translator. Desktop builds use the native
   clipboard; browser builds need clipboard permission and may require focus.
-- **Translation model…** configures a local OpenAI-compatible server. In LM
+- **Settings… > Translation model…** configures a local OpenAI-compatible server. In LM
   Studio, load your model (for example Gemma 3 12B), start its API server, set the
   base URL to `http://127.0.0.1:1234/v1`, and use **Load models** to select its ID.
   Save, then turn on **Local-model translation**. Translations appear below the
@@ -134,6 +134,69 @@ Launching through Steam automatically starts the app fullscreen, including
 non-Steam shortcuts in Desktop Mode and Gaming Mode. Launching directly stays
 windowed. Detection uses Steam's `SteamGameId` or `SteamAppId` environment
 variables; no launch options or Steamworks integration are needed.
+
+Desktop windows fit the display's available area, including the Deck's
+1280 x 800 screen. During gameplay at viewport heights of 800 px or less, the
+header is hidden and a floating burger button keeps the menu accessible.
+The library retains its header. The menu stays within the viewport and scrolls
+when needed; **Game library** remains available there.
+
+**Settings…** opens the display, character, LLM, clipboard, and translation
+controls in a scrollable dialog. **Handheld layout** there increases text to at least
+20 px and enlarges controls. It defaults on when Steam reports `SteamDeck=1`;
+other platforms, including macOS, can enable it manually. The toggle is saved
+and overrides the automatic default without changing your normal font setting.
+
+At viewport widths of 1280 px or less, or when a touch pointer is available,
+named game buttons hide their bracketed command numbers. Number-only buttons
+remain visible; command values and typed-input history are unchanged.
+
+Keyboard navigation works on every platform, so it can be tested on a Mac:
+
+- Outside text fields, arrow keys move focus between visible controls in the
+  current game screen, library, menu, or dialog. Left/Right stay within the
+  current visual row when possible, then reach nearby controls in the next
+  panel. Up/Down prefer the same column and use a position 20% from the left
+  edge to align unequal-width buttons. Down from the bottom controls reaches
+  the game input; movement does not wrap.
+- **Enter** activates a focused button or link; **Escape** closes menus and
+  dialogs. Confirmation dialogs keep Cancel as their initial selection.
+- In the game input, Up/Down still browse command history and Left/Right still
+  move the cursor on non-touch devices. On touch devices, Up/Down move focus
+  between controls instead of recalling command history. Press **Escape** to leave the input, then use arrows to choose
+  a command. Arrow navigation remains active after choosing a command; click the
+  input or type to return to text entry.
+- **Tab / Shift+Tab** remain available. Games requesting raw mouse/key events
+  keep their existing key handling rather than using arrow navigation.
+
+For navigating game screens through Steam Input, the D-pad can be mapped to
+arrow keys, A to Enter, and B to Escape, keeping the trackpad as a mouse for
+complex screens. The centered menu and dialogs also support direct controller
+input as described below.
+
+The controller's **Menu/Start** button opens a centered menu with **Restart,
+Library, Settings, and Exit** when Steam exposes a standard-mapped gamepad.
+No custom keyboard mapping is required for that button. **F10** opens the same
+menu for keyboard testing (some Macs need Fn+F10). Press Menu/Start again or
+Escape to close it. While a dialog is open, the controller D-pad navigates,
+A confirms a focused button, and B goes back. These bindings also work in
+Settings and confirmation dialogs; editable fields keep their native behavior.
+Restart, Library, and Exit retain unsaved-progress confirmations. Exit quits
+the desktop app and is disabled with an explanation in browser builds.
+The STEAM and “…” buttons remain reserved for Steam. A Steam Input layout that
+exposes only keyboard/mouse events cannot be detected as a gamepad; actual Deck
+default-layout compatibility still needs testing. Opening this menu does not
+pause interpreter timers or background tasks.
+
+**Settings… > Character Interaction History** controls the selected character's
+history and chat panel. It defaults off when launched through Steam and on
+elsewhere; a saved manual choice overrides that default. Turning it off removes
+the panel and cancels active chat generation without deleting recorded history.
+Game output scrollback, typed command history, and background character
+reactions retain their existing behavior.
+
+**Conformance demo** includes an **Artwork demo** button above its output for
+previewing location, season, weather, and time without opening another page.
 
 Linux downloads go to `~/.config/era-typescript/GAMES` (or
 `$XDG_CONFIG_HOME/era-typescript/GAMES` when configured). The app also searches

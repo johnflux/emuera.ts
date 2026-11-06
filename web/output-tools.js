@@ -42,7 +42,7 @@ export function createOutputTools({ writeClipboard, translate, onChange = () => 
       clipboardQueue = clipboardQueue.then(async () => {
         if (version !== generation || !config.clipboard) return;
         try { await writeClipboard(text); }
-        catch (error) { notify({ error: `Could not copy game text: ${error.message}` }); }
+        catch {}
       });
     }
     if (!config.local) return;

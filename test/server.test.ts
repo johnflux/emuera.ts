@@ -439,7 +439,8 @@ test("HTTP UI, isolated sessions, real image bytes, sprite metadata, errors and 
     assert.match(await area.text(), /^<svg /);
     assert.equal((await fetch(base + "/areas/99-nowhere.svg")).status, 404);
     const areas = await (await fetch(base + "/api/areas")).json();
-    const artDemo = await fetch(base + "/art-demo");
+    assert.equal((await fetch(base + "/art-demo")).status, 404);
+    const artDemo = await fetch(base + "/");
     assert.equal(artDemo.status, 200);
     assert.match(artDemo.headers.get("content-type")!, /text\/html/);
     const demoHtml = await artDemo.text();

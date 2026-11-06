@@ -561,6 +561,13 @@ export async function complete(options) {
 
 /** Sends one chat completion; every attempt, failed or not, is recorded in `log` for the debug tab. */
 async function request({ llm, messages, temperature, log, signal, tools, json = true }) {
+  // Strict chat templates accept one leading system message, not separate context messages.
+  const systemCount = messages.findIndex((message) => message.role !== "system");
+  const leading = systemCount < 0 ? messages.length : systemCount;
+  if (leading > 1) messages = [
+    { role: "system", content: messages.slice(0, leading).map((message) => message.content).join("\n\n") },
+    ...messages.slice(leading),
+  ];
   const payload = { model: llm.model, messages };
   if (Number.isFinite(temperature)) payload.temperature = temperature;
   if (tools) payload.tools = tools;

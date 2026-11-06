@@ -3,6 +3,23 @@ import { speechQuotes } from "./translate.js";
 
 let expanded = true;
 const inlineChats = new WeakMap();
+const HISTORY_KEY = "era-typescript.character-history";
+
+export function characterHistoryEnabled() {
+  const saved = localStorage.getItem(HISTORY_KEY);
+  return saved === null ? globalThis.eraDesktop?.steam !== true : saved === "1";
+}
+
+export function setupCharacterHistoryToggle(onChange) {
+  const toggle = document.querySelector("#character-history-toggle");
+  const apply = () => toggle.setAttribute("aria-pressed", String(characterHistoryEnabled()));
+  apply();
+  toggle.addEventListener("click", () => {
+    localStorage.setItem(HISTORY_KEY, characterHistoryEnabled() ? "0" : "1");
+    apply();
+    onChange();
+  });
+}
 
 export function disposeCharacterChats(root) {
   for (const host of root.querySelectorAll(".era-main-chat")) inlineChats.get(host)?.dispose();

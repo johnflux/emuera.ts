@@ -599,6 +599,10 @@ undone). The
 is never displayed. The page's CSP only allows same-origin requests, so the
 browser calls `POST /api/llm`, which forwards `chat/completions` or `models`
 to the configured base URL (`src/llm.ts`).
+Leading system instructions, interaction history and scene context are combined
+into one system message before sending, including encounter and gossip requests,
+so strict chat templates retain user/assistant alternation. Tool calls and their
+result messages remain in the provider's standard format.
 
 **Encounters.** At each command prompt `TwInteractionHistory.encounters()` compares the awake characters in the
 player's room with the previous prompt's; anyone new is an encounter (`arrived: "player"` when the player moved,
@@ -1133,6 +1137,10 @@ readback and browser drawing; `CBGSETG`/`CBGCLEAR` also work as expressions.
 `GSAVE`/`GLOAD` persist real `imgNNNN.png` files through the save store and refuse
 missing/corrupt images or loading into an existing graphics ID. Storage errors
 are surfaced rather than mistaken for a missing image.
+Copied graphics snapshots whose drawing history exceeds 64 KiB are rasterized
+to PNG before further compositing or output. This prevents nested outline and
+image copies from expanding exponentially in the serialized output; the normal
+output limit still applies. Small histories retain their original paint operations.
 The server uses the native Node modules `@napi-rs/canvas` and `@napi-rs/image`;
 dependency installation must include the package for the host OS/CPU.
 Fonts, text rasterization, triangle dash caps, and antialiasing can differ from

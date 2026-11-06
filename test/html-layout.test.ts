@@ -471,7 +471,7 @@ test("area artwork fixes the header height and prevents horizontal scrolling fro
 });
 
 test("header rendering has no indoor or outdoor setting in the demo or game", async () => {
-  for (const file of ["web/art-demo.html", "web/art-demo.js", "web/style.css", "hotpatch/MAIN_SCREEN.ERB", "hotpatch/SLEEP_MENU.ERB"]) {
+  for (const file of ["web/index.html", "web/art-demo.js", "web/style.css", "hotpatch/MAIN_SCREEN.ERB", "hotpatch/SLEEP_MENU.ERB"]) {
     const source = await readFile(new URL(`../${file}`, import.meta.url), "utf8");
     assert.doesNotMatch(source, /era-indoor|era-underground|id="setting"|values\.get\("setting"\)|nNoWeather|HOTPATCH_SKY\(/);
   }
@@ -710,7 +710,7 @@ test("panorama overlap clips only the middle and applies consistently to artwork
   assert.match(css, /padding-left: min\(50%, max\(0px, calc\(var\(--area-left-width, 0px\) - var\(--area-art-overlap\)\)\)\)/);
   assert.match(css, /padding-right: min\(50%, max\(0px, calc\(var\(--area-right-width, 0px\) - var\(--area-art-overlap\)\)\)\)/);
   assert.match(css, /background-origin: border-box, border-box, content-box;\s*background-clip: border-box, border-box, content-box/);
-  const demo = await readFile(new URL("../web/art-demo.html", import.meta.url), "utf8");
+  const demo = await readFile(new URL("../web/index.html", import.meta.url), "utf8");
   assert.match(demo, /id="overlap" type="range" min="0" max="600" step="4" value="220"/);
   for (const [area, value] of [220, 88, 116, 320, 264, 168, 96, 360, 176].entries())
     assert.ok(css.includes(`.era-area-art.era-area-${area} { --area-art-overlap: ${value}px; }`));
@@ -731,7 +731,7 @@ test("foothill water highlights move independently and respect night and reduced
   assert.match(css, /@keyframes era-water-flow \{ to \{ mask-position: -24px 24px; \} \}/);
   assert.match(css, /\.era-area-7\.era-area-art-night \.era-sky-land::before \{ opacity: .28; \}/);
   assert.match(css, /prefers-reduced-motion: reduce\) \{\s*\.era-area-7[^}]*animation: none; opacity: 0/);
-  for (const file of ["index.html", "art-demo.html"]) {
+  for (const file of ["index.html"]) {
     const html = await readFile(new URL(`../web/${file}`, import.meta.url), "utf8");
     assert.match(html, /id="era-water-highlight" color-interpolation-filters="sRGB"/);
     assert.match(html, /-8 0 8 .8 0/);
@@ -811,7 +811,7 @@ test("night panorama lights get a warm halo without blurring the scenery", async
       assert.ok(screened >= base, "the glow cannot darken any lamp channel");
     }
   }
-  for (const file of ["index.html", "art-demo.html"]) {
+  for (const file of ["index.html"]) {
     const html = await readFile(new URL(`../web/${file}`, import.meta.url), "utf8");
     assert.match(html, /<filter id="era-light-glow"[^>]*color-interpolation-filters="sRGB"/);
     assert.match(html, /feColorMatrix values="0 0 0 0 1 0 0 0 0 \.65 0 0 0 0 \.25 3 3 -4 0 -2"/);
@@ -819,17 +819,44 @@ test("night panorama lights get a warm halo without blurring the scenery", async
   }
 });
 
-test("title screen menu is visible and contains the artwork demo link", async () => {
+test("menu stays concise and artwork is embedded in the conformance demo", async () => {
   const [html, css, app] = await Promise.all([
     readFile(new URL("../web/index.html", import.meta.url), "utf8"),
     readFile(new URL("../web/library.css", import.meta.url), "utf8"),
     readFile(new URL("../web/app.js", import.meta.url), "utf8"),
   ]);
-  assert.match(html, /<nav id="menu-panel"[^>]*>[\s\S]*<a href="\/art-demo" target="_blank" rel="noopener">Artwork demo<\/a>[\s\S]*<\/nav>/);
-  assert.doesNotMatch(html, /<div class="library-toolbar">[\s\S]*Artwork demo/);
+  const menu = html.match(/<nav id="menu-panel"[\s\S]*?<\/nav>/)![0];
+  assert.doesNotMatch(menu, /Artwork demo|id="llm-toggle"|id="font-size"|id="translate-toggle"/);
+  assert.match(html, /<div id="demo-tools" hidden>.*id="art-demo-toggle"/);
+  assert.match(html, /<dialog id="art-demo"/);
+  assert.match(app, /querySelector\("#demo-tools"\)\.hidden = runMode !== "demo"/);
   assert.match(css, /\.is-home #mode, \.is-home #activity, \.is-home > main \{ display: none; \}/);
   assert.match(app, /menuPanel\.addEventListener\("click", \(event\) => \{ if \(event\.target\.closest\("button, a\[href\]"\)\) setMenu\(false\); \}\)/);
-  assert.match(app, /menuPanel\.querySelectorAll\("button, a\[href\], input"\)/);
+  assert.doesNotMatch(app, /menuPanel\.addEventListener\("keydown"/);
+});
+
+test("configuration controls live in a modal Settings dialog and have unique IDs", async () => {
+  const html = await readFile(new URL("../web/index.html", import.meta.url), "utf8");
+  const settings = html.match(/<dialog id="settings"[\s\S]*?<\/dialog>/)![0];
+  for (const id of ["llm-toggle", "translate-toggle", "clipboard-toggle", "local-translate-toggle",
+    "local-translate-configure", "handheld-toggle", "character-history-toggle", "font-size", "settings-form"])
+    assert.ok(settings.includes(`id="${id}"`), `${id} belongs to Settings`);
+  const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]);
+  assert.equal(ids.length, new Set(ids).size);
+  const app = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
+  assert.match(app, /settingsPanel\.showModal\(\)/);
+  assert.match(app, /querySelector\("#settings-close"\).*settingsPanel\.close\(\)/);
+});
+
+test("compact gameplay header preserves its menu and scrolling menu rows cannot shrink", async () => {
+  const compact = await readFile(new URL("../web/handheld.css", import.meta.url), "utf8");
+  assert.match(compact, /@media \(max-height: 800px\)/);
+  assert.match(compact, /body:not\(\.is-home\) > header \{ height: 0;/);
+  assert.match(compact, /body:not\(\.is-home\) > header > :not\(\.menu\) \{ display: none;/);
+  assert.match(compact, /body:not\(\.is-home\) > header \.menu \{ position: fixed;/);
+  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  assert.match(css, /\.menu-panel \{[^}]*max-height: calc\(100dvh - var\(--menu-top, 40px\) - 8px\); overflow-y: auto;/);
+  assert.match(css, /\.menu-panel > \* \{ flex-shrink: 0; \}/);
 });
 
 test("rain and blizzards use layered precipitation with seamless motion and reduced-motion support", async () => {
@@ -875,7 +902,7 @@ test("terminal hides only the horizontal scrollbar without disabling overflow or
 
 test("settings panel uses a responsive two-column form without clipping its controls", async () => {
   const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
-  assert.match(css, /#settings \{[^}]*max-height: min\(60vh, 480px\);[^}]*overflow: auto;/);
+  assert.match(css, /#settings \{[^}]*max-height: calc\(100dvh - 32px\);[^}]*overflow: auto;/);
   assert.match(css, /#settings-form \{[^}]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/);
   assert.match(css, /@media \(max-width: 600px\).*#settings-form \{ grid-template-columns: minmax\(0, 1fr\); \}/);
   assert.match(css, /#settings-form input\[type="text"\] \{[^}]*width: 100%;[^}]*min-width: 0;/);

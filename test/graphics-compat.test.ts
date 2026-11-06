@@ -5,7 +5,7 @@ import path from "node:path";
 import { test } from "node:test";
 import vm from "node:vm";
 import { createCanvas, Image } from "@napi-rs/canvas";
-import { decodePicture, pictureColor, PixelCache, rasterize } from "../src/graphics.js";
+import { compactPicture, decodePicture, pictureColor, PixelCache, rasterize } from "../src/graphics.js";
 import { emptyGame, indexScript, type Game } from "../src/loader.js";
 import { EraError } from "../src/model.js";
 import { Runtime, type Picture, type RuntimeOptions } from "../src/runtime.js";
@@ -194,7 +194,7 @@ test("matrix readback reuses the rasterized base while pixel batches grow and in
 });
 
 const twOutline = new URL("../GAMES/anon-tw-anon-tw_eng-modding/ERB/ステータス表示関連/縁取り.ERB", import.meta.url);
-test("AnonTW's original image-border routine finishes without an operation per pixel", { skip: !existsSync(twOutline) }, () => {
+for (const jit of [false, true]) test(`AnonTW's original image-border routine stays within the serialized output limit (JIT ${jit})`, { skip: !existsSync(twOutline) }, () => {
   const game = emptyGame();
   indexScript(game, readFileSync(twOutline, "utf8"), "tw-outline.erb");
   indexScript(game, `@GET_EMPTY_G(WIDTH, HEIGHT)
@@ -217,15 +217,75 @@ GSETCOLOR 1, 0xFFFFFFFF, 128, 128
 SPRITECREATE "TEST", 1
 LOCAL = OUTLINE_SPR("TEST", 0x88FFFF00)
 PRINTFORML CENTER {GGETCOLOR(LOCAL, 128, 128)} CLEAR {GGETCOLOR(LOCAL, 0, 0)}
+SPRITECREATE "OUTLINED", LOCAL
+HTML_PRINT "<img src='OUTLINED'>"
 CBGSETG LOCAL, 0, 0, 1
 QUIT`, "outline-regression.erb");
   const started = performance.now();
-  const snapshot = new Runtime(game, 5_000_000).start();
+  const snapshot = new Runtime(game, 5_000_000, { jit }).start();
   assert.equal(snapshot.status, "halted", JSON.stringify(snapshot.error));
   assert.ok(performance.now() - started < 5000, "256x256 image border must finish within five seconds");
   assert.match(JSON.stringify(snapshot.output), /CENTER 4294967295 CLEAR 0/);
+  assert.ok(JSON.stringify(snapshot.output).length < 2_000_000, "HTML_PRINT must include the sprite without exceeding its budget");
+  const html = snapshot.output.find((line) => line.type === "html");
+  assert.ok(html && "sprites" in html && html.sprites?.OUTLINED);
+  assert.equal(pictureColor(html.sprites.OUTLINED.picture, 128, 128, () => { throw new Error("Unexpected resource"); }), 0xffffffffn);
   const graphics = snapshot.cbg![0]!.picture!;
   const count = (picture: Picture): number => picture.ops.reduce((n, op) =>
     n + 1 + (op.op === "graphics" ? count(op.source) : op.op === "mask" ? count(op.source) + count(op.mask) : 0), 0);
   assert.ok(count(graphics) < 100, "Pixel cleanup must not generate 65,536 fill operations");
+});
+
+test("large graphics snapshots preserve pixels, copies and drawing transforms", () => {
+  const resolve = () => { throw new Error("Unexpected resource"); };
+  const small: Picture = { width: 2, height: 2, ops: [
+    { op: "fill", color: "rgba(255, 0, 0, 1)", rect: [0, 0, 2, 2] },
+  ] };
+  assert.equal(compactPicture(small, resolve), small, "small pictures keep their paint operations");
+  const colors: Record<number, number> = Object.fromEntries(Array.from({ length: 128 * 128 }, (_, i) => [i, 0xff123456]));
+  colors[0] = 0x01123456;
+  colors[1] = 0;
+  const large: Picture = { width: 128, height: 128, ops: [{ op: "pixels", colors }] };
+  assert.ok(JSON.stringify(large).length > 64 * 1024);
+  const compact = compactPicture(large, resolve);
+  assert.ok(JSON.stringify(compact).length < 64 * 1024);
+  assert.equal(compact.ops[0]?.op, "image");
+  for (const [x, color] of [[0, 0x01123456n], [1, 0n], [2, 0xff123456n]] as const)
+    assert.equal(pictureColor(compact, x, 0, resolve), color);
+  colors[2] = 0;
+  assert.equal(pictureColor(compact, 2, 0, resolve), 0xff123456n, "later pixel writes do not change captured PNGs");
+  assert.equal(large.ops[0]?.op, "pixels", "compaction does not change the live canvas");
+
+  for (const jit of [false, true]) {
+    const game = emptyGame();
+    indexScript(game, `@SYSTEM_TITLE
+GCREATE 1, 8, 8
+GCLEAR 1, 0xFFFF0000
+REPEAT 16
+ GDRAWG 1, 1, 0, 0, 8, 8, 0, 0, 8, 8
+REND
+SPRITECREATE "COPY", 1
+HTML_PRINT "<img src='COPY'>"
+GCLEAR 1, 0xFF0000FF
+PRINTFORML LIVE {GGETCOLOR(1, 0, 0)}
+GCREATE 2, 8, 8
+GDRAWGWITHROTATE 2, 1, 90, 4, 4
+REPEAT 800
+ GFILLRECTANGLE 2, 0, 0, 0, 0
+REND
+SPRITECREATE "ROTATED", 2
+HTML_PRINT "<img src='ROTATED'>"
+GSETBRUSH 2, 0xFF00FF00
+GFILLRECTANGLE 2, 1, 1, 1, 1
+PRINTFORML TRANSFORM {GGETCOLOR(2, 6, 1)} {GGETCOLOR(2, 1, 1)}
+QUIT`, "compact-copies.erb");
+    const snapshot = new Runtime(game, 50_000, { jit }).start();
+    assert.equal(snapshot.status, "halted", JSON.stringify(snapshot.error));
+    assert.ok(JSON.stringify(snapshot.output).length < 2_000_000);
+    assert.match(JSON.stringify(snapshot.output), /LIVE 4278190335/);
+    assert.match(JSON.stringify(snapshot.output), /TRANSFORM 4278255360 4278190335/);
+    const html = snapshot.output.find((line) => line.type === "html");
+    assert.ok(html && "sprites" in html && html.sprites?.COPY);
+    assert.equal(pictureColor(html.sprites.COPY.picture, 0, 0, resolve), 0xffff0000n);
+  }
 });

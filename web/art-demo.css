@@ -1,7 +1,4 @@
-.art-demo { height: auto; min-height: 100dvh; background: #10141b; color: #e9edf4; font-family: system-ui, sans-serif; }
-.art-demo > header { height: auto; min-height: 64px; padding: 16px 24px; flex-wrap: wrap; justify-content: space-between; }
-.art-demo h1 { margin: 0; font-size: 20px; }
-.art-demo > main { display: block; flex: none; padding: 16px 24px 32px; overflow: visible; }
+.art-demo { width: min(1100px, calc(100vw - 32px)); max-width: none; max-height: calc(100dvh - 32px); overflow: auto; background: #10141b; color: #e9edf4; font-family: system-ui, sans-serif; }
 .art-demo p { color: #aeb9ca; line-height: 1.6; }
 #art-controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin: 24px 0; }
 #art-controls label { display: flex; flex-direction: column; gap: 8px; font-size: 14px; }
@@ -14,6 +11,6 @@
 .art-note { font-size: 13px; }
 .art-filters { position: absolute; }
 @media (max-width: 600px) {
-  .art-demo > main { padding: 12px; }
+  .art-demo { padding: 12px; }
   #art-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

@@ -53,6 +53,13 @@ export function decodePicture(bytes: Buffer): Picture {
   ] };
 }
 
+/** Bound copied drawing histories before repeated compositing expands them exponentially. */
+export function compactPicture(picture: Picture, resolve: ImageSource): Picture {
+  if (picture.ops.length === 1 && picture.ops[0]?.op === "image") return picture;
+  if (JSON.stringify(picture).length <= 64 * 1024) return picture;
+  return decodePicture(encodePicture(picture, resolve));
+}
+
 function imagePixels(url: string, resolve: ImageSource): { width: number; height: number; rgba: Uint8ClampedArray } {
   const bytes = url.startsWith("data:image/") ? Buffer.from(url.slice(url.indexOf(",") + 1), "base64") : resolve(url);
   const decoder = new Transformer(bytes);

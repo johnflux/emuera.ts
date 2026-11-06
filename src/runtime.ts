@@ -20,7 +20,7 @@ import { ASYNC, Jit, type CallAnalysis } from "./jit.js";
 import { readNativeSave, writeNativeSave, type NativeSave, type SavedContainers, type SaveMetadata } from "./save-format.js";
 import { fixHistoryHtml, SHARP_METHODS, supportedSharpCall, translateHistoryDate } from "./plugin-compat.js";
 import { regexCharacterClasses, regexGroupOrder, replaceRegex } from "./regex.js";
-import { decodePicture, encodePicture, InvalidGraphicsImage, pictureColor, PixelCache, resourceColor } from "./graphics.js";
+import { compactPicture, decodePicture, encodePicture, InvalidGraphicsImage, pictureColor, PixelCache, resourceColor } from "./graphics.js";
 import { TwInteractionHistory, type CharacterHistory, type Encounter, type Gossip, type HistoryCharacter, type Memory } from "./interaction-history.js";
 import { runCharacterTool, toolCallSummary, unquoteSpeech, type CharacterAction, type ToolHost } from "./character-tools.js";
 import { characterVoice, MemoryVoiceStore, type CharacterVoice, type EditableVoice, type VoiceStore } from "./character-voice.js";
@@ -1396,8 +1396,8 @@ export class Runtime {
   /** The current content of a G; later drawing to that G does not change it. */
   private picture(id: bigint): Picture | undefined {
     const canvas = this.graphics.get(id);
-    return canvas && { width: canvas.width, height: canvas.height,
-      ops: canvas.ops.map((op) => op.op === "pixels" ? { ...op, colors: { ...op.colors } } : op) };
+    return canvas && compactPicture({ width: canvas.width, height: canvas.height,
+      ops: canvas.ops.map((op) => op.op === "pixels" ? { ...op, colors: { ...op.colors } } : op) }, this.graphicImage);
   }
   private graphicImage = (url: string): Buffer => {
     if (!this.game.root || !url.startsWith(this.game.resourceBase)) throw new EraError("Graphics resource is unavailable");

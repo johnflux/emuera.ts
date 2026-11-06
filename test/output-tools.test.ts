@@ -97,12 +97,12 @@ test("large output is translated in bounded sequential requests without truncati
   assert.equal(states.at(-1)!.text!.replaceAll("\n", "").length, 13000);
 });
 
-test("browser clipboard denial is reported explicitly instead of appearing successful", async () => {
+test("browser clipboard denial is ignored without showing an error", async () => {
   const { tools, states, flush } = harness(undefined, async () => { throw new Error("Clipboard permission denied"); });
   tools.configure({ clipboard: true });
   tools.publish("Game text");
   await flush();
-  assert.match(states.at(-1)!.error!, /Could not copy game text: Clipboard permission denied/);
+  assert.ok(!states.some((state) => state.error?.includes("Could not copy game text")));
 });
 
 test("local model translation reuses the proxy without chat tools or JSON mode", async () => {
@@ -129,16 +129,18 @@ test("desktop clipboard writes use Electron IPC and reject non-game frames and o
   const copied: string[] = [];
   const handlers = new Map<string, (event: unknown, text: unknown) => void>();
   const sender = {};
+  let quits = 0;
   vm.runInNewContext(main + "\nwindow = {webContents: sender}; server = {address: () => ({port: 12345})};", {
     require: (name: string) => {
       if (name === "electron") return {
-        app: { whenReady: () => ({ then: () => ({ catch() {} }) }), on() {} },
+        app: { whenReady: () => ({ then: () => ({ catch() {} }) }), on() {}, quit: () => { quits++; } },
         ipcMain: { handle: (channel: string, handler: (event: unknown, text: unknown) => void) => handlers.set(channel, handler) },
         clipboard: { writeText: (text: string) => copied.push(text) },
       };
       if (name === "node:path") return { join() {} };
       if (name === "node:url") return {};
       if (name === "./game-paths.cjs") return () => {};
+      if (name === "./steam-launch.cjs") return () => false;
       throw new Error("Unexpected import: " + name);
     },
     console: { error() {} }, sender,
@@ -150,14 +152,22 @@ test("desktop clipboard writes use Electron IPC and reject non-game frames and o
   assert.throws(() => write({ sender: {}, senderFrame: { url: "http://127.0.0.1:12345/" } }, "Unexpected"), /only available from the game window/);
   assert.throws(() => write({ sender, senderFrame: { url: "http://127.0.0.1:12345/" } }, "x".repeat(1_000_001)), /at most/);
   assert.equal(copied.length, 1);
+  const quit = handlers.get("era:quit")!;
+  assert.throws(() => quit({ sender: {}, senderFrame: { url: "http://127.0.0.1:12345/" } }, undefined), /only available from the game window/);
+  assert.throws(() => quit({ sender, senderFrame: { url: "https://untrusted.example/" } }, undefined), /only available from the game window/);
+  assert.equal(quits, 0);
+  quit({ sender, senderFrame: { url: "http://127.0.0.1:12345/" } }, undefined);
+  assert.equal(quits, 1);
 
-  let bridge: { writeClipboard(text: string): unknown } | undefined;
+  let bridge: { writeClipboard(text: string): unknown; quit(): unknown } | undefined;
   const preload = readFileSync(new URL("../electron/preload.cjs", import.meta.url), "utf8");
   vm.runInNewContext(preload, {
+    process: { argv: [] },
     require: () => ({
       contextBridge: { exposeInMainWorld: (name: string, api: typeof bridge) => { assert.equal(name, "eraDesktop"); bridge = api; } },
       ipcRenderer: { invoke: (channel: string, text: string) => ({ channel, text }) },
     }),
   });
   assert.deepEqual(bridge!.writeClipboard("Game text"), { channel: "era:write-clipboard", text: "Game text" });
+  assert.deepEqual(bridge!.quit(), { channel: "era:quit", text: undefined });
 });

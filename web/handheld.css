@@ -1,0 +1,31 @@
+:is(button, a[href], input, select, textarea):focus-visible {
+  outline: 2px solid #8ddaff;
+  outline-offset: 2px;
+}
+.is-handheld header { height: 52px; }
+.is-handheld .menu-toggle { width: 44px; height: 40px; }
+.is-handheld .menu-panel { font-size: 16px; }
+.is-handheld .menu-panel :is(button, a) { min-height: 40px; }
+.is-handheld :is(.library-refresh, .library-toggle, .library-tabs button, .game-card button, .confirm-actions button) { min-height: 44px; font-size: 16px; }
+.is-handheld :is(.confirm, .library-footer, .library-message) { font-size: 16px; }
+.is-handheld #input-form { font-size: 20px; }
+.is-handheld #input-form :is(input, button) { min-height: 44px; }
+.is-handheld .era-main-chat { --era-history-size: 16px; }
+.is-handheld #terminal { padding-left: 12px; }
+.is-handheld .line button.choice:not(:has(.sprite, .subarea-anchor)) { min-height: 36px; }
+.is-handheld .time-effect { top: 52px; }
+.is-handheld :is(dialog, .era-dialog) { max-height: calc(100dvh - 32px); }
+.is-handheld .settings-actions button { min-height: 44px; font-size: 16px; }
+.is-handheld .line button.choice:focus-visible { outline: 2px solid #8ddaff; outline-offset: 2px; }
+@media (max-width: 1280px), (any-pointer: coarse) {
+  .command-number { display: none; }
+}
+@media (max-height: 800px) {
+  body:not(.is-home) :is(.era-main, .era-shop) .era-main-header:has(.era-area-art) > .era-watch-control { top: 0; }
+  body:not(.is-home) > header { height: 0; padding: 0; border: 0; }
+  body:not(.is-home) > header > :not(.menu) { display: none; }
+  body:not(.is-home) > header .menu { position: fixed; top: 8px; right: 8px; }
+  body:not(.is-home) > header .menu-toggle { width: 40px; height: 36px; background: #121212e6; }
+  body:not(.is-home) #time-effect { top: 0; }
+  body:not(.is-home) > header > #status.error { display: block; position: fixed; bottom: 64px; left: 8px; right: 8px; padding: 8px; background: #281616; white-space: normal; }
+}

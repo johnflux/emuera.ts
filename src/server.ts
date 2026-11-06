@@ -672,7 +672,9 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
       const pages: Record<string, string> = {
         "/": "index.html", "/app.js": "app.js", "/translate.js": "translate.js", "/output-tools.js": "output-tools.js", "/interaction-history.js": "interaction-history.js", "/llm.js": "llm.js", "/encounters.js": "encounters.js", "/style.css": "style.css",
         "/library.js": "library.js", "/library.css": "library.css", "/cache.js": "cache.js", "/performance.js": "performance.js",
-        "/art-demo": "art-demo.html", "/art-demo.js": "art-demo.js", "/art-demo.css": "art-demo.css", "/sky.js": "sky.js",
+        "/handheld.js": "handheld.js", "/handheld.css": "handheld.css",
+        "/controller-menu.js": "controller-menu.js",
+        "/art-demo.js": "art-demo.js", "/art-demo.css": "art-demo.css", "/sky.js": "sky.js",
         "/title/new-game.webp": "title/new-game.webp", "/title/load-game.webp": "title/load-game.webp",
         "/moon.svg": "moon.svg",
         "/relationship-icons.svg": "relationship-icons.svg",

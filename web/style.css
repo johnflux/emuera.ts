@@ -70,7 +70,8 @@ button:disabled { color: #666; cursor: default; }
 .menu { position: relative; flex-shrink: 0; order: 2; }
 .menu-toggle { width: 30px; height: 28px; padding: 0; border-color: #3a3a3a; border-radius: 6px; font-size: 16px; line-height: 1; }
 .menu-toggle[aria-expanded="true"] { background: #24313a; border-color: #8ddaff; color: #fff; }
-.menu-panel { position: absolute; top: calc(100% + 6px); right: 0; min-width: 220px; display: flex; flex-direction: column; gap: 2px; padding: 6px; border: 1px solid #3a3a3a; border-radius: 8px; background: #121212; box-shadow: 0 8px 24px #000c; font-size: 13px; }
+.menu-panel { position: fixed; top: var(--menu-top, 40px); right: 8px; width: min(300px, calc(100vw - 16px)); max-height: calc(100dvh - var(--menu-top, 40px) - 8px); overflow-y: auto; display: flex; flex-direction: column; gap: 2px; padding: 6px; border: 1px solid #3a3a3a; border-radius: 8px; background: #121212; box-shadow: 0 8px 24px #000c; font-size: 13px; overscroll-behavior: contain; }
+.menu-panel > * { flex-shrink: 0; }
 .menu-panel[hidden] { display: none; }
 .menu-heading { margin: 6px 8px 2px; color: #777; font-size: 10px; text-transform: uppercase; letter-spacing: .08em; }
 .menu-heading:first-child { margin-top: 2px; }
@@ -199,7 +200,15 @@ a { color: #8ddaff; }
 .debug-header-actions { display: flex; gap: 6px; }
 .debug-header button { font-size: 11px; padding: 2px 8px; }
 #debug-log { flex: 1; min-height: 3em; margin: 0; padding: 6px 8px; overflow: auto; white-space: pre-wrap; }
-#settings { width: min(720px, calc(100% - 40px)); max-height: min(60vh, 480px); flex-shrink: 0; overflow: auto; align-self: center; border: 1px solid #294656; border-radius: 9px; padding: 18px 20px 20px; margin: 16px 20px 0; font-size: 13px; color: #dce8ed; background: radial-gradient(ellipse at 100% 0, #16364366, transparent 55%), #09131b; box-shadow: 0 12px 36px #0008; font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace; }
+#settings { width: min(720px, calc(100vw - 32px)); max-width: none; max-height: calc(100dvh - 32px); overflow: auto; border: 1px solid #294656; border-radius: 9px; padding: 18px 20px 20px; margin: auto; font-size: 13px; color: #dce8ed; background: radial-gradient(ellipse at 100% 0, #16364366, transparent 55%), #09131b; box-shadow: 0 12px 36px #0008; font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace; }
+.dialog-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.settings-actions { display: flex; flex-direction: column; gap: 8px; }
+.settings-actions button { text-align: left; }
+.controller-menu { width: min(360px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto; }
+.controller-menu-actions { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
+.controller-menu-actions button { min-height: 48px; font-size: 20px; text-align: center; border-radius: 6px; }
+#demo-tools { flex-shrink: 0; padding: 8px 56px 8px 12px; }
+#demo-tools[hidden] { display: none; }
 #settings h2 { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; color: #e9f5f7; font-size: 17px; letter-spacing: .03em; }
 #settings h2::before { content: ""; width: 3px; height: 18px; border-radius: 3px; background: #69c9b5; box-shadow: 0 0 12px #69c9b566; }
 #settings > p { margin: 0 0 16px; color: #99adba; font-size: 12px; line-height: 1.6; }

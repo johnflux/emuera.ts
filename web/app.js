@@ -1,13 +1,16 @@
 import { createTranslation, protectMapTranslation } from "./translate.js";
 import { createLibrary } from "./library.js";
 import { sky, prepareSkyArt } from "./sky.js";
-import { disposeCharacterChats, sendInlineChat, setHistoryTranslator, setupInlineChat } from "./interaction-history.js";
+import { characterHistoryEnabled, disposeCharacterChats, sendInlineChat, setHistoryTranslator, setupCharacterHistoryToggle, setupInlineChat } from "./interaction-history.js";
 import { relationshipTimeline } from "./relationship-timeline.js";
 import { activeLlm, listModels, PROVIDERS, setupLlmConfig, translateGameText } from "./llm.js";
 import { createOutputTools, gameOutputText } from "./output-tools.js";
 import { encountersEnabled, gossipEnabled, memoriesEnabled, runEncounters, runGossip, runMemories, writeMemory } from "./encounters.js";
 import { cached, LruCache } from "./cache.js";
 import { profiling, profileStart, profileEnd } from "./performance.js";
+import { decorateCommandNumbers, setupHandheld, setupKeyboardNavigation, touchInput } from "./handheld.js";
+import { setupArtworkDemo } from "./art-demo.js";
+import { setupControllerMenu } from "./controller-menu.js";
 
 const terminal = document.querySelector("#terminal");
 const timeEffect = document.querySelector("#time-effect");
@@ -135,6 +138,7 @@ let continuedScreens = [];
 let outputRoot = terminal;
 let pendingImages = [];
 let generation = 0;
+let lastCharacterHistory = null;
 const sprites = new LruCache(2 * 1024 * 1024, 512);
 const SETTINGS_KEY = "era-typescript.settings";
 /** Emuera's configured font size and line height (emuera.config), the units game image layouts are written in. */
@@ -156,10 +160,9 @@ function applySettings() {
   root.setProperty("--selection-color", settings.selection);
   const font = settings.font && !/["\\;{}<>]/.test(settings.font) ? `"${settings.font}", ` : "";
   root.setProperty("--terminal-font", `${font}"BIZ UD Gothic", "MS Gothic", "ＭＳ ゴシック", monospace`);
-  if (settings.fontSize) {
-    root.setProperty("--font-size", `${settings.fontSize}px`);
-    document.querySelector("#font-size").value = String(settings.fontSize);
-  }
+  const fontSize = handheld.enabled() ? Math.max(20, settings.fontSize ?? 16) : settings.fontSize ?? 16;
+  root.setProperty("--font-size", `${fontSize}px`);
+  document.querySelector("#font-size").value = String(fontSize);
   const form = document.querySelector("#settings-form");
   for (const name of ["foreground", "background", "selection", "font"])
     if (form.elements[name] !== document.activeElement) form.elements[name].value = settings[name];
@@ -173,6 +176,16 @@ function updateSetting(name, value) {
   settings = { ...gameDefaults, ...saved };
   applySettings();
 }
+const handheld = setupHandheld(applySettings);
+const keyboardNavigation = setupKeyboardNavigation({
+  terminal, command,
+  canNavigate: () => (!busy || expiring) && input?.kind !== "mousekey",
+});
+setupCharacterHistoryToggle(() => {
+  showCharacterHistory(lastCharacterHistory);
+  updateControls();
+  scheduleHtmlPositions();
+});
 const settingsLoaded = (async () => {
   settings = { ...gameDefaults, ...savedSettings() };
   applySettings();
@@ -996,6 +1009,7 @@ function choice(label, value, title = "") {
   return button;
 }
 function decorateLabel(element) {
+  decorateCommandNumbers(element);
   const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
   const nodes = [];
   while (walker.nextNode()) {
@@ -1928,7 +1942,7 @@ async function renderSteps(steps, fresh = false, keepFocus = false, toBottom = f
     if (clickingThrough && input && input.kind !== "wait") settle();
     profileEnd("render.controls", phaseStarted);
   }
-  if (input && !keepFocus) command.focus({ preventScroll: true });
+  if (input && !keepFocus) keyboardNavigation.focusInput();
   if (profiling) profileEnd("render.total", totalStarted, {
     step: steps.at(-1)?.snapshot.step,
     elements: terminal.querySelectorAll("*").length,
@@ -2232,29 +2246,8 @@ async function renderSnapshot(snapshot, advanceScreen) {
   }
   markTarget(snapshot.target);
   for (const main of outputRoot.querySelectorAll(".screen.is-active .era-main")) setupMainSidebar(main);
-  if (snapshot.characterHistory) {
-    for (const parent of outputRoot.querySelectorAll(".screen.is-active .era-main:not(:has(.era-main-chat))"))
-      setupInlineChat(parent, snapshot.characterHistory, () => api("/api/character-history", {
-        session, step, character: snapshot.characterHistory.character.id,
-      }), { input: command, gameId: runGame ?? runMode, gameTitle: gameTitle(runGame),
-        runTool: (name, args) => api("/api/character-tool", { session, step, character: snapshot.characterHistory.character.id, name, arguments: args }),
-        record: (text) => api("/api/character-chat", { session, step, character: snapshot.characterHistory.character.id, text }),
-        undo: (lines) => api("/api/character-chat/undo", { session, step, character: snapshot.characterHistory.character.id, lines }),
-        voice: () => api("/api/character-voice", { session, step, character: snapshot.characterHistory.character.id }),
-        saveVoice: (voice) => api("/api/character-voice/save", { session, character: snapshot.characterHistory.character.id, voice }),
-        downloadCard: async () => {
-          const query = new URLSearchParams({ session, character: snapshot.characterHistory.character.id });
-          const response = await fetch(`/api/character-card?${query}`);
-          if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error ?? `Could not download the card (${response.status})`);
-          }
-          return response.blob();
-        },
-        remember: (text, covers) => api("/api/character-memory", { session, character: snapshot.characterHistory.character.id, text, covers }),
-        writeMemory: (history, signal) => writeMemory({ llm: activeLlm(), history, gameId: runGame ?? runMode, gameTitle: gameTitle(runGame), signal }),
-        refresh: refreshScreen });
-  }
+  lastCharacterHistory = snapshot.characterHistory ?? null;
+  showCharacterHistory(lastCharacterHistory);
   await prepareMapPictures();
   await prepareAreaArt();
   const revived = outputRoot.querySelectorAll(".screen.is-active button.choice.is-revived");
@@ -2305,7 +2298,40 @@ async function renderSnapshot(snapshot, advanceScreen) {
     : input.kind === "mousekey" ? "Click, scroll or press a key." : `Waiting for ${input.kind} input.`);
   trimScrollback();
 }
+function showCharacterHistory(history) {
+  if (!characterHistoryEnabled()) {
+    for (const root of new Set([terminal, outputRoot])) {
+      disposeCharacterChats(root);
+      root.querySelectorAll(".era-main-chat").forEach((host) => host.remove());
+    }
+    return;
+  }
+  if (history) {
+    for (const parent of outputRoot.querySelectorAll(".screen.is-active .era-main:not(:has(.era-main-chat))"))
+      setupInlineChat(parent, history, () => api("/api/character-history", {
+        session, step, character: history.character.id,
+      }), { input: command, gameId: runGame ?? runMode, gameTitle: gameTitle(runGame),
+        runTool: (name, args) => api("/api/character-tool", { session, step, character: history.character.id, name, arguments: args }),
+        record: (text) => api("/api/character-chat", { session, step, character: history.character.id, text }),
+        undo: (lines) => api("/api/character-chat/undo", { session, step, character: history.character.id, lines }),
+        voice: () => api("/api/character-voice", { session, step, character: history.character.id }),
+        saveVoice: (voice) => api("/api/character-voice/save", { session, character: history.character.id, voice }),
+        downloadCard: async () => {
+          const query = new URLSearchParams({ session, character: history.character.id });
+          const response = await fetch(`/api/character-card?${query}`);
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error ?? `Could not download the card (${response.status})`);
+          }
+          return response.blob();
+        },
+        remember: (text, covers) => api("/api/character-memory", { session, character: history.character.id, text, covers }),
+        writeMemory: (history, signal) => writeMemory({ llm: activeLlm(), history, gameId: runGame ?? runMode, gameTitle: gameTitle(runGame), signal }),
+        refresh: refreshScreen });
+  }
+}
 function showReport(visible) {
+  document.querySelector("#demo-tools").hidden = runMode !== "demo";
   report.hidden = !visible;
   const mode = document.querySelector("#mode");
   mode.hidden = !runMode;
@@ -2438,7 +2464,7 @@ async function start(mode, game = runGame, debug = debugPreferred()) {
     await render(snapshot, false, true);
   }
   catch (error) { message(error.message, true); }
-  finally { busy = false; endActivity(); updateControls(); if (input) command.focus({ preventScroll: true }); runQueuedContinue(); }
+  finally { busy = false; endActivity(); updateControls(); if (input) keyboardNavigation.focusInput(); runQueuedContinue(); }
 }
 /**
  * Reattaches to a session still running on the server (after a page reload, or when another tab moved it on) by
@@ -2478,7 +2504,7 @@ async function resume(id) {
     busy = false;
     endActivity();
     updateControls();
-    if (input) command.focus({ preventScroll: true });
+    if (input) keyboardNavigation.focusInput();
     if (restored) runQueuedContinue();
   }
   return restored;
@@ -2537,7 +2563,7 @@ async function submit(value, selectedChoice = null) {
       busy = false;
       endActivity();
       updateControls();
-      if (input) command.focus({ preventScroll: true });
+      if (input) keyboardNavigation.focusInput();
     }
     if (result?.changed) await refreshScreen();
     return;
@@ -2593,7 +2619,7 @@ async function submit(value, selectedChoice = null) {
     if (nameField) {
       nameField.focus({ preventScroll: true });
       nameField.setSelectionRange(nameFocus.start, nameFocus.end);
-    } else if (input) command.focus({ preventScroll: true });
+    } else if (input) keyboardNavigation.focusInput();
     if (skipRequested) void continueSkipping();
     runQueuedContinue();
     void reactToEncounters();
@@ -2651,7 +2677,7 @@ async function refreshScreen() {
     busy = false;
     endActivity();
     updateControls();
-    if (input) command.focus({ preventScroll: true });
+    if (input) keyboardNavigation.focusInput();
     if (skipRequested) void continueSkipping();
     runQueuedContinue();
   }
@@ -2815,6 +2841,7 @@ function rememberCommand(value, selectedChoice) {
   showCommandHint();
 }
 command.addEventListener("keydown", (event) => {
+  if (touchInput()) return;
   if (event.defaultPrevented || event.isComposing || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey
     || (event.key !== "ArrowUp" && event.key !== "ArrowDown") || !commandHistory.length) return;
   event.preventDefault();
@@ -2849,7 +2876,7 @@ command.addEventListener("compositionend", submitCharacter);
 document.addEventListener("keydown", (event) => {
   if (document.body.classList.contains("is-home")) return;
   if (busy && !expiring && session && event.key === "Enter" && !event.repeat && !event.isComposing && !event.defaultPrevented
-    && !(event.target instanceof Element && event.target.closest("input:not(#command), textarea, select, button, a[href], .menu"))) {
+    && !(event.target instanceof Element && event.target.closest("input:not(#command), textarea, select, button, a[href], .menu, dialog"))) {
     event.preventDefault();
     queueContinue();
     return;
@@ -2865,7 +2892,7 @@ document.addEventListener("keydown", (event) => {
   }
   if ((busy && !expiring) || !input || event.defaultPrevented || event.isComposing || event.ctrlKey || event.metaKey || event.altKey) return;
   const target = event.target;
-  if (target !== command && target instanceof Element && target.closest("input, textarea, select, [contenteditable]:not([contenteditable='false']), .menu")) return;
+  if (target !== command && target instanceof Element && target.closest("input, textarea, select, [contenteditable]:not([contenteditable='false']), .menu, dialog")) return;
   if (event.repeat && input.singleCharacter) {
     event.preventDefault();
     return;
@@ -2887,23 +2914,23 @@ document.addEventListener("keydown", (event) => {
 });
 const menuToggle = document.querySelector("#menu-toggle");
 const menuPanel = document.querySelector("#menu-panel");
+function positionMenu() {
+  const top = Math.min(menuToggle.getBoundingClientRect().bottom + 6, window.innerHeight - 48);
+  menuPanel.style.setProperty("--menu-top", `${Math.max(8, top)}px`);
+}
 function setMenu(open, { restoreFocus = false } = {}) {
+  positionMenu();
   menuPanel.hidden = !open;
   menuToggle.setAttribute("aria-expanded", String(open));
   if (open) menuPanel.querySelector("button")?.focus({ preventScroll: true });
   else if (restoreFocus) menuToggle.focus({ preventScroll: true });
 }
+window.addEventListener("resize", () => {
+  if (!menuPanel.hidden) positionMenu();
+});
 menuToggle.addEventListener("click", () => setMenu(menuPanel.hidden));
 // Choosing an action closes the menu; the font slider keeps it open so it can be dragged.
 menuPanel.addEventListener("click", (event) => { if (event.target.closest("button, a[href]")) setMenu(false); });
-menuPanel.addEventListener("keydown", (event) => {
-  if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
-  if (event.target.matches("input[type=range]")) return;
-  const items = [...menuPanel.querySelectorAll("button, a[href], input")];
-  const next = items.indexOf(event.target) + (event.key === "ArrowDown" ? 1 : -1);
-  event.preventDefault();
-  items[(next + items.length) % items.length].focus();
-});
 document.addEventListener("pointerdown", (event) => {
   if (!menuPanel.hidden && !event.target.closest(".menu")) setMenu(false);
 });
@@ -3055,11 +3082,30 @@ translationConfig.querySelector("form").addEventListener("submit", (event) => {
 });
 translationConfig.addEventListener("keydown", (event) => event.stopPropagation());
 const settingsPanel = document.querySelector("#settings");
-document.querySelector("#settings-toggle").addEventListener("click", (event) => {
-  settingsPanel.hidden = !settingsPanel.hidden;
-  event.currentTarget.setAttribute("aria-expanded", String(!settingsPanel.hidden));
-  if (!settingsPanel.hidden) settingsPanel.scrollIntoView({ block: "nearest" });
+setupControllerMenu({
+  restart: () => chooseRun(runMode, runGame),
+  library: () => document.querySelector("#library-toggle").click(),
+  settings: () => settingsPanel.showModal(),
+  canRestart: () => !!session && !busy,
+  canExit: typeof globalThis.eraDesktop?.quit === "function",
+  exit: async () => {
+    if (session && !await confirmAction("Exit Era?", "Progress that has not been saved in the game will be lost.", "Exit")) return;
+    await globalThis.eraDesktop.quit();
+  },
+  onError: (error) => message(`Menu action failed: ${error.message}`, true),
 });
+document.querySelector("#settings-toggle").addEventListener("click", () => {
+  settingsPanel.showModal();
+});
+document.querySelector("#settings-close").addEventListener("click", () => settingsPanel.close());
+document.querySelector("#menu-library").addEventListener("click", () => document.querySelector("#library-toggle").click());
+const artDemo = document.querySelector("#art-demo");
+const loadArtworkDemo = setupArtworkDemo();
+document.querySelector("#art-demo-toggle").addEventListener("click", () => {
+  artDemo.showModal();
+  loadArtworkDemo();
+});
+document.querySelector("#art-demo-close").addEventListener("click", () => artDemo.close());
 document.querySelector("#settings-form").addEventListener("input", (event) => {
   const { name, value } = event.target;
   if (name === "font" && /["\\;{}<>]/.test(value)) return;
