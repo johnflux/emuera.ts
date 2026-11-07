@@ -662,6 +662,12 @@ body:has(.menu-panel:not([hidden])) .clock-overhang { visibility: hidden; }
 .era-counters { grid-area: counters; }
 .era-main-last { grid-area: last; color: #888; }
 @container (min-width: 761px) {
+  /* The sidebar spans grid rows; its content must not force those rows taller than the screen. */
+  .era-main-sidebar { min-height: 0; overflow-y: auto; overscroll-behavior: contain; contain: size; }
+  .era-main-sidebar:has(.era-stats) > .era-main-left { flex: 1 1 0; min-height: 80px; }
+  .era-main-sidebar:has(.era-stats) > .era-main-right { flex: none; }
+  .era-main-sidebar .era-main-left > .era-stats { flex: 1 1 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+  .era-main-sidebar .era-stats:focus-visible { outline: 2px solid #7ccce3; outline-offset: -2px; }
   .era-main:not(:has(.era-counters)) {
     grid-template-rows: auto auto 1fr auto;
     grid-template-areas: "header header" "center sidebar" "actions sidebar" "last last";
@@ -696,6 +702,10 @@ body:has(.menu-panel:not([hidden])) .clock-overhang { visibility: hidden; }
   overflow: hidden; border: 1px solid #2f4a63; border-radius: 12px; background: #0b0e11; color: var(--terminal-foreground); box-shadow: 0 12px 48px #000; }
 .era-dialog::backdrop { background: #000000b0; }
 .era-dialog > .line { flex: none; }
+.era-sky-dialog:popover-open { width: min(1200px, calc(100vw - 32px)); height: min(540px, calc(100dvh - 32px)); max-height: calc(100dvh - 32px); }
+.era-sky-dialog .line button.choice.era-wait-continue { font-size: 1em; }
+.era-sky-dialog > .era-main-header { position: relative; flex: none; height: var(--area-art-height, 150px); min-height: 150px; padding: 0; overflow: hidden; border: 0; border-radius: 0; }
+.era-sky-narration { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 12px 16px; }
 .era-relationship:popover-open { width: min(1200px, calc(100vw - 32px)); height: fit-content; max-height: calc(100dvh - 32px); overflow: visible; border-color: #735563; background: radial-gradient(ellipse at 45% 25%, #211b29a0, transparent 65%), #090c10; }
 .era-relationship:popover-open:has(.era-relationship-demo) { margin-top: 112px; max-height: calc(100dvh - 128px); }
 .era-relationship-header { display: flex; align-items: center; gap: 16px; padding: 0; border-radius: 10px 10px 0 0; background: url("/relationship-assets/header-sakura.svg") right center / auto 100% no-repeat, linear-gradient(120deg, #30202d, #161c28); border-bottom: 1px solid #614451; }

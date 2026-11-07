@@ -93,6 +93,7 @@ test("main screen distributes space and spaces player controls consistently", { 
             toggles[0].top - tiles[2].bottom, toggles[2].top - toggles[0].bottom, config.top - toggles[2].bottom]
         };
       });
+
       document.body.textContent = JSON.stringify(results);
     </script>`;
   const profile = await mkdtemp(join(tmpdir(), "era-layout-"));
@@ -126,6 +127,145 @@ test("main screen distributes space and spaces player controls consistently", { 
         for (const gap of result.gaps)
           assert.ok(Math.abs(gap - 6) < 1, `${label}: expected 6px between player controls, got ${gap}`);
       }
+    }
+  } finally {
+    await rm(profile, { recursive: true, force: true });
+  }
+});
+
+test("sky dialog fits its contents and keeps the panorama visible while narration scrolls", { skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH" }, async () => {
+  const [style, handheld] = await Promise.all([
+    readFile(new URL("../web/style.css", import.meta.url), "utf8"),
+    readFile(new URL("../web/handheld.css", import.meta.url), "utf8"),
+  ]);
+  const html = `<!doctype html><meta charset="utf-8"><style>${style}\n${handheld}</style><body>
+    <div class="screen is-active"><div class="era-box era-dialog era-sky-dialog" popover="manual">
+      <div class="line"><div class="era-inventory-header"><div class="era-inventory-heading">
+        <span class="era-inventory-title">Gaze at the sky</span><button class="choice era-dialog-close era-wait-continue">Continue</button>
+      </div></div></div>
+      <div class="era-box era-main-header"><div class="line"><span><div class="era-sky era-sky-day"><span class="era-sky-view"></span></div></span></div></div>
+      <div class="era-box era-sky-narration"><div class="line">A clear sky.</div></div>
+    </div></div><script>
+      const dialog = document.querySelector(".era-sky-dialog"), narration = document.querySelector(".era-sky-narration");
+      dialog.showPopover();
+      const scene = document.querySelector(".era-sky").getBoundingClientRect();
+      const button = document.querySelector(".era-wait-continue").getBoundingClientRect();
+      const initialHeight = dialog.getBoundingClientRect().height;
+      narration.firstChild.style.height = "120px";
+      const mediumHeight = dialog.getBoundingClientRect().height;
+      narration.firstChild.style.height = "1200px";
+      const result = { initialHeight, mediumHeight, sceneHeight: scene.height, overlaps: button.bottom > scene.top,
+        dialogHeight: dialog.getBoundingClientRect().height, viewportHeight: innerHeight,
+        scrollable: narration.scrollHeight > narration.clientHeight };
+      document.body.textContent = JSON.stringify(result);
+    </script>`;
+  const profile = await mkdtemp(join(tmpdir(), "era-sky-layout-"));
+  try {
+    const args = ["--headless", "--disable-gpu", "--no-first-run", `--user-data-dir=${profile}`, "--window-size=1200,700", "--dump-dom"];
+    if (process.platform === "linux" && process.getuid?.() === 0) args.push("--no-sandbox");
+    args.push(`data:text/html;base64,${Buffer.from(html).toString("base64")}`);
+    const { stdout } = await execute(browser!, args, { maxBuffer: 8 * 1024 * 1024, timeout: 30000 });
+    const match = stdout.match(/<body[^>]*>([\s\S]*?)<\/body>/);
+    assert.ok(match);
+    const result = JSON.parse(match[1]) as { initialHeight: number; mediumHeight: number; sceneHeight: number; overlaps: boolean; dialogHeight: number; viewportHeight: number; scrollable: boolean };
+    assert.ok(result.initialHeight >= 500, "dialog reserves space for narration");
+    assert.equal(result.initialHeight, result.mediumHeight, "dialog height does not change as narration grows");
+    assert.equal(result.initialHeight, result.dialogHeight, "overflowing narration does not grow the dialog");
+    assert.equal(result.sceneHeight, 150);
+    assert.equal(result.overlaps, false, "the continue control does not cover the panorama");
+    assert.ok(result.dialogHeight <= result.viewportHeight);
+    assert.equal(result.scrollable, true, "long narration scrolls without shrinking the panorama");
+  } finally {
+    await rm(profile, { recursive: true, force: true });
+  }
+});
+
+test("stats scroll independently while player controls retain space", { skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH" }, async () => {
+  const [style, handheld] = await Promise.all([
+    readFile(new URL("../web/style.css", import.meta.url), "utf8"),
+    readFile(new URL("../web/handheld.css", import.meta.url), "utf8"),
+  ]);
+  const fixture = (name: string, width: number, stats: boolean, playerHeight: number) => `
+    <div class="fixture" data-case="${name}"><div id="terminal" style="width:${width}px;height:650px;font-size:20px;line-height:1.25">
+      <div class="screen is-active"><div class="era-main">
+        <div class="era-main-header" style="height:130px">Header</div>
+        <div class="era-main-center"><div class="era-card" style="height:200px">Room</div></div>
+        <div class="era-main-actions era-card"><div class="line">Actions</div></div>
+        <div class="era-main-sidebar">
+          <div class="era-main-left">${stats ? `<div class="era-card era-stats" tabindex="0">
+            <div class="line"><div class="era-card-title">Character's Stats</div></div>
+            <div class="line"><div class="era-palam-grid">${Array.from({ length: name === "short-stats" ? 2 : 28 }, (_, i) =>
+              `<div class="era-palam-item">Stat ${i + 1}</div>`).join("")}</div></div></div>` : ""}</div>
+          <div class="era-main-right"><div class="era-card era-player"><div style="height:${playerHeight}px">Player information</div>
+            <div class="line"><button class="choice era-player-control">Inventory</button></div>
+            <div class="line"><button class="choice era-chip-button">Config</button></div>
+          </div></div>
+        </div>
+      </div></div>
+    </div></div>`;
+  const cases = [
+    { name: "wide", width: 1180, stats: true, playerHeight: 180 },
+    { name: "short-stats", width: 1180, stats: true, playerHeight: 180 },
+    { name: "large-player", width: 1180, stats: true, playerHeight: 700 },
+    { name: "no-stats", width: 1180, stats: false, playerHeight: 180 },
+    { name: "stacked", width: 650, stats: true, playerHeight: 180 },
+  ];
+  const html = `<!doctype html><meta charset="utf-8"><style>${style}\n${handheld}</style><body class="MODE">
+    ${cases.map(({ name, width, stats, playerHeight }) => fixture(name, width, stats, playerHeight)).join("")}
+    <script>
+      const results = [...document.querySelectorAll(".fixture")].map(f => {
+        const sidebar = f.querySelector(".era-main-sidebar"), player = f.querySelector(".era-player");
+        const stats = f.querySelector(".era-stats"), config = f.querySelector(".era-chip-button");
+        const before = sidebar.scrollTop;
+        if (stats) { stats.focus({ preventScroll: true }); stats.scrollTop = stats.scrollHeight; }
+        const statsFocused = document.activeElement === stats;
+        const sidebarAfterStats = sidebar.scrollTop;
+        const configBottomBefore = config.getBoundingClientRect().bottom - sidebar.getBoundingClientRect().top;
+        sidebar.scrollTop = sidebar.scrollHeight;
+        return { name: f.dataset.case, sidebarClient: sidebar.clientHeight, sidebarScroll: sidebar.scrollHeight,
+          sidebarBefore: before, sidebarAfterStats, sidebarScrolled: sidebar.scrollTop,
+          playerHeight: player.getBoundingClientRect().height, statsFocused, configBottomBefore,
+          configBottom: config.getBoundingClientRect().bottom - sidebar.getBoundingClientRect().top,
+          statsClient: stats?.clientHeight, statsScroll: stats?.scrollHeight, statsTop: stats?.scrollTop,
+          statsOverflow: stats && getComputedStyle(stats).overflowY };
+      });
+      document.body.textContent = JSON.stringify(results);
+    </script>`;
+  const profile = await mkdtemp(join(tmpdir(), "era-sidebar-layout-"));
+  try {
+    for (const [mode, size] of [["desktop", "1440,900"], ["is-handheld", "1200,700"]] as const) {
+      const args = ["--headless", "--disable-gpu", "--no-first-run", `--user-data-dir=${profile}`, `--window-size=${size}`, "--dump-dom"];
+      if (process.platform === "linux" && process.getuid?.() === 0) args.push("--no-sandbox");
+      args.push(`data:text/html;base64,${Buffer.from(html.replace("MODE", mode)).toString("base64")}`);
+      const { stdout } = await execute(browser!, args, { maxBuffer: 8 * 1024 * 1024, timeout: 30000 });
+      const match = stdout.match(/<body[^>]*>([\s\S]*?)<\/body>/);
+      assert.ok(match);
+      const results = JSON.parse(match[1]) as Array<{
+        name: string; sidebarClient: number; sidebarScroll: number; sidebarBefore: number; sidebarAfterStats: number;
+        sidebarScrolled: number; playerHeight: number; configBottom: number; configBottomBefore: number; statsFocused: boolean;
+        statsClient?: number; statsScroll?: number; statsTop?: number; statsOverflow?: string;
+      }>;
+      const wide = results.find(result => result.name === "wide")!;
+      assert.equal(wide.statsOverflow, "auto", mode);
+      assert.ok(wide.statsScroll! > wide.statsClient!, `${mode}: stats overflow within their own card`);
+      assert.ok(wide.statsTop! > 0, `${mode}: stats reach lower rows`);
+      assert.equal(wide.statsFocused, true, `${mode}: stats can receive keyboard focus`);
+      assert.equal(wide.sidebarBefore, wide.sidebarAfterStats, `${mode}: scrolling stats does not scroll player`);
+      assert.ok(wide.configBottomBefore <= wide.sidebarClient + 1, `${mode}: player controls remain visible: ${JSON.stringify(wide)}`);
+      assert.ok(wide.playerHeight < wide.sidebarClient - 80, `${mode}: player does not consume stats space`);
+      const short = results.find(result => result.name === "short-stats")!;
+      assert.equal(short.statsScroll, short.statsClient, `${mode}: short stats do not overflow`);
+      assert.ok(short.statsClient! > 80, `${mode}: stats fill spare sidebar space`);
+      assert.ok(Math.abs(short.playerHeight - wide.playerHeight) <= 1, `${mode}: spare space does not expand player`);
+      const large = results.find(result => result.name === "large-player")!;
+      assert.ok(large.sidebarScroll > large.sidebarClient, `${mode}: oversized player remains reachable by sidebar scrolling`);
+      assert.ok(large.sidebarScrolled > 0 && large.configBottom <= large.sidebarClient + 1,
+        `${mode}: sidebar scrolling reaches the last player control`);
+      const noStats = results.find(result => result.name === "no-stats")!;
+      assert.ok(noStats.configBottomBefore <= noStats.sidebarClient + 1, `${mode}: player is visible without stats`);
+      const stacked = results.find(result => result.name === "stacked")!;
+      assert.notEqual(stacked.statsOverflow, "auto", `${mode}: narrow stacked layout retains normal page flow`);
+      assert.equal(stacked.statsScroll, stacked.statsClient, `${mode}: stacked stats are not clipped`);
     }
   } finally {
     await rm(profile, { recursive: true, force: true });

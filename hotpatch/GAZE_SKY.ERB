@@ -1,0 +1,32 @@
+; Keep the game's weather narration and subsequent command results in one dialog.
+@MESSAGE_COM495
+LOCAL = HOTPATCH_SKY_DIALOG_STATE(1)
+HTML_PRINT "<era-open class='era-dialog era-sky-dialog' role='dialog' aria-label='Gaze at the sky'>"
+HTML_PRINT "<div class='era-inventory-header'><div class='era-inventory-heading'><span class='era-inventory-title'>Gaze at the sky</span><button value='0' class='era-dialog-close era-wait-continue' title='Continue'>Continue</button></div></div>"
+HTML_PRINT "<era-open class='era-main-header'>"
+CALL HOTPATCH_SKY
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-open class='era-sky-narration'>"
+DRAWLINE
+CALL HOTPATCH_ORIGINAL_MESSAGE_COM495
+
+; SOURCE_CHECK prints the actual elapsed time and closing rule after the narration.
+@SOURCE_CHECK
+CALL HOTPATCH_ORIGINAL_SOURCE_CHECK
+LOCAL = RESULT
+IF HOTPATCH_SKY_DIALOG_STATE()
+	LOCAL:1 = HOTPATCH_SKY_DIALOG_STATE(0)
+	IF SELECTCOM == 495
+		HTML_PRINT "<era-close>"
+		HTML_PRINT "<era-close>"
+	ENDIF
+ENDIF
+RETURN LOCAL
+
+@HOTPATCH_SKY_DIALOG_STATE(nValue = -1)
+#FUNCTION
+#DIM DYNAMIC nValue
+#DIM nOpen
+SIF nValue >= 0
+	nOpen = nValue
+RETURNF nOpen

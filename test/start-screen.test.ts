@@ -384,6 +384,25 @@ QUIT`, "TEST_BODY_BULK_FEEDBACK.ERB");
   assert.match(started, /50,000/, "starting bonus is applied exactly once");
   assert.doesNotMatch(started, /Select Mode|Select a place to stay|Some characters have alternative dialogue options|Here some various settings/);
   assert.match(markup(settle(runtime, runtime.input("100"))), /era-room-stage/, "Wake Up reaches the main screen");
+  const sky = runtime.input("495");
+  assert.equal(sky.error, null, JSON.stringify(sky.error));
+  assert.equal(sky.input?.kind, "wait");
+  assert.match(markup(sky), /era-dialog era-sky-dialog[\s\S]*era-main-header[\s\S]*era-sky/);
+  assert.match(markup(sky), /era-sky-narration[\s\S]*-{10,}/, "the opening rule is inside the narration");
+  let afterSky = sky;
+  let resultShown = false;
+  for (let step = 0; afterSky.input?.kind === "wait"; step++) {
+    assert.ok(step < 100, "sky flow returns to the main screen");
+    afterSky = runtime.input("");
+    const text = markup(afterSky);
+    if (text.includes("+1 minute")) {
+      resultShown = true;
+      assert.equal(afterSky.input?.kind, "wait", "command results remain visible until continued");
+      assert.match(text, /\+1 minute[\s\S]*-{10,}[\s\S]*<era-close>[\s\S]*<era-close>/);
+    }
+  }
+  assert.ok(resultShown, "the original time result is printed");
+  assert.match(markup(afterSky), /era-main-actions/, "finishing the weather narration returns to the main screen");
 
   const saved = saves.read("save99.sav");
   assert.ok(Buffer.isBuffer(saved), "new game produces a native autosave");

@@ -262,6 +262,16 @@ test("custom action button wrappers participate directly in the action flex row"
   assert.match(css, /^\.era-actions-group span:has\(> \.era-guard-control\) \{ display: contents; \}/m);
 });
 
+test("sky narration keeps its dialog open across waits and continues through its own button", async () => {
+  const app = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
+  assert.match(app, /const skyContinue = button\.matches\("\.era-sky-dialog \.era-wait-continue"\);/);
+  assert.match(app, /skyContinue && !waitContinue/);
+  assert.match(app, /submit\(input\?\.kind === "wait" && button\.matches\("\.era-sky-dialog \.era-wait-continue"\) \? "" : value, button\)/);
+  assert.match(app, /advanceScreen && currentScreen\?\.querySelector\("\.era-sky-dialog:not\(\[data-closed\]\)"\)\) advanceScreen = false/);
+  assert.match(app, /dialog\.matches\("\.era-sky-dialog"\) && dialog\.dataset\.closed && input\?\.kind !== "wait"/);
+  assert.match(app, /pageTranslated\(\) \|\| !!terminal\.querySelector\("\.screen\.is-active \.era-sky-dialog:popover-open"\)/);
+});
+
 test("date panel hides blank text lines and renders an accessible calendar icon", async () => {
   const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
   assert.match(css, /\.era-main-when > \.line:has\(> \.is-empty:only-child\) \{ display: none; \}/);
@@ -1368,6 +1378,9 @@ test("room overlays reserve no layout height and chat follows every responsive m
   assert.match(css, /\.era-main-sidebar > \.era-main-right \{ flex: 1; \}/);
   assert.match(css, /\.era-main-sidebar > \.era-main-left \{ flex: none; \}/);
   assert.match(css, /\.era-main-left > \.era-stats \{ flex: none; \}/);
+  assert.match(css, /\.era-main-sidebar:has\(\.era-stats\) > \.era-main-left \{ flex: 1 1 0; min-height: 80px; \}/);
+  assert.match(css, /\.era-main-sidebar:has\(\.era-stats\) > \.era-main-right \{ flex: none; \}/);
+  assert.match(css, /\.era-main-sidebar \.era-main-left > \.era-stats \{ flex: 1 1 0; min-height: 0; overflow-y: auto;/);
   assert.match(css, /\.era-player-actions \{[^}]*margin-top: auto;/);
   assert.match(css, /\.era-main \.era-player :is\(\.print-cell, \.era-guard-control\),\s*\.era-main \.era-player \.line button\.choice:is\(\.era-player-control, \.era-chip-button\) \{[^}]*padding: 6px 10px;[^}]*border-radius: 4px;/);
   assert.match(css, /\.line button\.choice\.era-toggle \{ --button-gap: 5px;/);
@@ -1376,6 +1389,7 @@ test("room overlays reserve no layout height and chat follows every responsive m
   assert.doesNotMatch(patch, /era-interaction-history/);
   assert.doesNotMatch(patch, /era-info-tabs|era-info-title/);
   const app = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
+  assert.match(app, /const stats = main\.querySelector\("\.era-stats"\);\s*if \(stats\) stats\.tabIndex = 0;/);
   assert.match(app, /for \(const selector of \["\.era-main-left", "\.era-main-right"\]\)/,
     "character Stats precedes Player in sidebar reading and display order");
 });

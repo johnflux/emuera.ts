@@ -370,7 +370,10 @@ function updateControls() {
     ? `Enter for ${JSON.stringify(input.defaultValue)}` : chatting ? "Command number, or say something…" : input ? lastCommand : "";
   [...terminal.querySelectorAll("button.choice"), ...islandRoot.querySelectorAll("button.choice")].forEach((button) => {
     const value = input?.kind === "integer" && /^-?\d+$/.test(button.dataset.value) ? BigInt(button.dataset.value).toString() : button.dataset.value;
-    button.disabled = !button.closest(".screen.is-active, .island-root") || button.classList.contains("is-stale") || (busy && !expiring) || !input || input.kind === "wait" || !!input.blocking
+    const skyContinue = button.matches(".era-sky-dialog .era-wait-continue");
+    const waitContinue = input?.kind === "wait" && skyContinue;
+    button.disabled = !button.closest(".screen.is-active, .island-root") || button.classList.contains("is-stale") || (busy && !expiring) || !input || (input.kind === "wait" && !waitContinue) || !!input.blocking
+      || (skyContinue && !waitContinue)
       || button.getAttribute("aria-disabled") === "true"
       || !!input.buttonValues && !input.buttonValues.includes(value);
   });
@@ -860,7 +863,8 @@ function syncDialogs() {
   if (!terminal.querySelector(".screen.is-active .era-inventory")) inventoryQuery = "";
   for (const dialog of terminal.querySelectorAll(".era-dialog")) {
     if (!dialog.popover) dialog.popover = "manual";
-    const open = !!dialog.closest(".screen.is-active");
+    const open = !!dialog.closest(".screen.is-active")
+      && !(dialog.matches(".era-sky-dialog") && dialog.dataset.closed && input?.kind !== "wait");
     if (open && dialog.classList.contains("era-inventory")) syncInventory(dialog);
     if (open) {
       if (dialog.matches(".era-wedding, .era-relationship-ending")) dialog.dataset.proposalStep = "5";
@@ -1035,7 +1039,7 @@ function choice(label, value, title = "") {
       // RESULT:5 is an integer button's value; a string button sets RESULTS instead.
       const numeric = /^-?\d+$/.test(value) && Number.isSafeInteger(Number(value));
       void submitMouseKey([1, MOUSE_BUTTONS[0], ...clientPoint(event), -1, numeric ? Number(value) : 0], numeric ? undefined : value, button);
-    } else void submit(value, button);
+    } else void submit(input?.kind === "wait" && button.matches(".era-sky-dialog .era-wait-continue") ? "" : value, button);
   });
   return button;
 }
@@ -1954,8 +1958,12 @@ async function renderSteps(steps, fresh = false, keepFocus = false, toBottom = f
   };
   const scrollTop = terminal.scrollTop;
   const scrollLeft = terminal.scrollLeft;
+  const skyNarration = terminal.querySelector(".screen.is-active .era-sky-dialog:popover-open .era-sky-narration");
+  const followSky = !skyNarration || skyNarration.scrollHeight - skyNarration.clientHeight - skyNarration.scrollTop < 2;
   const followBottom = toBottom || terminal.scrollHeight - terminal.clientHeight - scrollTop < 2;
-  const live = pageTranslated();
+  // Moving an open popover into the staging tree closes it; keep the sky dialog
+  // in place across its narration and final command-result wait.
+  const live = pageTranslated() || !!terminal.querySelector(".screen.is-active .era-sky-dialog:popover-open");
   const staged = live ? terminal : document.createElement("div");
   if (live && fresh) terminal.replaceChildren();
   // Keep a visual copy on screen while the original nodes (and their listeners)
@@ -1990,6 +1998,8 @@ async function renderSteps(steps, fresh = false, keepFocus = false, toBottom = f
     outputRoot = terminal;
     pendingImages = [];
     syncDialogs();
+    const updatedSky = terminal.querySelector(".screen.is-active .era-sky-dialog:popover-open .era-sky-narration");
+    if (updatedSky && followSky) updatedSky.scrollTop = updatedSky.scrollHeight;
     profileEnd("render.commit", phaseStarted);
     phaseStarted = profileStart();
     layoutHtmlPositions();
@@ -2186,6 +2196,8 @@ async function renderSnapshot(snapshot, advanceScreen) {
   }
   const previousScreen = currentScreen;
   const previousLine = currentLine;
+  // Weather narration can pause for waits and diary choices; both must resume inside the same open box.
+  if (advanceScreen && currentScreen?.querySelector(".era-sky-dialog:not([data-closed])")) advanceScreen = false;
   if (advanceScreen === "continue") {
     // An unfinished line keeps printing into its screen; otherwise the continued output starts a new screen.
     if (currentScreen && !currentLine) {
@@ -2602,6 +2614,8 @@ function setupMainSidebar(main) {
   sidebar.className = "era-main-sidebar";
   const player = main.querySelector(".era-player");
   const management = main.querySelector(".era-player-management");
+  const stats = main.querySelector(".era-stats");
+  if (stats) stats.tabIndex = 0;
   if (player && management) player.append(management);
   for (const selector of [".era-main-left", ".era-main-right"]) {
     const panel = main.querySelector(selector);

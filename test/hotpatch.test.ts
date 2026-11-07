@@ -118,6 +118,63 @@ test("hotpatches replace game routines and may add HOTPATCH_ helpers", async () 
   assert.equal(output, "patched");
 });
 
+test("gazing at the sky wraps the original narration without changing its waits or side effects", async () => {
+  const patch = readFileSync(new URL("../hotpatch/GAZE_SKY.ERB", import.meta.url), "utf8");
+  for (const jit of [false, true]) {
+    const game = emptyGame();
+    indexScript(game, `@SYSTEM_TITLE
+    SELECTCOM = 495
+    CALL MESSAGE_COM495
+    CALL SOURCE_CHECK
+    PRINTW
+    PRINTFORML Weather effect: {FLAG:1}, diary choice: {FLAG:2}
+    INPUT
+    QUIT
+@MESSAGE_COM495
+PRINTW First weather line
+FLAG:1 += 1
+PRINTW Second weather line
+PRINTBUTTON "Yes", 0
+PRINTBUTTON "No", 1
+BINPUT
+FLAG:2 = RESULT
+@SOURCE_CHECK
+PRINTL +1 minute
+DRAWLINE
+@HOTPATCH_SKY
+HTML_PRINT "<div class='era-sky era-area-0' data-minutes='360'></div>"`, "<sky-test>");
+    await withPatchDir({ "GAZE_SKY.ERB": patch }, async (dir) => {
+      assert.deepEqual((await applyHotpatches(game, dir)).sort(), ["MESSAGE_COM495", "SOURCE_CHECK"]);
+    });
+    const runtime = new Runtime(game, undefined, { jit });
+    const first = runtime.start();
+    assert.equal(first.error, null, JSON.stringify(first.error));
+    assert.equal(first.input?.kind, "wait");
+    const output = first.output.map(item => "text" in item ? item.text : "").join("\n");
+    assert.match(output, /era-dialog era-sky-dialog/);
+    assert.match(output, /era-main-header/);
+    assert.match(output, /era-sky era-area-0/);
+    assert.doesNotMatch(output, /era-main-when|era-watch-control|era-clock|era-calendar/);
+    assert.match(output, /First weather line/);
+    const second = runtime.input("");
+    assert.equal(second.error, null, JSON.stringify(second.error));
+    assert.equal(second.input?.kind, "wait");
+    assert.ok(second.output.some(item => item.type === "text" && item.text === "Second weather line"));
+    const choice = runtime.input("");
+    assert.equal(choice.error, null, JSON.stringify(choice.error));
+    assert.equal(choice.input?.kind, "integer", "the original diary choice remains interactive");
+    const finished = runtime.input("1");
+    assert.equal(finished.error, null, JSON.stringify(finished.error));
+    assert.equal(finished.input?.kind, "wait");
+    const resultText = finished.output.map(item => "text" in item ? item.text : "").join("\n");
+    assert.match(resultText, /\+1 minute[\s\S]*-{10,}[\s\S]*<era-close>[\s\S]*<era-close>/);
+    assert.equal(finished.output.filter(item => item.type === "html" && item.text === "<era-close>").length, 2);
+    const after = runtime.input("");
+    assert.equal(after.input?.kind, "integer");
+    assert.ok(after.output.some(item => item.type === "text" && item.text === "Weather effect: 1, diary choice: 1"));
+  }
+});
+
 test("Move map destination rows render their reachability class", {
   skip: !existsSync(GAME_ROOT),
 }, async () => {
