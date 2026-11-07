@@ -1,6 +1,31 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildMessages, complete, converse } from "../web/llm.js";
+import { buildMessages, complete, converse, gossipPrompt, systemPrompt } from "../web/llm.js";
+
+test("consistent royal voice examples guide chat and gossip without overriding mixed or singular voices", () => {
+  for (const examples of [
+    ["We are pleased.", "You have Our thanks."],
+    ["I am pleased.", "You have my thanks."],
+    ["We are all here.", "I am pleased."],
+    ["We are all here.", "Hello."],
+    [],
+  ]) {
+    const scene = { voice: { examples } };
+    const character = { name: "Test character" };
+    const prompts = [
+      systemPrompt({ character, gameTitle: "Test", scene }),
+      gossipPrompt({ character, other: { name: "Alice" }, place: "Shrine", gameTitle: "Test", scene }),
+    ];
+    const royal = examples[1] === "You have Our thanks.";
+    for (const prompt of prompts) {
+      assert.equal(prompt.includes("consistently use royal self-reference"), royal);
+      if (royal) {
+        assert.match(prompt, /Never switch to "I", "I'm"/);
+        assert.match(prompt, /Before calling say or tell, check every sentence/);
+      }
+    }
+  }
+});
 
 test("strict chat templates receive one system message with all context and intact tool rounds", async () => {
   const originalFetch = globalThis.fetch;

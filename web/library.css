@@ -29,11 +29,11 @@
 .game-requirements { color: #d1bc96; }
 .library-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid #ffffff13; }
 .library-tabs { display: flex; gap: 28px; }
-.library-tabs button { position: relative; padding: 17px 0; border: 0; background: transparent; color: #8e9bad; font-size: 14px; }
+.library-tabs button { --button-gap: 0; position: relative; padding: 17px 0; border: 0; background: transparent; color: #8e9bad; font-size: 14px; }
 .library-tabs button[aria-selected="true"] { color: #e8f1eb; }
 .library-tabs button[aria-selected="true"]::after { content: ""; position: absolute; bottom: -1px; left: 0; right: 0; height: 2px; background: #a9cdbd; }
 .library-tabs span { margin-left: 6px; padding: 2px 6px; background: #ffffff0a; border-radius: 5px; font-size: 11px; color: #94aaab; }
-.library-refresh { padding: 7px 10px; border: 1px solid #ffffff1c; border-radius: 6px; background: transparent; color: #aeb9c9; font-size: 12px; }
+.library-refresh { --button-padding: 7px 10px; --button-border: #ffffff1c; --button-background: transparent; --button-color: #aeb9c9; font-size: 12px; }
 .library-message { min-height: 20px; margin: 18px 0; color: #91a0b4; font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
 .library-message.error { color: #ffb7a9; }
 .library-progress { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 0 0 20px; padding: 14px 16px; border: 1px solid #98c8bc55; border-radius: 8px; background: #20312e; color: #dcebe3; font-size: 13px; }
@@ -62,8 +62,8 @@
 .game-card h3 { margin: 12px 0 10px; color: #f0f1f5; font-size: 20px; font-weight: 600; letter-spacing: -.03em; overflow-wrap: anywhere; }
 .game-card-blurb { min-height: 66px; margin: 0 0 20px; color: #a1acbd; font-size: 13px; line-height: 1.7; }
 .game-card-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
-.game-primary { display: inline-block; border: 1px solid #a3c7b9; border-radius: 6px; background: #b5d5c5; padding: 9px 15px; color: #162b25; font-size: 12px; font-weight: 650; text-decoration: none; }
-.game-primary:hover:enabled, a.game-primary:hover { background: #d1e6da; border-color: #d1e6da; color: #162b25; }
+.game-primary { --button-border: #a3c7b9; --button-background: #b5d5c5; --button-padding: 9px 15px; --button-radius: 6px; --button-color: #162b25; --button-hover-background: #d1e6da; --button-hover-border: #d1e6da; font-size: 12px; font-weight: 650; text-decoration: none; }
+.game-primary:hover:enabled, a.game-primary:hover { background: var(--button-hover-background); border-color: var(--button-hover-border); color: var(--button-color); }
 .game-primary:disabled { background: #384a43; border-color: #51675d; color: #a8b9b0; }
 .game-source { color: #aab7c7; font-size: 11px; text-decoration: none; }
 .game-source:hover { color: #e3eee7; text-decoration: underline; }

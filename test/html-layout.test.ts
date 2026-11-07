@@ -1338,7 +1338,8 @@ test("room overlays reserve no layout height and chat follows every responsive m
   assert.ok(css.includes('"center" "actions" "sidebar"'));
   assert.match(css, /\.era-main-chat \{ grid-column: 1 \/ -1;/);
   assert.doesNotMatch(css, /"chat sidebar"|"chat"/);
-  assert.match(css, /\.era-room-stage \.era-occupant-list \{[^}]*flex: none;[^}]*height: 216px;/);
+  assert.match(css, /\.era-room-stage \{ --era-occupant-height: 216px;/);
+  assert.match(css, /\.era-room-stage \.era-occupant-list \{[^}]*flex: none;[^}]*height: var\(--era-occupant-height\);/);
   assert.match(css, /\.era-room-stage \.era-occupant-caged > \.era-occupant-text \{ position: static; \}/);
   assert.doesNotMatch(css, /\.era-room-stage \{[^}]*min-height:/);
   assert.doesNotMatch(css, /era-history-preview|era-info-with-preview/);
@@ -1369,7 +1370,8 @@ test("room overlays reserve no layout height and chat follows every responsive m
   assert.match(css, /\.era-main-left > \.era-stats \{ flex: none; \}/);
   assert.match(css, /\.era-player-actions \{[^}]*margin-top: auto;/);
   assert.match(css, /\.era-main \.era-player :is\(\.print-cell, \.era-guard-control\),\s*\.era-main \.era-player \.line button\.choice:is\(\.era-player-control, \.era-chip-button\) \{[^}]*padding: 6px 10px;[^}]*border-radius: 4px;/);
-  assert.match(css, /\.line button\.choice\.era-toggle \{ display: inline-flex; align-items: center; gap: 5px;/);
+  assert.match(css, /\.line button\.choice\.era-toggle \{ --button-gap: 5px;/);
+  assert.match(css, /\.line button\.choice:is\([^)]*\.era-toggle[^)]*\)[^{]*\{[^}]*display: inline-flex; align-items: center;/);
   const patch = await readFile(new URL("../hotpatch/MAIN_SCREEN.ERB", import.meta.url), "utf8");
   assert.doesNotMatch(patch, /era-interaction-history/);
   assert.doesNotMatch(patch, /era-info-tabs|era-info-title/);
@@ -1831,9 +1833,10 @@ test("character history renders literal text and local controls without game inp
   assert.equal(prompt[0].role, "system");
   assert.match(prompt[0].content, /role-playing as Alice.*"eraTW"/);
   assert.match(prompt[0].content, /"speech".*"actions"/);
-  assert.match(prompt[1].content, /Current situation: Day 5, 10:00 at Living room\. Alice's favor toward the player: 3; trust: 2\./);
-  assert.match(prompt[1].content, /\[Day 5, 10:00 · Living room\] Talk \(present: Alice\)\n.*Hello\.\nNarration to Player: Narration\.\nPlayer inputs: A choice\nFavor\+2/);
-  assert.doesNotMatch(prompt[1].content, /Hello there/, "the new message is the player's turn, not part of the history context");
+  assert.deepEqual(prompt.map((message: { role: string }) => message.role), ["system", "user"]);
+  assert.match(prompt[0].content, /Current situation: Day 5, 10:00 at Living room\. Alice's favor toward the player: 3; trust: 2\./);
+  assert.match(prompt[0].content, /\[Day 5, 10:00 · Living room\] Talk \(present: Alice\)\n.*Hello\.\nNarration to Player: Narration\.\nPlayer inputs: A choice\nFavor\+2/);
+  assert.doesNotMatch(prompt[0].content, /Hello there/, "the new message is the player's turn, not part of the history context");
   assert.deepEqual(prompt.at(-1), { role: "user", content: "Player: Hello there" });
   assert.equal(chat.textarea.value, "");
   assert.deepEqual(game.lines.map((line) => line.text), ['"Hello there"', "Alice waves.", "「Hi!」"]);
@@ -1859,7 +1862,7 @@ test("character history renders literal text and local controls without game inp
   assert.deepEqual(chat.shown().slice(-3), ['Player: 「Hello there」', "Alice: Alice waves.", "Alice: 「Hi!」"]);
   replies.push({ status: 401, body: { error: { message: "No auth" } } });
   await chat.say("Again");
-  assert.match(sent[1]!.payload.messages[1].content, /Conversation \(present: Alice\)\nPlayer: 「Hello there」\nAlice: Alice waves\.\nAlice: 「Hi!」/);
+  assert.match(sent[1]!.payload.messages[0].content, /Conversation \(present: Alice\)\nPlayer: 「Hello there」\nAlice: Alice waves\.\nAlice: 「Hi!」/);
   assert.match(chat.text(), /No reply: 401 Unauthorized: No auth/);
   assert.equal(chat.textarea.value, "Again");
   assert.equal(game.lines.length, 3, "the unanswered message is taken back");
@@ -1871,7 +1874,7 @@ test("character history renders literal text and local controls without game inp
   await retry.listeners.get("click")!(localEvent);
   await settled();
   assert.deepEqual(sent.at(-2)!.payload.messages.slice(-1), [{ role: "user", content: "Player: Hello there" }]);
-  assert.doesNotMatch(sent.at(-2)!.payload.messages[1].content, /Hi!/);
+  assert.doesNotMatch(sent.at(-2)!.payload.messages[0].content, /Hi!/);
   assert.deepEqual(game.lines.map((line) => line.text), ['"Hello there"', "「Hello again!」"]);
   await chat.find((node) => node.tag === "button" && node.textContent === "Edit").listeners.get("click")!(localEvent);
   await settled();
@@ -1916,8 +1919,8 @@ test("character history renders literal text and local controls without game inp
   assert.match(first.messages[0].content, /call check_consent for it and answer/);
   assert.doesNotMatch(first.messages[0].content, /"speech"/);
   assert.equal(first.response_format, undefined, "replies come through tools, so JSON mode is off");
-  assert.match(first.messages[2].content, /^Current scene \("me" is you, the character you play\):\n\{"time":"07:00","me":\{"name":"Alice"\},"othersHere":\["Bob \(Human, male\)"\]\}$/);
-  assert.equal(first.messages.length, 4, "earlier turns are history, not replayed messages");
+  assert.match(first.messages[0].content, /Current scene \("me" is you, the character you play\):\n\{"time":"07:00","me":\{"name":"Alice"\},"othersHere":\["Bob \(Human, male\)"\]\}$/);
+  assert.equal(first.messages.length, 2, "earlier turns are in the combined system context, not replayed messages");
   assert.deepEqual(second.messages.slice(-3).map((message: { role: string }) => message.role), ["assistant", "tool", "tool"]);
   assert.equal(JSON.stringify(second.messages.at(-2)), JSON.stringify({ role: "tool", tool_call_id: "a", name: "change_feelings", content: '{"favor":{"before":3,"after":13}}' }));
   assert.deepEqual(chat.shown().slice(-4).map((line) => line.replace(/`.*/, "`")), ['Player: *hands over a gift* "Here is a gift"', "`", "`", "Alice: 「Thank you!」"]);
@@ -2054,7 +2057,7 @@ test("character history renders literal text and local controls without game inp
   assert.match(sent.at(-1)!.payload.messages[0].content, /commands available now \(Kiss, Caress\)/);
   // Her kojo's description and lines come after the scene as plain text, and the instructions ask to match them.
   assert.match(sent.at(-1)!.payload.messages[0].content, /Speak the way Alice does in the example lines below/);
-  const sceneMessage = sent.at(-1)!.payload.messages[2].content;
+  const sceneMessage = sent.at(-1)!.payload.messages[0].content;
   assert.match(sceneMessage, /How the game introduces you:\nA demon from below\.\n\nExample lines you say in the game \(your voice\):\n「We think not\.」$/);
   assert.doesNotMatch(sceneMessage, /"voice"/);
   assert.equal(redrawn, 2, "the dialog closes so the game plays out the scene command");
@@ -2758,8 +2761,10 @@ test("translated menu labels re-align locked borders after text and wrapper muta
   let changed: (() => void) | undefined;
   let observed: unknown;
   const frames: (() => void)[] = [];
+  let mapFits = 0;
   const layout = runInNewContext(`${source.slice(start, end)}\nlayoutHtmlPositions`, {
     terminal,
+    fitMoveMaps: () => { mapFits++; },
     requestAnimationFrame: (callback: () => void) => { frames.push(callback); return frames.length; },
     document: {
       body: new Element("BODY"),
@@ -2785,10 +2790,12 @@ test("translated menu labels re-align locked borders after text and wrapper muta
   assert.equal(frames.length, 1);
   frames.shift()!();
   assert.equal(border.getBoundingClientRect().left, 240);
+  assert.equal(mapFits, 1, "translation relayout also refits map labels");
   label.style.width = "35px";
   changed!();
   frames.shift()!();
   assert.equal(border.getBoundingClientRect().left, 240);
+  assert.equal(mapFits, 2);
   layout();
   assert.equal(border.getBoundingClientRect().left, 240);
 });

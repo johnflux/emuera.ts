@@ -165,6 +165,21 @@ export function debugLog(key) {
   return debugLogs.get(key);
 }
 
+function voicePrompt(name, scene) {
+  const examples = scene?.voice?.examples;
+  if (!examples?.length) return "";
+  const royal = examples.filter((line) => /\b(?:We|Us|Our)\b/.test(line)).length >= 2
+    && !examples.some((line) => /\b(?:I|I'm|I've|I'd|I'll|me|my|mine|myself)\b/i.test(line));
+  return `Speak the way ${name} does in the example lines below: the same formality, vocabulary and verbal tics. `
+    + `Above all, ${name} refers to ${name}self exactly as in the examples, in every line `
+    + `(characters differ: some say "I", some a royal "We"/"Us"/"Our", some their own name). `
+    + (royal ? `${name}'s examples consistently use royal self-reference: "We", "Us", "Our", "Ours", "Ourself". `
+      + `Use those forms even when speaking only for yourself, including greetings. Never switch to "I", "I'm", `
+      + `"I've", "I'd", "I'll", "me", "my", "mine" or "myself" for your own speech. ` : "")
+    + `Before calling say or tell, check every sentence for the correct self-reference. `
+    + `Say new things that fit the moment; never copy an example line word for word.`;
+}
+
 export function systemPrompt({ character, gameTitle, instructions, tools = false, scene, encounter }) {
   const name = character.name;
   const reply = tools && encounter ? [
@@ -284,10 +299,7 @@ export function systemPrompt({ character, gameTitle, instructions, tools = false
       + `own perspective; do not echo another character's greeting, wording or gestures. If they already expressed `
       + `what you would say, add a distinct reaction or stay silent. Only react to the player's latest message once; `
       + `your own tool calls and replies are not new messages from the player.`,
-    ...(scene?.voice?.examples?.length ? [`Speak the way ${name} does in the example lines below: the same formality, `
-      + `vocabulary and verbal tics. Above all, ${name} refers to ${name}self exactly as in the examples, in every line `
-      + `(characters differ: some say "I", some a royal "We"/"Us"/"Our", some their own name). Say new things that fit `
-      + `the moment; never copy an example line word for word.`] : []),
+    voicePrompt(name, scene),
     ...reply,
     instructions?.trim() ? `Additional instructions:\n${instructions.trim()}` : "",
   ].filter(Boolean).join("\n");
@@ -338,8 +350,7 @@ export function gossipPrompt({ character, other, place, gameTitle, instructions,
       + `${them} at ${place}. The player is not there and will not hear this. Reply in English.`,
     `Talk only through tool calls: tell is how ${name} speaks to ${them}. Any other text is ignored; when ${name} has `
       + `finished, or has nothing to say, reply with just DONE.`,
-    ...(scene?.voice?.examples?.length ? [`Speak the way ${name} does in the example lines below: the same formality, `
-      + `vocabulary and verbal tics, and refer to ${name}self exactly as in the examples.`] : []),
+    voicePrompt(name, scene),
     `The interaction history below is everything ${name} knows of the player: what happened between them, and what `
       + `${name} saw, overheard or was told.`,
     ...(told ? [

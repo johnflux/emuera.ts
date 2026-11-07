@@ -256,6 +256,25 @@ test("command numbers hide on handheld, at 1280 by 800 or smaller, or with touch
   assert.match(css, /@media \(max-width: 1280px\) and \(max-height: 800px\), \(any-pointer: coarse\) \{\s*\.command-number \{ display: none; \}/);
 });
 
+test("tooltip underlines hide in handheld and touch layouts without removing choice underlines", () => {
+  const css = readFileSync(new URL("../web/handheld.css", import.meta.url), "utf8");
+  assert.match(css, /\.is-handheld \.has-tooltip \.interactive-label \{ text-decoration-line: none; \}/);
+  assert.match(css, /@media \(any-pointer: coarse\) \{\s*\.has-tooltip \.interactive-label \{ text-decoration-line: none; \}/);
+  const desktop = readFileSync(new URL("../web/style.css", import.meta.url), "utf8");
+  assert.match(desktop, /\.has-tooltip \.interactive-label \{[^}]*text-decoration-style: dashed;/);
+  assert.match(desktop, /\.choice \.interactive-label \{ text-decoration: underline;/);
+});
+
+test("UI chrome shares centered button layout and controller badge geometry", () => {
+  const css = readFileSync(new URL("../web/style.css", import.meta.url), "utf8");
+  assert.match(css, /--button-color: currentColor;/);
+  assert.match(css, /button, a\.game-primary, \.line button\.choice:is\(\.era-chip-button, \.era-star, \.era-dialog-close, \.era-toggle, \.era-cycle-toggle\), \.era-chip-button \{[^}]*display: inline-flex; align-items: center; justify-content: center; gap: var\(--button-gap/);
+  assert.match(css, /\.line button\.choice \{ display: inline-block;/);
+  assert.match(css, /button\[hidden\][^{]*\.line button\.choice\[hidden\] \{ display: none; \}/);
+  assert.match(css, /\.era-move-back:enabled:not\(\.is-stale\)::after,\s*\.has-controller[^}]*button\.era-dialog-close:enabled\)::after \{[^}]*flex: 0 0 auto; align-self: center;[^}]*width: 1\.4em; height: 1\.4em; margin: 0;/);
+  assert.doesNotMatch(readFileSync(new URL("../web/handheld.css", import.meta.url), "utf8"), /era-move-back.*::after/);
+});
+
 test("launch version leaves room for the burger menu", () => {
   const css = readFileSync(new URL("../web/style.css", import.meta.url), "utf8");
   assert.match(css, /\.era-launch-version \{[^}]*right: 41px;[^}]*max-width: calc\(100% - 41px\);/);
@@ -302,6 +321,18 @@ test("text-only pauses and processing preserve an invisible command-row spacer b
 test("action tile controls remain vertically centered when their command numbers are hidden", () => {
   const css = readFileSync(new URL("../web/style.css", import.meta.url), "utf8");
   assert.match(css, /\.era-actions-group :is\(\.print-cell, \.era-guard-control\) \.choice \{ vertical-align: middle; \}/);
+  const handheld = readFileSync(new URL("../web/handheld.css", import.meta.url), "utf8");
+  assert.match(handheld, /\.is-handheld \.era-actions-group \.era-guard-control \{ display: inline-flex; align-items: center; min-height: 36px; box-sizing: border-box; \}/);
+  assert.match(handheld, /\.is-handheld \.era-actions-group \.line \.era-guard-control button\.choice \{ min-height: 0; \}/);
+});
+
+test("the empty room prefers the portrait height without taking space needed by actions", () => {
+  const css = readFileSync(new URL("../web/handheld.css", import.meta.url), "utf8");
+  assert.match(css, /\.is-handheld \.era-room-stage \.era-occupant-list:has\(\.era-alone-message\) \{ height: var\(--era-occupant-height\); min-height: 120px; max-height: var\(--era-occupant-height\); \}/);
+  assert.match(css, /\.is-handheld \.screen\.is-active \.era-main \{[^}]*grid-template-rows: auto minmax\(0, max-content\) minmax\(min-content, 1fr\) auto auto; \}/);
+  assert.match(css, /\.is-handheld \.screen\.is-active \.era-main:not\(:has\(\.era-counters\)\) \{ grid-template-rows: auto minmax\(0, max-content\) minmax\(min-content, 1fr\) auto; \}/);
+  assert.match(css, /\.is-handheld \.era-alone \.era-room-stage \{ flex: 1 1 auto; min-height: 0; overflow: visible; \}/);
+  assert.match(css, /\.is-handheld \.era-room-stage \.era-occupant-list:has\(\.era-alone-message\) \{ flex: 1 1 auto; \}/);
 });
 
 test("compact gameplay hides interaction history, shrinks watch text, and keeps action headings inline", () => {
@@ -337,7 +368,7 @@ test("render decorates command numbers after buttons have their surrounding labe
 
 test("compact room uses content height instead of reserving hidden chat space", () => {
   const css = readFileSync(new URL("../web/handheld.css", import.meta.url), "utf8");
-  assert.match(css, /\.is-handheld \.screen\.is-active \.era-main \{[^}]*grid-template-rows: auto auto minmax\(160px, 1fr\) auto auto;/);
+  assert.match(css, /\.is-handheld \.screen\.is-active \.era-main \{[^}]*grid-template-rows: auto minmax\(0, max-content\) minmax\(min-content, 1fr\) auto auto;/);
   assert.match(css, /\.is-handheld \.era-character:has\(\.era-main-chat\) \{ grid-template-rows: auto; \}/);
 });
 

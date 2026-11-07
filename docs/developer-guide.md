@@ -535,7 +535,14 @@ functions such as `FIRSTTIME` have side effects. Lines from intimate routines (s
 arousal or orgasm routines, and commands below 300 or groping ones, by the command number in the routine name) or
 about sex are used only in intimate scenes. The lines are picked one per routine in a seed-by-character order, so they stay the same between
 messages. The prompt lists them as plain text after the scene and asks the model to match her pronouns (e.g.
-YuugenMagan's royal "We"), formality and verbal tics without copying them. The interaction history dialog's
+YuugenMagan's royal "We"), formality and verbal tics without copying them.
+Chat and background gossip share this voice guidance. When multiple example
+lines use royal self-reference and none use singular first-person forms, the
+prompt explicitly requires royal forms in every sentence, including greetings;
+mixed examples are not forced into that pattern. Outgoing requests combine
+instructions, history and scene into one leading system message for strict
+chat templates, followed by the player's turn and any tool rounds.
+The interaction history dialog's
 **Character card** tab opens the "Character voice" editor directly, with its three text areas sharing the available
 height: it shows the generated description and lines
 (`POST /api/character-voice`, only at a command screen)
@@ -954,6 +961,8 @@ text, not executable HTML; as in Emuera.EM/EE, a literal lowercase `<br>` in
 the description becomes a line break, and each line is translated separately.
 Tooltip targets have a `has-tooltip` class and a subtle
 dashed underline that brightens on hover or keyboard focus without moving.
+Handheld layout and coarse-pointer touchscreens hide these tooltip underlines;
+ordinary choice underlines and keyboard focus indicators remain available.
 A subtle CSS text glow adds emphasis while preserving the game's text colors.
 Tooltip text and bracketed choice labels are wrapped in `.interactive-label`
 spans, leaving square brackets and surrounding whitespace undecorated. Unbracketed
@@ -972,6 +981,16 @@ label text is underlined. Applied text colors receive `has-text-color` and
 RGB channel spreads of 24 or less as neutral; it does not infer game state.
 The CSS variable `--choice-hover-color` controls each category's hover color.
 ERB-defined buttons, including section headings, retain their original input values.
+UI buttons share a centered inline-flex foundation in `web/style.css`.
+The `--button-background`, `--button-border`, `--button-color`,
+`--button-hover-background`, `--button-hover-border`, `--button-radius`,
+`--button-padding`, and `--button-gap` properties define intentional variants:
+chips, transparent dialog close controls, tool buttons, library primary actions,
+and destructive confirmation actions. Plain game-text choices opt out of this
+chrome layout; specialized map, artwork, tab, and character controls retain
+their own layouts. Controller badges share fixed geometry independent of the
+label font size: Back and Close use centered inline B badges, while focused
+actions and the time-stop watch retain their overlaid A and Y badges.
 `PRINTPLAIN` and `PRINTPLAINFORM` suppress automatic choice recognition,
 including for bracketed numbers. Both continue the current line; the latter
 evaluates FORM interpolation and padding while the former prints literal text.
@@ -1001,6 +1020,10 @@ npm run start:prod # compiled backend, no watch or automatic browser refresh
 npm run compat   # JSON compatibility inventory on stdout
 ```
 
+The browser layout test uses Chrome or Chromium when available; set `CHROME_PATH`
+to its executable if it is installed elsewhere. It skips if no browser is found.
+It measures room, actions, history and sidebar control layouts at comfortable and
+constrained sizes, rather than only checking CSS declarations.
 The local-game integration test skips when the ignored game directory is absent.
 Keep `web/` alongside `dist/` when running the build. The server requires the
 game's `ERB/`, `CSV/`, and `resources/` directories.

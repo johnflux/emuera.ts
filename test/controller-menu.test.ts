@@ -236,7 +236,7 @@ test("B activates map Back once per press and stays with dialogs when a modal is
   h.poll([1]);
   assert.equal(h.mapBackClicks, 1);
   assert.deepEqual(h.events, ["Escape"]);
-  const css = readFileSync(new URL("../web/handheld.css", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../web/style.css", import.meta.url), "utf8");
   assert.match(css, /\.has-controller \.screen\.is-active button\.era-move-back:enabled:not\(\.is-stale\)::after \{ content: "B";/);
 });
 

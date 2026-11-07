@@ -24,6 +24,8 @@
 .is-handheld .era-watch-control .era-timestop-button { font-size: 19px; }
 .is-handheld .era-actions-group > .line > span:has(> .era-actions-title) { flex-basis: auto; }
 .is-handheld .era-actions-group :is(.print-cell, .era-guard-control):has(.command-number-only) { display: inline-flex; align-items: center; min-height: 36px; box-sizing: border-box; }
+.is-handheld .era-actions-group .era-guard-control { display: inline-flex; align-items: center; min-height: 36px; box-sizing: border-box; }
+.is-handheld .era-actions-group .line .era-guard-control button.choice { min-height: 0; }
 .is-handheld .era-predefined-filter { margin-top: 6px; }
 .is-handheld #terminal { padding-left: 12px; }
 .is-handheld .line button.choice:not(:has(.sprite, .subarea-anchor)) { min-height: 36px; }
@@ -55,12 +57,19 @@
 .is-handheld .era-inventory-body { padding: 10px 14px; }
 .is-handheld .era-inventory-footer { padding: 8px 14px; }
 .is-handheld .era-alone-mark { display: none; }
-.is-handheld .era-room-stage .era-occupant-list:has(.era-alone-message) { height: auto; min-height: 120px; }
+.is-handheld .era-room-stage .era-occupant-list:has(.era-alone-message) { height: var(--era-occupant-height); min-height: 120px; max-height: var(--era-occupant-height); }
 @media (min-width: 1000px) {
-  .is-handheld .screen.is-active .era-main { height: max(540px, calc(100cqh - 8px)); min-height: 0; grid-template-rows: auto auto minmax(160px, 1fr) auto auto; }
+  .is-handheld .screen.is-active .era-main { height: max(540px, calc(100cqh - 8px)); min-height: 0; grid-template-rows: auto minmax(0, max-content) minmax(min-content, 1fr) auto auto; }
+  .is-handheld .screen.is-active .era-main:not(:has(.era-counters)) { grid-template-rows: auto minmax(0, max-content) minmax(min-content, 1fr) auto; }
   .is-handheld .screen.is-active .era-shop { height: max(540px, calc(100cqh - 8px)); min-height: 0; grid-template-rows: auto auto minmax(0, 1fr) auto; }
   .is-handheld .era-shop > :is(.era-shop-home, .era-shop-menu, .era-shop-system) { min-height: 0; overflow: auto; overscroll-behavior: contain; }
   .is-handheld .era-main > :is(.era-main-center, .era-main-actions, .era-main-sidebar) { min-height: 0; overflow: auto; overscroll-behavior: contain; }
+  /* The spanning sidebar must not distribute its intrinsic height between the room and actions tracks. */
+  .is-handheld .era-main > .era-main-sidebar { contain: size; }
+  .is-handheld .era-main-center:has(.era-alone) > .era-character { flex: 1 1 auto; min-height: 0; }
+  .is-handheld .era-alone .era-room-stage { flex: 1 1 auto; min-height: 0; overflow: visible; }
+  .is-handheld .era-alone .era-room-stage > .era-occupants { flex: 1 1 var(--era-occupant-height); min-height: 120px; }
+  .is-handheld .era-room-stage .era-occupant-list:has(.era-alone-message) { flex: 1 1 auto; }
   .is-handheld .era-move-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, .4fr); grid-template-rows: minmax(0, 1fr); gap: 8px; }
   .is-handheld .era-move-map { width: 100%; min-height: 0; }
   .is-handheld .era-move-side { min-width: 0; max-width: none; }
@@ -85,7 +94,6 @@
 }
 .has-controller .era-page-prev::before { content: "L1 "; color: #ffe083; }
 .has-controller .era-page-next::before { content: "R1 "; color: #ffe083; }
-.has-controller .screen.is-active button.era-move-back:enabled:not(.is-stale)::after { content: "B"; display: inline-grid; place-items: center; width: 1.2em; height: 1.2em; margin-left: .4em; border: 1px solid #e89a96; border-radius: 50%; color: #ffb8b2; font: bold 12px system-ui, sans-serif; }
 .has-controller .era-move-tabs::before { content: "L1"; }
 .has-controller .era-move-tabs::after { content: "R1"; }
 .has-controller .era-move-tabs::before, .has-controller .era-move-tabs::after { flex-shrink: 0; align-self: center; padding: 0 4px; color: #ffe083; font-size: .75em; }
@@ -137,6 +145,10 @@
 .line :is(.print-cell, .era-guard-control) button.choice.command-number-only:focus-visible { outline: none; }
 .line :is(.print-cell, .era-guard-control):has(button.choice.command-number-only:focus-visible) { outline: 2px solid #8ddaff; outline-offset: 2px; }
 .is-handheld .command-number { display: none; }
+.is-handheld .has-tooltip .interactive-label { text-decoration-line: none; }
+@media (any-pointer: coarse) {
+  .has-tooltip .interactive-label { text-decoration-line: none; }
+}
 .is-handheld .era-actions-group button.choice.command-number-only { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; margin: 0; padding: 0; border-radius: inherit; }
 @media (max-width: 1280px) and (max-height: 800px), (any-pointer: coarse) {
   .command-number { display: none; }

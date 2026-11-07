@@ -1,0 +1,133 @@
+import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { test } from "node:test";
+import { promisify } from "node:util";
+
+const execute = promisify(execFile);
+const browser = [
+  process.env.CHROME_PATH,
+  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  "/usr/bin/google-chrome",
+  "/usr/bin/google-chrome-stable",
+  "/usr/bin/chromium",
+  "/usr/bin/chromium-browser",
+  process.env.PROGRAMFILES && join(process.env.PROGRAMFILES, "Google/Chrome/Application/chrome.exe"),
+].find((path): path is string => !!path && existsSync(path));
+
+type Measurements = {
+  room: number;
+  roomVisible: number;
+  roomScroll: number;
+  actions: number;
+  actionsClient: number;
+  actionsScroll: number;
+  actionsSpare: number;
+  grid: string;
+  detail: number[];
+  historyDisplay: string;
+  historyHeight: number;
+  gaps: number[];
+};
+
+test("main screen distributes space and spaces player controls consistently", { skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH" }, async () => {
+  const [style, handheld] = await Promise.all([
+    readFile(new URL("../web/style.css", import.meta.url), "utf8"),
+    readFile(new URL("../web/handheld.css", import.meta.url), "utf8"),
+  ]);
+  const room = (occupied: boolean, history: boolean, crowded: boolean, counters: boolean) => `
+    <div id="terminal" style="width: 1180px; height: ${crowded ? 600 : 720}px; font-size: 20px; line-height: 1.25">
+      <div class="screen is-active"><div class="era-main">
+        <div class="era-main-header" style="height: 130px">Header</div>
+        <div class="era-main-center"><div class="era-card era-character${occupied ? "" : " era-alone"}">
+          <div class="era-room-stage"><div class="line"><div class="era-place">Room</div></div>
+            <div class="era-occupants"><div class="era-occupant-list">
+              ${occupied ? '<div class="era-occupant"><div style="width:180px;height:216px">Character</div></div>' :
+                '<div class="line"><span><div class="era-alone-message"><span class="era-alone-mark"></span><span class="era-alone-title">Nobody else is here</span><span class="era-alone-hint">Move or go out to find someone.</span></div></span></div>'}
+            </div></div>
+          </div>
+          ${occupied ? '<div class="era-character-info"><div class="era-info-body">Character information</div></div>' : ""}
+          ${history ? '<section class="era-main-chat"><div class="era-history-pane"><div>Interaction history</div></div></section>' : ""}
+        </div></div>
+        <div class="era-card era-main-actions"><div class="line">Interact</div>
+          ${Array.from({ length: crowded ? 8 : 2 }, () => '<div class="line" style="height:45px">Action row</div>').join("")}
+        </div>
+        <div class="era-main-sidebar"><div class="era-main-right"><div class="era-card era-player">
+          <div class="line">Player</div>
+          <div class="line"><div class="era-player-actions"><button class="choice era-player-control">Inventory</button></div></div>
+          <div class="era-player-management"><div class="era-actions-group">
+            <div class="line"><span class="print-cell">Move<button class="choice command-number-only">400</button></span><span class="print-cell">Go Out<button class="choice command-number-only">405</button></span><span class="print-cell">Lock The Door<button class="choice command-number-only">991</button></span></div>
+            <div class="line"><span><div class="era-toggles era-auto-toggles"><button class="choice era-toggle">Auto-TSP Movement</button><button class="choice era-toggle">Auto-Clean</button><button class="choice era-toggle">Pushdown Guard</button></div></span></div>
+          </div><div class="era-settings"><div class="line"><button class="choice era-chip-button">Config</button></div></div></div>
+        </div></div></div>
+        ${counters ? '<div class="era-card era-counters" style="height:35px">Counters</div>' : ""}
+      </div></div>
+    </div>`;
+  const cases = [false, true].flatMap(occupied => [false, true].flatMap(history =>
+    [false, true].flatMap(crowded => [false, true].map(counters => ({ occupied, history, crowded, counters })))));
+  const markup = cases.map(({ occupied, history, crowded, counters }) =>
+    `<div class="fixture">${room(occupied, history, crowded, counters)}</div>`).join("");
+  const html = `<!doctype html><meta charset="utf-8"><style>${style}\n${handheld}</style>
+    <body class="MODE">${markup}
+    <script>
+      const results = [...document.querySelectorAll(".fixture")].map(fixture => {
+        const get = selector => fixture.querySelector(selector);
+        const rect = selector => get(selector).getBoundingClientRect();
+        const actions = get(".era-main-actions"), center = get(".era-main-center");
+        const inventory = rect(".era-player-control");
+        const tiles = [...fixture.querySelectorAll(".era-player-management .print-cell")].map(e => e.getBoundingClientRect());
+        const toggles = [...fixture.querySelectorAll(".era-auto-toggles .era-toggle")].map(e => e.getBoundingClientRect());
+        const config = rect(".era-chip-button");
+        return {
+          room: rect(".era-occupant-list").height, roomVisible: center.clientHeight, roomScroll: center.scrollHeight,
+          actions: actions.getBoundingClientRect().height, actionsClient: actions.clientHeight, actionsScroll: actions.scrollHeight,
+          actionsSpare: actions.getBoundingClientRect().bottom - actions.lastElementChild.getBoundingClientRect().bottom,
+          grid: getComputedStyle(get(".era-main")).gridTemplateRows,
+          detail: [rect(".era-character").height, rect(".era-room-stage").height, rect(".era-occupants").height, rect(".era-place").height],
+          historyDisplay: get(".era-main-chat") ? getComputedStyle(get(".era-main-chat")).display : "absent",
+          historyHeight: get(".era-main-chat") ? rect(".era-main-chat").height : 0,
+          gaps: [tiles[0].top - inventory.bottom, tiles[2].top - tiles[0].bottom,
+            toggles[0].top - tiles[2].bottom, toggles[2].top - toggles[0].bottom, config.top - toggles[2].bottom]
+        };
+      });
+      document.body.textContent = JSON.stringify(results);
+    </script>`;
+  const profile = await mkdtemp(join(tmpdir(), "era-layout-"));
+  try {
+    for (const [mode, size] of [["desktop", "1440,900"], ["is-handheld", "1200,700"]] as const) {
+      const args = ["--headless", "--disable-gpu", "--no-first-run", `--user-data-dir=${profile}`, `--window-size=${size}`, "--dump-dom"];
+      if (process.platform === "linux" && process.getuid?.() === 0) args.push("--no-sandbox");
+      args.push(`data:text/html;base64,${Buffer.from(html.replace("MODE", mode)).toString("base64")}`);
+      const { stdout } = await execute(browser!, args, { maxBuffer: 8 * 1024 * 1024, timeout: 30000 });
+      const match = stdout.match(/<body[^>]*>([\s\S]*?)<\/body>/);
+      assert.ok(match, `${mode}: browser returned layout measurements`);
+      const results = JSON.parse(match[1]) as Measurements[];
+      assert.equal(results.length, cases.length, `${mode}: every layout case was measured`);
+      for (const [index, result] of results.entries()) {
+        const { occupied, history, crowded, counters } = cases[index];
+        const label = `${mode}, occupied=${occupied}, history=${history}, crowded=${crowded}, counters=${counters}`;
+        assert.ok(result.actionsScroll <= result.actionsClient + 1, `${label}: actions should fit without scrolling`);
+        if (result.roomScroll > result.roomVisible + 1)
+          assert.ok(result.actionsSpare <= 20, `${label}: room scrolls despite ${result.actionsSpare}px unused under actions`);
+        assert.equal(result.historyDisplay === "none", mode === "is-handheld" && history, `${label}: history visibility`);
+        if (history && mode === "desktop")
+          assert.ok(result.historyHeight >= 113, `${label}: visible history should have space for five lines`);
+        if (!crowded)
+          assert.ok(Math.abs(result.room - 216) < 1, `${label}: room should reach portrait height: ${JSON.stringify(result)}`);
+        if (mode === "is-handheld" && crowded) {
+          if (occupied)
+            assert.ok(result.roomScroll > result.roomVisible, `${label}: occupied room should scroll rather than crush actions`);
+          else
+            assert.ok(result.room < 216, `${label}: empty room should yield space to actions`);
+        }
+        for (const gap of result.gaps)
+          assert.ok(Math.abs(gap - 6) < 1, `${label}: expected 6px between player controls, got ${gap}`);
+      }
+    }
+  } finally {
+    await rm(profile, { recursive: true, force: true });
+  }
+});
