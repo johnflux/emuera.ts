@@ -11,6 +11,8 @@ import { profiling, profileStart, profileEnd } from "./performance.js";
 import { decorateCommandNumbers, setupHandheld, setupKeyboardNavigation, touchInput } from "./handheld.js";
 import { setupArtworkDemo } from "./art-demo.js";
 import { activateControllerAction, setupControllerMenu } from "./controller-menu.js";
+import { createCheckbox, choiceControl } from "./controls.js";
+import { createAutoAdvance } from "./auto-advance.js";
 
 const terminal = document.querySelector("#terminal");
 const timeEffect = document.querySelector("#time-effect");
@@ -123,6 +125,27 @@ function rememberRun() {
 }
 let input = null;
 let busy = false;
+const AUTO_ADVANCE_KEY = "era-typescript.auto-advance";
+const autoAdvanceToggle = document.querySelector("#auto-advance-toggle");
+autoAdvanceToggle.checked = localStorage.getItem(AUTO_ADVANCE_KEY) !== "0";
+const autoAdvance = createAutoAdvance(
+  () => autoAdvanceToggle.checked && session && !busy && !document.hidden
+    && !document.body.classList.contains("is-home")
+    && !document.querySelector("dialog[open], #menu-panel:not([hidden])")
+    && input?.kind === "wait" && !input.blocking && !input.timeout ? input : null,
+  () => { void submit(""); },
+);
+autoAdvanceToggle.addEventListener("change", () => {
+  localStorage.setItem(AUTO_ADVANCE_KEY, autoAdvanceToggle.checked ? "1" : "0");
+  autoAdvance.update();
+});
+document.addEventListener("visibilitychange", () => autoAdvance.update());
+window.addEventListener("pagehide", () => autoAdvance.clear());
+const autoAdvanceObserver = new MutationObserver(() => autoAdvance.update());
+autoAdvanceObserver.observe(document.body, { attributes: true, attributeFilter: ["class"] });
+for (const dialog of document.querySelectorAll("dialog"))
+  autoAdvanceObserver.observe(dialog, { attributes: true, attributeFilter: ["open"] });
+autoAdvanceObserver.observe(document.querySelector("#menu-panel"), { attributes: true, attributeFilter: ["hidden"] });
 /** Characters the player just ran into, from the last command screen, waiting for the LLM to give them a say. */
 let pendingEncounters = null;
 /** Cancels LLM encounter reactions still running when the player moves on. */
@@ -346,6 +369,7 @@ function endActivity() {
   activityChip.title = `Last step took ${seconds(total)}: script ${seconds(script)}, render ${seconds(total - script)}`;
 }
 function updateControls() {
+  autoAdvance.update();
   const chatting = mainChatInput(input, terminal.querySelector(".screen.is-active .era-main-chat"));
   terminal.classList.toggle("is-waiting", !busy && input?.kind === "wait");
   // Timer refreshes keep the field enabled so typing and focus survive animation frames.
@@ -359,6 +383,7 @@ function updateControls() {
     : input.kind === "integer" ? "Enter a whole number" : input.kind === "wait" ? "Press Enter to continue" : "Enter text";
   startButtons.forEach((button) => { button.setAttribute("aria-disabled", String(busy)); });
   restartButton.setAttribute("aria-disabled", String(busy));
+  debugButton.disabled = busy;
   // Setup's inline fields use unrestricted INPUT; a prompt printed after the dialog still needs the command bar.
   const inlineSetup = input?.kind === "integer"
     && lastOutputLine()?.closest(".screen.is-active .era-setup:not(.era-setup-editor)");
@@ -368,11 +393,11 @@ function updateControls() {
     || input.buttonValues !== undefined || !!inlineSetup || !!mainMenu;
   command.placeholder = input?.kind === "wait" ? "" : input?.defaultValue !== undefined
     ? `Enter for ${JSON.stringify(input.defaultValue)}` : chatting ? "Command number, or say something…" : input ? lastCommand : "";
-  [...terminal.querySelectorAll("button.choice"), ...islandRoot.querySelectorAll("button.choice")].forEach((button) => {
+  [...terminal.querySelectorAll(".choice"), ...islandRoot.querySelectorAll(".choice")].forEach((button) => {
     const value = input?.kind === "integer" && /^-?\d+$/.test(button.dataset.value) ? BigInt(button.dataset.value).toString() : button.dataset.value;
     const skyContinue = button.matches(".era-sky-dialog .era-wait-continue");
     const waitContinue = input?.kind === "wait" && skyContinue;
-    button.disabled = !button.closest(".screen.is-active, .island-root") || button.classList.contains("is-stale") || (busy && !expiring) || !input || (input.kind === "wait" && !waitContinue) || !!input.blocking
+    choiceControl(button).disabled = !button.closest(".screen.is-active, .island-root") || button.classList.contains("is-stale") || (busy && !expiring) || !input || (input.kind === "wait" && !waitContinue) || !!input.blocking
       || (skyContinue && !waitContinue)
       || button.getAttribute("aria-disabled") === "true"
       || !!input.buttonValues && !input.buttonValues.includes(value);
@@ -416,7 +441,7 @@ function retireScreen(screen = currentScreen) {
     }
     dimSiblings(currentScreen);
   }
-  currentScreen.querySelectorAll("button").forEach((button) => { button.disabled = true; });
+  currentScreen.querySelectorAll("button, input").forEach((button) => { button.disabled = true; });
   currentScreen.querySelectorAll("a[href]").forEach((link) => {
     link.dataset.href = link.getAttribute("href");
     link.removeAttribute("href");
@@ -443,7 +468,7 @@ function reviveScreen(group) {
     if (element.matches("button, a[href]")) element.removeAttribute("tabindex");
     else element.tabIndex = 0;
   });
-  group.querySelectorAll("button.choice").forEach((button) => { button.classList.add("is-revived"); });
+  group.querySelectorAll(".choice").forEach((button) => { button.classList.add("is-revived"); });
   group.querySelectorAll(".line").forEach((line) => { line.classList.add("is-revived-line"); });
   currentScreen = group;
   currentLine = null;
@@ -521,6 +546,7 @@ function hideTooltip() {
   clearTimeout(tooltipDelay);
   clearTimeout(tooltipDuration);
   tooltipTarget?.removeAttribute("aria-describedby");
+  if (tooltipTarget?.matches(".checkbox-control")) choiceControl(tooltipTarget).removeAttribute("aria-describedby");
   tooltipTarget = null;
   tooltip.hidden = true;
   if (tooltip.matches(":popover-open")) tooltip.hidePopover();
@@ -555,7 +581,7 @@ function describe(element, description) {
   description = description.replaceAll("<br>", "\n");
   element.classList.add("has-tooltip");
   element.dataset.tooltip = description;
-  if (!element.matches("button, a[href]")) element.tabIndex = 0;
+  if (!element.matches("button, a[href], .checkbox-control")) element.tabIndex = 0;
   async function show() {
     if (busy || !element.closest(".screen.is-active, .cbg-layer, .island-root") || element.matches(".is-stale")) return;
     if (element.closest(".era-occupant-list") && element.querySelector(".sprite")) return;
@@ -598,6 +624,7 @@ function describe(element, description) {
     // In the top layer, so it shows above an open dialog.
     if (tooltip.popover && !tooltip.matches(":popover-open")) tooltip.showPopover();
     element.setAttribute("aria-describedby", tooltip.id);
+    if (element.matches(".checkbox-control")) choiceControl(element).setAttribute("aria-describedby", tooltip.id);
     const anchor = visibleBox(element);
     const box = tooltip.getBoundingClientRect();
     const margin = 12;
@@ -615,7 +642,7 @@ function describe(element, description) {
     else show();
   });
   element.addEventListener("focus", show);
-  if (element.matches(".era-setup-detail")) element.addEventListener("focusin", show);
+  if (element.matches(".era-setup-detail, .checkbox-control")) element.addEventListener("focusin", show);
   function resetSetupHelp() {
     if (!element.matches(".era-setup-trait, .era-setup-detail")) return;
     const layout = element.closest(".era-setup-traits-layout");
@@ -632,11 +659,14 @@ function describe(element, description) {
     delete help.dataset.description;
     help.textContent = help.dataset.defaultDescription;
   }
-  element.addEventListener("focusout", () => queueMicrotask(resetSetupHelp));
+  element.addEventListener("focusout", () => {
+    queueMicrotask(resetSetupHelp);
+    if (element.matches(".checkbox-control") && tooltipTarget === element) hideTooltip();
+  });
   element.addEventListener("mouseleave", () => {
     clearTimeout(tooltipDelay);
     resetSetupHelp();
-    if (tooltipTarget === element && document.activeElement !== element) hideTooltip();
+    if (tooltipTarget === element && !element.contains(document.activeElement)) hideTooltip();
   });
   element.addEventListener("blur", () => { if (tooltipTarget === element) hideTooltip(); });
 }
@@ -1023,24 +1053,23 @@ function settle() {
   settleTimer = setTimeout(() => terminal.classList.remove("is-settling"), SETTLE_MS);
 }
 function settling() { return performance.now() < settleUntil; }
-function choice(label, value, title = "") {
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = "choice";
-  button.dataset.value = value;
-  button.textContent = label;
-  if (title) describe(button, title);
-  decorateLabel(button);
-  button.addEventListener("click", (event) => {
-    // detail is 0 for keyboard activation, which is deliberate.
+function choice(label, value, title = "", checked = null) {
+  const activate = (event) => {
     if (event.detail > 0 && settling()) return;
     if (!button.closest(".screen.is-active, .island-root")) return;
     if (input?.kind === "mousekey") {
-      // RESULT:5 is an integer button's value; a string button sets RESULTS instead.
       const numeric = /^-?\d+$/.test(value) && Number.isSafeInteger(Number(value));
       void submitMouseKey([1, MOUSE_BUTTONS[0], ...clientPoint(event), -1, numeric ? Number(value) : 0], numeric ? undefined : value, button);
     } else void submit(input?.kind === "wait" && button.matches(".era-sky-dialog .era-wait-continue") ? "" : value, button);
-  });
+  };
+  const button = checked === null ? document.createElement("button") : createCheckbox(checked, activate);
+  if (checked === null) button.type = "button";
+  button.classList.add("choice");
+  button.dataset.value = value;
+  (button.querySelector(".checkbox-label") ?? button).textContent = label;
+  if (title) describe(button, title);
+  decorateLabel(button);
+  if (checked === null) button.addEventListener("click", activate);
   return button;
 }
 function decorateLabel(element) {
@@ -1854,7 +1883,10 @@ async function renderHtml(markup, parent, sprites) {
       element = subarea(node, scale = /^absolute-left(?:top|bottom)$/i.test(node.getAttribute("display") ?? "") ? imageScale() : scale ?? columnScale());
     else if (node.tagName === "BUTTON") {
       const value = node.getAttribute("value");
-      if (value !== null) element = choice("", value, node.classList.contains("era-dialog-close") ? "" : node.getAttribute("title") ?? "");
+      const checked = node.getAttribute("aria-checked");
+      const checkbox = node.getAttribute("role") === "checkbox";
+      if (checkbox && checked !== "true" && checked !== "false") throw new Error(`Unsupported checkbox state: ${checked}`);
+      if (value !== null) element = choice("", value, node.classList.contains("era-dialog-close") ? "" : node.getAttribute("title") ?? "", checkbox ? checked === "true" : null);
       else element = document.createElement("span");
     } else if (node.tagName === "A") {
       const href = node.getAttribute("href") ?? "";
@@ -1885,11 +1917,6 @@ async function renderHtml(markup, parent, sprites) {
       element.dataset.htmlPosition = String(sizeAttribute(position, 0, scale ?? imageScale()));
     }
     applyClasses(element, node);
-    if (node.getAttribute("role") === "checkbox") {
-      element.setAttribute("role", "checkbox");
-      const checked = node.getAttribute("aria-checked");
-      if (checked === "true" || checked === "false") element.setAttribute("aria-checked", checked);
-    }
     if (node.tagName === "DIV" && element.classList.contains("era-sky") && node.hasAttribute("data-minutes")) sky(node, element);
     if (element.matches(".era-occupant-label, .era-setup-choice, .era-relationship-demo-state"))
       element.setAttribute("aria-pressed", String(node.getAttribute("aria-pressed") === "true"));
@@ -1902,10 +1929,10 @@ async function renderHtml(markup, parent, sprites) {
     if (element.matches(".era-dialog-close")) element.setAttribute("aria-label", title || "Close dialog");
     else if ((title || element.matches(".era-setup-trait")) && !element.dataset.tooltip) describe(element, title ?? "");
     destination.append(element);
-    if (node.tagName !== "IMG" && node.tagName !== "METER") for (const child of node.childNodes) await copy(child, node.tagName === "SHAPE" ? destination : element.subareaContent ?? element, scale);
+    if (node.tagName !== "IMG" && node.tagName !== "METER") for (const child of node.childNodes) await copy(child, node.tagName === "SHAPE" ? destination : element.querySelector(":scope > .checkbox-label") ?? element.subareaContent ?? element, scale);
   }
   for (const child of documentNode.body.childNodes) await copy(child, parent, undefined);
-  parent.querySelectorAll("button.choice, .has-tooltip").forEach(decorateLabel);
+  parent.querySelectorAll(".choice, .has-tooltip").forEach(decorateLabel);
 }
 async function showIslands(islands) {
   const elements = [];
@@ -2076,7 +2103,7 @@ async function expire() {
     const queued = queuedSubmit;
     queuedSubmit = null;
     if (queued) {
-      const selected = queued.choice === undefined ? null : [...terminal.querySelectorAll(".screen.is-active button.choice")]
+      const selected = queued.choice === undefined ? null : [...terminal.querySelectorAll(".screen.is-active .choice")]
         .find((button) => button.dataset.value === queued.choice) ?? null;
       void submit(queued.value, selected);
     }
@@ -2340,8 +2367,8 @@ async function renderSnapshot(snapshot, advanceScreen) {
   showCharacterHistory(lastCharacterHistory);
   await prepareMapPictures();
   await prepareAreaArt();
-  const revived = outputRoot.querySelectorAll(".screen.is-active button.choice.is-revived");
-  if (revived.length && outputRoot.querySelector(".screen.is-active button.choice:not(.is-revived)")) {
+  const revived = outputRoot.querySelectorAll(".screen.is-active .choice.is-revived");
+  if (revived.length && outputRoot.querySelector(".screen.is-active .choice:not(.is-revived)")) {
     revived.forEach((button) => { button.classList.replace("is-revived", "is-stale"); });
     splitStaleOutput();
   }
@@ -2426,7 +2453,7 @@ function showReport(visible) {
   const mode = document.querySelector("#mode");
   mode.hidden = !runMode;
   mode.textContent = (runMode === "demo" ? "Demo" : gameTitle(runGame)) + (runDebug ? " · Debug" : "");
-  debugButton.setAttribute("aria-pressed", String(runDebug));
+  debugButton.checked = runDebug;
   debugPanel.hidden = !runDebug;
   document.querySelector("#report").setAttribute("aria-expanded", String(visible));
   demoButton.setAttribute("aria-pressed", String(!visible && runMode === "demo"));
@@ -2677,7 +2704,7 @@ async function submit(value, selectedChoice = null) {
   } : null;
   const waiting = input.kind === "wait";
   // Typed input that matches a visible choice highlights that choice too.
-  const pending = selectedChoice ?? (value === "" ? null : [...terminal.querySelectorAll(".screen.is-active button.choice")]
+  const pending = selectedChoice ?? (value === "" ? null : [...terminal.querySelectorAll(".screen.is-active .choice")]
     .find((button) => button.dataset.value === value) ?? null);
   pending?.classList.add("is-pending");
   message(input.kind === "wait" ? "Continuing..." : input.kind === "mousekey" ? "Sending input..." : `Sending ${JSON.stringify(pending?.textContent.replace(/\s+/g, " ").trim() || value)}...`);
@@ -2830,7 +2857,11 @@ terminal.addEventListener("click", (event) => {
     if (!dragged(event) && !labelled.disabled && !settling()) labelled.click();
     return;
   }
-  if (event.target instanceof Element && event.target.closest("button, a[href]")) return;
+  if (event.target instanceof Element) {
+    if (event.target.closest("button, a[href]")) return;
+    const checkbox = event.target.closest(".checkbox-control");
+    if (checkbox && !choiceControl(checkbox).disabled) return;
+  }
   const selection = getSelection();
   if (selection && !selection.isCollapsed) {
     if (dragged(event)) return;
@@ -3018,7 +3049,7 @@ function showCommandHint(label = "") {
 }
 function rememberCommand(value, selectedChoice) {
   if (value !== "" && input.kind !== "wait" && input.kind !== "mousekey") {
-    const button = selectedChoice ?? [...terminal.querySelectorAll(".screen.is-active button.choice")]
+    const button = selectedChoice ?? [...terminal.querySelectorAll(".screen.is-active .choice")]
       .find((button) => button.dataset.value === value);
     const labeledControl = button?.closest(".print-cell, .era-guard-control") ?? button;
     let label = labeledControl?.textContent.replace(/\s+/g, " ").split(`[${value}]`).join("").trim() ?? "";
@@ -3169,7 +3200,8 @@ demoButton.addEventListener("click", () => { void chooseRun("demo"); });
 startButtons[1].addEventListener("click", () => { void chooseRun("game", games[0]?.id); });
 restartButton.addEventListener("click", () => { void chooseRun(runMode, runGame); });
 // Debug mode changes what the game loads ([IF_DEBUG]), so switching it restarts the run.
-debugButton.addEventListener("click", async () => {
+debugButton.addEventListener("click", async (event) => {
+  event.preventDefault();
   if (busy) return;
   const debug = !runDebug;
   if (session && input && !await confirmAction(debug ? "Turn on debug mode?" : "Turn off debug mode?",
@@ -3190,11 +3222,11 @@ document.querySelector("#font-size").addEventListener("input", (event) => {
 const translateToggle = document.querySelector("#translate-toggle");
 const translateState = document.querySelector("#translate-state");
 function showTranslation({ state, detail, enabled, supported }) {
-  translateToggle.setAttribute("aria-pressed", String(enabled));
+  translateToggle.checked = enabled;
   translateToggle.disabled = !supported;
   const labels = { starting: "starting", waiting: "click to download", downloading: `downloading ${detail}`, unavailable: "unavailable" };
   translateState.textContent = !supported ? "(needs Chrome or Edge)" : enabled && labels[state] ? `(${labels[state].trim()})` : "";
-  translateToggle.title = detail && state !== "downloading" ? `Translate Japanese: ${detail}` : "Translate the game's Japanese text on this device as it is printed";
+  translateToggle.closest("label").title = detail && state !== "downloading" ? `Translate Japanese: ${detail}` : "Translate the game's Japanese text on this device as it is printed";
 }
 showTranslation(translation.status());
 translateToggle.addEventListener("click", () => {
@@ -3229,8 +3261,8 @@ llmConfig.addEventListener("close", () => {
 });
 function showOutputTools({ config, text, translating, error }) {
   if (config) {
-    document.querySelector("#clipboard-toggle").setAttribute("aria-pressed", String(config.clipboard));
-    document.querySelector("#local-translate-toggle").setAttribute("aria-pressed", String(config.local));
+    document.querySelector("#clipboard-toggle").checked = config.clipboard;
+    document.querySelector("#local-translate-toggle").checked = config.local;
     document.querySelector("#local-translation").hidden = !config.local;
   }
   if (text !== undefined) document.querySelector("#local-translation-text").textContent = text;
@@ -3251,7 +3283,7 @@ function openTranslationConfig() {
   translationConfig.showModal();
 }
 document.querySelector("#local-translate-toggle").addEventListener("click", () => {
-  if (!outputTools.config().model.trim()) { openTranslationConfig(); return; }
+  if (!outputTools.config().model.trim()) { showOutputTools({ config: outputTools.config() }); openTranslationConfig(); return; }
   const local = !outputTools.config().local;
   if (local && translation.enabled()) translation.setEnabled(false);
   outputTools.configure({ local });

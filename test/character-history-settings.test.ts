@@ -14,7 +14,7 @@ test("character history defaults off for Steam but respects saved choices on eve
     { steam: true, saved: "1", expected: true },
   ]) {
     let stored = saved;
-    let pressed = "";
+    let checked = false;
     let click = () => {};
     let changes = 0;
     const api = runInNewContext(`${source}\n({characterHistoryEnabled, setupCharacterHistoryToggle})`, {
@@ -28,14 +28,14 @@ test("character history defaults off for Steam but respects saved choices on eve
       },
       document: {
         querySelector: () => ({
-          setAttribute: (_name: string, value: string) => { pressed = value; },
+          set checked(value: boolean) { checked = value; },
           addEventListener: (_name: string, listener: () => void) => { click = listener; },
         }),
       },
     });
     assert.equal(api.characterHistoryEnabled(), expected);
     api.setupCharacterHistoryToggle(() => { changes++; });
-    assert.equal(pressed, String(expected));
+    assert.equal(checked, expected);
     click();
     assert.equal(api.characterHistoryEnabled(), !expected);
     assert.equal(stored, expected ? "0" : "1");

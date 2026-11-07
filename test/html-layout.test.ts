@@ -1,3 +1,4 @@
+import { styleSource } from "./style-source.js";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
@@ -11,12 +12,14 @@ test("HTML renderer supports semantic headings while keeping executable tags dis
   const allowed = runInNewContext(`${declaration}\nallowedTags`) as Set<string>;
   for (let level = 1; level <= 6; level++) assert.ok(allowed.has(`H${level}`));
   for (const tag of ["SCRIPT", "STYLE", "IFRAME", "OBJECT", "EMBED"]) assert.ok(!allowed.has(tag));
-  assert.match(source, /node\.getAttribute\("role"\) === "checkbox"[\s\S]*element\.setAttribute\("aria-checked", checked\)/);
+  assert.match(source, /node\.getAttribute\("role"\) === "checkbox"/);
+  assert.match(source, /checkbox \? checked === "true" : null/);
+  assert.match(source, /Unsupported checkbox state/);
 });
 
 test("Move viewport fills the game area without capping destination groups", async () => {
-  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
-  const handheld = await readFile(new URL("../web/handheld.css", import.meta.url), "utf8");
+  const css = styleSource("style");
+  const handheld = styleSource("handheld");
   assert.match(css, /#terminal:has\(\.screen\.is-active \.era-move\) \{ container-type: size; \}/);
   assert.match(css, /\.era-layout \{ margin-top: 1em; \}/);
   assert.match(css, /\.screen\.is-active \.era-move \{ height: calc\(100cqh - 8px\); \}/);
@@ -234,7 +237,7 @@ test("Move fitting includes intrinsic overflow beyond the visible row text", asy
 });
 
 test("Move hidden rows collapse their line even inside alignment wrappers", async () => {
-  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  const css = styleSource("style");
   assert.match(css, /\.era-move-side > \.line:has\(:is\(\.era-move-current, \.era-move-places-title, \.era-move-more-title\)\[hidden\]\) \{ display: none; \}/);
   assert.match(css, /\.era-move-key \{[^}]*align-self: flex-end;[^}]*flex-wrap: wrap;/);
 });
@@ -258,7 +261,7 @@ test("fallback double-line map glyphs occupy Emuera's single-column cells in HTM
 });
 
 test("custom action button wrappers participate directly in the action flex row", async () => {
-  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  const css = styleSource("style");
   assert.match(css, /^\.era-actions-group span:has\(> \.era-guard-control\) \{ display: contents; \}/m);
 });
 
@@ -273,7 +276,7 @@ test("sky narration keeps its dialog open across waits and continues through its
 });
 
 test("date panel hides blank text lines and renders an accessible calendar icon", async () => {
-  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  const css = styleSource("style");
   assert.match(css, /\.era-main-when > \.line:has\(> \.is-empty:only-child\) \{ display: none; \}/);
   assert.match(css, /\.era-main-when:has\(\.era-calendar-button\) \{ display: flex; align-items: inherit; gap: 8px;/);
   assert.match(css, /\.era-main-when > \.line:has\(\.era-calendar-button\) \{ flex: 0 0 40px;/);
@@ -302,7 +305,7 @@ test("date panel hides blank text lines and renders an accessible calendar icon"
 });
 
 test("calendar popup presents seven day rows with a shared day and schedule heading", async () => {
-  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  const css = styleSource("style");
   assert.match(css, /\.era-calendar:popover-open \{ width: min\(1440px, calc\(100vw - 32px\)\); height: fit-content; max-height: calc\(100dvh - 32px\);/);
   assert.match(css, /\.era-calendar-layout \{ display: grid; grid-template-columns: minmax\(300px, \.85fr\) minmax\(0, 1\.65fr\); gap: 20px; align-items: start;/);
   assert.match(css, /\.era-calendar-month-grid \{ display: grid; grid-template-columns: repeat\(7, minmax\(0, 1fr\)\);/);
@@ -323,18 +326,18 @@ test("calendar popup presents seven day rows with a shared day and schedule head
 
 test("all dialog close buttons retain accessible names without hover tooltips", async () => {
   const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
-  assert.match(source, /choice\("", value, node\.classList\.contains\("era-dialog-close"\) \? "" : node\.getAttribute\("title"\) \?\? ""\)/);
+  assert.match(source, /choice\("", value, node\.classList\.contains\("era-dialog-close"\) \? "" : node\.getAttribute\("title"\) \?\? "",/);
   assert.match(source, /if \(element\.matches\("\.era-dialog-close"\)\) element\.setAttribute\("aria-label", title \|\| "Close dialog"\);\s*else if .*describe\(element, title \?\? ""\);/);
 });
 
 test("relationship avatar scales from the bottom-left within its shorter wrapper", async () => {
-  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  const css = styleSource("style");
   assert.match(css, /\.era-relationship \.era-info-face \{[^}]*width: 99px; height: 90px; border: 0;/);
   assert.match(css, /\.era-relationship \.era-info-face \.sprite-clip \{ transform-origin: left bottom; \}/);
 });
 
 test("friendship uses a gold heart without recoloring the romance icons", async () => {
-  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  const css = styleSource("style");
   const icons = await readFile(new URL("../web/relationship-icons.svg", import.meta.url), "utf8");
   assert.match(css, /relationship-icons\.svg"\) 0 0 \/ 600% 100%/);
   assert.match(css, /\.era-relationship-icon-friends \{ background-position: 100% 0; \}/);
@@ -344,7 +347,7 @@ test("friendship uses a gold heart without recoloring the romance icons", async 
 });
 
 test("compact relationship actions preserve pink, lavender and danger palettes", async () => {
-  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  const css = styleSource("style");
   const compact = css.slice(css.indexOf("@media (max-width: 1100px)"), css.indexOf(".era-sheet-header {"));
   assert.match(compact, /\.era-relationship-option \{ --relationship-button-background: #493040; --relationship-button-border: #b97d9b; \}/);
   assert.match(compact, /\.era-relationship-action-3, \.era-relationship-action-4 \{ --relationship-button-background: #3e304f; --relationship-button-border: #a68abc; \}/);
@@ -357,7 +360,7 @@ test("compact relationship actions preserve pink, lavender and danger palettes",
 test("wedding skips proposal checks and reuses the celebratory outcome with a married emblem", async () => {
   const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
   assert.match(source, /if \(dialog\.matches\("\.era-wedding, \.era-relationship-ending"\)\) dialog\.dataset\.proposalStep = "5";\s*if \(dialog\.classList\.contains\("era-proposal"\)\) syncProposal\(dialog\);/);
-  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  const css = styleSource("style");
   assert.match(css, /\.era-wedding \.era-proposal-jewel \{ background-image: url\("\/relationship-assets\/icon-married.svg"\); \}/);
 });
 
@@ -367,7 +370,7 @@ test("relationship endings use subdued action-specific emblems without celebrato
   for (const line of ending.split("\n").filter(line => line.includes("HTML_PRINT") && line.includes("<era-open"))) {
     assert.match(line, /^HTML_PRINT @?"<era-open [^>]+>"$/, "box markers must be standalone HTML_PRINT calls");
   }
-  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  const css = styleSource("style");
   assert.match(css, /\.era-relationship-ending \.era-proposal-jewel \{ background-image: url\("\/relationship-assets\/icon-divorced.svg"\); \}/);
   assert.match(css, /\.era-relationship-ending-5 \.era-proposal-jewel \{ background-image: url\("\/relationship-assets\/icon-engaged.svg"\); \}/);
   assert.match(css, /\.era-relationship-ending-7 \.era-proposal-jewel \{ background-image: url\("\/relationship-assets\/icon-fwb.svg"\); \}/);
@@ -382,12 +385,12 @@ test("confession shares the staged reveal but uses the Lovers emblem and standal
   assert.match(result, /era-dialog era-proposal era-confession/);
   assert.match(result, /Agreement threshold/);
   assert.match(result, /Character-specific story/);
-  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  const css = styleSource("style");
   assert.match(css, /\.era-confession \.era-proposal-jewel \{ background-image: url\("\/relationship-assets\/icon-lovers.svg"\); \}/);
 });
 
 test("declined proposals show the remaining outcome and footer without further animation", async () => {
-  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  const css = styleSource("style");
   assert.match(css, /\.era-proposal-declined:not\(\.era-confession, \.era-relationship-ending\)\[data-proposal-step="5"\] \.era-proposal-moment > :not\(\.era-proposal-verdict\),\s*\.era-proposal-declined:not\(\.era-confession, \.era-relationship-ending\)\[data-proposal-step="5"\] \.era-proposal-footer \{ animation: none; \}/);
 });
 
@@ -515,7 +518,7 @@ test("proposal staggers labels and results, types the response and reveals the o
   assert.equal(timers.size, 0);
   assert.equal(response.children[1]!.textContent, response.textContent, "declined response shows immediately");
   dialog.matches = () => false;
-  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  const css = styleSource("style");
   assert.match(css, /\.era-proposal-pending,[\s\S]*?visibility: hidden;/);
   assert.match(css, /\.era-proposal\[data-proposal-step="5"\] \.era-proposal-verdict \{ animation: era-proposal-reveal 180ms/);
   assert.match(css, /:not\(\.era-proposal-verdict\) \{ animation: era-proposal-reveal 1500ms 180ms/);
@@ -587,7 +590,7 @@ test("vector clock draws exact game minutes, wraps days and rejects invalid inpu
   for (const value of [null, "", "NaN", "Infinity", "1.5", "12px", "9007199254740992"])
     assert.throws(() => draw(value), /Unsupported clock minutes:/);
   assert.match(source, /node\.tagName === "DIV" && node\.classList\.contains\("era-clock"\) && node\.hasAttribute\("data-minutes"\)\) element = clock\(node\)/);
-  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  const css = styleSource("style");
   assert.match(css, /\.era-main-header \.era-clock \{[^}]*position: absolute; inset: 0; width: 100%; height: 100%;/);
   assert.match(css, /\.era-main-header \{[^}]*overflow: visible;/);
   assert.match(css, /\.era-sky \{[^}]*overflow: hidden; border-radius: inherit;/);
@@ -629,7 +632,7 @@ test("hover artwork is an additive layer that fades above the normal frame", asy
     levels.add(alpha(x, y));
   }
   assert.ok(levels.size > 3, "texture keeps varying opacity rather than a flat fill");
-  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  const css = styleSource("style");
   assert.match(css, /\.era-main-header > \.era-watch-control \{[^}]*margin-right: -60px; margin-top: -44px; margin-bottom: -16px;/);
   assert.match(css, /\.era-watch-control > \.line:has\(\.era-timestop-button\) \{[^}]*left: 49%; top: 40\.5%; width: 37\.5%; height: 31%;/);
   assert.match(css, /\.era-watch-control::after \{[^}]*left: 45%; top: 40\.5%; width: 41\.5%; height: 31%; z-index: 0; pointer-events: none; background:/);
@@ -707,14 +710,14 @@ test("watch crown overlays the toolbar without escaping horizontally or lingerin
   dialog = false; present = false;
   update();
   assert.equal(overlay.hidden, true, "leaving the main/wake-up screen removes the crown");
-  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  const css = styleSource("style");
   assert.match(css, /\.clock-overhang \{ position: fixed; z-index: 6; pointer-events: none;/);
   assert.match(css, /body:has\(\.menu-panel:not\(\[hidden\]\)\) \.clock-overhang \{ visibility: hidden; \}/);
   assert.match(source, /clockOverhang\.setAttribute\("aria-hidden", "true"\)/);
 });
 
 test("area artwork fixes the header height and prevents horizontal scrolling from the overhanging watch", async () => {
-  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  const css = styleSource("style");
   assert.match(css, /\.era-main-header:has\(\.era-area-art\) \{ height: calc\(var\(--area-art-height, 150px\) \+ 2px\); min-height: 0; max-height:[^}]*container-type: size; overflow: clip; overflow-clip-margin: 32px;/);
   assert.match(css, /\.era-main-header:has\(\.era-area-art\) > \.era-watch-control \{ position: absolute; top: -32px; right: -37px; margin: 0; width: 300px; container-type: inline-size;/);
   assert.match(css, /\.era-main-header:has\(\.era-area-art\) \.era-watch-control \.era-timestop-button \{ padding: 2px clamp\(2px, 2cqw, 12px\); transform: translateX\(-5px\); \}/);
@@ -724,7 +727,7 @@ test("area artwork fixes the header height and prevents horizontal scrolling fro
 });
 
 test("header rendering has no indoor or outdoor setting in the demo or game", async () => {
-  for (const file of ["web/index.html", "web/art-demo.js", "web/style.css", "hotpatch/MAIN_SCREEN.ERB", "hotpatch/SLEEP_MENU.ERB"]) {
+  for (const file of ["web/index.html", "web/art-demo.js", "web/generated/style.css", "hotpatch/MAIN_SCREEN.ERB", "hotpatch/SLEEP_MENU.ERB"]) {
     const source = await readFile(new URL(`../${file}`, import.meta.url), "utf8");
     assert.doesNotMatch(source, /era-indoor|era-underground|id="setting"|values\.get\("setting"\)|nNoWeather|HOTPATCH_SKY\(/);
   }
@@ -737,7 +740,7 @@ test("header rendering has no indoor or outdoor setting in the demo or game", as
 
 test("only the Underworld left lantern has a localized randomly timed flicker", async () => {
   const source = await readFile(new URL("../web/sky.js", import.meta.url), "utf8");
-  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  const css = styleSource("style");
   assert.match(source, /if \(area === "9"\) \{[\s\S]*?lantern\.className = "era-cave-lantern";/);
   assert.match(source, /--lantern-flicker-duration", `\$\{flicker\.duration\}s`/);
   assert.match(source, /--lantern-flicker-pattern", flicker\.easing/);
@@ -767,7 +770,7 @@ test("only the Underworld left lantern has a localized randomly timed flicker", 
 
 test("Underworld bats are confined to the cavern artwork and respect reduced motion", async () => {
   const source = await readFile(new URL("../web/sky.js", import.meta.url), "utf8");
-  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  const css = styleSource("style");
   assert.match(source, /if \(area === "9"\) \{[^}]*bats\.className = "era-cave-bats";[^}]*bats\.setAttribute\("aria-hidden", "true"\);[^}]*i < 4[^}]*sky\.querySelector\("\.era-sky-landmark"\)\?\.append\(bats\);/);
   assert.match(css, /\.era-cave-bats \{[^}]*pointer-events: none; overflow: hidden;/);
   assert.match(css, /animation: era-bat-flight 8s ease-in-out infinite alternate/);
@@ -779,7 +782,7 @@ test("Underworld bats are confined to the cavern artwork and respect reduced mot
 });
 
 test("Underworld ambience follows location and retains weaker fog and storm flashes", async () => {
-  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  const css = styleSource("style");
   assert.match(css, /\.era-sky\.era-area-9 \{ background: color-mix\(in srgb, #b3c5ff var\(--cave-daylight, 100%\), #090a1d\); \}/);
   assert.doesNotMatch(css, /era-cave-depth|depth-shade/);
   assert.match(css, /\.era-sky\.era-area-9 \.era-sky-view \{ background: none; \}/);
@@ -791,7 +794,7 @@ test("Underworld ambience follows location and retains weaker fog and storm flas
 });
 
 test("Moon sky uses a lunar palette for day, twilight and night", async () => {
-  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  const css = styleSource("style");
   const day = css.match(/\.era-area-10:is\(\.era-sky-dawn, \.era-sky-morning, \.era-sky-day, \.era-sky-evening\) \.era-sky-view \{([^}]+)\}/)?.[1];
   assert.ok(day);
   for (const colour of ["#242139", "#57506e", "#b6a8c6", "#302039", "#8b5d80", "#dfaaa8"])
@@ -802,7 +805,7 @@ test("Moon sky uses a lunar palette for day, twilight and night", async () => {
 });
 
 test("Moon location replaces only the nighttime orb and its weather glow with Earth", async () => {
-  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  const css = styleSource("style");
   const rule = css.match(/\.era-area-10\.era-sky-moon \.era-sky-orb, \.era-area-10\.era-sky-moon \.era-sky-clouds::after \{([^}]+)\}/)?.[1];
   assert.ok(rule);
   assert.match(rule, /background-image: url\(\/earth\.png\); image-rendering: pixelated;/);
@@ -890,7 +893,7 @@ test("sky follows exact game minutes with a bounded arc and warm sunrise and sun
   for (const [season, day] of [[0, 1], [5, 1], [1, 0], [1, 32], [1.5, 1]])
     assert.throws(() => draw("720", season, day), /Unsupported sky date:/);
   assert.match(source, /element\.classList\.contains\("era-sky"\) && node\.hasAttribute\("data-minutes"\)\) sky\(node, element\)/);
-  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  const css = styleSource("style");
   assert.match(css, /--sky-orb-right: clamp\(10px, max\(450px,[^;]*max\(10px, calc\(100% - 40px\)\)\)/);
   assert.match(css, /\.era-sky-orb, \.era-sky-clouds::after \{ position: absolute; top: min\(var\(--sky-orb-top, 10px\), max\(0px, calc\(100% - 30px\)\)\); right: var\(--sky-orb-right\);/);
   assert.match(css, /linear-gradient\(color-mix\(in srgb, #2f78c4, #493b76 var\(--sky-warmth, 0%\)\)/);
@@ -950,7 +953,7 @@ test("area artwork blends bad-weather days and selects undimmed seasonal night p
                   night && availability === "partial" ? undefined : "520px");
               }
   }
-  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  const css = styleSource("style");
   assert.match(css, /\.era-sky\.era-area-art-night \.era-sky-landmark \{ --landmark-tint: ; \}/);
   assert.match(css, /\.era-area-art-weather \.era-sky-landmark::after \{[^}]*opacity: var\(--area-weather-blend, 0\);[^}]*--area-weather-middle/);
   for (const [weather, opacity] of [["cloudy", ".18"], ["rain", ".32"], ["storm", ".48"], ["fog", ".18"], ["snow", ".20"], ["blizzard", ".35"]])
@@ -958,7 +961,7 @@ test("area artwork blends bad-weather days and selects undimmed seasonal night p
 });
 
 test("panorama overlap clips only the middle and applies consistently to artwork overlays", async () => {
-  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  const css = styleSource("style");
   assert.match(css, /--area-art-overlap: 96px/);
   assert.match(css, /padding-left: min\(50%, max\(0px, calc\(var\(--area-left-width, 0px\) - var\(--area-art-overlap\)\)\)\)/);
   assert.match(css, /padding-right: min\(50%, max\(0px, calc\(var\(--area-right-width, 0px\) - var\(--area-art-overlap\)\)\)\)/);
@@ -974,7 +977,7 @@ test("panorama overlap clips only the middle and applies consistently to artwork
 });
 
 test("foothill water highlights move independently and respect night and reduced motion", async () => {
-  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  const css = styleSource("style");
   assert.match(css, /\.era-area-7\.era-area-art \.era-sky-land/);
   assert.match(css, /background: var\(--area-water-left\)[^;]*var\(--area-water-right\)[^;]*var\(--area-water-middle\)/);
   const skySource = await readFile(new URL("../web/sky.js", import.meta.url), "utf8");
@@ -1036,13 +1039,13 @@ test("foothill water overlays keep the original water mask in every season witho
 });
 
 test("fog overlays the full top image with half strength in the Underworld", async () => {
-  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  const css = styleSource("style");
   assert.match(css, /\.era-weather-fog \.era-sky-view::after \{ content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none;[^}]*background:/);
   assert.match(css, /\.era-sky\.era-area-9\.era-weather-fog \.era-sky-view::after \{ display: block; opacity: \.5; \}/);
 });
 
 test("night cloud, fog and snow palettes are muted and a blurred orb glows above clouds", async () => {
-  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  const css = styleSource("style");
   assert.match(css, /\.era-sky-moon\.era-weather-cloudy \.era-sky-clouds \{[^}]*#202b3d99/);
   assert.match(css, /\.era-sky-moon:is\(\.era-weather-snow, \.era-weather-blizzard\) \.era-sky-clouds \{ background: linear-gradient\(#28364aaa, #43536a88\); \}/);
   assert.match(css, /:is\(\.era-weather-snow, \.era-weather-blizzard\) \.era-sky-clouds \{ background: linear-gradient\(#9aa6b2aa, #c8d2dc88\); \}/);
@@ -1055,7 +1058,7 @@ test("night cloud, fog and snow palettes are muted and a blurred orb glows above
 });
 
 test("night panorama lights get a warm halo without blurring the scenery", async () => {
-  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  const css = styleSource("style");
   assert.match(css, /\.era-area-art-night \.era-sky-landmark::before \{[^}]*pointer-events: none; opacity: \.7;[^}]*--area-left[^}]*--area-right[^}]*--area-middle/);
   assert.match(css, /filter: url\(#era-light-glow\); mix-blend-mode: screen;/);
   for (const base of [0, .25, .65, .9, 1]) {
@@ -1075,7 +1078,7 @@ test("night panorama lights get a warm halo without blurring the scenery", async
 test("menu stays concise and artwork is embedded in the conformance demo", async () => {
   const [html, css, app] = await Promise.all([
     readFile(new URL("../web/index.html", import.meta.url), "utf8"),
-    readFile(new URL("../web/library.css", import.meta.url), "utf8"),
+    styleSource("library"),
     readFile(new URL("../web/app.js", import.meta.url), "utf8"),
   ]);
   const menu = html.match(/<nav id="menu-panel"[\s\S]*?<\/nav>/)![0];
@@ -1102,18 +1105,18 @@ test("configuration controls live in a modal Settings dialog and have unique IDs
 });
 
 test("compact gameplay header preserves its menu and scrolling menu rows cannot shrink", async () => {
-  const compact = await readFile(new URL("../web/handheld.css", import.meta.url), "utf8");
+  const compact = styleSource("handheld");
   assert.match(compact, /@media \(max-height: 800px\)/);
   assert.match(compact, /body:not\(\.is-home\) > header \{ height: 0;/);
   assert.match(compact, /body:not\(\.is-home\) > header > :not\(\.menu\) \{ display: none;/);
   assert.match(compact, /body:not\(\.is-home\) > header \.menu \{ position: fixed;/);
-  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  const css = styleSource("style");
   assert.match(css, /\.menu-panel \{[^}]*max-height: calc\(100dvh - var\(--menu-top, 40px\) - 8px\); overflow-y: auto;/);
   assert.match(css, /\.menu-panel > \* \{ flex-shrink: 0; \}/);
 });
 
 test("rain and blizzards use layered precipitation with seamless motion and reduced-motion support", async () => {
-  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  const css = styleSource("style");
   for (const weather of ["rain", "blizzard"]) {
     assert.ok(css.includes(`.era-weather-${weather} .era-sky-fall::before`));
     assert.ok(css.includes(`.era-weather-${weather} .era-sky-fall::after`));
@@ -1129,7 +1132,7 @@ test("rain and blizzards use layered precipitation with seamless motion and redu
 });
 
 test("storms use denser layered rain, staggered wind gusts and gentle lightning", async () => {
-  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  const css = styleSource("style");
   assert.match(css, /\.era-weather-storm \.era-sky-fall::before \{[^}]*background-size: 71px 61px;[^}]*--fall-speed: \.45s;[^}]*era-rain-gust 17s/);
   assert.match(css, /\.era-weather-storm \.era-sky-fall::after \{[^}]*background-size: 107px 89px;[^}]*--fall-speed: \.32s;[^}]*era-rain-gust 23s -7s/);
   assert.match(css, /39% \{ transform: skewX\(9deg\); \}/);
@@ -1141,20 +1144,20 @@ test("storms use denser layered rain, staggered wind gusts and gentle lightning"
 });
 
 test("blizzard veil stays static and lightning uses a thin forked silhouette", async () => {
-  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  const css = styleSource("style");
   assert.doesNotMatch(css, /snow-curtain/);
   assert.match(css, /48% 58%, 32% 60%, 59% 32%, 81% 63%, 63% 31%, 44% 30%, 62% 0/);
 });
 
 test("terminal hides only the horizontal scrollbar without disabling overflow or logical width", async () => {
-  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  const css = styleSource("style");
   assert.match(css, /#terminal::-webkit-scrollbar \{ height: 0; \}/);
   assert.match(css, /#terminal \{[^}]*overflow: auto;/);
   assert.match(css, /#terminal > \* \{[^}]*min-width: var\(--logical-width, 0\);/);
 });
 
 test("settings panel uses a responsive two-column form without clipping its controls", async () => {
-  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  const css = styleSource("style");
   assert.match(css, /#settings \{[^}]*max-height: calc\(100dvh - 32px\);[^}]*overflow: auto;/);
   assert.match(css, /#settings-form \{[^}]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/);
   assert.match(css, /@media \(max-width: 600px\).*#settings-form \{ grid-template-columns: minmax\(0, 1fr\); \}/);
@@ -1162,7 +1165,7 @@ test("settings panel uses a responsive two-column form without clipping its cont
 });
 
 test("main and wakeup screens fill the terminal height including its top padding", async () => {
-  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  const css = styleSource("style");
   assert.match(css, /#terminal:has\(\.screen\.is-active \.era-main\), #terminal:has\(\.screen\.is-active \.era-shop\) \{ container-type: size; \}/);
   assert.match(css, /#terminal:has\(\.screen\.is-active :is\(\.era-main, \.era-shop\)\) > \.screen\.is-active \{ min-width: 0; \}/);
   assert.match(css, /\.screen\.is-active :is\(\.era-main, \.era-shop\) \{ min-height: calc\(100cqh \+ 4px\); \}/);
@@ -1173,7 +1176,7 @@ test("main and wakeup screens fill the terminal height including its top padding
 test("LLM configuration keeps provider controls in a responsive scrollable dialog with clear setup status", async () => {
   const [html, css] = await Promise.all([
     readFile(new URL("../web/index.html", import.meta.url), "utf8"),
-    readFile(new URL("../web/style.css", import.meta.url), "utf8"),
+    styleSource("style"),
   ]);
   const elements = (node: DefaultTreeAdapterMap["node"]): DefaultTreeAdapterMap["element"][] => {
     const children = "childNodes" in node ? node.childNodes.flatMap(elements) : [];
@@ -1232,7 +1235,7 @@ test("LLM configuration keeps provider controls in a responsive scrollable dialo
 });
 
 test("action headers reserve filter-row height without preventing wrapping", async () => {
-  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  const css = styleSource("style");
   assert.match(css, /\.era-actions-header \{[^}]*flex-wrap: wrap;/);
   assert.match(css, /\.era-actions-header \{[^}]*align-items: center;/);
   assert.match(css, /\.era-actions-header \{[^}]*min-height: max\(22px, calc\(1lh \+ 6px\)\);/);
@@ -1252,7 +1255,8 @@ test("last command is a placeholder, never input data, and defaults and waits ta
     islandRoot: { querySelectorAll: () => [] },
     command: field, send: { ...element, disabled: false, textContent: "" },
     document: { querySelector: () => ({ hidden: false }) },
-    startButtons: [], restartButton: element,
+    startButtons: [], restartButton: element, debugButton: { disabled: false },
+    autoAdvance: { update() {} },
     busy: false, expiring: false,
     input: { kind: "integer", defaultValue: undefined as string | undefined },
     lastCommand: "Last Command: Time Stop",
@@ -1324,7 +1328,7 @@ test("header identifies the running game and preserves demo and debug labels", a
 });
 
 test("active title fills the terminal below the visible interpreter header", async () => {
-  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  const css = styleSource("style");
   assert.doesNotMatch(css, /body:has\(\.screen\.is-active \.era-launch\) > header/);
   assert.match(css, /#terminal:has\(\.screen\.is-active \.era-launch\) \{[^}]*container-type: size;/);
   assert.match(css, /\.screen\.is-active \.era-launch \{[^}]*100cqw[^}]*100cqh[^}]*height: 100%;/);
@@ -1332,7 +1336,7 @@ test("active title fills the terminal below the visible interpreter header", asy
 });
 
 test("title choices highlight the focused or hovered button without an outline", async () => {
-  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  const css = styleSource("style");
   assert.match(css, /\.era-launch-actions:has\(button\.choice:is\(\.is-pending, \.is-selected\)\) button\.choice:not\(\.is-pending, \.is-selected\)::before/);
   assert.match(css, /:has\(button\.choice:enabled:focus-visible\) button\.choice:not\(:focus-visible\)::before \{ opacity: \.7; transform: translateY\(-50%\) scale\(\.95\); \}/);
   assert.match(css, /@media \(hover: hover\) \{\s*\.era-launch-actions[^{}]*:has\(button\.choice:enabled:hover\) button\.choice:not\(:hover\)::before \{ opacity: \.7; transform: translateY\(-50%\) scale\(\.95\); \}/);
@@ -1340,7 +1344,7 @@ test("title choices highlight the focused or hovered button without an outline",
 });
 
 test("room overlays reserve no layout height and chat follows every responsive main layout", async () => {
-  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  const css = styleSource("style");
   assert.match(css, /\.era-room-stage \.era-scene \{[^}]*position: absolute;[^}]*top: 2em;[^}]*pointer-events: none;/);
   assert.match(css, /\.era-room-stage \.era-occupant > \.line:has\(\.era-occupant-label\)[^{]*\{[^}]*position: absolute;[^}]*bottom: 4px;/);
   assert.match(css, /\.era-room-stage \.line button\.choice\.era-occupant-label \{[^}]*border: 0;[^}]*background: transparent;/);
@@ -1383,8 +1387,8 @@ test("room overlays reserve no layout height and chat follows every responsive m
   assert.match(css, /\.era-main-sidebar \.era-main-left > \.era-stats \{ flex: 1 1 0; min-height: 0; overflow-y: auto;/);
   assert.match(css, /\.era-player-actions \{[^}]*margin-top: auto;/);
   assert.match(css, /\.era-main \.era-player :is\(\.print-cell, \.era-guard-control\),\s*\.era-main \.era-player \.line button\.choice:is\(\.era-player-control, \.era-chip-button\) \{[^}]*padding: 6px 10px;[^}]*border-radius: 4px;/);
-  assert.match(css, /\.line button\.choice\.era-toggle \{ --button-gap: 5px;/);
-  assert.match(css, /\.line button\.choice:is\([^)]*\.era-toggle[^)]*\)[^{]*\{[^}]*display: inline-flex; align-items: center;/);
+  assert.match(css, /\.checkbox-control\.era-toggle \{ padding: 3px 7px; gap: 6px;/);
+  assert.match(css, /\.checkbox-control \{[^}]*display: inline-flex; align-items: center;/);
   const patch = await readFile(new URL("../hotpatch/MAIN_SCREEN.ERB", import.meta.url), "utf8");
   assert.doesNotMatch(patch, /era-interaction-history/);
   assert.doesNotMatch(patch, /era-info-tabs|era-info-title/);
@@ -2669,7 +2673,7 @@ test("HTML islands paint layers in ascending order, preserve same-layer order an
   assert.deepEqual(islands.map((island) => island.layer), [99, 98, 99], "snapshot data stays unchanged");
   await render([]);
   assert.deepEqual(children, []);
-  assert.match(source, /button\.disabled = !button\.closest\("\.screen\.is-active, \.island-root"\)/);
+  assert.match(source, /choiceControl\(button\)\.disabled = !button\.closest\("\.screen\.is-active, \.island-root"\)/);
   assert.match(source, /if \(!button\.closest\("\.screen\.is-active, \.island-root"\)\) return;/);
 });
 

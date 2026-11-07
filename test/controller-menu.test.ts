@@ -1,3 +1,4 @@
+import { styleSource } from "./style-source.js";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
@@ -203,7 +204,7 @@ test("map bumpers select adjacent tabs without wrapping or acting through overla
   activate(1);
   assert.deepEqual(clicks, [2, 1, 0]);
   assert.deepEqual(focused, clicks);
-  const css = readFileSync(new URL("../web/handheld.css", import.meta.url), "utf8");
+  const css = styleSource("handheld");
   assert.match(css, /\.has-controller \.era-move-tabs::before \{ content: "L1"; \}/);
   assert.match(css, /\.has-controller \.era-move-tabs::after \{ content: "R1"; \}/);
 });
@@ -236,7 +237,7 @@ test("B activates map Back once per press and stays with dialogs when a modal is
   h.poll([1]);
   assert.equal(h.mapBackClicks, 1);
   assert.deepEqual(h.events, ["Escape"]);
-  const css = readFileSync(new URL("../web/style.css", import.meta.url), "utf8");
+  const css = styleSource("style");
   assert.match(css, /\.has-controller \.screen\.is-active button\.era-move-back:enabled:not\(\.is-stale\)::after \{ content: "B";/);
 });
 
@@ -446,7 +447,7 @@ test("app Close and Cancel buttons carry Back hints without changing their form 
   const cancels = [...html.matchAll(/<button\b[^>]*value="cancel"[^>]*>/g)];
   assert.equal(cancels.length, 3);
   for (const [tag] of cancels) assert.match(tag, /data-controller-hint="B"/);
-  const css = readFileSync(new URL("../web/style.css", import.meta.url), "utf8");
+  const css = styleSource("style");
   assert.match(css, /\.has-controller :is\(dialog\[open\], \.screen\.is-active \.era-dialog:popover-open\).*:focus:not\(\[data-controller-hint\]\):not\(\.era-dialog-close\)::after/);
 });
 

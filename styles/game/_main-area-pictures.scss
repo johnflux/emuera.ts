@@ -1,0 +1,100 @@
+/* Area pictures (web/areas/<map id>-<name>/<season>-<day|night>-<left|middle|right>.png, chosen by app.js): pixel art
+   at one art pixel per CSS pixel, scaled nearest-neighbour; the ends over the middle repeated along the header, which
+   stays at their height. Day pictures at night are dimmed as above; night pictures are not. */
+:is(.era-main, .era-shop) .era-main-header:has(.era-area-art) { height: calc(var(--area-art-height, 150px) + 2px); min-height: 0; max-height: calc(var(--area-art-height, 150px) + 2px); container-type: size; overflow: clip; overflow-clip-margin: 32px; }
+:is(.era-main, .era-shop) .era-main-header:has(.era-area-art) > .era-watch-control { position: absolute; top: -32px; right: -37px; margin: 0; width: 300px; container-type: inline-size; }
+#terminal:has(.screen.is-active :is(.era-main, .era-shop) .era-main-header .era-area-art) { overflow-x: hidden; }
+:is(.era-main, .era-shop) .era-main-header:has(.era-area-art) .era-watch-control .era-timestop-button { padding: 2px clamp(2px, 2cqw, 12px); transform: translateX(-5px); }
+:is(.era-main, .era-shop) .era-main-header:has(.era-area-art) > .era-main-when { max-width: calc(100% - 239px); max-height: 100%; overflow: auto; padding: 4px 12px; }
+.era-sky.era-area-art .era-sky-landmark { left: 0; right: 0; bottom: 0; width: auto; height: 100%; image-rendering: pixelated; -webkit-mask: none; mask: none;
+  background: var(--area-left, none) left bottom / auto no-repeat, var(--area-right, none) right bottom / auto no-repeat, var(--area-middle) left bottom / auto repeat-x;
+  filter: var(--landmark-tint, ); }
+.era-sky { --area-art-overlap: 96px; }
+.era-area-art.era-area-0 { --area-art-overlap: 220px; }
+.era-area-art.era-area-1 { --area-art-overlap: 88px; }
+.era-area-art.era-area-2 { --area-art-overlap: 116px; }
+.era-area-art.era-area-3 { --area-art-overlap: 320px; }
+.era-area-art.era-area-4 { --area-art-overlap: 264px; }
+.era-area-art.era-area-5 { --area-art-overlap: 168px; }
+.era-area-art.era-area-6 { --area-art-overlap: 96px; }
+.era-area-art.era-area-7 { --area-art-overlap: 360px; }
+.era-area-art.era-area-8 { --area-art-overlap: 176px; }
+.era-area-art.era-area-9 { --area-art-overlap: 48px; }
+.era-cave-lantern { position: absolute; left: 132px; bottom: 55px; width: 40px; height: 42px;
+  pointer-events: none; opacity: 0; z-index: 1;
+  background: #090a1d; mask: url(/underworld-lantern-mask.png) center / contain no-repeat;
+  animation: era-lantern-flicker var(--lantern-flicker-duration, 9s) var(--lantern-flicker-delay, 0s) var(--lantern-flicker-pattern, steps(1)) infinite; }
+@keyframes era-lantern-flicker {
+  from { opacity: 0; }
+  to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .era-cave-lantern { animation: none; opacity: 0; } }
+.era-cave-bats { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.era-cave-bats > span { position: absolute; left: 26%; top: 48%; width: 14px; height: 10px;
+  animation: era-bat-flight 8s ease-in-out infinite alternate; }
+.era-cave-bats > span:nth-child(2) { left: 42%; top: 53%; animation-duration: 11s; animation-delay: -4s; }
+.era-cave-bats > span:nth-child(3) { left: 57%; top: 47%; animation-duration: 9s; animation-delay: -7s; }
+.era-cave-bats > span:nth-child(4) { left: 68%; top: 51%; animation-duration: 13s; animation-delay: -2s; }
+.era-cave-bats > span::before { content: ""; position: absolute; inset: 0; background: #0d0b18;
+  clip-path: polygon(0 0, 21% 10%, 43% 45%, 57% 45%, 79% 10%, 100% 0, 86% 50%, 71% 35%, 57% 65%, 43% 65%, 29% 35%, 14% 50%);
+  animation: era-bat-wings .32s steps(1) infinite; }
+.era-cave-bats > span::after { content: ""; position: absolute; left: 6px; top: 4px; width: 3px; height: 5px;
+  background: #0d0b18; clip-path: polygon(0 0, 50% 20%, 100% 0, 100% 80%, 50% 100%, 0 80%); }
+.era-cave-bats > span:nth-child(2)::before { animation-delay: -.08s; }
+.era-cave-bats > span:nth-child(3)::before { animation-duration: .38s; }
+.era-cave-bats > span:nth-child(4)::before { animation-duration: .28s; }
+@keyframes era-bat-flight {
+  0% { transform: translate(-65px, -32px); }
+  25% { transform: translate(30px, 32px); }
+  50% { transform: translate(125px, -32px); }
+  75% { transform: translate(20px, 32px); }
+  100% { transform: translate(-85px, -32px); } }
+@keyframes era-bat-wings {
+  50% { clip-path: polygon(29% 95%, 21% 60%, 43% 45%, 57% 45%, 79% 60%, 71% 95%, 71% 70%, 64% 85%, 57% 65%, 43% 65%, 36% 85%, 29% 70%); } }
+@media (prefers-reduced-motion: reduce) {
+  .era-cave-bats { display: none; }
+  .era-cave-bats > span, .era-cave-bats > span::before { animation: none; } }
+.era-area-art :is(.era-sky-landmark, .era-sky-land) {
+  padding-left: min(50%, max(0px, calc(var(--area-left-width, 0px) - var(--area-art-overlap))));
+  padding-right: min(50%, max(0px, calc(var(--area-right-width, 0px) - var(--area-art-overlap)))); }
+.era-sky.era-area-art .era-sky-landmark {
+  background-origin: border-box, border-box, content-box;
+  background-clip: border-box, border-box, content-box; }
+.era-area-art .era-sky-landmark::before,
+.era-area-art .era-sky-landmark::after,
+.era-area-art .era-sky-land::before { padding: inherit; }
+.era-sky.era-area-art .era-sky-land { display: none; }
+.era-area-7.era-area-art .era-sky-land {
+  display: block; height: 100%; background: none; border: 0; border-radius: 0; filter: none;
+  -webkit-mask: none; mask: none; pointer-events: none; }
+.era-area-7.era-area-art .era-sky-land::before {
+  content: ""; position: absolute; inset: 0; opacity: .85;
+  background: var(--area-water-left) left bottom / auto no-repeat,
+    var(--area-water-right) right bottom / auto no-repeat,
+    var(--area-water-middle) left bottom / auto repeat-x;
+  filter: url(#era-water-highlight); clip-path: inset(70px 0 0);
+  mask-image: repeating-linear-gradient(0deg, transparent 0 3px, #000 4px 7px, transparent 8px 12px);
+  mask-size: 24px 24px; animation: era-water-flow .65s linear infinite; }
+.era-area-7.era-area-art-night .era-sky-land::before { opacity: .28; }
+@keyframes era-water-flow { to { mask-position: -24px 24px; } }
+@media (prefers-reduced-motion: reduce) {
+  .era-area-7.era-area-art .era-sky-land::before { animation: none; opacity: 0; } }
+.era-sky.era-area-art-night .era-sky-landmark { --landmark-tint: ; }
+.era-sky.era-area-art-day .era-sky-landmark { --landmark-tint: ; }
+.era-area-art-weather .era-sky-landmark::after { content: ""; position: absolute; inset: 0; opacity: var(--area-weather-blend, 0); pointer-events: none;
+  background: var(--area-weather-left) left bottom / auto no-repeat, var(--area-weather-right) right bottom / auto no-repeat, var(--area-weather-middle) left bottom / auto repeat-x; }
+/* Isolate bright warm pixels so windows glow without blurring the buildings or moonlit snow. */
+.era-area-art-night .era-sky-landmark::before { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .7;
+  background: var(--area-left, none) left bottom / auto no-repeat, var(--area-right, none) right bottom / auto no-repeat, var(--area-middle) left bottom / auto repeat-x;
+  filter: url(#era-light-glow); mix-blend-mode: screen; }
+.era-sky.era-area-art .era-sky-land::before,
+.era-sky.era-area-art .era-sky-landmark::after,
+.era-sky.era-area-art .era-sky-landmark::before {
+  background-origin: border-box, border-box, content-box;
+  background-clip: border-box, border-box, content-box; }
+.era-weather-cloudy { --area-weather-blend: .18; }
+.era-weather-rain { --area-weather-blend: .32; }
+.era-weather-storm { --area-weather-blend: .48; }
+.era-weather-fog { --area-weather-blend: .18; }
+.era-weather-snow { --area-weather-blend: .20; }
+.era-weather-blizzard { --area-weather-blend: .35; }

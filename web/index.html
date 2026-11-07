@@ -29,7 +29,7 @@
         <button id="restart" aria-haspopup="dialog">Restart game…</button>
         <button id="demo" aria-pressed="false">Conformance demo</button>
         <button id="report" aria-expanded="false" aria-controls="compatibility">Compatibility report</button>
-        <button id="debug-toggle" aria-pressed="false" aria-haspopup="dialog" title="Emuera's debug mode: restarts the run with [IF_DEBUG] code loaded, DEBUGPRINT output shown and ASSERT checked">Debug mode</button>
+        <label class="checkbox-control" title="Emuera's debug mode: restarts the run with [IF_DEBUG] code loaded, DEBUGPRINT output shown and ASSERT checked"><input id="debug-toggle" type="checkbox"><span>Debug mode</span></label>
         <button id="settings-toggle" aria-haspopup="dialog" aria-controls="settings">Settings…</button>
         <button id="menu-library">Game library</button>
       </nav>
@@ -115,7 +115,7 @@
       </div>
       <h3>Display</h3>
       <div class="settings-actions">
-        <button id="handheld-toggle" aria-pressed="false">Handheld layout</button>
+        <label class="checkbox-control"><input id="handheld-toggle" type="checkbox"><span>Handheld layout</span></label>
         <button id="controller-hints-toggle" title="Cycle Auto, On, and Off. Auto detects a gamepad or Steam Deck; this only changes hints, not controller input.">Controller hints: Auto</button>
         <label class="menu-font">Font size <input id="font-size" type="range" min="12" max="24" value="16"></label>
       </div>
@@ -127,13 +127,17 @@
         <label>Font name <input name="font" type="text" maxlength="100" spellcheck="false"></label>
         <button type="button" id="settings-reset">Reset to game defaults</button>
       </form>
+      <h3>Playback</h3>
+      <div class="settings-actions">
+        <label class="checkbox-control"><input id="auto-advance-toggle" type="checkbox"><span>Auto-continue after 0.5 seconds</span></label>
+      </div>
       <h3>Characters &amp; translation</h3>
       <div class="settings-actions">
-        <button id="character-history-toggle" aria-pressed="true">Character Interaction History</button>
+        <label class="checkbox-control"><input id="character-history-toggle" type="checkbox"><span>Character Interaction History</span></label>
         <button id="llm-toggle" aria-haspopup="dialog" title="Choose the language model that lets characters reply in Interaction History">LLM… <span id="llm-state" class="menu-state"></span></button>
-        <button id="translate-toggle" aria-pressed="false" title="Translate the game's Japanese text on this device as it is printed">Translate Japanese <span id="translate-state" class="menu-state"></span></button>
-        <button id="clipboard-toggle" aria-pressed="false">Auto-copy game text</button>
-        <button id="local-translate-toggle" aria-pressed="false">Local-model translation</button>
+        <label class="checkbox-control" title="Translate the game's Japanese text on this device as it is printed"><input id="translate-toggle" type="checkbox"><span>Translate Japanese <span id="translate-state" class="menu-state"></span></span></label>
+        <label class="checkbox-control"><input id="clipboard-toggle" type="checkbox"><span>Auto-copy game text</span></label>
+        <label class="checkbox-control"><input id="local-translate-toggle" type="checkbox"><span>Local-model translation</span></label>
         <button id="local-translate-configure" aria-haspopup="dialog">Translation model…</button>
       </div>
     </dialog>
@@ -230,8 +234,8 @@
         <fieldset class="llm-config-section">
           <legend>Response settings</legend>
           <div class="llm-config-fields">
-            <label class="llm-config-check"><input name="jsonMode" type="checkbox"><span>Request JSON output (<code>response_format</code>)</span></label>
-            <label class="llm-config-check"><input name="tools" type="checkbox"><span>Let the character act in the game with tools (the model must support tool calling)</span></label>
+            <label class="checkbox-control llm-config-check"><input name="jsonMode" type="checkbox"><span>Request JSON output (<code>response_format</code>)</span></label>
+            <label class="checkbox-control llm-config-check"><input name="tools" type="checkbox"><span>Let the character act in the game with tools (the model must support tool calling)</span></label>
             <label for="llm-temperature">Temperature</label>
             <input id="llm-temperature" name="temperature" type="number" min="0" max="2" step="0.1">
             <label for="llm-history-chars">History sent</label>
@@ -243,9 +247,9 @@
         <fieldset class="llm-config-section">
           <legend>Character behavior</legend>
           <div class="llm-config-fields">
-            <label class="llm-config-check"><input name="encounters" type="checkbox"><span>Characters you run into may speak up on their own (asks the LLM each time you meet someone; needs tools)</span></label>
-            <label class="llm-config-check"><input name="memories" type="checkbox"><span>Characters keep a memory of you (asks the LLM at the start of each day to sum up each character's history, which is then sent with every prompt)</span></label>
-            <label class="llm-config-check"><input name="gossip" type="checkbox"><span>Characters gossip about you (when two meet away from you, one may pass on news about you, which can change how the other feels; needs tools)</span></label>
+            <label class="checkbox-control llm-config-check"><input name="encounters" type="checkbox"><span>Characters you run into may speak up on their own (asks the LLM each time you meet someone; needs tools)</span></label>
+            <label class="checkbox-control llm-config-check"><input name="memories" type="checkbox"><span>Characters keep a memory of you (asks the LLM at the start of each day to sum up each character's history, which is then sent with every prompt)</span></label>
+            <label class="checkbox-control llm-config-check"><input name="gossip" type="checkbox"><span>Characters gossip about you (when two meet away from you, one may pass on news about you, which can change how the other feels; needs tools)</span></label>
           </div>
         </fieldset>
       </div>

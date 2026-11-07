@@ -1,3 +1,4 @@
+import { styleSource } from "./style-source.js";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
@@ -168,7 +169,7 @@ test("time effects only burst on live transitions, clean up, and restore without
 });
 
 test("time effects are nonblocking and respect reduced motion", async () => {
-  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  const css = styleSource("style");
   assert.match(css, /\.time-effect \{[^}]*pointer-events: none;/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\) \{\s*\.time-effect[^}]*animation: none;/);
   assert.match(css, /\.time-shockwave \{ display: none; \}/);

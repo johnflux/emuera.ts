@@ -1,0 +1,23 @@
+.era-sheet-header { display: flex; flex-direction: column; gap: 8px; padding: 10px 16px 0; border-bottom: 1px solid #2a3138; background: #111518; }
+.era-sheet-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.era-sheet-caption { color: #788b97; font-size: .85em; }
+.era-sheet-people { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.line .era-sheet-people .era-sheet-person { padding: 3px 12px; border: 1px solid transparent; border-radius: 999px; color: #8998a2; font-weight: normal; }
+.line .era-sheet-people .era-sheet-person.era-current { border-color: #438899; background: #19333e; color: #b7e9f4; font-weight: bold; }
+.era-sheet-person .era-sub { margin-left: 1ch; }
+.line button.choice.era-sheet-step { padding: 0 8px; color: #8fc8ff; font-size: 1.3em; }
+.era-sheet-count { color: #888; font-size: .85em; }
+.line button.choice.era-dialog-close { --button-background: transparent; --button-border: transparent; --button-color: #aaa; --button-padding: 0 10px; margin-left: auto; font-size: 1.5em; line-height: 1.2; }
+.era-sheet-pages { display: flex; flex-wrap: wrap; gap: 2px; }
+.line button.choice.era-sheet-page { padding: 6px 14px 7px; border-bottom: 2px solid transparent; color: #9aa5ad; }
+.line button.choice.era-sheet-page.era-current { border-bottom-color: #66ffff; color: #66ffff; }
+.era-sheet-body { flex: 1; min-height: 0; overflow: auto; padding: 10px 16px 16px; scrollbar-gutter: stable; }
+.era-sheet-body > * { min-width: var(--logical-width, 0); }
+/* BASIC_STATE opens every page with a heavy rule, which the header's border already draws. */
+.era-sheet-body > :nth-child(1 of .line:not(.era-marker)).single-line { display: none; }
+.era-sheet-footer { display: flex; justify-content: flex-end; gap: 3ch; padding: 10px 16px; border-top: 1px solid #2a3138; }
+.era-sheet-subpages { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 14px; }
+.line button.choice.era-sheet-subpage { padding: 2px 14px; border: 1px solid #2a3138; border-radius: 999px; color: #9aa5ad; }
+.line button.choice.era-sheet-subpage.era-current { border-color: #2f6060; background: #102a2c; color: #66ffff; }
+.era-sheet-bars { display: grid; grid-template-columns: repeat(2, 44ch); column-gap: 6ch; row-gap: 2px; margin: 4px 0 6px 2ch; }
+.era-sheet-bars .era-bar { grid-template-columns: 4ch minmax(0, 1fr) 13ch; }

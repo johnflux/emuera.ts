@@ -1,0 +1,21 @@
+.era-inventory:popover-open { width: min(1100px, calc(100vw - 32px)); height: min(820px, calc(100dvh - 32px)); }
+.era-inventory-header { padding: 16px 20px 12px; border-bottom: 1px solid #245066; background: linear-gradient(135deg, #102735, #0b141d); white-space: normal; }
+.era-inventory-heading, .era-inventory-tools, .era-inventory-footer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.era-inventory-title { color: #63d3f6; font-size: 1.15em; font-weight: bold; }
+.era-inventory-tabs { margin: 14px 0 12px; gap: 5px; }
+.era-inventory-tools .era-chip-button, .era-inventory-footer .era-chip-button { --button-padding: 3px 12px; --button-border: #35566d; --button-radius: 4px; --button-color: #8fc8ff; }
+.era-inventory-tools .era-current { --button-background: #102a2c; --button-color: #6ff; }
+.era-inventory-body { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 16px 20px; scrollbar-gutter: stable; }
+.era-inventory-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: 0 24px; align-content: start; }
+.era-inventory-grid > .line { min-width: 0; white-space: normal; }
+.era-inventory-grid > .line[hidden], .era-inventory-body > .line[hidden] { display: none; }
+.era-inventory-item { display: flex; align-items: baseline; gap: 12px; padding: 6px 2px; border-bottom: 1px solid #ffffff0a; }
+.era-inventory-item:is(:hover, :focus-visible) { background: #ffffff05; }
+.era-inventory-name { min-width: 0; color: #b5c5ce; overflow-wrap: anywhere; }
+.era-inventory-quantity { margin-left: auto; color: #8a9ba6; font-variant-numeric: tabular-nums; }
+.era-inventory-empty { padding: 32px 12px; color: #92a7b5; text-align: center; white-space: normal; }
+.era-inventory-footer { justify-content: space-between; padding: 10px 20px; border-top: 1px solid #245066; color: #92a7b5; font-size: .85em; white-space: normal; }
+.era-inventory-filter { flex: 1 1 180px; max-width: 320px; min-width: 0; }
+.era-inventory-search { width: 100%; min-width: 0; padding: 5px 8px; border: 1px solid #2a3943; border-radius: 4px; background: #0b1117; color: #c5d3dc; font: inherit; }
+.era-inventory-search::placeholder { color: #768894; }
+.era-inventory-search:focus { outline: 1px solid #63b6d2; outline-offset: 1px; }

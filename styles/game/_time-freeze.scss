@@ -1,0 +1,20 @@
+/* Time stop: the world freezes. Cards frost over (an icy rim, rime in the corners, a faint crystal grain), colours
+   drain from meters and other people, and the clock ices up with a snowflake on it. You stay in colour. */
+.era-main:has(.era-stopped) :is(.era-card, .era-main-header) { position: relative; border-color: #7fb4e0aa;
+  background: linear-gradient(160deg, #152440, #0c1326 60%, #101c34); box-shadow: inset 0 0 22px #a8dcff1f, 0 0 10px #7fc4ff14; }
+.era-main :is(.era-card, .era-main-header)::before { content: ""; position: absolute; inset: 0; z-index: 0; border-radius: inherit; pointer-events: none; opacity: var(--era-freeze);
+  background: radial-gradient(circle at 0 0, #e4f6ff30, transparent 26%), radial-gradient(circle at 100% 0, #e4f6ff1c, transparent 18%),
+    radial-gradient(circle at 100% 100%, #e4f6ff26, transparent 22%), radial-gradient(circle at 0 100%, #e4f6ff14, transparent 16%),
+    repeating-linear-gradient(60deg, #ffffff06 0 1px, transparent 1px 13px), repeating-linear-gradient(-60deg, #ffffff05 0 1px, transparent 1px 17px); }
+.era-main :is(.era-card, .era-main-header) { position: relative; }
+.era-main :is(.era-card, .era-main-header) > * { position: relative; z-index: 1; }
+.era-main:has(.era-stopped) .era-card-title { color: #bfe6ff; text-shadow: 0 0 6px #9fd8ff66; }
+.era-main :is(.era-character, .era-stats, .era-occupants) .era-meter > span { filter: saturate(calc(1 - .7 * var(--era-freeze))) brightness(calc(1 + .15 * var(--era-freeze))); }
+.era-main:has(.era-stopped) .era-clock { --clock-face: #e2f2fc; --clock-rim: #bfe6ff; --clock-ink: #40677f; --clock-tick: #8cb4ce; --clock-accent: #3288b8; }
+.era-main .era-clock::before, .era-main .era-clock::after { filter: grayscale(calc(.7 * var(--era-freeze))) sepia(calc(.4 * var(--era-freeze))) hue-rotate(calc(170deg * var(--era-freeze))) drop-shadow(0 2px 3px #0006) drop-shadow(0 0 6px rgb(159 216 255 / calc(.6 * var(--era-freeze)))); }
+.era-main .era-clock :is(img, canvas) { filter: grayscale(var(--era-freeze)) sepia(calc(.4 * var(--era-freeze))) hue-rotate(calc(170deg * var(--era-freeze))) saturate(calc(1 + 1.2 * var(--era-freeze))) brightness(calc(1 + .05 * var(--era-freeze))); }
+.era-main:has(.era-stopped) .era-clock::after { content: "❄"; position: absolute; z-index: 4; left: 43%; top: 78%; color: #e4f6ff; font-size: 22px; line-height: 1; text-shadow: 0 0 6px #9fd8ff; }
+.era-main .era-sky { filter: grayscale(calc(.8 * var(--era-freeze))) sepia(calc(.25 * var(--era-freeze))) hue-rotate(calc(170deg * var(--era-freeze))) saturate(calc(1 + .5 * var(--era-freeze))) brightness(calc(1 - .2 * var(--era-freeze))); }
+.era-main:has(.era-stopped) .era-sky * { animation-play-state: paused; }
+.era-main:has(.era-stopped) .era-main-header::before { z-index: 1; }
+.era-main:has(.era-stopped) .era-main-when { color: #cfe6f5; }

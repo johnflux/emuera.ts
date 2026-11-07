@@ -1,0 +1,41 @@
+.is-handheld .era-character:has(.era-main-chat) { grid-template-rows: auto; }
+@media (min-width: 1000px) and (max-width: 1280px) and (max-height: 800px) {
+  .screen.is-active .era-main { grid-template-rows: auto auto minmax(160px, 1fr) auto auto; }
+  .screen.is-active .era-shop { height: max(540px, calc(100cqh - 8px)); min-height: 0; grid-template-rows: auto auto minmax(0, 1fr) auto; }
+  .era-shop > :is(.era-shop-home, .era-shop-menu, .era-shop-system) { min-height: 0; overflow: auto; overscroll-behavior: contain; }
+}
+@media (max-width: 1280px) and (max-height: 800px) {
+  .era-character:has(.era-main-chat) { grid-template-rows: auto; }
+}
+@media (max-width: 600px) {
+  .is-handheld .era-relationship-options, .era-relationship-options { grid-template-columns: 1fr; }
+  .is-handheld #settings .settings-actions { grid-template-columns: minmax(0, 1fr); }
+  .is-handheld .art-demo #art-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .is-handheld .era-sheet-bars { grid-template-columns: minmax(0, 1fr); }
+}
+.is-handheld .line button.choice:focus-visible { outline: 2px solid #8ddaff; outline-offset: 2px; }
+.line :is(.print-cell, .era-guard-control) button.choice.command-number-only:focus-visible { outline: none; }
+.line :is(.print-cell, .era-guard-control):has(button.choice.command-number-only:focus-visible) { outline: 2px solid #8ddaff; outline-offset: 2px; }
+.is-handheld .command-number { display: none; }
+.is-handheld .has-tooltip .interactive-label { text-decoration-line: none; }
+@media (any-pointer: coarse) {
+  .has-tooltip .interactive-label { text-decoration-line: none; }
+}
+.is-handheld .era-actions-group button.choice.command-number-only { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; margin: 0; padding: 0; border-radius: inherit; }
+/* Compact viewports and coarse pointers also hide command numbers outside handheld mode. */
+@media (max-width: 1280px) and (max-height: 800px), (any-pointer: coarse) {
+  .command-number { display: none; }
+  .era-actions-group :is(.print-cell, .era-guard-control):has(.command-number-only) { display: inline-flex; align-items: center; min-height: var(--compact-choice-min-height); box-sizing: border-box; }
+  .era-actions-group button.choice.command-number-only { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; margin: 0; padding: 0; border-radius: inherit; }
+}
+@media (max-height: 800px) {
+  body:not(.is-home) :is(.era-main, .era-shop) .era-main-header:has(.era-area-art) > .era-watch-control { top: -20px; }
+  body:not(.is-home) :is(.era-main, .era-shop) .era-main-header:has(.era-area-art) > .era-watch-control { right: 0; }
+  body:not(.is-home) > header { height: 0; padding: 0; border: 0; }
+  body:not(.is-home) > header > :not(.menu) { display: none; }
+  body:not(.is-home) > header .menu { position: fixed; top: 8px; right: 8px; }
+  body:not(.is-home) > header .menu-toggle { width: 40px; height: 36px; background: #121212e6; }
+  body:not(.is-home) .era-move-header { padding-right: 52px; }
+  body:not(.is-home) #time-effect { top: 0; }
+  body:not(.is-home) > header > #status.error { display: block; position: fixed; top: 8px; bottom: auto; left: 8px; right: 56px; padding: 8px; background: #281616; white-space: normal; }
+}

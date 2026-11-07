@@ -1,0 +1,96 @@
+/* The header's backdrop (HOTPATCH_SKY): sky for the hour, weather over it, the season's land along the bottom; under a
+   roof the sky is dimmer, underground there is none. The text sits on a translucent panel to stay readable. */
+.era-main-header { position: relative; overflow: visible; isolation: isolate; }
+.era-main-header > * { position: relative; z-index: 1; }
+.era-main-header > .line:has(.era-sky), .era-main-header > .line > span:has(> .era-sky) { display: contents; }
+.era-sky { position: absolute; inset: 0; z-index: 0; overflow: hidden; border-radius: inherit; pointer-events: none; background: #0d1014; }
+.era-main-header > .era-main-when { order: 0; flex: 0 1 auto; padding: 6px 12px; border-radius: 8px; background: #0a0e1428; backdrop-filter: blur(3px); }
+.era-main-header > .era-watch-control { order: 1; margin-left: auto; margin-right: -60px; margin-top: -44px; margin-bottom: -16px; width: 420px; max-width: 100%; aspect-ratio: 825 / 509; flex: 0 0 auto; min-width: 0; isolation: isolate; }
+.era-watch-control > .line:has(.era-clock) { position: static; }
+.era-watch-control > .line { position: static; z-index: auto; min-width: 0; }
+.era-watch-control > .line:has(.era-timestop-button) { position: absolute; left: 49%; top: 40.5%; width: 37.5%; height: 31%; z-index: 2; }
+.era-watch-control .era-timestop { height: 100%; gap: 4px; }
+.era-watch-control .era-timestop > .era-timestop-button { flex: 0 0 100%; }
+.era-watch-control .era-timestop-button { position: relative; z-index: 2; }
+.era-watch-control .era-clock { pointer-events: none; }
+.era-watch-control .era-clock > svg { z-index: 0; }
+.era-main-header .era-clock { --clock-face: #f4e6cc; --clock-rim: #b68a50; --clock-ink: #38271e; --clock-tick: #9b784f; --clock-accent: #76502e; position: absolute; inset: 0; width: 100%; height: 100%; }
+/* The aligned 825 x 509 normal/hover artwork supplies its own glass texture over the live dial. */
+.era-clock > svg { position: absolute; left: 13.9383%; top: 31.4034%; width: 31.1414%; height: 50.4748%; display: block; overflow: visible; transform: matrix(.992769, -.00638, -.00638, 1.007231, 0, 0) rotate(8deg); transform-origin: center; }
+.era-clock::before { content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none; background: url("./clock-frame.png") center / 100% 100% no-repeat; filter: drop-shadow(0 2px 3px #0006); }
+.era-clock::after, .clock-overhang::after { content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none; background: url("./clock-frame-hover.png") center / 100% 100% no-repeat; opacity: 0; transition: opacity 220ms ease-in-out; }
+.era-watch-control:has(.era-timestop-button:enabled:is(:hover, :focus-visible)) .era-clock::after { opacity: 1; }
+.clock-overhang::after { opacity: var(--clock-hover-opacity, 0); transition: none; }
+@media (prefers-reduced-motion: reduce) { .era-clock::after { transition: none; } }
+/* Paint enamel behind the transparent plaque and let the metal artwork conceal its edges. */
+.era-watch-control::after { content: ""; position: absolute; left: 45%; top: 40.5%; width: 41.5%; height: 31%; z-index: 0; pointer-events: none; background: radial-gradient(ellipse at 50% 0, #29414a, #101c24 75%); }
+.era-watch-control:has(.era-wake-button)::after { background: radial-gradient(ellipse at 68% 43%, #3a3023, #191c20 75%); }
+.era-watch-control:has(.era-stopped)::after { background: radial-gradient(ellipse at 68% 43%, #3a2c4b, #1b182b 75%); }
+.era-watch-control:has(.era-unavailable.era-timestop-button)::after { background: #191919; }
+.era-watch-control:has(.era-timestop-button:enabled:is(:hover, :focus-visible))::after { filter: brightness(1.35); }
+/* Only the crown above the scroll viewport is repeated here, so game output remains clipped and scrollable. */
+.clock-overhang { position: fixed; z-index: 6; pointer-events: none; background: url("./clock-frame.png") center / 100% 100% no-repeat; }
+.clock-overhang[hidden] { display: none; }
+body:has(.menu-panel:not([hidden])) .clock-overhang { visibility: hidden; }
+.era-clock-face { fill: var(--clock-face); }
+.era-clock-track { fill: none; stroke: var(--clock-tick); stroke-width: .35; }
+.era-clock-inner-ring { fill: none; stroke: var(--clock-tick); stroke-width: .3; opacity: .4; }
+.era-clock-tick { stroke: var(--clock-accent); stroke-width: .75; stroke-linecap: round; }
+.era-clock-hour-mark { stroke: var(--clock-ink); stroke-width: 1.15; }
+.era-clock-quarter { stroke-width: 1.5; }
+.era-clock-numeral { fill: var(--clock-ink); font-family: Georgia, "Times New Roman", serif; font-size: 8px; font-weight: bold; text-anchor: middle; }
+.era-clock-signature { fill: var(--clock-tick); font-family: Georgia, "Times New Roman", serif; font-size: 3px; letter-spacing: 1px; text-anchor: middle; }
+.era-clock-hour { fill: var(--clock-ink); stroke: var(--clock-accent); stroke-width: .35; stroke-linejoin: round; }
+.era-clock-minute { fill: var(--clock-accent); stroke: var(--clock-ink); stroke-width: .3; stroke-linejoin: round; }
+.era-clock-pin { fill: var(--clock-rim); stroke: var(--clock-ink); stroke-width: .6; }
+.era-clock .sprite-clip { filter: url(#era-clock-dial); }
+/* Legacy sprite clocks retain their filters; the hotpatched vector dial uses its own palette. */
+:is(.era-main, .era-shop):not(:has(.era-stopped)) .era-main-header:has(.era-sky-night) .era-clock .sprite-clip { filter: url(#era-radium); }
+:is(.era-main, .era-shop):not(:has(.era-stopped)) .era-main-header:has(.era-sky-night) .era-clock { --clock-face: #211e1b; --clock-rim: #b68a50; --clock-ink: #efdec0; --clock-tick: #a58a62; --clock-accent: #d7b375; }
+.era-sky-view, .era-sky-orb, .era-sky-clouds, .era-sky-landmark, .era-sky-fall, .era-sky-land { position: absolute; display: block; }
+.era-sky-view { inset: 0; overflow: hidden; }
+.era-sky-clouds, .era-sky-fall { inset: 0; }
+:is(.era-sky-dawn, .era-sky-morning, .era-sky-day, .era-sky-evening) .era-sky-view {
+  background: radial-gradient(ellipse at calc(100% - var(--sky-orb-right) - 15px) 110px, color-mix(in srgb, #ffad6680 var(--sky-warmth, 0%), transparent), transparent 60%),
+    linear-gradient(color-mix(in srgb, #2f78c4, #493b76 var(--sky-warmth, 0%)), color-mix(in srgb, #79b8e8, #d4728c var(--sky-warmth, 0%)) 55%, color-mix(in srgb, #c5e5f5, #ffc083 var(--sky-warmth, 0%))); }
+.era-sky-night .era-sky-view { background: linear-gradient(#060a1c, #18234a); }
+.era-sky-view::before { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: var(--sky-darkness, 0);
+  background: radial-gradient(1.5px 1.5px at 13% 17%, #e5eeff, #b4ceff44 45%, transparent),
+    radial-gradient(1px 1px at 71% 38%, #ffe6c8dd, transparent),
+    radial-gradient(2.5px 2.5px at 46% 61%, #f5f8ffbb, #a5c4ff22 40%, transparent),
+    radial-gradient(.8px .8px at 89% 83%, #cadbff99, transparent),
+    radial-gradient(1px 1px at 24% 43%, #dce8ffbb, transparent),
+    radial-gradient(.7px .7px at 57% 13%, #fff9, transparent),
+    radial-gradient(1.2px 1.2px at 83% 72%, #ffebcfaa, transparent),
+    radial-gradient(.8px .8px at 6% 91%, #cbdcff88, transparent),
+    radial-gradient(.7px .7px at 34% 26%, #d7e5ff88, transparent),
+    radial-gradient(.8px .8px at 76% 57%, #fff7, transparent),
+    radial-gradient(.6px .6px at 17% 79%, #c7d9ff77, transparent),
+    radial-gradient(.7px .7px at 94% 8%, #fff8, transparent),
+    radial-gradient(ellipse at 63% 0%, #687da317, transparent 65%);
+  background-size: 389px 173px, 389px 173px, 389px 173px, 389px 173px,
+    251px 137px, 251px 137px, 251px 137px, 251px 137px,
+    173px 97px, 173px 97px, 173px 97px, 173px 97px, 100% 100%; }
+:is(.era-sky-dawn, .era-sky-evening) .era-sky-view::before {
+  background: linear-gradient(#060a1c, #18234a); }
+.era-area-10:is(.era-sky-dawn, .era-sky-morning, .era-sky-day, .era-sky-evening) .era-sky-view {
+  background: radial-gradient(ellipse at calc(100% - var(--sky-orb-right) - 15px) 110px, color-mix(in srgb, #e6b9ce55 var(--sky-warmth, 0%), transparent), transparent 60%),
+    linear-gradient(color-mix(in srgb, #242139, #302039 var(--sky-warmth, 0%)), color-mix(in srgb, #57506e, #8b5d80 var(--sky-warmth, 0%)) 55%, color-mix(in srgb, #b6a8c6, #dfaaa8 var(--sky-warmth, 0%))); }
+.era-area-10.era-sky-night .era-sky-view {
+  background: linear-gradient(#080611, #241c3d); }
+.era-area-10:is(.era-sky-dawn, .era-sky-evening) .era-sky-view::before {
+  background: linear-gradient(#080611, #241c3d); }
+/* Keep clear of the right-hand scenery when space permits, but never push the orb off a narrow header. */
+.era-sky-view { --sky-orb-right: clamp(10px, max(450px, calc(450px + (70% - 450px) * var(--sky-orbit, .5))), max(10px, calc(100% - 40px))); }
+.era-sky-orb, .era-sky-clouds::after { position: absolute; top: min(var(--sky-orb-top, 10px), max(0px, calc(100% - 30px))); right: var(--sky-orb-right); width: 30px; height: 30px; border-radius: 50%;
+  background: radial-gradient(#fffbe0, color-mix(in srgb, #ffe27a, #ffb27a var(--sky-warmth, 0%)) 55%, color-mix(in srgb, #ffc94a, #ff783a var(--sky-warmth, 0%)));
+  box-shadow: 0 0 26px 10px color-mix(in srgb, #ffe07a88, #ff7a3a99 var(--sky-warmth, 0%)); }
+.era-sky-moon .era-sky-orb, .era-sky-moon .era-sky-clouds::after { width: 28px; height: 28px;
+  background: url(/moon.svg) center / contain no-repeat; box-shadow: none; filter: drop-shadow(0 0 5px #dceaff70); }
+.era-area-10.era-sky-moon .era-sky-orb, .era-area-10.era-sky-moon .era-sky-clouds::after {
+  --earth-orb-size: 103.6px;
+  width: var(--earth-orb-size); height: var(--earth-orb-size);
+  top: calc(var(--sky-orb-top, 10px) + 14px - var(--earth-orb-size) / 2);
+  right: min(var(--sky-orb-right), max(0px, calc(100% - var(--earth-orb-size) - 10px)));
+  mask-image: linear-gradient(rgb(0 0 0 / var(--sky-darkness, 1)), rgb(0 0 0 / var(--sky-darkness, 1)));
+  background-image: url(/earth.png); image-rendering: pixelated; }

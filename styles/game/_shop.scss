@@ -1,0 +1,43 @@
+/* Sleep menu (hotpatch/SLEEP_MENU.ERB): the main screen's header and cards; you | home, then the menu | system, the tip. */
+.era-shop { display: grid; gap: 10px; width: 100cqi; max-width: 100cqi; margin: 4px 0; white-space: normal;
+  grid-template-columns: minmax(32ch, 38ch) minmax(0, 1fr) minmax(32ch, 44ch);
+  grid-template-areas: "header header header" "player menu system" "home menu system" "tip tip tip"; }
+.screen.is-active .era-shop { grid-template-rows: auto auto 1fr auto; }
+.era-shop > * { min-width: 0; }
+.era-shop > .line { grid-column: 1 / -1; }
+.era-shop > .era-shop-player { grid-area: player; }
+.era-shop > .era-shop-home { grid-area: home; }
+.era-shop > .era-shop-menu { grid-area: menu; }
+.era-shop > .era-shop-system { grid-area: system; }
+.era-shop > .era-shop-tip { grid-area: tip; color: #e8d870; }
+.era-shop .era-main-header { min-height: 92px; }
+.era-shop-wake { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; margin-top: 4px; }
+.era-shop-wake .era-status-label { margin-right: 0; }
+.era-shop-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.line button.choice.era-timestop-button.era-wake-button { border-color: #bd8850; background: radial-gradient(ellipse at top, #3a3023, #191c20 75%); color: #ffe8b8; }
+@media (max-width: 600px) {
+  .era-main-header > .era-watch-control { max-width: 100%; }
+}
+/* Labels are real controls over the artwork's plaque, not a second painted frame. */
+.era-watch-control .line button.choice.era-timestop-button, .era-watch-control .era-timestop-button { min-width: 0; width: 100%; height: 100%; padding: 2px 12px; border: 0; border-radius: 24px; background: transparent; box-shadow: none; color: #cceeea; text-shadow: 0 1px 2px #000; letter-spacing: 0; font-size: 1.15em; backdrop-filter: none; -webkit-backdrop-filter: none; }
+.era-watch-control .line button.choice.era-timestop-button.era-wake-button { color: #ffe8b8; }
+.era-watch-control .line button.choice.era-timestop-button.era-stopped { color: #f0d8ff; background: transparent; }
+.era-watch-control .era-timestop-button.era-unavailable { color: #999; background: transparent; }
+.era-watch-control .era-timestop-button .era-sub { font-size: .65em; margin-top: 1px; }
+.era-watch-control .era-timestop-gauge { margin-top: 4px; gap: 2px; }
+.era-watch-control .era-timestop-tsp { font-size: .65em; opacity: 1; }
+.era-watch-control .era-timestop-gauge .era-meter { background: #0006; }
+.era-watch-control .era-timestop-button:enabled:is(:hover, :focus-visible) { background: transparent; filter: none; }
+.era-watch-control button.era-timestop-button::before { content: ""; position: absolute; inset: -14px -16px; }
+@container (max-width: 1100px) {
+  .era-shop { grid-template-columns: minmax(32ch, 40ch) minmax(0, 1fr); grid-template-areas: "header header" "player menu" "home menu" "system system" "tip tip"; }
+  .screen.is-active .era-shop { grid-template-rows: auto auto 1fr auto auto; }
+}
+@container (max-width: 760px) {
+  .era-shop { grid-template-columns: minmax(0, 1fr); grid-template-areas: "header" "player" "home" "menu" "system" "tip"; }
+  .screen.is-active .era-shop { grid-template-rows: auto; }
+}
+.era-shop-place { position: relative; display: block; padding-left: 1.05em; margin: 8px 0 14px; font-size: 1.1em; font-weight: bold; }
+.era-shop-place::before { position: absolute; left: 0; top: .25em; margin-right: 0; }
+.era-shop-place .era-sub { display: block; margin: 6px 0 0; font-size: .85em; font-weight: normal; }
+.era-shop :is(.era-shop-wake, .era-shop-chips, .era-main-header) .interactive-label { text-decoration-line: none; }

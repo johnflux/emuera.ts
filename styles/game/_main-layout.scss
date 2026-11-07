@@ -1,0 +1,21 @@
+/* Main screen: room, actions and history beside the player/menu/stats sidebar. */
+.era-main { display: grid; gap: 10px; max-width: 100cqi; margin: 4px 0; white-space: normal;
+  grid-template-columns: minmax(0, 1fr) minmax(32ch, 36ch);
+  grid-template-rows: auto auto 1fr auto auto;
+  grid-template-areas: "header header" "center sidebar" "actions sidebar" "counters sidebar" "last last"; }
+#terminal:has(.screen.is-active .era-main), #terminal:has(.screen.is-active .era-shop) { container-type: size; }
+#terminal:has(.screen.is-active :is(.era-main, .era-shop)) > .screen.is-active { min-width: 0; }
+.screen.is-active :is(.era-main, .era-shop) { min-height: calc(100cqh + 4px); }
+.era-main > * { min-width: 0; align-self: start; }
+.era-main > .line { grid-column: 1 / -1; }
+.era-main-header { grid-area: header; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; padding: 8px 12px; border: 1px solid #2c3640; border-radius: 10px; background: linear-gradient(90deg, #12181e, #0d1014); }
+.era-main-when { flex: 0 1 auto; width: max-content; min-width: 0; color: #fff; }
+.era-main-when .output-text { color: #fff; }
+.era-main-when > .line:has(> .is-empty:only-child) { display: none; }
+.era-main-when:has(.era-calendar-button) { display: flex; align-items: inherit; gap: 8px; }
+.era-main-when:has(.era-calendar-button) > .line { min-width: 0; }
+.era-main-when > .line:has(.era-calendar-button) { flex: 0 0 40px; line-height: 0; }
+:is(.era-main, .era-shop) .era-main-when .line button.choice.era-calendar-button { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.screen.is-active .era-main-when .line button.choice.era-calendar-button:enabled:is(:hover, :focus-visible) { background: transparent; }
+.era-calendar-button::before { content: ""; width: 40px; height: 40px; margin-top: -5px; background: url("./calendar.svg") center / contain no-repeat; }
+.era-calendar-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

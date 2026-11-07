@@ -12,7 +12,7 @@ export function characterHistoryEnabled() {
 
 export function setupCharacterHistoryToggle(onChange) {
   const toggle = document.querySelector("#character-history-toggle");
-  const apply = () => toggle.setAttribute("aria-pressed", String(characterHistoryEnabled()));
+  const apply = () => { toggle.checked = characterHistoryEnabled(); };
   apply();
   toggle.addEventListener("click", () => {
     localStorage.setItem(HISTORY_KEY, characterHistoryEnabled() ? "0" : "1");

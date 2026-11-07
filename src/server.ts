@@ -707,11 +707,12 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
         return;
       }
       const pages: Record<string, string> = {
-        "/": "index.html", "/app.js": "app.js", "/translate.js": "translate.js", "/output-tools.js": "output-tools.js", "/interaction-history.js": "interaction-history.js", "/llm.js": "llm.js", "/encounters.js": "encounters.js", "/style.css": "style.css",
-        "/library.js": "library.js", "/library.css": "library.css", "/cache.js": "cache.js", "/performance.js": "performance.js",
-        "/handheld.js": "handheld.js", "/handheld.css": "handheld.css",
+        "/": "index.html", "/app.js": "app.js", "/translate.js": "translate.js", "/output-tools.js": "output-tools.js", "/interaction-history.js": "interaction-history.js", "/llm.js": "llm.js", "/encounters.js": "encounters.js", "/style.css": "generated/style.css",
+        "/library.js": "library.js", "/library.css": "generated/library.css", "/cache.js": "cache.js", "/performance.js": "performance.js",
+        "/handheld.js": "handheld.js", "/handheld.css": "generated/handheld.css",
         "/controller-menu.js": "controller-menu.js",
-        "/art-demo.js": "art-demo.js", "/art-demo.css": "art-demo.css", "/sky.js": "sky.js",
+        "/controls.js": "controls.js", "/auto-advance.js": "auto-advance.js",
+        "/art-demo.js": "art-demo.js", "/art-demo.css": "generated/art-demo.css", "/sky.js": "sky.js",
         "/title/new-game.webp": "title/new-game.webp", "/title/load-game.webp": "title/load-game.webp",
         "/moon.svg": "moon.svg",
         "/relationship-icons.svg": "relationship-icons.svg",

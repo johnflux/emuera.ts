@@ -1,0 +1,98 @@
+/* Weather: clouds dim or hide the sky, rain and snow fall. */
+.era-weather-fair .era-sky-clouds { background: radial-gradient(40px 12px at 70% 38%, #ffffffb0, transparent), radial-gradient(56px 14px at 86% 62%, #ffffff90, transparent), radial-gradient(34px 10px at 58% 72%, #ffffff70, transparent); }
+.era-sky-night.era-weather-fair .era-sky-clouds { opacity: .25; }
+:is(.era-weather-cloudy, .era-weather-rain, .era-weather-storm, .era-weather-fog, .era-weather-snow, .era-weather-blizzard) .era-sky-orb { opacity: .12; filter: blur(3px); }
+:is(.era-weather-cloudy, .era-weather-rain, .era-weather-storm, .era-weather-fog, .era-weather-snow, .era-weather-blizzard) .era-sky-clouds::after {
+  content: ""; z-index: 0; pointer-events: none; opacity: .4; filter: blur(2px); }
+:is(.era-weather-rain, .era-weather-fog) .era-sky-clouds::after { filter: blur(3px); }
+:is(.era-weather-storm, .era-weather-blizzard) .era-sky-clouds::after { opacity: .22; filter: blur(4px); }
+.era-weather-cloudy .era-sky-clouds {
+  --cloud-light: #d3dce5bb; --cloud-shade: #8796a699; --cloud-sky: linear-gradient(#65778a77, #8193a344);
+  background: radial-gradient(ellipse 75px 19px at 18% 24%, var(--cloud-light) 25%, transparent 100%),
+    radial-gradient(ellipse 105px 24px at 23% 34%, var(--cloud-shade) 30%, transparent 100%),
+    radial-gradient(ellipse 62px 23px at 29% 21%, var(--cloud-light) 20%, transparent 100%),
+    radial-gradient(ellipse 120px 22px at 55% 12%, var(--cloud-shade) 25%, transparent 100%),
+    radial-gradient(ellipse 80px 28px at 62% 9%, var(--cloud-light) 20%, transparent 100%),
+    radial-gradient(ellipse 115px 20px at 78% 48%, var(--cloud-shade) 30%, transparent 100%),
+    radial-gradient(ellipse 65px 24px at 84% 37%, var(--cloud-light) 20%, transparent 100%),
+    radial-gradient(ellipse 100px 16px at 92% 52%, var(--cloud-light) 15%, transparent 100%), var(--cloud-sky); }
+:is(.era-weather-rain, .era-weather-storm) .era-sky-clouds { background: radial-gradient(120px 26px at 70% 22%, #4a525acc, transparent), linear-gradient(#3a424bdd, #2a3036bb); }
+:is(.era-weather-snow, .era-weather-blizzard) .era-sky-clouds { background: linear-gradient(#9aa6b2aa, #c8d2dc88); }
+.era-weather-fog .era-sky-clouds { background: repeating-linear-gradient(#e6ecf000 0 6px, #e6ecf055 10px, #e6ecf000 16px), linear-gradient(#b8c2ca99, #d8dee499); }
+.era-weather-fog .era-sky-view::after { content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  background: repeating-linear-gradient(0deg, #e6ecf000 0 18px, #e6ecf055 24px, #e6ecf000 36px), linear-gradient(#cbd4dc55, #d8dee499); }
+.era-sky-moon.era-weather-cloudy .era-sky-clouds { --cloud-light: #58698088; --cloud-shade: #28374c99; --cloud-sky: linear-gradient(#202b3d99, #151e2f88); }
+.era-sky-moon:is(.era-weather-snow, .era-weather-blizzard) .era-sky-clouds { background: linear-gradient(#28364aaa, #43536a88); }
+.era-sky-moon.era-weather-fog .era-sky-clouds { background: repeating-linear-gradient(#50607800 0 6px, #50607833 10px, #50607800 16px), linear-gradient(#2c394b88, #3c4a5e88); }
+.era-sky-moon.era-weather-fog .era-sky-view::after { background: repeating-linear-gradient(0deg, #53647b00 0 18px, #53647b33 24px, #53647b00 36px), linear-gradient(#35445a44, #46566d77); }
+:is(.era-weather-rain, .era-weather-storm, .era-weather-blizzard) .era-sky-fall::before,
+:is(.era-weather-rain, .era-weather-storm, .era-weather-blizzard) .era-sky-fall::after {
+  content: ""; position: absolute; inset: -32px; pointer-events: none;
+  animation: era-precipitation var(--fall-speed) linear infinite; }
+.era-weather-rain .era-sky-fall::before, .era-weather-storm .era-sky-fall::before {
+  background: radial-gradient(ellipse .7px 5px at 12% 18%, #bdd5ef77 35%, transparent),
+    radial-gradient(ellipse .6px 3px at 43% 74%, #b8cee955 35%, transparent),
+    radial-gradient(ellipse .8px 6px at 78% 39%, #d2e3f588 35%, transparent),
+    radial-gradient(ellipse .6px 4px at 94% 91%, #b8cee966 35%, transparent);
+  background-size: 113px 83px; transform: skewX(-12deg); --fall-speed: .8s; --fall-travel: 0px 83px; }
+.era-weather-rain .era-sky-fall::after, .era-weather-storm .era-sky-fall::after {
+  background: radial-gradient(ellipse 1px 8px at 25% 35%, #d8eaff99 25%, transparent),
+    radial-gradient(ellipse .8px 6px at 63% 82%, #c4ddf488 25%, transparent),
+    radial-gradient(ellipse .9px 7px at 91% 12%, #d8eaff77 25%, transparent);
+  background-size: 173px 127px; transform: skewX(-12deg); --fall-speed: .55s; --fall-travel: 0px 127px; }
+.era-weather-storm .era-sky-fall { background: radial-gradient(ellipse at 70% 15%, #c3d8f000, transparent 75%);
+  animation: era-lightning 13s linear infinite; }
+.era-weather-storm .era-sky-clouds::before { content: ""; position: absolute; top: 0; left: 58%;
+  width: 64px; height: min(110px, 85%); pointer-events: none; opacity: 0; background: #e4efff;
+  clip-path: polygon(60% 0, 40% 32%, 55% 32%, 27% 62%, 44% 60%, 20% 100%,
+    48% 58%, 32% 60%, 59% 32%, 81% 63%, 63% 31%, 44% 30%, 62% 0);
+  animation: era-lightning-bolt 13s linear infinite; }
+.era-weather-storm .era-sky-fall::before { inset: -96px; background-size: 71px 61px; --fall-speed: .45s; --fall-travel: 0px 61px;
+  animation: era-precipitation var(--fall-speed) linear infinite, era-rain-gust 17s ease-in-out infinite; }
+.era-weather-storm .era-sky-fall::after { inset: -96px; background-size: 107px 89px; --fall-speed: .32s; --fall-travel: 0px 89px;
+  animation: era-precipitation var(--fall-speed) linear infinite, era-rain-gust 23s -7s ease-in-out infinite; }
+.era-weather-snow .era-sky-fall { background: radial-gradient(1.5px 1.5px at 20% 30%, #fff, transparent), radial-gradient(2px 2px at 60% 70%, #fffd, transparent), radial-gradient(1.5px 1.5px at 85% 15%, #fffc, transparent);
+  background-size: 46px 46px; animation: era-fall 3.5s linear infinite; }
+.era-weather-blizzard .era-sky-fall { z-index: 1;
+  background: radial-gradient(ellipse at 15% 65%, #d7e5ef70, transparent 75%),
+    radial-gradient(ellipse at 80% 20%, #e1edf570, transparent 80%), linear-gradient(#bccedd90, #d6e3eda6); }
+.era-sky-moon.era-weather-blizzard .era-sky-fall {
+  background: radial-gradient(ellipse at 15% 65%, #758aa170, transparent 75%),
+    radial-gradient(ellipse at 80% 20%, #8a9eb070, transparent 80%), linear-gradient(#42556b90, #63798fa6); }
+.era-weather-blizzard .era-sky-fall::before {
+  background: radial-gradient(ellipse 2px 1px at 13% 27%, #d4e5f6bb 30%, transparent),
+    radial-gradient(1px 1px at 38% 81%, #edf5ff99 30%, transparent),
+    radial-gradient(ellipse 2.5px 1px at 67% 46%, #dceaffaa 30%, transparent),
+    radial-gradient(1px 1px at 7% 63%, #edf5ff99 30%, transparent),
+    radial-gradient(ellipse 2px 1px at 52% 12%, #d4e5f6aa 30%, transparent),
+    radial-gradient(1.2px 1.2px at 81% 88%, #fff9 30%, transparent),
+    radial-gradient(1.3px 1.3px at 91% 9%, #fff9 30%, transparent);
+  background-size: 43px 31px; --fall-speed: .24s; --fall-travel: -129px 31px; opacity: .95; }
+.era-weather-blizzard .era-sky-fall::after {
+  background: radial-gradient(ellipse 3.5px 1.5px at 21% 19%, #f5faffdd 25%, transparent),
+    radial-gradient(ellipse 2.5px 2px at 56% 68%, #fff 25%, transparent),
+    radial-gradient(ellipse 4px 1.3px at 88% 39%, #e8f3ffcc 25%, transparent),
+    radial-gradient(ellipse 3px 1.3px at 39% 47%, #f5faffcc 25%, transparent),
+    radial-gradient(2px 2px at 73% 93%, #fffd 25%, transparent),
+    radial-gradient(1.7px 1.7px at 7% 91%, #fff9 25%, transparent);
+  background-size: 67px 47px; --fall-speed: .2s; --fall-travel: -201px 47px; }
+.era-weather-strange .era-sky-clouds { box-shadow: inset 0 0 40px #ff70c055; }
+@keyframes era-fall { to { background-position: -10px 40px; } }
+@keyframes era-precipitation { to { background-position: var(--fall-travel); } }
+@keyframes era-rain-gust {
+  0%, 100% { transform: skewX(-12deg); }
+  17% { transform: skewX(-27deg); }
+  39% { transform: skewX(9deg); }
+  54% { transform: skewX(-5deg); }
+  78% { transform: skewX(-23deg); }
+  88% { transform: skewX(16deg); } }
+@keyframes era-lightning {
+  0%, 73%, 77%, 100% { background-color: #b9d4f500; }
+  74%, 76% { background-color: #b9d4f538; }
+  75% { background-color: #b9d4f509; } }
+@keyframes era-lightning-bolt {
+  0%, 73.5%, 75%, 77%, 100% { opacity: 0; }
+  74% { opacity: .9; }
+  76% { opacity: .55; } }
+@media (prefers-reduced-motion: reduce) { .era-sky-fall, .era-sky-fall::before, .era-sky-fall::after { animation: none !important; } }
+@media (prefers-reduced-motion: reduce) { .era-weather-storm .era-sky-clouds::before { animation: none; } }

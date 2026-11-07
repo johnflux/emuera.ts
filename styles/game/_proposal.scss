@@ -1,0 +1,71 @@
+.era-proposal:popover-open { width: min(660px, calc(100vw - 24px)); height: fit-content; max-height: calc(100dvh - 24px); overflow: auto; border: 1px solid #b98caa; border-radius: 18px; background: radial-gradient(ellipse at 50% 20%, #482b424f, transparent 70%), #101019; box-shadow: 0 0 70px #df9db933; }
+.era-proposal > .line.era-marker, .era-proposal-body > .line.era-marker { display: none; }
+.era-proposal-header { display: flex; align-items: center; gap: 14px; padding-right: 14px; background: url("/relationship-assets/header-sakura.svg") right center / auto 100% no-repeat, #271d2a; border-bottom: 1px solid #795367; }
+.era-proposal-header > div { min-width: 0; flex: 1; }
+.era-proposal .era-info-face { flex: none; width: 99px; height: 90px; border: 0; background: transparent; }
+.era-proposal .era-info-face .sprite-clip { transform-origin: left bottom; }
+.era-proposal-header .era-sub { margin: 0; color: #c4a8ba; font-size: .8em; }
+.era-proposal-header h2 { margin: 4px 0; color: #ffe0ed; font: 600 1.3em ui-sans-serif, system-ui, sans-serif; overflow-wrap: anywhere; }
+.era-proposal-body { position: relative; flex: none; padding: 20px 28px 24px; }
+.era-proposal-moment { text-align: center; padding-bottom: 22px; white-space: normal; }
+.era-proposal-jewel { display: block; width: 116px; height: 116px; margin: 0 auto; background: url("/relationship-assets/icon-engaged.svg") center / contain no-repeat; filter: drop-shadow(0 0 16px #f4a8d1); }
+.era-wedding .era-proposal-jewel { background-image: url("/relationship-assets/icon-married.svg"); }
+.era-confession .era-proposal-jewel { background-image: url("/relationship-assets/icon-lovers.svg"); }
+.era-wedding-message { color: #ead9e4; text-align: center; white-space: normal; line-height: 1.7; }
+.era-relationship-ending .era-proposal-jewel { background-image: url("/relationship-assets/icon-divorced.svg"); }
+.era-relationship-ending-5 .era-proposal-jewel { background-image: url("/relationship-assets/icon-engaged.svg"); }
+.era-relationship-ending-7 .era-proposal-jewel { background-image: url("/relationship-assets/icon-fwb.svg"); }
+.era-ending-details { color: #b6a7b3; text-align: center; white-space: normal; line-height: 1.6; font-size: .85em; }
+.era-proposal-pending,
+.era-proposal:not([data-proposal-step]) :is(.era-proposal-check, .era-proposal-formula, .era-proposal-response, .era-proposal-moment) { visibility: hidden; }
+.era-proposal[data-proposal-step="5"] .era-proposal-verdict { animation: era-proposal-reveal 180ms ease-out both; }
+.era-proposal[data-proposal-step="5"] .era-proposal-moment > :not(.era-proposal-verdict) { animation: era-proposal-reveal 1500ms 180ms ease-out both; }
+.era-proposal-accepted[data-proposal-step="5"] .era-proposal-body::after { content: ""; position: absolute; inset: 0 0 auto; height: 80%; z-index: 3; pointer-events: none; background: url("/relationship-assets/engagement_confetti.gif") center top / 100% 100% no-repeat; animation: era-proposal-confetti-out 1ms 3650ms step-end forwards; }
+@keyframes era-proposal-confetti-out { to { visibility: hidden; } }
+.era-proposal :is(.era-proposal-response, .era-proposal-check > span):has(.era-proposal-typed) { display: grid; }
+.era-proposal-typed, .era-proposal-text-reserve { grid-area: 1 / 1; }
+.era-proposal-text-reserve { visibility: hidden; }
+.era-proposal-caption { color: #c9a9be; font: italic 1em ui-serif, Georgia, serif; }
+.era-proposal-moment h3 { margin: 8px 0 12px; color: #ffe6bf; font: 650 1.9em ui-sans-serif, system-ui, sans-serif; text-shadow: 0 0 22px #ffc58577; }
+.era-proposal-verdict { display: inline-block; padding: 4px 16px; border: 1px solid #d5ac7780; border-radius: 999px; background: #d5ac7714; color: #f5d6a5; }
+.era-proposal-check-heading { margin-bottom: 8px; color: #c1a8bc; font-size: .8em; letter-spacing: .08em; text-transform: uppercase; }
+.era-proposal-check { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 12px; padding: 12px; margin-top: 6px; border: 1px solid #aeb8bf26; border-radius: 8px; background: #ffffff04; white-space: normal; font-size: .9em; }
+.era-proposal-check strong { font-weight: normal; color: #e7dce5; }
+.era-proposal-check b { font-size: .8em; letter-spacing: .06em; }
+.era-proposal-check :is(strong, b):not(.era-proposal-pending) { animation: era-proposal-reveal 180ms ease-out both; }
+.era-check-pass b { color: #a9ddbd; }
+.era-check-fail b { color: #f0abab; }
+.era-proposal-formula { color: #a899aa; font-size: .75em; line-height: 1.6; white-space: normal; text-align: right; }
+.era-proposal-love-exp, .era-proposal-trait { text-decoration: underline dotted; text-underline-offset: 3px; cursor: help; }
+.era-proposal-love-exp { color: #a9ddbd; }
+.era-proposal-trait { color: #f0abab; }
+.era-proposal-response { margin-top: 20px; padding: 16px 18px; border-left: 2px solid #d3a6bf; background: #d3a6bf0a; color: #ead9e4; white-space: normal; line-height: 1.7; }
+.era-proposal-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 28px; border-top: 1px solid #79536766; color: #a899aa; font-size: .8em; }
+.era-proposal:not([data-proposal-step="5"]) .era-proposal-footer { visibility: hidden; }
+.era-proposal[data-proposal-step="5"] .era-proposal-footer { animation: era-proposal-footer-in 400ms 3650ms ease-out both; }
+.era-proposal-declined[data-proposal-step="5"] .era-proposal-footer { animation-delay: 1680ms; }
+.era-proposal-declined:not(.era-confession, .era-relationship-ending)[data-proposal-step="5"] .era-proposal-moment > :not(.era-proposal-verdict),
+.era-proposal-declined:not(.era-confession, .era-relationship-ending)[data-proposal-step="5"] .era-proposal-footer { animation: none; }
+@keyframes era-proposal-footer-in {
+  from { opacity: 0; visibility: hidden; }
+  to { opacity: 1; visibility: visible; }
+}
+.era-proposal-declined .era-proposal-jewel { filter: grayscale(.65) drop-shadow(0 0 10px #ac91be55); }
+.era-proposal-declined .era-proposal-moment h3 { color: #dfc5df; text-shadow: none; }
+.era-proposal-declined .era-proposal-verdict { color: #dec2cf; border-color: #b48b9b66; background: #b48b9b0a; }
+@keyframes era-proposal-reveal {
+  from { opacity: 0; transform: scale(.75) translateY(8px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) { .era-proposal[data-proposal-step="5"] .era-proposal-moment > *, .era-proposal-check :is(strong, b):not(.era-proposal-pending) { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .era-proposal-accepted[data-proposal-step="5"] .era-proposal-body::after { content: none; } }
+@media (prefers-reduced-motion: reduce) { .era-proposal[data-proposal-step="5"] .era-proposal-footer { animation: none; } }
+@media (max-width: 540px) {
+  .era-proposal-body { padding: 16px; }
+  .era-proposal-header { padding: 12px; }
+  .era-proposal .era-info-face { display: none; }
+  .era-proposal-moment h3 { font-size: 1.5em; }
+  .era-proposal-check { grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }
+  .era-proposal-check > span { grid-column: 1 / -1; }
+  .era-proposal-footer { padding: 14px 16px; }
+}

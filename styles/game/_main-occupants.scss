@@ -1,0 +1,122 @@
+/* The room is a row of full portraits, not a tab rail. Crowds scroll without shrinking the sprites. */
+.era-occupants { min-width: 0; }
+.era-occupant-list { display: flex; align-items: stretch; justify-content: safe center; gap: 8px; overflow-x: auto; padding: 2px 2px 8px; }
+.era-occupant { display: flex; flex: 0 0 180px; flex-direction: column; align-items: center; justify-content: flex-end; gap: 6px; min-width: 0; padding: 6px; text-align: center; }
+.era-occupant > .line { width: 100%; white-space: normal; }
+.line button.choice.era-occupant-label { display: block; width: 100%; padding: 5px 8px; border: 1px solid #294c5b; border-radius: 5px; background: #05111aee; text-align: center; white-space: normal; }
+.line button.choice.era-occupant-label[aria-pressed="true"] { border-color: #65d8ed; color: #8ceaff; }
+.screen.is-active .line button.choice.era-occupant-label:enabled:is(:hover, :focus-visible) { background: #1e262d; }
+.era-occupant.era-request .era-occupant-state { color: #7f7; }
+.era-occupant.era-asleep .era-face { filter: brightness(.6) saturate(.5); }
+.era-occupant.era-occupant-caged { background: transparent; cursor: default; }
+.era-occupant-caged .era-face { border-radius: 6px; filter: saturate(.4); }
+.era-occupant-caged .era-occupant-name { color: #aab8c4; }
+.era-face { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 44px; height: 44px; overflow: hidden; border-radius: 50%; background: #222; }
+.era-face-letter { color: #aaa; font-weight: bold; font-size: 1.3em; }
+.era-occupant-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
+.era-occupant-name { color: #eee; font-weight: bold; }
+.era-occupant:has(.era-occupant-label[aria-pressed="true"]) .era-occupant-name { color: #8fc8ff; }
+/* Names in the game's mood colours (SHOW_EQUIP_2: C_BLUE, C_H_PINK, C_ORANGE, C_AQUA, C_RED). */
+.era-occupant.era-mood-asleep .era-occupant-name { color: #306eff; }
+.era-occupant.era-mood-heat .era-occupant-name { color: #ff69b4; }
+.era-occupant.era-mood-drunk .era-occupant-name { color: #ffa500; }
+.era-occupant.era-mood-happy .era-occupant-name { color: #66ffff; }
+.era-occupant.era-mood-sullen .era-occupant-name { color: #ff0000; }
+.era-occupant-state { color: #8a949c; font-size: .85em; }
+/* HOTPATCH_FEELINGS: relationship, hate mark, mad/sullen/happy (colours from the game's character list and SHOW_EQUIP_2). */
+.era-feel { white-space: nowrap; }
+.era-occupant-state .era-feel::before { content: " · "; color: #8a949c; }
+.era-feel-partner { color: #ff5050; } .era-feel-love { color: #ee60ee; } .era-feel-lust { color: #4fbf80; }
+.era-feel-friend { color: #6aa8e0; } .era-feel-mistress { color: #ff6347; } .era-feel-yearning { color: #ccc; }
+.era-feel-hate, .era-feel-mad, .era-feel-sullen { color: #ff5050; } .era-feel-sad { color: #6f9cff; } .era-feel-happy { color: #66ffff; }
+.era-facts .era-feel-hate { cursor: help; }
+/* The character card: name, portrait beside the facts and meters. */
+.era-character { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 400px); gap: 10px; align-items: stretch; }
+.era-character > :is(.line, .era-scene) { grid-column: 1 / -1; }
+.era-main-center > .era-character { padding: 6px; }
+.era-character:has(.era-main-chat) { grid-template-rows: auto 1fr; }
+@container (max-width: 1100px) {
+  .era-character:has(.era-main-chat) { grid-template-rows: auto auto 1fr; }
+}
+.era-room-stage { --era-occupant-height: 216px; position: relative; isolation: isolate; display: flex; flex-direction: column; align-self: stretch; min-width: 0; width: 100%; padding: 3px 4px 0; overflow: hidden; border-radius: 3px; background: radial-gradient(ellipse at 50% 95%, #28415166, transparent 70%), linear-gradient(#0b1c27, #101c25); }
+.era-room-stage > .line:has(.era-place) { flex: none; }
+.era-room-stage .era-place { margin-bottom: 8px; }
+.era-room-stage .era-place-name { font-size: 1.15em; letter-spacing: 0; }
+.era-room-stage .era-place-name .era-sub { margin-left: 1.5ch; }
+.era-room-stage .era-scene { position: absolute; top: 2em; left: 8px; right: 8px; z-index: 2; margin: 0; padding: 6px 9px; border-left: 2px solid #41829b; font-size: .9em; font-style: normal; pointer-events: none; text-shadow: 0 1px 3px #000; }
+.era-room-stage > .era-occupants { display: flex; flex: none; flex-direction: column; margin-top: auto; }
+.era-room-stage .era-occupant-list { flex: none; height: var(--era-occupant-height); align-items: flex-end; padding: 0 4px; overflow-y: hidden; }
+.era-room-stage .era-occupant-list:has(.era-alone-message) { align-items: stretch; }
+.era-room-stage .era-occupant { position: relative; padding: 0 2px; gap: 0; }
+.era-room-stage .era-occupant > .line:has(.era-occupant-label), .era-room-stage .era-occupant > .era-occupant-text { position: absolute; bottom: 4px; left: 2px; right: 2px; z-index: 1; width: auto; }
+.era-room-stage .line button.choice.era-occupant-label { padding: 1px 4px; border: 0; border-radius: 0; background: transparent; text-shadow: 0 1px 3px #000, 0 0 5px #000; }
+.screen.is-active .era-room-stage .line button.choice.era-occupant-label:enabled:is(:hover, :focus-visible) { background: transparent; text-decoration: underline; }
+.era-room-stage .era-occupant-state { color: #c1ccd3; text-shadow: 0 1px 3px #000, 0 0 5px #000; }
+.era-room-stage .era-occupant .era-occupant-text .era-occupant-name { color: #fff; text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 2px 3px #000; }
+.era-room-stage .era-occupant:has(.era-portrait) { flex-basis: auto; min-width: 180px; width: max-content; }
+.era-room-stage .era-occupant-caged { flex-basis: 110px; gap: 6px; padding-bottom: 5px; font-size: .85em; }
+.era-room-stage .era-occupant-caged > .era-occupant-text { position: static; }
+/* Nobody to show: a placeholder silhouette in the middle of the card, the room's look text under it. */
+.era-character.era-alone { display: flex; flex-direction: column; align-items: stretch; }
+.era-alone-message { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 16px 12px; text-align: center; }
+.era-alone-mark { position: relative; width: 84px; height: 84px; overflow: hidden; border: 2px dashed #33414d; border-radius: 50%; }
+.era-alone-mark::before, .era-alone-mark::after { content: ""; position: absolute; left: 50%; background: #26323c; }
+.era-alone-mark::before { top: 16px; width: 26px; height: 26px; margin-left: -13px; border-radius: 50%; }
+.era-alone-mark::after { top: 46px; width: 52px; height: 44px; margin-left: -26px; border-radius: 26px 26px 0 0; }
+.era-alone-title { color: #9fb3c2; font-size: 1.2em; font-weight: bold; }
+.era-alone-hint { color: #6c7780; font-size: .9em; }
+.era-character-name { font-size: 1.25em; color: #66ffff; }
+/* The place as the character card's title, with its furniture and cleanliness. */
+.era-place { flex-wrap: wrap; align-items: center; row-gap: 4px; }
+.era-place-name { color: #e6f2ff; font-size: 1.3em; letter-spacing: .02em; }
+.era-place-name::before { content: ""; display: inline-block; width: .55em; height: .55em; margin-right: .5em; border: 2px solid #66ffff; border-radius: 50% 50% 50% 0; transform: rotate(-45deg) translateY(-.1em); }
+.era-place-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-left: auto; font-size: .8em; font-weight: normal; }
+/* Each portrait's effect layers share one cell, with its label below. */
+.era-portrait { min-width: 0; align-self: center; }
+.era-portrait .sprite { height: auto; vertical-align: bottom; }
+/* The picture takes its own height here, so the blank lines the game prints to make room for it are dropped. */
+.era-portrait .sprite-clip:first-child { position: relative; display: block; }
+.era-portrait > .line:not(:has(.sprite)) { display: none; }
+/* PRINT_TARGET_IMAGE prints each layer (effects, frame, time-stop tint) on its own line, raised by ypos to overlap the
+   first; here every line shares one grid cell instead, so the layers stack whatever height they take. */
+.era-portrait { display: grid; }
+.era-portrait > .line { grid-area: 1 / 1; }
+.era-portrait .sprite-clip { top: 0 !important; }
+/* The time-stop layer is a flat translucent square of Emuera's background colour, which would show as a box on the
+   card's gradient; fading the picture by the same amount (its alpha is 35%) gives the intended dimming. */
+.era-portrait .sprite[data-src="時間停止"] { display: none; }
+.era-portrait .sprite { opacity: calc(1 - .35 * var(--era-freeze)); }
+.era-character-info { min-width: 0; width: 100%; max-width: 400px; align-self: stretch; display: flex; flex-direction: column; }
+.era-info-tab { padding: 7px 12px; border: 1px solid #28485b; border-bottom: 0; border-radius: 5px 5px 0 0; background: #0c1b27; color: #91adbd; font: inherit; font-size: .9em; cursor: pointer; }
+.era-info-tab[aria-pressed="true"] { border-color: #3c9bb7; background: linear-gradient(#16394b, #0b202e); color: #b7dbea; }
+.era-history-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px; }
+:is(.era-history-toolbar, .era-llm-message-tools, .era-llm-composer, .era-llm-voice-actions) button {
+  --button-color: #b7dbea; --button-background: #16394b; --button-border: #3c9bb7; --button-radius: 4px;
+}
+/* Stays in the top right corner while the history scrolls under it. */
+.era-history-more-overlay { position: sticky; top: 0; height: 0; z-index: 1; }
+.era-history-more { position: absolute; top: 0; right: 0; margin: 0; padding: 2px 8px; border: 0; border-radius: 0 0 0 5px; background: #05111b; color: #b7dbea; font: inherit; line-height: var(--era-history-line); cursor: pointer; }
+.era-history-more:is(:hover, :focus-visible) { text-decoration: underline; }
+.era-history-dialog { width: min(calc(var(--logical-width, 1200px) + 64px), calc(100vw - 48px)); height: calc(100dvh - 48px); max-width: none; max-height: none; box-sizing: border-box; padding: 12px; border: 1px solid #3c9bb7; border-radius: 6px; background: #0b1c28; color: #d7eff8; }
+.era-history-dialog::backdrop { background: #000000b0; }
+.era-history-dialog h2 { font: inherit; font-size: var(--era-history-size); line-height: var(--era-history-line); margin: 0; color: #b7dbea; }
+.era-history-dialog[open] { display: flex; flex-direction: column; overflow: hidden; }
+.era-history-dialog .era-history-toolbar h2 { flex: 1; }
+.era-history-tabs { display: flex; gap: 4px; }
+.era-history-tabs .era-info-tab { border-bottom: 1px solid #28485b; border-radius: 5px; }
+.era-history-pane { flex: 1 1 auto; min-height: 0; overflow: auto; }
+.era-history-pane[hidden], .era-llm-composer[hidden] { display: none; }
+.era-llm-message-tools { display: inline-flex; gap: 4px; margin-left: 8px; vertical-align: baseline; visibility: hidden; }
+.era-history-text:hover .era-llm-message-tools, .era-llm-message-tools:focus-within { visibility: visible; }
+@media (hover: none) { .era-llm-message-tools { visibility: visible; } }
+.era-llm-message-tools button { --button-padding: 0 6px; font-size: .75em; opacity: .55; }
+.era-llm-message-tools button:hover, .era-llm-message-tools button:focus-visible { opacity: 1; }
+.era-llm-status { margin: 0 0 6px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.era-llm-status[hidden] { display: none; }
+.era-llm-composer { flex-shrink: 0; padding: 8px 0 0; border-top: 1px solid #28485b; }
+.era-llm-composer-row { display: flex; gap: 8px; align-items: stretch; }
+.era-llm-composer textarea { flex: 1; resize: vertical; min-height: 2.6em; max-height: 30vh; padding: 5px 8px; border: 1px solid #3c9bb7; border-radius: 4px; background: #06131c; color: #d7eff8; font: inherit; }
+:is(.era-llm-composer, .era-llm-voice-actions) button:disabled { opacity: .5; }
+.era-llm-composer-actions { display: flex; gap: 8px; align-items: center; margin-top: 6px; font-size: .85em; }
+.era-llm-composer-actions button { --button-padding: 2px 8px; }
+.era-llm-state { flex: 1; color: #9ab3c3; }

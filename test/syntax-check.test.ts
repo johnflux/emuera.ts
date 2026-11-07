@@ -1,3 +1,4 @@
+import { styleSource } from "./style-source.js";
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import { readFile } from "node:fs/promises";
@@ -402,7 +403,7 @@ test("compatibility screen runs a game-specific syntax check and exposes results
   assert.equal(result.children[0]!.className, "");
   assert.equal(result.children[1]!.className, "diagnostic-info");
   assert.equal(report.children.at(-1)!.children[0]!.className, "diagnostic-info");
-  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  const css = styleSource("style");
   assert.match(css, /#compatibility \.diagnostic-info \{ color: #666; \}/);
   fail = true;
   await button.listeners.get("click")!();

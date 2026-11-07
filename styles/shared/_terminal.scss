@@ -1,0 +1,104 @@
+/* main has no right padding: the scrollbar takes its place, and the output keeps a 20px margin like the left one. */
+#terminal { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 16px max(6px, calc(20px - var(--scrollbar-width, 0px))) 0 20px; font-size: var(--font-size); line-height: var(--line-height, 1.25); overflow: auto; scrollbar-gutter: stable; container-type: inline-size; }
+#terminal::-webkit-scrollbar { height: 0; }
+/* CBGSETG/CBGSETSPRITE pictures: positioned over the terminal's visible box by placeBackground() in app.js. */
+#terminal { position: relative; z-index: 1; }
+.cbg-layer { position: absolute; overflow: hidden; pointer-events: none; }
+.cbg-layer:empty { display: none; }
+#cbg-back { z-index: 0; }
+#cbg-front { z-index: 2; }
+.island-root { position: absolute; z-index: 3; overflow: hidden; clip-path: inset(0); pointer-events: none; font-family: var(--terminal-font); font-size: var(--font-size); line-height: var(--line-height, 1.25); }
+.island-root:empty { display: none; }
+.html-island { position: absolute; inset: 0; isolation: isolate; white-space: pre-wrap; }
+.html-island .subarea, .html-island .choice, .html-island a { pointer-events: auto; }
+.cbg-layer canvas { position: absolute; }
+/* Text and line backgrounds would hide the pictures behind the text; Emuera draws text over them. */
+#terminal.has-cbg-back { --terminal-background: transparent; }
+#terminal::before { content: ""; margin-top: auto; }
+#terminal > * { flex-shrink: 0; min-width: var(--logical-width, 0); }
+#terminal.is-waiting { cursor: pointer; }
+/* Briefly after clicking through to a menu, its choices ignore clicks (see settle() in app.js). */
+#terminal.is-settling button.choice { cursor: default; }
+.screen.is-history { filter: grayscale(1); opacity: .4; pointer-events: none; }
+.screen.is-history:has(.choice.is-selected) { opacity: 1; }
+.screen.is-history .history-dimmed { opacity: .4; }
+.screen.is-history button.choice:disabled { opacity: 1; }
+.screen.is-history button.choice.is-selected { opacity: .7; }
+.screen.is-history button.choice.history-dimmed { opacity: .4; }
+.line { min-height: 1lh; white-space: pre-wrap; overflow-wrap: anywhere; background-color: var(--line-background, var(--terminal-background)); }
+.align-left { text-align: left; }
+.align-center { text-align: center; }
+.align-right { text-align: right; }
+.output-text { color: var(--output-color, var(--terminal-foreground)); background-color: var(--output-background, var(--terminal-background)); font-weight: normal; font-style: normal; text-decoration: none; }
+.text-color-neutral { --choice-hover-color: var(--selection-color); }
+.text-color-chromatic { --choice-hover-color: color-mix(in srgb, var(--selection-color) 75%, #f00); }
+.font-bold { font-weight: bold; }
+.font-italic { font-style: italic; }
+.font-underline { text-decoration: underline; }
+.font-strikeout { text-decoration: line-through; }
+.font-underline.font-strikeout { text-decoration: underline line-through; }
+.title-image { overflow: hidden; }
+.line p { margin: 0; min-height: 1lh; }
+.line.single-line { white-space: pre; overflow: hidden; }
+/* Emuera <div> sub-areas (app.js subarea): placed from the print position without taking room in the line. */
+.subarea-anchor { position: relative; display: inline-block; width: 0; height: 0; vertical-align: top; }
+.subarea-anchor.subarea-fixed { position: static; }
+.subarea-fixed > .subarea { position: fixed; }
+.subarea { position: absolute; box-sizing: border-box; overflow: hidden; border: 0 solid currentColor; text-align: left; white-space: pre-wrap; }
+.print-cell { display: inline-block; white-space: pre; }
+.html-positioned { display: inline-block; vertical-align: top; }
+.half-cells { display: inline-block; overflow: hidden; vertical-align: top; white-space: pre; text-decoration: inherit; }
+.half-cells.squeezed { position: relative; overflow: visible; }
+.half-cells.squeezed > span { position: absolute; left: 0; top: 0; text-decoration: none; transform: scale(.5, .6); transform-origin: left 55%; }
+.title-image, .title-image p { min-height: 0; line-height: 0; }
+/* With line-height 0 an inline span still paints its background over a font-height box centred on the baseline,
+   half a line above the image, covering the previous line. The title strip has no text, so drop the font box. */
+.title-image .output-text { font-size: 0; }
+.line button.choice { display: inline-block; font: inherit; background: transparent; color: inherit; border: 0; border-radius: 0; padding: 0; vertical-align: baseline; text-decoration: none; }
+button, a.game-primary, .line button.choice:is(.era-chip-button, .era-star, .era-dialog-close, .era-cycle-toggle), .era-chip-button {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--button-gap, .45em); vertical-align: middle;
+  padding: var(--button-padding, 1px 9px); border: 1px solid var(--button-border, #39434c); border-radius: var(--button-radius, 999px);
+  background: var(--button-background, #182027); color: var(--button-color, #c9d4dc); cursor: pointer;
+}
+button[hidden], a.game-primary[hidden], .era-chip-button[hidden], .line button.choice[hidden] { display: none; }
+.screen.is-active button.choice:enabled:hover, .screen.is-active button.choice:enabled:hover *, .screen.is-active button.choice:enabled:focus-visible, .screen.is-active button.choice:enabled:focus-visible * { color: var(--choice-hover-color, var(--selection-color)) !important; }
+.choice .interactive-label { text-decoration: underline; text-decoration-color: slategray; text-decoration-thickness: from-font; text-underline-offset: .15em; }
+.line button.choice:disabled { opacity: .5; }
+.screen.is-active button.choice:disabled { opacity: 1; }
+/* Choices left over from before a CLEARLINE, once newer ones are printed (only those still sharing a box with new output). */
+.screen.is-active button.choice.is-stale { opacity: .4; filter: grayscale(1); }
+.screen.is-active .is-stale.has-tooltip:hover { background-color: transparent; }
+a { color: #8ddaff; }
+.has-tooltip, .line button.choice.has-tooltip { cursor: help; text-decoration: none; transition: background-color 180ms ease; }
+/* A tooltip on something clickable still shows the hand: the click matters more than the explanation. */
+.screen.is-active .line button.choice.has-tooltip:enabled { cursor: pointer; }
+.has-tooltip .interactive-label { text-decoration-line: underline; text-decoration-style: dashed; text-decoration-color: #777; text-decoration-thickness: 1px; text-underline-offset: .2em; transition: text-decoration-color 180ms ease, text-shadow 180ms ease; }
+.screen.is-active .has-tooltip:hover, .screen.is-active .has-tooltip:focus-visible { background-color: #ffffff12; }
+/* A picture button highlights its picture rather than the line it hangs from. */
+.screen.is-active .has-tooltip:has(.sprite-clip):is(:hover, :focus-visible), .screen.is-active button.choice:has(.sprite-clip):is(:hover, :focus-visible) { background-color: transparent; }
+.screen.is-active :is(.has-tooltip, button.choice):is(:hover, :focus-visible) .sprite-clip:not(.sprite-hover) { background-color: #ffffff12; }
+.screen.is-active .has-tooltip:hover .interactive-label, .screen.is-active .has-tooltip:focus-visible .interactive-label { text-decoration-color: #ddd; text-shadow: 0 0 4px currentColor; }
+.has-tooltip:focus-visible { outline: 1px dotted #aaa; outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .has-tooltip, .line button.choice.has-tooltip, .has-tooltip .interactive-label { transition: none; } }
+#game-tooltip { position: fixed; z-index: 10; inset: auto; margin: 0; max-width: min(480px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow: auto; padding: 10px 12px; border: 1px solid #777; background: #181818; color: #fff; font-size: 14px; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; pointer-events: none; box-shadow: 0 3px 12px #000; }
+#game-tooltip:has(> canvas) { padding: 0; border: 0; }
+#game-tooltip > canvas { display: block; }
+/* Emuera images don't size their line: the holder is zero-height at the line top and the picture overflows below. */
+.sprite { display: inline-block; position: relative; height: 0; vertical-align: top; }
+.sprite-clip { position: absolute; left: 0; overflow: hidden; }
+.sprite img, .sprite canvas { position: absolute; max-width: none; }
+/* The selected character's picture (TARGET): a soft aqua glow behind it and a bar beneath, matching the game's aqua name. */
+.screen.is-active button.choice.is-target .sprite-clip:not(.sprite-hover) { background: radial-gradient(ellipse 60% 55% at 50% 60%, #66ffff2e, #66ffff0a 70%, transparent); box-shadow: inset 0 -3px 0 #66ffffb0; border-radius: 6px; }
+.screen.is-active button.choice.is-target:is(:hover, :focus-visible) .sprite-clip:not(.sprite-hover) { background-color: #ffffff12; }
+/* The other characters' pictures are slightly faded and desaturated; hovering one restores it. */
+.screen.is-active button.choice.is-not-target .sprite-clip { opacity: .8; filter: grayscale(.45); transition: opacity 180ms ease, filter 180ms ease; }
+.screen.is-active button.choice.is-not-target:is(:hover, :focus-visible) .sprite-clip { opacity: 1; filter: none; }
+@media (prefers-reduced-motion: reduce) { .screen.is-active button.choice.is-not-target .sprite-clip { transition: none; } }
+.sprite-hover { visibility: hidden; }
+.screen.is-active :is(.has-tooltip, button.choice):is(:hover, :focus-visible) .sprite-hover { visibility: visible; }
+.screen.is-active :is(.has-tooltip, button.choice):is(:hover, :focus-visible) .sprite-normal { visibility: hidden; }
+.screen.is-active .era-portrait:is(:hover, :focus-within) .sprite-hover { visibility: visible; }
+.screen.is-active .era-portrait:is(:hover, :focus-within) .sprite-normal { visibility: hidden; }
+.shape-rect { position: relative; height: 1em; vertical-align: text-top; }
+.shape-rect > span { position: absolute; background: currentColor; }
+.missing { color: #ff9d9d; font-size: 12px; }

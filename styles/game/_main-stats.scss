@@ -1,0 +1,28 @@
+.era-bar-max { color: #7a848c; }
+.era-bar.era-buffed .era-bar-value { color: #0ff; }
+.era-bar.era-debuffed .era-bar-value { color: #ff0; }
+.era-empty { color: #777; font-style: italic; }
+.era-stats .era-section-title { display: none; }
+.era-stats .era-palam-grid { grid-template-columns: minmax(0, 1fr); }
+/* Values and gem gains take only their content width; the meter uses the remaining room. */
+.era-stats .era-palam-item { min-width: 0; grid-template-columns: 6ch 4ch minmax(0, 1fr) max-content max-content; column-gap: .5ch; padding: 0; }
+/* Clock and faces sit in the flow (Emuera pictures overflow their line). */
+:is(.era-clock, .era-face) .sprite { height: auto; vertical-align: middle; }
+:is(.era-clock, .era-face) .sprite-clip { position: relative; display: block; }
+.era-clock { line-height: 0; }
+/* Time stop: the big control. */
+.era-timestop { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.line button.choice.era-timestop-button, .era-timestop-button { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; min-width: 18ch; max-width: 100%; padding: 12px 24px 12px 38px; border: 5px solid #bd8850; border-radius: 48px; background: radial-gradient(ellipse at top, #29414a, #101c24 75%); color: #cceeea; box-shadow: inset 0 0 0 2px #382114, inset 0 0 0 4px #e2b97888, 0 0 0 1px #f4c581, 0 0 0 3px #624126, 0 3px 8px #0008; font-weight: bold; font-size: 1.15em; letter-spacing: .05em; cursor: pointer; text-shadow: 0 1px 2px #000; }
+.era-timestop-button { -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
+.line button.choice.era-timestop-button.era-stopped { border-color: #a8c7d2; background: radial-gradient(ellipse at top, #3a2c4b, #1b182b 75%); color: #f0d8ff; box-shadow: inset 0 0 0 2px #304552, inset 0 0 0 4px #d4eaff88, 0 0 0 1px #e1f4ff, 0 0 0 3px #43566a, 0 0 14px #b060ff66; }
+.era-timestop-button .era-sub { margin: 2px 0 0; font-size: .7em; font-weight: normal; letter-spacing: 0; color: inherit; opacity: .75; }
+.era-timestop-gauge { display: flex; flex-direction: column; align-items: stretch; gap: 3px; align-self: stretch; margin-top: 6px; }
+.era-timestop-gauge .era-meter { width: 100%; height: 5px; border-radius: 3px; background: #0006; overflow: hidden; }
+.era-timestop-gauge .era-meter > span { background: #b070ff; border-radius: 3px; }
+.era-timestop-tsp { font-size: .62em; font-weight: normal; letter-spacing: .04em; opacity: .8; text-align: center; }
+.era-stopped .era-timestop-gauge .era-meter > span { background: #e0b0ff; box-shadow: 0 0 6px #d090ff; }
+.era-unavailable .era-timestop-gauge .era-meter > span { background: #666; }
+.era-timestop-button.era-unavailable { border-color: #444; background: #191919; color: #777; cursor: default; }
+.screen.is-active .line button.choice.era-timestop-button:enabled:is(:hover, :focus-visible) { filter: brightness(1.15); }
+.screen.is-active .line button.choice.era-timestop-button:focus-visible { outline: 2px solid #ffe0a2; outline-offset: 4px; }
+.era-timestop .interactive-label, .era-bars .interactive-label, .era-player-status .interactive-label, .era-occupants .interactive-label, .era-toggles .interactive-label, .era-character .interactive-label { text-decoration-line: none; }

@@ -1,0 +1,45 @@
+/* The land: hills in the season's colours, darker at night. */
+.era-sky-land { left: 0; right: 0; bottom: 0; height: 20px; background: var(--land, #3d6e3a);
+  --hills: radial-gradient(22% 75% at 14% 100%, #000 98%, transparent), radial-gradient(30% 95% at 56% 100%, #000 98%, transparent),
+    radial-gradient(24% 65% at 92% 100%, #000 98%, transparent), linear-gradient(#000, #000) bottom / 100% 35% no-repeat;
+  -webkit-mask: var(--hills); mask: var(--hills); }
+.era-season-spring .era-sky-land { --land: radial-gradient(2px 2px at 30% 40%, #ffc8e0, transparent) 0 0 / 14px 10px, linear-gradient(#7aa85a, #557f3c); }
+.era-season-summer .era-sky-land { --land: linear-gradient(#3f8a3c, #276227); }
+.era-season-autumn .era-sky-land { --land: radial-gradient(2px 2px at 40% 50%, #ffb040, transparent) 0 0 / 12px 9px, linear-gradient(#b0642a, #7a3e1c); }
+.era-season-winter .era-sky-land { --land: linear-gradient(#eef4f8, #c4d2de); }
+:is(.era-sky-night, .era-sky-dawn) .era-sky-land { filter: brightness(.4) saturate(.7); }
+.era-sky-evening .era-sky-land { filter: brightness(.65) saturate(.9); }
+/* Underworld ambience follows the location, independent of the current room. */
+.era-sky.era-area-9 { background: color-mix(in srgb, #b3c5ff var(--cave-daylight, 100%), #090a1d); }
+.era-sky.era-area-9 .era-sky-view { background: none; }
+.era-sky.era-area-9 .era-sky-view::before,
+.era-sky.era-area-9 .era-sky-view::after { display: none; }
+.era-area-9 .era-sky-view > :not(.era-sky-landmark) { display: none; }
+.era-sky.era-area-9.era-weather-fog .era-sky-view::after { display: block; opacity: .5; }
+.era-sky.era-area-9.era-weather-storm .era-sky-view::after {
+  content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  display: block; background: none; animation: era-lightning 13s -3s linear infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .era-sky.era-area-9.era-weather-storm .era-sky-view::after { animation: none; } }
+/* The area's landmark (web/areas/<map id>-<name>.svg) between the clock panel and the Time Stop button, standing on the
+   land; woods repeat along the header instead. Darker at night like the land. */
+.era-sky-landmark { display: none; right: 12%; bottom: 6px; width: min(360px, 40%); height: calc(100% - 10px); background: no-repeat right bottom / contain;
+  filter: url(#era-pixelate) var(--landmark-tint, ); }
+[class*="era-area-"] .era-sky-landmark { display: block; }
+.era-area-0 .era-sky-landmark { background-image: url(/areas/0-shrine.svg); }
+.era-area-1 .era-sky-landmark { background-image: url(/areas/1-temple.svg); }
+.era-area-2 .era-sky-landmark { background-image: url(/areas/2-village.svg); }
+.era-area-3 .era-sky-landmark { background-image: url(/areas/3-mansion.svg); }
+.era-area-4 .era-sky-landmark { background-image: url(/areas/4-bamboo.svg); }
+.era-area-5 .era-sky-landmark { background-image: url(/areas/5-forest.svg); }
+.era-area-6 .era-sky-landmark { background-image: url(/areas/6-netherworld.svg); }
+.era-area-7 .era-sky-landmark { background-image: url(/areas/7-foothills.svg); }
+.era-area-8 .era-sky-landmark { background-image: url(/areas/8-summit.svg); }
+.era-area-9 .era-sky-landmark { background-image: url(/areas/9-underworld.svg); }
+.era-area-10 .era-sky-landmark { background-image: url(/areas/10-moon.svg); }
+:is(.era-area-4, .era-area-5) .era-sky-landmark { left: 0; right: 0; width: auto; height: calc(100% - 4px); background-repeat: repeat-x; background-size: auto 100%;
+  -webkit-mask: linear-gradient(90deg, transparent 20%, #000 55%); mask: linear-gradient(90deg, transparent 20%, #000 55%); }
+.era-area-9 .era-sky-landmark { bottom: 0; height: 100%; }
+.era-area-5 .era-sky-landmark { background-size: auto 78%; background-position: left bottom; }
+:is(.era-sky-night, .era-sky-dawn) .era-sky-landmark { --landmark-tint: brightness(.5) saturate(.75); }
+.era-sky-evening .era-sky-landmark { --landmark-tint: brightness(.75) saturate(.9); }

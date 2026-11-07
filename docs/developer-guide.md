@@ -325,6 +325,19 @@ automatically refresh connected browser tabs once the backend is ready again.
 not preserve live game state. The UI shows a reload notice. A disconnected
 server is reported while the browser waits for reconnection.
 
+Styles are authored in `styles/` as Sass and compiled to `web/generated/`.
+`npm start` builds them before starting the server and watches for changes;
+the generated CSS triggers the usual browser reload. `npm run build` and
+`npm test` also compile styles. For direct test-runner invocations, first run
+`npm run build:css`. Generated CSS is not checked in.
+
+`styles/style.scss` defines the cascade order. Its partials separate shared
+terminal and application styles from `styles/game/` screen and game UI styles.
+The existing global class names remain available to game output. Responsive
+overrides live in `styles/handheld/`, ordered by `styles/handheld.scss`;
+library and art-demo styles have their own entry points. Keep rule order intact
+when moving styles: game markup and renderer rules share the global cascade.
+
 `npm run start:prod` runs the compiled production build without watching or
 automatic browser refresh. If switching from the old, already-running
 non-watching server, stop that process once, then use `npm start` instead.
@@ -845,7 +858,7 @@ Emuera, so pictures that span lines line up with the text beside them. This is n
 MS Gothic or a pixel-identical recreation of native Emuera. The font is served
 locally, with no external requests, and startup waits for it before measuring
 terminal columns; font-load failure is reported rather than silently measuring a
-fallback. Customize `--terminal-font` in `web/style.css` to change the font stack.
+fallback. Customize `--terminal-font` in `styles/shared/_base.scss` to change the font stack.
 The game's configured window width (`ウィンドウ幅`, less Emuera's shape shift, in
 half-width cells of `フォントサイズ`; 149 columns for this game) is the minimum
 layout width: a narrower browser keeps that layout and scrolls the terminal
@@ -914,6 +927,20 @@ the portable print fixture was also run unchanged under native Emuera.
 Output continued past a click-to-continue wait stays bright: a run of dialogue
 greys out together only once the game stops at a real input (a menu or prompt),
 so new choices are shown against greyed history.
+Settings → Playback enables **Auto-continue after 0.5 seconds** by default. The
+preference is saved in this browser. It submits Continue only for an untimed,
+non-blocking click-to-continue wait, never a command choice or text input. It pauses
+while the page is hidden or an app menu/dialog is open, and starts a fresh 500 ms
+delay when playback resumes. Script-controlled timeout behavior is unchanged.
+`web/auto-advance.js` owns the cancellable timer; a failed Continue is not retried
+automatically at the same wait.
+
+Two-state settings and game controls use native checkboxes with the shared
+`.checkbox-control` styling. `web/controls.js` creates game checkboxes; their checked
+state comes from the runtime snapshot, not an optimistic local toggle. Controller
+hints and Auto-moan retain their three-state cycles; run/view/tab actions and the
+Stalk star remain buttons.
+
 While waiting at `WAIT`, clicking the terminal also continues (in addition to
 Enter or the Continue button). Links and drags that select text do not
 advance; any other click does, clearing a leftover selection (for example a
@@ -981,7 +1008,7 @@ label text is underlined. Applied text colors receive `has-text-color` and
 RGB channel spreads of 24 or less as neutral; it does not infer game state.
 The CSS variable `--choice-hover-color` controls each category's hover color.
 ERB-defined buttons, including section headings, retain their original input values.
-UI buttons share a centered inline-flex foundation in `web/style.css`.
+UI buttons share a centered inline-flex foundation in `styles/shared/_terminal.scss`.
 The `--button-background`, `--button-border`, `--button-color`,
 `--button-hover-background`, `--button-hover-border`, `--button-radius`,
 `--button-padding`, and `--button-gap` properties define intentional variants:
@@ -1002,7 +1029,8 @@ Scrollbar space is reserved so scrolling does not shrink the measured width.
 The browser sends an updated column count with each input, so newly generated
 output follows window/font-size changes; existing scrollback is not regenerated.
 
-Terminal presentation can be customized in `web/style.css`: use
+Terminal presentation can be customized in `styles/shared/_base.scss` and
+`styles/shared/_terminal.scss`: use
 `--terminal-foreground` / `--terminal-background` for the default palette,
 `.output-text` for output fragments, `.align-left` / `.align-center` /
 `.align-right` for lines, and `.font-bold` / `.font-italic` / `.font-underline`

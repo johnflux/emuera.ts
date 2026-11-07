@@ -1,0 +1,24 @@
+/* Meters. */
+.era-bars { margin: 4px 0; }
+.era-bar { display: grid; grid-template-columns: 5ch minmax(6ch, 1fr) 6ch; column-gap: 1ch; align-items: center; }
+.era-bar .era-meter { width: 100%; height: .6em; background: #1c2228; }
+.era-bar-tracks { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.era-bar-track { display: block; position: relative; height: .6em; background: repeating-linear-gradient(135deg, #48515a 0 1px, #20282e 1px 4px); }
+.era-bar .era-bar-track .era-meter { display: block; position: absolute; inset: 0; height: 100%; background: transparent; }
+.era-bar-capacity { position: absolute; inset: 0; }
+.era-bar .era-bar-capacity .era-meter > span { background: #1c2228; }
+.era-bar-overflow { height: .2em; background: transparent; }
+.era-bar-label { color: #8a949c; }
+.era-bar-value { text-align: right; }
+.era-sta .era-meter > span { background: #40c060; }
+.era-sta.era-asleep .era-meter > span { background: #40d0e0; }
+.era-ene .era-meter > span { background: #4080e0; }
+.era-drnk .era-meter > span { background: #d05050; }
+.era-vig .era-meter > span { background: #d8c040; }
+.era-tsp .era-meter > span { background: #b070ff; }
+.era-mood .era-meter > span { background: #ff70b0; }
+.era-composure .era-meter > span { background: #e0a040; }
+.era-bar.era-low .era-meter > span { background: #e0c030; }
+.era-bar.era-critical .era-meter > span { background: #e03030; }
+.era-bar.era-low .era-bar-value { color: #ff0; }
+.era-bar.era-critical .era-bar-value { color: #f55; }

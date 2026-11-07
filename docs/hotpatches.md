@@ -745,7 +745,7 @@ accepts three additions that real Emuera does not understand:
 | Extension | Meaning |
 |-----------|---------|
 | `<div>` | A block container. Real Emuera's `<div>` (EM+EE) is a positioned sub-area instead; a `div` with any of its attributes (`width`, `height`, `xpos`, `ypos`, `size`, `rect`, `depth`, `color`, `display`, `margin`, `padding`, `border`, `bcolor`, `radius`) is drawn as one, so hotpatch blocks must not use them. |
-| `class='era-…'` | Classes in the `era-` namespace are kept and styled in [`web/style.css`](../web/style.css); other classes are dropped. |
+| `class='era-…'` | Classes in the `era-` namespace are kept and styled by the global Sass partials under [`styles/game/`](../styles/game/); other classes are dropped. |
 | `<meter value='n' max='m'>` | A progress bar, rendered as `span.era-meter` with ARIA meter attributes. |
 
 A `div` with the `era-section` class is a block that wraps to the visible width

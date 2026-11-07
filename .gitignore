@@ -2,5 +2,6 @@ GAMES/
 OTHER/
 node_modules/
 dist/
+web/generated/
 release/
 **/.DS_Store

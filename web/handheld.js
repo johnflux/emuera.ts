@@ -1,5 +1,5 @@
 const HANDHELD_KEY = "era-typescript.handheld";
-const EDITABLE = "input, textarea, select, [contenteditable]:not([contenteditable='false'])";
+const EDITABLE = "input:not([type=checkbox]):not([type=radio]), textarea, select, [contenteditable]:not([contenteditable='false'])";
 const CONTROLS = "button:enabled, a[href], input:enabled, select:enabled, textarea:enabled";
 
 export function touchInput() {
@@ -54,7 +54,7 @@ export function setupHandheld(onChange) {
     : saved === "1";
   function apply() {
     document.body.classList.toggle("is-handheld", enabled);
-    toggle.setAttribute("aria-pressed", String(enabled));
+    toggle.checked = enabled;
   }
   apply();
   toggle.addEventListener("click", () => {

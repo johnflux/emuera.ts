@@ -33,10 +33,91 @@ type Measurements = {
   gaps: number[];
 };
 
+test("compact button sizes share tokens without changing desktop or sprite controls", { skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH" }, async () => {
+  const [style, handheld] = await Promise.all([
+    readFile(new URL("../web/generated/style.css", import.meta.url), "utf8"),
+    readFile(new URL("../web/generated/handheld.css", import.meta.url), "utf8"),
+  ]);
+  const html = `<!doctype html><meta charset="utf-8"><style>${style}\n${handheld}</style>
+    <body class="MODE">
+      <div class="screen is-active" style="font: 12px/1.25 sans-serif">
+        <div class="era-actions-group"><div class="line">
+          <span class="print-cell" id="tile">Move<button class="choice command-number-only"><span class="command-number">400</span></button></span>
+          <span class="era-guard-control" id="number-guard">Guard<button class="choice command-number-only"><span class="command-number">1</span></button></span>
+          <span class="print-cell" id="multiline" style="width: 80px">A long action label that wraps across multiple lines<button class="choice command-number-only"><span class="command-number">2</span></button></span>
+          <span class="era-guard-control" id="guard"><button class="choice">Relationship</button></span>
+          <button class="choice" id="choice">Choice</button>
+          <button class="choice" id="sprite"><span class="sprite"></span></button>
+        </div></div>
+        <div class="era-load"><div class="era-save-list"><div class="line"><button class="choice era-save-slot" id="save">Save</button></div></div></div>
+        <div class="era-relationship"><div class="line"><button class="choice era-relationship-select" id="relationship">Select</button></div></div>
+      </div>
+      <div class="settings-actions"><button id="settings">Settings</button></div>
+      <div class="dialog-heading"><button id="dialog">Close</button></div>
+      <script>
+        const measure = id => {
+          const element = document.getElementById(id), css = getComputedStyle(element), rect = element.getBoundingClientRect();
+          return { minHeight: css.minHeight, height: rect.height, display: css.display, position: css.position };
+        };
+        const snapshot = () => Object.fromEntries(["tile", "number-guard", "multiline", "guard", "choice", "sprite", "save", "relationship", "settings", "dialog"].map(id => [id, measure(id)]));
+        const initial = snapshot();
+        const number = document.querySelector("#tile button");
+        const numberStyle = getComputedStyle(number), tile = document.getElementById("tile").getBoundingClientRect(), button = number.getBoundingClientRect();
+        const overlay = { position: numberStyle.position, covers: ["top", "right", "bottom", "left"].every(edge => Math.abs(tile[edge] - button[edge]) <= 1.1), numberDisplay: getComputedStyle(number.firstElementChild).display };
+        document.documentElement.style.setProperty("--compact-choice-min-height", "48px");
+        document.documentElement.style.setProperty("--handheld-chrome-min-height", "52px");
+        document.documentElement.style.setProperty("--compact-relationship-button-height", "64px");
+        document.body.textContent = JSON.stringify({ initial, updated: snapshot(), overlay });
+      </script>`;
+  type Item = { minHeight: string; height: number; display: string; position: string };
+  type Result = { initial: Record<string, Item>; updated: Record<string, Item>; overlay: { position: string; covers: boolean; numberDisplay: string } };
+  const profile = await mkdtemp(join(tmpdir(), "era-buttons-"));
+  try {
+    for (const [mode, size] of [["desktop", "1440,1000"], ["compact", "1200,700"], ["is-handheld", "1440,1000"]] as const) {
+      const args = ["--headless", "--disable-gpu", "--no-first-run", `--user-data-dir=${profile}`, `--window-size=${size}`, "--dump-dom"];
+      if (process.platform === "linux" && process.getuid?.() === 0) args.push("--no-sandbox");
+      args.push(`data:text/html;base64,${Buffer.from(html.replace("MODE", mode)).toString("base64")}`);
+      const { stdout } = await execute(browser!, args, { maxBuffer: 8 * 1024 * 1024, timeout: 30000 });
+      const match = stdout.match(/<body[^>]*>([\s\S]*?)<\/body>/);
+      assert.ok(match, `${mode}: browser returned button measurements`);
+      const { initial, updated, overlay } = JSON.parse(match[1]) as Result;
+      const compact = mode !== "desktop";
+      for (const id of ["tile", "number-guard"]) {
+        assert.equal(initial[id].minHeight, compact ? "36px" : "auto", `${mode}: ${id} initial minimum`);
+        assert.equal(updated[id].minHeight, compact ? "48px" : "auto", `${mode}: ${id} updated minimum`);
+        if (compact) assert.equal(updated[id].height, 48, `${mode}: ${id} follows the shared size`);
+      }
+      assert.equal(overlay.position, compact ? "absolute" : "static", `${mode}: number button position`);
+      assert.equal(overlay.numberDisplay, compact ? "none" : "inline", `${mode}: command number visibility`);
+      if (compact) assert.ok(overlay.covers, `${mode}: number button covers its tile`);
+      assert.ok(updated.multiline.height > 48, `${mode}: long labels can grow beyond the minimum height`);
+      assert.equal(initial.guard.minHeight, mode === "is-handheld" ? "36px" : "auto");
+      assert.equal(updated.guard.minHeight, mode === "is-handheld" ? "48px" : "auto");
+      assert.equal(initial.choice.minHeight, mode === "is-handheld" ? "36px" : "auto");
+      assert.equal(updated.choice.minHeight, mode === "is-handheld" ? "48px" : "auto");
+      assert.equal(updated.sprite.minHeight, initial.sprite.minHeight);
+      assert.equal(initial.save.minHeight, compact ? "36px" : "23px");
+      assert.equal(updated.save.minHeight, compact ? "48px" : "23px");
+      if (compact) {
+        assert.equal(initial.relationship.height, 56);
+        assert.equal(updated.relationship.height, 64);
+      }
+      if (mode === "is-handheld") {
+        for (const id of ["settings", "dialog"]) {
+          assert.equal(initial[id].minHeight, "44px");
+          assert.equal(updated[id].minHeight, "52px");
+        }
+      }
+    }
+  } finally {
+    await rm(profile, { recursive: true, force: true });
+  }
+});
+
 test("main screen distributes space and spaces player controls consistently", { skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH" }, async () => {
   const [style, handheld] = await Promise.all([
-    readFile(new URL("../web/style.css", import.meta.url), "utf8"),
-    readFile(new URL("../web/handheld.css", import.meta.url), "utf8"),
+    readFile(new URL("../web/generated/style.css", import.meta.url), "utf8"),
+    readFile(new URL("../web/generated/handheld.css", import.meta.url), "utf8"),
   ]);
   const room = (occupied: boolean, history: boolean, crowded: boolean, counters: boolean) => `
     <div id="terminal" style="width: 1180px; height: ${crowded ? 600 : 720}px; font-size: 20px; line-height: 1.25">
@@ -135,8 +216,8 @@ test("main screen distributes space and spaces player controls consistently", { 
 
 test("sky dialog fits its contents and keeps the panorama visible while narration scrolls", { skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH" }, async () => {
   const [style, handheld] = await Promise.all([
-    readFile(new URL("../web/style.css", import.meta.url), "utf8"),
-    readFile(new URL("../web/handheld.css", import.meta.url), "utf8"),
+    readFile(new URL("../web/generated/style.css", import.meta.url), "utf8"),
+    readFile(new URL("../web/generated/handheld.css", import.meta.url), "utf8"),
   ]);
   const html = `<!doctype html><meta charset="utf-8"><style>${style}\n${handheld}</style><body>
     <div class="screen is-active"><div class="era-box era-dialog era-sky-dialog" popover="manual">
@@ -182,8 +263,8 @@ test("sky dialog fits its contents and keeps the panorama visible while narratio
 
 test("stats scroll independently while player controls retain space", { skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH" }, async () => {
   const [style, handheld] = await Promise.all([
-    readFile(new URL("../web/style.css", import.meta.url), "utf8"),
-    readFile(new URL("../web/handheld.css", import.meta.url), "utf8"),
+    readFile(new URL("../web/generated/style.css", import.meta.url), "utf8"),
+    readFile(new URL("../web/generated/handheld.css", import.meta.url), "utf8"),
   ]);
   const fixture = (name: string, width: number, stats: boolean, playerHeight: number) => `
     <div class="fixture" data-case="${name}"><div id="terminal" style="width:${width}px;height:650px;font-size:20px;line-height:1.25">
