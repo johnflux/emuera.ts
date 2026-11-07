@@ -87,6 +87,23 @@ test("local translation cancels stale screens, never applies disabled results, a
   assert.ok(!states.some((state) => state.text === "Disabled translation"));
 });
 
+test("resetting text-tool toggles preserves translation model settings and cancels active work", async () => {
+  let signal: AbortSignal | undefined;
+  const { tools, flush, saved } = harness(async (request) => {
+    signal = request.signal;
+    return new Promise<string>(() => {});
+  });
+  tools.configure({ clipboard: true, local: true, endpoint: "http://localhost:9999/v1", model: "custom", language: "French" });
+  tools.publish("Game text");
+  await flush();
+  tools.configure({ clipboard: false, local: false });
+  assert.equal(signal?.aborted, true);
+  assert.deepEqual(JSON.parse(JSON.stringify(tools.config())), {
+    clipboard: false, local: false, endpoint: "http://localhost:9999/v1", model: "custom", language: "French",
+  });
+  assert.equal(JSON.parse([...saved.values()][0]!).model, "custom");
+});
+
 test("large output is translated in bounded sequential requests without truncation", async () => {
   const requests: TranslationRequest[] = [];
   const { tools, states, flush } = harness(async (request) => { requests.push(request); return request.text; });

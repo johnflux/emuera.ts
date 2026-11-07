@@ -6,7 +6,8 @@ import { runInNewContext } from "node:vm";
 import { once } from "node:events";
 import { createApp } from "../src/server.js";
 
-const source = readFileSync(new URL("../web/handheld.js", import.meta.url), "utf8").replace(/^export /gm, "");
+const source = readFileSync(new URL("../web/controls.js", import.meta.url), "utf8").replace(/^export /gm, "")
+  + "\n" + readFileSync(new URL("../web/handheld.js", import.meta.url), "utf8").replace(/^import .+;\n/gm, "").replace(/^export /gm, "");
 
 test("server serves handheld module and stylesheet with their correct content types", async () => {
   const app = createApp([]);
@@ -56,6 +57,7 @@ test("handheld layout defaults on for Deck or touch and preserves explicit prefe
           assert.equal(key, "era-typescript.handheld");
           stored = value;
         },
+        removeItem: () => { stored = null; },
       },
       document: {
         body: { classList: { toggle: (_name: string, value: boolean) => { applied = value; } } },
@@ -74,6 +76,11 @@ test("handheld layout defaults on for Deck or touch and preserves explicit prefe
     assert.equal(applied, !expected);
     assert.equal(stored, expected ? "0" : "1");
     assert.equal(changes, 1);
+    layout.reset();
+    assert.equal(stored, null);
+    assert.equal(layout.enabled(), deck || coarse || touchPoints > 0);
+    assert.equal(checked, layout.enabled());
+    assert.equal(changes, 2);
   }
 });
 
@@ -453,6 +460,8 @@ function navigationHarness() {
   type Control = {
     tabIndex: number; hidden: boolean; editable: boolean; visible: boolean; scrolled: boolean;
     saveSlot: boolean; page: string; tabGroup: string; dataset: { value: string };
+    classList: { contains(name: string): boolean; add(name: string): void; remove(...names: string[]): void };
+    click(): void;
     matches(selector: string): boolean;
     closest(selector: string): unknown;
     focus(): void;
@@ -464,9 +473,12 @@ function navigationHarness() {
   const state = { activeElement: null as Control | null, allowed: true, home: false, modal: false, closed: false, touch: false, handheld: false,
     nestedClosed: false, title: false };
   function control(left: number, top: number, editable = false): Control {
+    const classes = new Set<string>();
     return {
+      classList: { contains: name => classes.has(name), add: name => { classes.add(name); }, remove: (...names) => { names.forEach(name => classes.delete(name)); } },
+      click() {},
       tabIndex: 0, hidden: false, editable, visible: true, scrolled: false, saveSlot: false, page: "", tabGroup: "", dataset: { value: "" },
-      matches(selector) { return selector === ".era-load .era-save-slot" ? this.saveSlot : selector === this.page; },
+      matches(selector) { return selector.includes("input") ? this.editable : selector === ".era-load .era-save-slot" ? this.saveSlot : selector === this.page; },
       closest(selector) {
         if (selector === ".era-launch-actions button.choice:enabled") return state.title && !this.editable ? this : null;
         if (selector === ".era-page-prev, .era-page-next") return this.page ? this : null;
@@ -662,6 +674,53 @@ test("editable arrows and Enter keep native handling; Escape exits game input", 
   assert.equal(state.activeElement, null);
   key("ArrowDown");
   assert.equal(state.activeElement, items[0]);
+});
+
+test("directional focus passes editable controls until activated and Back leaves editing first", () => {
+  const { state, items, key, handlers, event } = navigationHarness();
+  const field = items[1]!;
+  field.editable = true;
+  state.modal = true;
+  items[0]!.focus();
+  key("ArrowRight");
+  assert.equal(state.activeElement, field);
+  assert.equal(field.classList.contains("is-control-navigation"), true);
+  assert.equal(key("x").defaultPrevented, true);
+  const paste = event("insertFromPaste", field);
+  handlers.get("beforeinput")!(paste);
+  assert.equal(paste.defaultPrevented, true);
+  key("ArrowDown");
+  assert.equal(state.activeElement, items[3]);
+  key("ArrowUp");
+  assert.equal(state.activeElement, field);
+  assert.equal(key("Enter").defaultPrevented, true);
+  assert.equal(field.classList.contains("is-control-editing"), true);
+  assert.equal(key("ArrowLeft").defaultPrevented, false);
+  assert.equal(key("Escape").stopped, true);
+  assert.equal(state.closed, false);
+  assert.equal(field.classList.contains("is-control-navigation"), true);
+  key("ArrowLeft");
+  assert.equal(state.activeElement, items[0]);
+  key("Escape");
+  assert.equal(state.closed, true);
+});
+
+test("clicks and Tab departure restore native input editing", () => {
+  const { state, items, key, handlers, event } = navigationHarness();
+  const field = items[1]!;
+  field.editable = true;
+  items[0]!.focus();
+  key("ArrowRight");
+  assert.equal(state.activeElement, field);
+  assert.equal(key("Tab").defaultPrevented, false);
+  handlers.get("focusout")!(event("focusout", field));
+  assert.equal(field.classList.contains("is-control-navigation"), false);
+  key("ArrowLeft");
+  assert.equal(state.activeElement, field);
+  field.classList.add("is-control-navigation");
+  handlers.get("pointerdown")!(event("pointerdown", field));
+  assert.equal(key("ArrowLeft", field).defaultPrevented, false);
+  assert.equal(field.classList.contains("is-control-navigation"), false);
 });
 
 test("game navigation does not intercept busy/raw-input keys but library navigation remains available", () => {

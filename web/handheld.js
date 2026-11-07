@@ -1,5 +1,7 @@
+import { EDITABLE_CONTROL, activateNavigationControl, navigateControl, resetControlNavigation } from "./controls.js";
+
 const HANDHELD_KEY = "era-typescript.handheld";
-const EDITABLE = "input:not([type=checkbox]):not([type=radio]), textarea, select, [contenteditable]:not([contenteditable='false'])";
+const EDITABLE = EDITABLE_CONTROL;
 const CONTROLS = "button:enabled, a[href], input:enabled, select:enabled, textarea:enabled";
 
 export function touchInput() {
@@ -49,9 +51,9 @@ export function decorateCommandNumbers(element) {
 export function setupHandheld(onChange) {
   const toggle = document.querySelector("#handheld-toggle");
   const saved = localStorage.getItem(HANDHELD_KEY);
-  let enabled = saved === null
-    ? globalThis.eraDesktop?.handheld === true || touchInput() || (globalThis.navigator?.maxTouchPoints ?? 0) > 0
-    : saved === "1";
+  const defaultEnabled = () => globalThis.eraDesktop?.handheld === true || touchInput()
+    || (globalThis.navigator?.maxTouchPoints ?? 0) > 0;
+  let enabled = saved === null ? defaultEnabled() : saved === "1";
   function apply() {
     document.body.classList.toggle("is-handheld", enabled);
     toggle.checked = enabled;
@@ -63,7 +65,15 @@ export function setupHandheld(onChange) {
     apply();
     onChange();
   });
-  return { enabled: () => enabled };
+  return {
+    enabled: () => enabled,
+    reset() {
+      localStorage.removeItem(HANDHELD_KEY);
+      enabled = defaultEnabled();
+      apply();
+      onChange();
+    },
+  };
 }
 
 export function directionalTarget(rects, current, key) {
@@ -129,7 +139,18 @@ export function setupKeyboardNavigation({ terminal, command, canNavigate }) {
         && element.getClientRects().length > 0;
     });
   }
-  document.addEventListener("pointerdown", () => { usingChoices = false; }, true);
+  document.addEventListener("pointerdown", (event) => {
+    usingChoices = false;
+    const editable = event.target.closest(EDITABLE);
+    if (editable) resetControlNavigation(editable);
+  }, true);
+  document.addEventListener("focusout", (event) => {
+    const editable = event.target.closest(EDITABLE);
+    if (editable) resetControlNavigation(editable);
+  });
+  document.addEventListener("beforeinput", (event) => {
+    if (event.target.closest(EDITABLE)?.classList.contains("is-control-navigation")) event.preventDefault();
+  }, true);
   document.addEventListener("click", (event) => {
     const page = event.target.closest(".era-page-prev, .era-page-next");
     pageAction = page ? page.matches(".era-page-prev") ? ".era-page-prev" : ".era-page-next" : null;
@@ -143,7 +164,25 @@ export function setupKeyboardNavigation({ terminal, command, canNavigate }) {
   document.addEventListener("keydown", (event) => {
     if (event.defaultPrevented || event.isComposing || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
     const target = event.target;
+    const editable = target !== command ? target.closest(EDITABLE) : null;
+    if ((event.key === "Enter" || event.key === " ") && activateNavigationControl(editable)) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      return;
+    }
+    if (event.key === "Enter" && editable?.classList.contains("is-control-editing")
+      && editable.matches("input:not([type=color]):not([type=range])")) {
+      navigateControl(editable);
+      event.preventDefault();
+      return;
+    }
     if (event.key === "Escape") {
+      if (editable && !editable.classList.contains("is-control-navigation")) {
+        navigateControl(editable);
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return;
+      }
       const dialog = activeDialog();
       if (dialog) {
         event.preventDefault();
@@ -156,10 +195,16 @@ export function setupKeyboardNavigation({ terminal, command, canNavigate }) {
       }
       return;
     }
+    if (editable?.classList.contains("is-control-navigation") && event.key !== "Tab"
+      && !["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key)) {
+      event.preventDefault();
+      return;
+    }
     const touchCommand = target === command && (touchInput() || document.body.classList.contains("is-handheld"))
       && (event.key === "ArrowUp" || event.key === "ArrowDown");
     if (!["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key)
-      || target.closest(EDITABLE) && !touchCommand || target.closest("[role=tablist]")) return;
+      || target.closest(EDITABLE) && !editable?.classList.contains("is-control-navigation") && !touchCommand
+      || target.closest("[role=tablist]")) return;
     pageAction = null;
     tabAction = null;
     const root = scope();
@@ -173,6 +218,8 @@ export function setupKeyboardNavigation({ terminal, command, canNavigate }) {
     event.preventDefault();
     if (next < 0) return;
     usingChoices = root.closest("#terminal") !== null;
+    if (editable && editable !== items[next]) resetControlNavigation(editable);
+    if (items[next] !== command) navigateControl(items[next]);
     items[next].focus({ preventScroll: true });
     items[next].scrollIntoView({ block: "nearest", inline: "nearest" });
   }, true);

@@ -29,7 +29,6 @@
         <button id="restart" aria-haspopup="dialog">Restart game…</button>
         <button id="demo" aria-pressed="false">Conformance demo</button>
         <button id="report" aria-expanded="false" aria-controls="compatibility">Compatibility report</button>
-        <label class="checkbox-control" title="Emuera's debug mode: restarts the run with [IF_DEBUG] code loaded, DEBUGPRINT output shown and ASSERT checked"><input id="debug-toggle" type="checkbox"><span>Debug mode</span></label>
         <button id="settings-toggle" aria-haspopup="dialog" aria-controls="settings">Settings…</button>
         <button id="menu-library">Game library</button>
       </nav>
@@ -81,6 +80,7 @@
       <div class="line">Select a game from the library to start.</div>
       </div>
     </section>
+    <button id="continue-hint" type="button" hidden>Click to continue</button>
     <form id="input-form" autocomplete="off" hidden>
       <div class="command-field">
         <input id="command" aria-label="Game input" aria-describedby="command-hint" disabled spellcheck="false">
@@ -111,21 +111,25 @@
     <dialog id="settings" class="confirm settings-dialog" aria-labelledby="settings-heading">
       <div class="dialog-heading">
       <h2 id="settings-heading">Settings</h2>
+      <div class="settings-heading-actions">
+      <button id="settings-reset" type="button">Reset all</button>
       <button id="settings-close" type="button" aria-label="Close settings" data-controller-hint="B">Close</button>
+      </div>
       </div>
       <h3>Display</h3>
       <div class="settings-actions">
         <label class="checkbox-control"><input id="handheld-toggle" type="checkbox"><span>Handheld layout</span></label>
-        <button id="controller-hints-toggle" title="Cycle Auto, On, and Off. Auto detects a gamepad or Steam Deck; this only changes hints, not controller input.">Controller hints: Auto</button>
-        <label class="menu-font">Font size <input id="font-size" type="range" min="12" max="24" value="16"></label>
+        <label class="checkbox-control" title="Cycle Auto, On, and Off. Auto detects a gamepad or Steam Deck; this only changes hints, not controller input."><input id="controller-hints-toggle" type="checkbox"><span id="controller-hints-label">Controller hints: Auto</span></label>
       </div>
       <p>Uses the game's <code>emuera.config</code> settings unless changed here. Changes are saved only in this browser.</p>
       <form id="settings-form">
         <label>Text color <input name="foreground" type="color"></label>
         <label>Background color <input name="background" type="color"></label>
         <label>Selected text color <input name="selection" type="color"></label>
-        <label>Font name <input name="font" type="text" maxlength="100" spellcheck="false"></label>
-        <button type="button" id="settings-reset">Reset to game defaults</button>
+        <div class="settings-font-row">
+          <label>Font name <input name="font" type="text" maxlength="100" spellcheck="false"></label>
+          <label>Font size <input id="font-size" type="range" min="12" max="24" value="16"></label>
+        </div>
       </form>
       <h3>Playback</h3>
       <div class="settings-actions">
@@ -139,6 +143,10 @@
         <label class="checkbox-control"><input id="clipboard-toggle" type="checkbox"><span>Auto-copy game text</span></label>
         <label class="checkbox-control"><input id="local-translate-toggle" type="checkbox"><span>Local-model translation</span></label>
         <button id="local-translate-configure" aria-haspopup="dialog">Translation model…</button>
+      </div>
+      <h3>Interpreter</h3>
+      <div class="settings-actions">
+        <label class="checkbox-control" title="Emuera's debug mode: restarts the run with [IF_DEBUG] code loaded, DEBUGPRINT output shown and ASSERT checked"><input id="debug-toggle" type="checkbox"><span>Debug mode</span></label>
       </div>
     </dialog>
     <dialog id="art-demo" class="confirm art-demo" aria-labelledby="art-demo-heading">

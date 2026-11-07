@@ -123,6 +123,72 @@ test("syntax checks include loader diagnostics and count unsupported lines separ
   assert.deepEqual(result.diagnostics[0], game.diagnostics[0]);
 });
 
+test("syntax checks and execution accept repeated inline regex options", async () => {
+  const pattern = "^(?i)nue$|(?i)houjuu";
+  for (const jit of [false, true]) {
+    const game = emptyGame();
+    indexScript(game, `@SYSTEM_TITLE
+LOCAL = STRCOUNT("nue", "${pattern}")
+PRINTFORML {LOCAL}
+`, "nested-options.ERB");
+    const report = await checkSyntax(game);
+    assert.deepEqual(report.diagnostics, []);
+    const result = new Runtime(game, { jit }).start();
+    assert.equal(result.status, "halted", JSON.stringify(result.error));
+    assert.ok(result.output.some((item) => item.text === "1"));
+  }
+});
+
+test("static regex checks cover expressions, statements, FORM, macros, declarations and calls", async () => {
+  const game = emptyGame();
+  indexScript(game, `#DEFINE BAD_REGEX "["
+#DIM GLOBAL VALUE = STRCOUNT("", BAD_REGEX)
+`, "regex.ERH", true);
+  indexScript(game, `@UNVISITED(ARG = STRCOUNT("", "["))
+#DIM COUNT = REGEXPMATCH("", "[")
+LOCAL = STRCOUNT("", "^" + "[")
+PRINTFORML {REPLACE("", "[", "")} {REGEXPMATCH("", "(")}
+IF STRCOUNT(LOCALS, BAD_REGEX)
+ENDIF
+STRCOUNT "", "["
+REGEXPMATCH "", "["
+REPLACE "", "[", ""
+FINDELEMENT LOCALS, "[",,,1
+LOCAL = FINDLASTELEMENT(LOCALS, "[")
+CALLF STRCOUNT("", "[")
+TRYCALL OPTIONAL, STRCOUNT("", "[")
+@AFTER
+LOCAL = 1 +
+`, "regex.ERB");
+  const report = await checkSyntax(game);
+  assert.equal(report.skippedLines, 0);
+  assert.deepEqual(report.diagnostics.filter((d) => d.file === "regex.ERH").map((d) => d.line), [2]);
+  assert.deepEqual(report.diagnostics.filter((d) => d.file === "regex.ERB").map((d) => d.line),
+    [1, 2, 3, 4, 4, 5, 7, 8, 9, 10, 11, 12, 15]);
+  assert.deepEqual(report.references, []);
+});
+
+test("regex checks skip dynamic patterns, literal replacement modes and overridden built-ins", async () => {
+  const game = emptyGame();
+  indexScript(game, `@UNVISITED
+LOCAL = STRCOUNT("", "(?i)nazrin")
+LOCAL = STRCOUNT("", "a(?i)b")
+LOCAL = STRCOUNT("", @"valid")
+LOCAL = STRCOUNT("", LOCALS)
+LOCAL = STRCOUNT("", "[" + LOCALS)
+LOCAL = REPLACE("", "[", "", 2)
+LOCAL = REPLACE("", "[", "", LOCAL)
+LOCAL = FINDELEMENT(LOCALS, "plain",,,1)
+LOCAL = FINDLASTELEMENT(LOCALS, "[",,,LOCAL)
+LOCAL = REGEXPMATCH("", "[")
+@REGEXPMATCH(ARGS, ARGS:1)
+#FUNCTION
+RETURNF 0
+`, "regex-valid.ERB");
+  assert.deepEqual((await checkSyntax(game)).diagnostics, []);
+  assert.deepEqual((await checkSyntax(game)).references, []);
+});
+
 test("syntax checks accept native eraFL FORM encoding and omitted FOR starts", async () => {
   const game = emptyGame();
   indexScript(game, await readFile(new URL("./fixtures/native-conformance-fl-syntax.erb", import.meta.url), "utf8"), "fl-syntax.ERB");
@@ -321,7 +387,7 @@ ENDSELECT
 test("compatibility syntax endpoint selects its game, caches results and leaves play available", async () => {
   const good = emptyGame(), bad = emptyGame();
   indexScript(good, "@SYSTEM_TITLE\nPRINTL good\nWAIT", "good.ERB");
-  indexScript(bad, "@UNUSED\nLOCAL = 1 +", "bad.ERB");
+  indexScript(bad, '@UNUSED\nLOCAL = 1 +\nLOCAL = STRCOUNT("", "[")', "bad.ERB");
   const app = createApp([{ id: "good", title: "Good", game: good }, { id: "bad", title: "Bad", game: bad }]);
   app.listen(0, "127.0.0.1");
   await once(app, "listening");
@@ -334,9 +400,12 @@ test("compatibility syntax endpoint selects its game, caches results and leaves 
     const results = await Promise.all([post("/api/compatibility/syntax", { game: "bad" }), post("/api/compatibility/syntax", { game: "good" })]);
     assert.deepEqual(results.map((r) => r.status), [200, 200]);
     const [badReport, goodReport] = await Promise.all(results.map((r) => r.json()));
-    assert.equal(badReport.diagnostics.length, 1);
+    assert.equal(badReport.diagnostics.length, 2);
     assert.equal(goodReport.diagnostics.length, 0);
     assert.equal(badReport.diagnostics[0].file, "bad.ERB");
+    assert.equal(badReport.diagnostics[1].file, "bad.ERB");
+    assert.equal(badReport.diagnostics[1].line, 3);
+    assert.match(badReport.diagnostics[1].message, /^STRCOUNT: Invalid regular expression:/);
     assert.deepEqual(await (await post("/api/compatibility/syntax", { game: "bad" })).json(), badReport);
     assert.equal((await post("/api/compatibility/syntax", { game: "missing" })).status, 404);
     const start = await (await post("/api/start", { mode: "game", game: "good" })).json();

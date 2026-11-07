@@ -166,8 +166,9 @@ export function createTranslation({ onChange = () => {} } = {}) {
     return value;
   }
   function setEnabled(on) {
-    localStorage.setItem(STORAGE_KEY, on ? "on" : "off");
-    if (on) {
+    if (on === undefined) localStorage.removeItem(STORAGE_KEY);
+    else localStorage.setItem(STORAGE_KEY, on ? "on" : "off");
+    if (enabled()) {
       set(translator ? "ready" : "off");
       for (const root of roots) translateTree(root);
     } else {

@@ -19,7 +19,7 @@ import { DECLINE, loadIntrinsics, type Intrinsic } from "./intrinsics.js";
 import { ASYNC, Jit, type CallAnalysis } from "./jit.js";
 import { readNativeSave, writeNativeSave, type NativeSave, type SavedContainers, type SaveMetadata } from "./save-format.js";
 import { fixHistoryHtml, SHARP_METHODS, supportedSharpCall, translateHistoryDate } from "./plugin-compat.js";
-import { regexCharacterClasses, regexGroupOrder, replaceRegex } from "./regex.js";
+import { compileRegex, regexGroupOrder, replaceRegex } from "./regex.js";
 import { xxhash32 } from "./xxhash.js";
 import { compactPicture, decodePicture, encodePicture, InvalidGraphicsImage, pictureColor, PixelCache, resourceColor } from "./graphics.js";
 import { TwInteractionHistory, type CharacterHistory, type Encounter, type Gossip, type HistoryCharacter, type Memory } from "./interaction-history.js";
@@ -3164,28 +3164,10 @@ export class Runtime {
     const matches = [...source.matchAll(regex)];
     return { count: matches.length, groups: order.length, values: matches.flatMap((match) => order.map((index) => match[index] ?? "")) };
   }
-  /** Compiles a .NET pattern; leading inline options like (?i) become JS flags, mid-pattern ones scope the rest. */
   private regex(pattern: string): RegExp {
     let cached = this.regexCache.get(pattern);
     if (!cached) {
-      let source = pattern;
-      let flags = "gu";
-      const leading = /^\(\?([ims]+)\)/.exec(source);
-      if (leading) {
-        source = source.slice(leading[0].length);
-        for (const flag of leading[1]!) if (!flags.includes(flag)) flags += flag;
-      }
-      // A later (?i) applies to the remainder of its group, which a scoped modifier group expresses.
-      source = source.replace(/\(\?([ims]+)\)((?:[^()\\]|\\.|\((?:[^()\\]|\\.)*\))*)/g, "(?$1:$2)");
-      // .NET accepts escaped punctuation that JS rejects under the Unicode flag.
-      source = source.replace(/\\(.)/g, (escape: string, character: string) =>
-        /^[ ,#=!:%&@<>;"'`~]$/.test(character) ? character : escape);
-      source = regexCharacterClasses(source);
-      try { cached = new RegExp(source, flags); }
-      catch (error) {
-        if (!(error instanceof SyntaxError)) throw error;
-        throw new EraError(`Invalid regular expression: ${error.message}`);
-      }
+      cached = compileRegex(pattern);
       if (this.regexCache.size > 1000) this.regexCache.clear();
       this.regexCache.set(pattern, cached);
     }

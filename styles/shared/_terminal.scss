@@ -17,6 +17,15 @@
 #terminal::before { content: ""; margin-top: auto; }
 #terminal > * { flex-shrink: 0; min-width: var(--logical-width, 0); }
 #terminal.is-waiting { cursor: pointer; }
+#continue-hint {
+  --button-background: transparent; --button-border: transparent; --button-color: #b0b0b0;
+  --button-hover-background: transparent; --button-hover-border: transparent;
+  flex-shrink: 0; justify-content: flex-start; margin: 0; padding: 4px 20px;
+  font: italic var(--font-size)/1.4 var(--terminal-font);
+  animation: continue-hint-pulse 2.4s ease-in-out infinite;
+}
+@keyframes continue-hint-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .7; } }
+@media (prefers-reduced-motion: reduce) { #continue-hint { animation: none; } }
 /* Briefly after clicking through to a menu, its choices ignore clicks (see settle() in app.js). */
 #terminal.is-settling button.choice { cursor: default; }
 .screen.is-history { filter: grayscale(1); opacity: .4; pointer-events: none; }

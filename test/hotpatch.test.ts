@@ -957,6 +957,7 @@ QUIT`, "<settings-test>");
     assert.doesNotMatch(html, /Pushdown Guard|Auto Items/, "guard is with management actions; Auto Items is in Inventory");
     assert.match(html, /title='Standing: Prefer standing versions/);
     assert.match(html, /title='Auto-moan: [^']+Cycles this character through No, Yes and Yes \(Ahegao\)/);
+    assert.match(html, new RegExp(`value='4000' class='era-toggle' role='checkbox' aria-checked='${["false", "true", "mixed"][mode]}'`));
     assert.match(html, /Automatic Condom/);
   }
 });

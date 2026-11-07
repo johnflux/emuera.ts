@@ -1,5 +1,69 @@
+import { EraError } from "./model.js";
+
 let characterClasses: Record<string, string> | undefined;
 const groupOrders = new WeakMap<RegExp, readonly number[]>();
+
+function inlineOptions(pattern: string): string {
+  let result = "", inClass = false;
+  const scopes: string[][] = [[]];
+  const closeOptions = (): void => { result += ")".repeat(scopes.at(-1)!.length); };
+  for (let i = 0; i < pattern.length; i++) {
+    const c = pattern[i]!;
+    if (c === "\\") {
+      result += c + (pattern[++i] ?? "");
+      continue;
+    }
+    if (c === "[" && !inClass) { inClass = true; result += c; continue; }
+    if (inClass) {
+      if (c === "]") inClass = false;
+      result += c;
+      continue;
+    }
+    if (c === "(") {
+      const option = /^\(\?([ims]+(?:-[ims]+)?|-[ims]+)\)/.exec(pattern.slice(i));
+      if (option) {
+        scopes.at(-1)!.push(option[1]!);
+        result += `(?${option[1]}:`;
+        i += option[0].length - 1;
+        continue;
+      }
+      scopes.push([]);
+    } else if (c === "|") {
+      // Options continue into later alternatives without changing their precedence.
+      closeOptions();
+      result += "|" + scopes.at(-1)!.map((option) => `(?${option}:`).join("");
+      continue;
+    } else if (c === ")") {
+      closeOptions();
+      if (scopes.length > 1) scopes.pop();
+      else scopes[0] = [];
+    }
+    result += c;
+  }
+  closeOptions();
+  return result;
+}
+
+/** Compiles a .NET pattern using the runtime's current JavaScript translation. */
+export function compileRegex(pattern: string): RegExp {
+  let source = pattern;
+  let flags = "gu";
+  const leading = /^\(\?([ims]+)\)/.exec(source);
+  if (leading) {
+    source = source.slice(leading[0].length);
+    for (const flag of leading[1]!) if (!flags.includes(flag)) flags += flag;
+  }
+  source = inlineOptions(source);
+  // .NET accepts escaped punctuation that JS rejects under the Unicode flag.
+  source = source.replace(/\\(.)/g, (escape: string, character: string) =>
+    /^[ ,#=!:%&@<>;"'`~]$/.test(character) ? character : escape);
+  source = regexCharacterClasses(source);
+  try { return new RegExp(source, flags); }
+  catch (error) {
+    if (!(error instanceof SyntaxError)) throw error;
+    throw new EraError(`Invalid regular expression: ${error.message}`);
+  }
+}
 
 /** .NET's predefined classes use Unicode categories, not JavaScript's ASCII \w and \d. */
 export function regexCharacterClasses(pattern: string): string {

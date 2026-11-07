@@ -41,13 +41,16 @@ export function setupControllerMenu({ restart, library, settings, exit, canResta
   function applyControllerMode() {
     const enabled = mode === "on" || (mode === "auto" && (detected || globalThis.eraDesktop?.handheld === true));
     document.body.classList.toggle("has-controller", enabled);
-    hintsToggle.textContent = `Controller hints: ${mode === "auto" ? `Auto (${enabled ? "On" : "Off"})` : mode === "on" ? "On" : "Off"}`;
+    setCheckboxState(hintsToggle, mode === "auto" ? "mixed" : mode === "on", enabled);
+    document.querySelector("#controller-hints-label").textContent = `Controller hints: ${mode === "auto" ? `Auto (${enabled ? "On" : "Off"})` : mode === "on" ? "On" : "Off"}`;
   }
   applyControllerMode();
-  hintsToggle.addEventListener("click", () => {
+  hintsToggle.addEventListener("click", (event) => {
+    event.preventDefault();
     mode = modes[(modes.indexOf(mode) + 1) % modes.length];
     localStorage.setItem(hintsKey, mode);
     applyControllerMode();
+    queueMicrotask(applyControllerMode);
   });
   const dialog = document.querySelector("#controller-menu");
   const actions = [...dialog.querySelectorAll(".controller-menu-actions button")];
@@ -121,12 +124,13 @@ export function setupControllerMenu({ restart, library, settings, exit, canResta
       // Only consume the standard D-pad, confirm and back buttons while a dialog is open.
       const keys = [[12, "ArrowUp"], [13, "ArrowDown"], [14, "ArrowLeft"], [15, "ArrowRight"], [1, "Escape"]];
       for (const [button, key] of keys) {
-        if (down(button)) (document.activeElement ?? modal).dispatchEvent(
+        if (down(button) && !adjustControllerRange(document.activeElement, key)) (document.activeElement ?? modal).dispatchEvent(
           new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }),
         );
       }
       if (down(0)) {
         const focused = document.activeElement;
+        if (modal.contains(focused) && activateNavigationControl(focused)) continue;
         if (focused?.matches('button:enabled, a[href], input[type="checkbox"]:enabled, input[type="radio"]:enabled')
           && modal.contains(focused)) focused.click();
       }
@@ -152,4 +156,13 @@ export function setupControllerMenu({ restart, library, settings, exit, canResta
     frame = null;
   });
   start();
+  return {
+    reset() {
+      localStorage.removeItem(hintsKey);
+      localStorage.removeItem("era-typescript.force-controller");
+      mode = "auto";
+      applyControllerMode();
+    },
+  };
 }
+import { activateNavigationControl, adjustControllerRange, setCheckboxState } from "./controls.js";

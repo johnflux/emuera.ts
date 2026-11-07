@@ -25,6 +25,7 @@ test("character history defaults off for Steam but respects saved choices on eve
           assert.equal(key, "era-typescript.character-history");
           stored = value;
         },
+        removeItem: () => { stored = null; },
       },
       document: {
         querySelector: () => ({
@@ -34,12 +35,16 @@ test("character history defaults off for Steam but respects saved choices on eve
       },
     });
     assert.equal(api.characterHistoryEnabled(), expected);
-    api.setupCharacterHistoryToggle(() => { changes++; });
+    const toggle = api.setupCharacterHistoryToggle(() => { changes++; });
     assert.equal(checked, expected);
     click();
     assert.equal(api.characterHistoryEnabled(), !expected);
     assert.equal(stored, expected ? "0" : "1");
     assert.equal(changes, 1);
+    toggle.reset();
+    assert.equal(stored, null);
+    assert.equal(checked, !steam);
+    assert.equal(changes, 2);
   }
 });
 

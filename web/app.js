@@ -133,7 +133,7 @@ const autoAdvance = createAutoAdvance(
     && !document.body.classList.contains("is-home")
     && !document.querySelector("dialog[open], #menu-panel:not([hidden])")
     && input?.kind === "wait" && !input.blocking && !input.timeout ? input : null,
-  () => { void submit(""); },
+  () => { void submit("", null, true); },
 );
 autoAdvanceToggle.addEventListener("change", () => {
   localStorage.setItem(AUTO_ADVANCE_KEY, autoAdvanceToggle.checked ? "1" : "0");
@@ -177,7 +177,7 @@ function displaySettings() {
   const { foreground, background, selection, font } = settings;
   return { foreground, background, selection, font };
 }
-function applySettings() {
+function applySettings(force = false) {
   const root = document.documentElement.style;
   root.setProperty("--terminal-foreground", settings.foreground);
   root.setProperty("--terminal-background", settings.background);
@@ -189,7 +189,7 @@ function applySettings() {
   document.querySelector("#font-size").value = String(fontSize);
   const form = document.querySelector("#settings-form");
   for (const name of ["foreground", "background", "selection", "font"])
-    if (form.elements[name] !== document.activeElement) form.elements[name].value = settings[name];
+    if (force || form.elements[name] !== document.activeElement) form.elements[name].value = settings[name];
   terminalColumns();
   fitMoveMaps();
 }
@@ -206,7 +206,7 @@ const keyboardNavigation = setupKeyboardNavigation({
   terminal, command,
   canNavigate: () => (!busy || expiring) && input?.kind !== "mousekey",
 });
-setupCharacterHistoryToggle(() => {
+const characterHistory = setupCharacterHistoryToggle(() => {
   showCharacterHistory(lastCharacterHistory);
   updateControls();
   scheduleHtmlPositions();
@@ -371,6 +371,8 @@ function endActivity() {
 }
 function updateControls() {
   autoAdvance.update();
+  document.querySelector("#continue-hint").hidden = !autoAdvance.isPaused() || busy
+    || input?.kind !== "wait" || !!input.blocking || !!input.timeout;
   const chatting = mainChatInput(input, terminal.querySelector(".screen.is-active .era-main-chat"));
   terminal.classList.toggle("is-waiting", !busy && input?.kind === "wait");
   // Timer refreshes keep the field enabled so typing and focus survive animation frames.
@@ -1886,8 +1888,8 @@ async function renderHtml(markup, parent, sprites) {
       const value = node.getAttribute("value");
       const checked = node.getAttribute("aria-checked");
       const checkbox = node.getAttribute("role") === "checkbox";
-      if (checkbox && checked !== "true" && checked !== "false") throw new Error(`Unsupported checkbox state: ${checked}`);
-      if (value !== null) element = choice("", value, node.classList.contains("era-dialog-close") ? "" : node.getAttribute("title") ?? "", checkbox ? checked === "true" : null);
+      if (checkbox && !["true", "false", "mixed"].includes(checked)) throw new Error(`Unsupported checkbox state: ${checked}`);
+      if (value !== null) element = choice("", value, node.classList.contains("era-dialog-close") ? "" : node.getAttribute("title") ?? "", checkbox ? checked === "mixed" ? "mixed" : checked === "true" : null);
       else element = document.createElement("span");
     } else if (node.tagName === "A") {
       const href = node.getAttribute("href") ?? "";
@@ -1998,6 +2000,8 @@ async function renderSteps(steps, fresh = false, keepFocus = false, toBottom = f
   // are updated off-screen. Commit only after HTML and new images are ready.
   if (!fresh && !live) {
     const visible = terminal.cloneNode(true);
+    const checkboxes = terminal.querySelectorAll("input[type=checkbox]");
+    visible.querySelectorAll("input[type=checkbox]").forEach((copy, i) => { copy.indeterminate = checkboxes[i].indeterminate; });
     // Cloned canvases are blank; copy their pixels so pictures don't blink out while the update is prepared.
     const originals = terminal.querySelectorAll("canvas");
     visible.querySelectorAll("canvas").forEach((copy, i) => {
@@ -2532,6 +2536,7 @@ async function terminalReady() {
 }
 /** Clears the run's client state before a new or resumed run is shown. */
 function resetRun() {
+  autoAdvance.reset();
   resetAudio();
   lastCommand = "";
   showTimeState(undefined);
@@ -2662,7 +2667,7 @@ function routesToCharacter(value, selectedChoice, request, host) {
   return !selectedChoice && mainChatInput(request, host) && value.trim() !== "" && !/^[+-]?\d+$/.test(value.trim());
 }
 
-async function submit(value, selectedChoice = null) {
+async function submit(value, selectedChoice = null, automatic = false) {
   // Input made while an animation frame is loading is sent once that frame is shown.
   if (expiring) { queuedSubmit = { value, choice: selectedChoice?.dataset.value }; return; }
   if (busy || !input || input.blocking) return;
@@ -2725,6 +2730,7 @@ async function submit(value, selectedChoice = null) {
       }
     }
     const snapshot = await api("/api/input", { session, step, value, columns: terminalColumns(), display: displaySettings(), client: clientState() });
+    autoAdvance.observeResult(snapshot, automatic);
     activityResponded();
     selectedChoice?.classList.add("is-selected");
     command.value = "";
@@ -2826,6 +2832,7 @@ function clickToContinue(event) {
   if (input?.kind !== "wait") return;
   void submit("");
 }
+document.querySelector("#continue-hint").addEventListener("click", () => clickToContinue());
 // A click continues unless it was a drag that selected text. Selection state alone can't decide: a double click
 // leaves a word selected, and clicks inside an existing selection keep it, so later clicks would never count.
 const DRAG_DISTANCE = 4;
@@ -3316,7 +3323,7 @@ translationConfig.querySelector("form").addEventListener("submit", (event) => {
 });
 translationConfig.addEventListener("keydown", (event) => event.stopPropagation());
 const settingsPanel = document.querySelector("#settings");
-setupControllerMenu({
+const controllerMenu = setupControllerMenu({
   onY: () => { if (!busy && input && !input.blocking) activateControllerAction(); },
   restart: () => chooseRun(runMode, runGame),
   library: () => document.querySelector("#library-toggle").click(),
@@ -3346,11 +3353,38 @@ document.querySelector("#settings-form").addEventListener("input", (event) => {
   if (name === "font" && /["\\;{}<>]/.test(value)) return;
   if (name) updateSetting(name, name === "font" ? value.trim() || undefined : value.toLowerCase());
 });
+async function resetSettings() {
+  const restartDebug = session && input && runDebug;
+  if (restartDebug) {
+    if (busy) {
+      message("Wait for the current command to finish before resetting debug mode.", true);
+      return;
+    }
+    if (!await confirmAction("Reset settings?",
+      `${runName(runMode, runGame)} restarts without debug mode. Progress in the current run that has not been saved in the game will be lost.`,
+      "Reset and restart")) return;
+  }
+  localStorage.removeItem(SETTINGS_KEY);
+  settings = { ...gameDefaults };
+  handheld.reset();
+  controllerMenu.reset();
+  localStorage.removeItem(AUTO_ADVANCE_KEY);
+  autoAdvanceToggle.checked = true;
+  autoAdvance.update();
+  characterHistory.reset();
+  outputTools.configure({ clipboard: false, local: false });
+  translation.setEnabled(undefined);
+  localStorage.removeItem(DEBUG_KEY);
+  debugButton.checked = false;
+  if (!restartDebug) {
+    runDebug = false;
+    debugPanel.hidden = true;
+  }
+  applySettings(true);
+  if (restartDebug) await start(runMode, runGame, false);
+}
 document.querySelector("#settings-reset").addEventListener("click", () => {
-  const fontSize = savedSettings().fontSize;
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(fontSize ? { fontSize } : {}));
-  settings = { ...gameDefaults, fontSize };
-  applySettings();
+  void resetSettings().catch((error) => message(`Could not reset settings: ${error.message}`, true));
 });
 document.querySelector("#report").addEventListener("click", async () => {
   if (!report.hidden) {

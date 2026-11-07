@@ -793,8 +793,9 @@ character to focus and still defaults to the player. The player panel's Inventor
 uses a softly bordered control. Pushdown Guard, Auto-TSP Movement and Auto-Clean
 share one compact checkbox row; Pushdown Guard includes its explanation.
 Standing explains the preference for supported standing positions (and the
-location fallback); Auto-moan explains its three per-character modes and scripted
-dialogue fallback. Time Stop keeps its translucent background and
+location fallback); Auto-moan uses a three-state checkbox (empty for No, checked
+for Yes, dash for Yes with Ahegao), retains its mode label and original cycle,
+and explains its per-character modes and scripted dialogue fallback. Time Stop keeps its translucent background and
 adds a 3px backdrop blur.
 
 `PLAYER_SPECIAL.ERB` supplies main-screen-only helpers for special effects and

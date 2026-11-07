@@ -6,7 +6,75 @@ import { runInNewContext } from "node:vm";
 import { once } from "node:events";
 import { createApp } from "../src/server.js";
 
-const source = readFileSync(new URL("../web/controller-menu.js", import.meta.url), "utf8").replace(/^export /gm, "");
+const controls = readFileSync(new URL("../web/controls.js", import.meta.url), "utf8").replace(/^export /gm, "");
+const source = controls + "\n" + readFileSync(new URL("../web/controller-menu.js", import.meta.url), "utf8").replace(/^import .+;\n/gm, "").replace(/^export /gm, "");
+
+test("controller hint checkboxes cycle dash, check, empty without changing saved modes", () => {
+  const h = harness();
+  assert.equal(h.hintsToggle.indeterminate, true);
+  assert.equal(h.hintsToggle.checked, false);
+  assert.equal(h.hintsToggle.dataset.active, "false");
+  h.cycleHints();
+  assert.equal(h.hintsToggle.indeterminate, false);
+  assert.equal(h.hintsToggle.checked, true);
+  assert.equal(h.hintsToggle.dataset.active, "true");
+  h.cycleHints();
+  assert.equal(h.hintsToggle.indeterminate, false);
+  assert.equal(h.hintsToggle.checked, false);
+  assert.equal(h.hintsToggle.dataset.active, "false");
+  h.cycleHints();
+  assert.equal(h.hintsToggle.indeterminate, true);
+  assert.equal(h.hintsToggle.dataset.active, "false");
+  h.poll([]);
+  assert.equal(h.hintsToggle.indeterminate, true);
+  assert.equal(h.hintsToggle.dataset.active, "true");
+});
+
+test("debug checkbox belongs to settings rather than the burger menu", () => {
+  const html = readFileSync(new URL("../web/index.html", import.meta.url), "utf8");
+  const settings = html.slice(html.indexOf('<dialog id="settings"'), html.indexOf('<dialog id="art-demo"'));
+  assert.match(settings, /id="debug-toggle"/);
+  assert.doesNotMatch(html.slice(html.indexOf('<nav id="menu-panel"'), html.indexOf("</nav>")), /checkbox-control|debug-toggle/);
+});
+
+test("resetting controller hints restores Auto and removes the legacy override", () => {
+  const h = harness(false, "on", "1");
+  h.menu.reset();
+  assert.equal(h.hintsLabel, "Controller hints: Auto (Off)");
+  assert.equal(h.storage.has("era-typescript.controller-hints"), false);
+  assert.equal(h.storage.has("era-typescript.force-controller"), false);
+  assert.equal(h.hintsToggle.indeterminate, true);
+  h.poll([]);
+  assert.equal(h.hintsLabel, "Controller hints: Auto (On)");
+});
+
+test("gamepad A enters input editing and D-pad adjusts ranges only in edit mode", () => {
+  const h = harness();
+  h.key();
+  h.editable.type = "range";
+  h.editable.classList.add("is-control-navigation");
+  h.editable.focus();
+  h.poll([15]);
+  assert.equal(h.editable.value, "14");
+  assert.deepEqual(h.events, ["ArrowRight"]);
+  h.poll([]);
+  h.poll([0]);
+  assert.equal(h.editable.classList.contains("is-control-editing"), true);
+  assert.equal(h.dialog.open, true);
+  h.poll([]);
+  h.poll([15]);
+  assert.equal(h.editable.value, "16");
+  assert.deepEqual(h.events, ["ArrowRight", "input", "change"]);
+  h.poll([15]);
+  assert.equal(h.editable.value, "16", "held buttons stay edge-triggered");
+  h.poll([]);
+  h.poll([14]);
+  assert.equal(h.editable.value, "14");
+  h.poll([]);
+  h.poll([1]);
+  assert.equal(h.events.at(-1), "Escape", "Back is routed to the shared edit/navigation handler");
+  assert.deepEqual(h.calls, [0, 0, 0, 0]);
+});
 
 function harness(canExit = true, savedHints = "auto", legacyForce = "0", deck = false) {
   type Key = {
@@ -35,26 +103,37 @@ function harness(canExit = true, savedHints = "auto", legacyForce = "0", deck = 
   }));
   let hasController = false;
   let yActions = 0;
-  let hintsClick = () => {};
+  let hintsClick = (_event: { preventDefault(): void }) => {};
+  const hintsLabel = { textContent: "" };
   const hintsToggle = {
-    textContent: "",
-    addEventListener: (_type: string, listener: () => void) => { hintsClick = listener; },
+    checked: false, defaultChecked: false, indeterminate: false,
+    dataset: { active: "" },
+    addEventListener: (_type: string, listener: typeof hintsClick) => { hintsClick = listener; },
   };
   const storage = new Map([["era-typescript.controller-hints", savedHints], ["era-typescript.force-controller", legacyForce]]);
   if (!savedHints) storage.delete("era-typescript.controller-hints");
   function control(index: number) {
     let click = async () => {};
+    const classes = new Set<string>();
     return {
       disabled: false, title: "", isConnected: true,
+      type: "", value: "14", min: "10", max: "20", step: "2",
+      classList: {
+        contains: (name: string) => classes.has(name),
+        add: (name: string) => { classes.add(name); },
+        remove: (...names: string[]) => { names.forEach(name => classes.delete(name)); },
+      },
       focus() { focused = this; },
       closest: () => dialog.open ? dialog : null,
       matches: () => !actions[index]?.disabled,
       click: () => click(),
-      dispatchEvent: (event: { key: string }) => { events.push(event.key); },
+      dispatchEvent: (event: { key?: string; type?: string }) => { events.push(event.key ?? event.type!); },
       addEventListener: (_type: string, listener: () => Promise<void>) => { click = listener; },
     };
   }
+
   const actions = [0, 1, 2, 3].map(control);
+  const editable = control(-1);
   let closeListener = () => {};
   const dialog = {
     open: false,
@@ -70,7 +149,7 @@ function harness(canExit = true, savedHints = "auto", legacyForce = "0", deck = 
         click: () => { pages[index]!++; },
       };
     },
-    contains: (item: unknown) => actions.some((action) => action === item),
+    contains: (item: unknown) => item === editable || actions.some((action) => action === item),
     addEventListener: (_type: string, listener: () => void) => { closeListener = listener; },
   };
   let closeClick = () => {};
@@ -80,6 +159,7 @@ function harness(canExit = true, savedHints = "auto", legacyForce = "0", deck = 
     localStorage: {
       getItem: (key: string) => storage.get(key) ?? null,
       setItem: (key: string, value: string) => storage.set(key, value),
+      removeItem: (key: string) => storage.delete(key),
     },
     document: {
       body: { classList: { toggle: (name: string, value: boolean) => {
@@ -90,6 +170,7 @@ function harness(canExit = true, savedHints = "auto", legacyForce = "0", deck = 
       get activeElement() { return focused; },
       querySelector(selector: string) {
         if (selector === "#controller-hints-toggle") return hintsToggle;
+        if (selector === "#controller-hints-label") return hintsLabel;
         if (selector === "#controller-menu") return dialog;
         if (selector === "#controller-menu-close") return { addEventListener: (_type: string, listener: () => void) => { closeClick = listener; } };
         if (selector === "dialog[open]") return nested || dialog.open ? dialog : null;
@@ -113,11 +194,13 @@ function harness(canExit = true, savedHints = "auto", legacyForce = "0", deck = 
     window: { addEventListener: (type: string, listener: () => void) => handlers.set(type, listener) },
     requestAnimationFrame: (callback: () => void) => { frames.set(++nextId, callback); return nextId; },
     cancelAnimationFrame: (id: number) => frames.delete(id),
+    queueMicrotask: (callback: () => void) => callback(),
     KeyboardEvent: class { constructor(public keyType: string, public options: { key: string }) {} get key() { return this.options.key; } },
+    Event: class { constructor(public type: string) {} },
   });
   let restartable = true;
   let failExit = false;
-  setup({
+  const menu = setup({
     restart: () => { calls[0]!++; },
     library: () => { calls[1]!++; },
     settings: () => { calls[2]!++; nested = true; },
@@ -143,14 +226,15 @@ function harness(canExit = true, savedHints = "auto", legacyForce = "0", deck = 
     callback();
   }
   return {
-    dialog, actions, calls, errors, events, frames, handlers, key, poll, pages,
+    dialog, actions, editable, menu, calls, errors, events, frames, handlers, key, poll, pages,
     close: () => closeClick(),
     focus: (index: number) => actions[index]!.focus(),
     get focused() { return focused; },
     get hasController() { return hasController; },
     get yActions() { return yActions; },
-    cycleHints: () => hintsClick(),
-    get hintsLabel() { return hintsToggle.textContent; },
+    cycleHints: () => hintsClick({ preventDefault() {} }),
+    get hintsLabel() { return hintsLabel.textContent; },
+    hintsToggle,
     storage,
     set nested(value: boolean) { nested = value; },
     set popover(value: boolean) { popover = value; },

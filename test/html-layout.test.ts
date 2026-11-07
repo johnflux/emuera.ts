@@ -13,7 +13,7 @@ test("HTML renderer supports semantic headings while keeping executable tags dis
   for (let level = 1; level <= 6; level++) assert.ok(allowed.has(`H${level}`));
   for (const tag of ["SCRIPT", "STYLE", "IFRAME", "OBJECT", "EMBED"]) assert.ok(!allowed.has(tag));
   assert.match(source, /node\.getAttribute\("role"\) === "checkbox"/);
-  assert.match(source, /checkbox \? checked === "true" : null/);
+  assert.match(source, /checkbox \? checked === "mixed" \? "mixed" : checked === "true" : null/);
   assert.match(source, /Unsupported checkbox state/);
 });
 
@@ -1256,7 +1256,7 @@ test("last command is a placeholder, never input data, and defaults and waits ta
     command: field, send: { ...element, disabled: false, textContent: "" },
     document: { querySelector: () => ({ hidden: false }) },
     startButtons: [], restartButton: element, debugButton: { disabled: false },
-    autoAdvance: { update() {} },
+    autoAdvance: { update() {}, isPaused: () => false },
     busy: false, expiring: false,
     input: { kind: "integer", defaultValue: undefined as string | undefined },
     lastCommand: "Last Command: Time Stop",
@@ -2376,7 +2376,11 @@ test("mouse and keyboard events reach the input queue while a timed frame is ren
   ].join("\n"), {
     terminal, state, sent,
     get busy() { return state.busy; }, get expiring() { return state.expiring; },
-    document: { body: { classList: { contains: () => false } }, addEventListener: (_: string, handler: (event: object) => void) => documentHandlers.push(handler) },
+    document: {
+      body: { classList: { contains: () => false } },
+      querySelector: () => ({ addEventListener() {} }),
+      addEventListener: (_: string, handler: (event: object) => void) => documentHandlers.push(handler),
+    },
     Element: class {}, settling: () => state.settling, clientPoint: () => [10, -20],
     backgroundHit: () => state.hit, selectBackground() {}, getSelection: () => null,
   });

@@ -19,6 +19,13 @@ export function setupCharacterHistoryToggle(onChange) {
     apply();
     onChange();
   });
+  return {
+    reset() {
+      localStorage.removeItem(HISTORY_KEY);
+      apply();
+      onChange();
+    },
+  };
 }
 
 export function disposeCharacterChats(root) {

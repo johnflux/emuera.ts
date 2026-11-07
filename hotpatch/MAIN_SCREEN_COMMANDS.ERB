@@ -692,20 +692,25 @@ RETURNF @"<button value='{nValue}' class='era-toggle%sClass%%(nOn ? " era-on" # 
 @HOTPATCH_SETTINGS
 #DIMS DYNAMIC sHtml
 #DIMS DYNAMIC sMoan
+#DIMS DYNAMIC sMoanChecked
 sHtml '= "<button value='809' class='era-chip-button'>Config</button>"
 IF TARGET > 0 && TARGET != MASTER && (CFLAG:MASTER:うふふ || CFLAG:TARGET:うふふ || CFLAG:MASTER:イタズラ || CFLAG:TARGET:イタズラ || FLAG:70 || FREE_USE_ACTIVE())
 	sHtml += HOTPATCH_TOGGLE("Automatic Condom", 838, FLAG:自動ゴム)
 	SELECTCASE CFLAG:オート喘ぎ
 		CASE 0
 			sMoan '= "Auto-moan: No"
+			sMoanChecked '= "false"
 		CASE 1
 			sMoan '= "Auto-moan: Yes"
+			sMoanChecked '= "true"
 		CASE 2
 			sMoan '= "Auto-moan: Yes (Ahegao)"
+			sMoanChecked '= "mixed"
 		CASEELSE
 			sMoan '= "Invalid Option"
+			sMoanChecked '= "false"
 	ENDSELECT
-	sHtml += @"<button value='4000' class='era-cycle-toggle' title='%sMoan%: Cycles this character through No, Yes and Yes (Ahegao). Adds automatic moans during intimate actions when no scripted dialogue is provided; Ahegao enables more expressive variations.'>%sMoan%</button>"
+	sHtml += @"<button value='4000' class='era-toggle' role='checkbox' aria-checked='%sMoanChecked%' title='%sMoan%: Cycles this character through No, Yes and Yes (Ahegao). Adds automatic moans during intimate actions when no scripted dialogue is provided; Ahegao enables more expressive variations.'>%sMoan%</button>"
 	sHtml += HOTPATCH_TOGGLE("Standing", -9122, CFLAG:STANDING_TOGGLE, "", "Prefer standing versions of supported intimate positions with this character. When off, use normal positions where the location allows; standing may still be required elsewhere. Does not apply during sleep sessions.")
 ENDIF
 HTML_PRINT @"<div class='era-toggles era-settings'>%sHtml%</div>"

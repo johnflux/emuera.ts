@@ -7,6 +7,7 @@ import { allowsFullWidthSpace, EraError, key, splitArguments, type Diagnostic, t
 import { BUILTIN_FUNCTIONS, Runtime } from "./runtime.js";
 import { symbolTable, Variables } from "./variables.js";
 import { formNameEnd, parseAssignment, parseCallTarget, parseCaseTests, statementExpression } from "./statement-parser.js";
+import { compileRegex } from "./regex.js";
 
 const RAW = new Set([
   "DATA", "PRINTPLAIN", "CUSTOMDRAWLINE", "STRLEN", "STRLENU", "DEBUGPRINT", "DEBUGPRINTL",
@@ -35,6 +36,7 @@ const SYSTEM_VARIABLES = new Set([
   "RAND", "LINECOUNT", "LASTLOAD_VERSION", "LASTLOAD_NO", "LASTLOAD_TEXT",
   "__INT_MAX__", "__INT_MIN__", "__FILE__", "__FUNCTION__", "__LINE__", "DRAWLINESTR", "MONEYLABEL",
 ]);
+const REGEX_FUNCTIONS = new Set(["STRCOUNT", "REPLACE", "REGEXPMATCH", "FINDELEMENT", "FINDLASTELEMENT"]);
 
 export interface SyntaxReport {
   scriptFiles: number;
@@ -82,7 +84,44 @@ function types(lines: readonly Line[], target: Map<string, boolean>): void {
   }
 }
 
-function inspectReferences(expr: Expr, game: Game, scope: Variables, report: (message: string) => void): void {
+function staticString(expr: Expr | undefined): string | undefined {
+  if (expr?.kind === "literal" && typeof expr.value === "string") return expr.value;
+  if (expr?.kind === "binary" && expr.op === "+") {
+    const left = staticString(expr.left), right = staticString(expr.right);
+    if (left !== undefined && right !== undefined) return left + right;
+  }
+  if (expr?.kind === "format") {
+    const parts = expr.parts.map(staticString);
+    if (parts.every((part) => part !== undefined)) return parts.join("");
+  }
+  return undefined;
+}
+
+function inspectRegex(expr: Extract<Expr, { kind: "call" }>, game: Game, report: (message: string) => void): void {
+  if (game.routines.has(expr.name)) return;
+  if (!REGEX_FUNCTIONS.has(expr.name)) return;
+  let pattern = staticString(expr.args[1]);
+  if (pattern === undefined) return;
+  if (expr.name === "REPLACE" && expr.args[3] && expr.args[3].kind !== "omitted") {
+    const mode = expr.args[3];
+    if (mode.kind !== "literal" || typeof mode.value !== "bigint" || mode.value === 2n) return;
+  }
+  if (expr.name === "FINDELEMENT" || expr.name === "FINDLASTELEMENT") {
+    if (!/[\\^$.|?*+()[\]{}]/.test(pattern)) return;
+    const full = expr.args[4];
+    if (full && full.kind !== "omitted") {
+      if (full.kind !== "literal" || typeof full.value !== "bigint") return;
+      if (full.value !== 0n) pattern = `^(?:${pattern})$`;
+    }
+  }
+  try { compileRegex(pattern); }
+  catch (error) {
+    if (!(error instanceof EraError)) throw error;
+    report(`${expr.name}: ${error.message}`);
+  }
+}
+
+function inspectReferences(expr: Expr, game: Game, scope: Variables, report: (message: string) => void, diagnostic: (message: string) => void): void {
   const walk = (value: Expr): void => {
     switch (value.kind) {
       case "variable": {
@@ -98,6 +137,7 @@ function inspectReferences(expr: Expr, game: Game, scope: Variables, report: (me
         break;
       }
       case "call":
+        inspectRegex(value, game, diagnostic);
         if (!game.routines.has(value.name) && !BUILTIN_FUNCTIONS.has(value.name))
           report(`Unknown function: ${value.name}`);
         value.args.forEach((arg, i) => {
@@ -189,7 +229,9 @@ function checkLine(line: Line, game: Game, strings: Map<string, boolean>, inspec
       if (op.startsWith("TRY") || op === "FUNC") { expressions(parameters, game); return true; }
       missingCall(target);
     }
-    expressions(parameters, game, parse);
+    if (op === "CALLF" && target && REGEX_FUNCTIONS.has(target) && !game.routines.has(target))
+      parse(`${target}(${parameters})`);
+    else expressions(parameters, game, parse);
     return true;
   }
   if (op === "TIMES") {
@@ -226,6 +268,7 @@ function checkLine(line: Line, game: Game, strings: Map<string, boolean>, inspec
     if (call.kind === "call") call.args.forEach(inspect);
     return true;
   }
+  if (REGEX_FUNCTIONS.has(op)) { parse(`${op}(${args})`); return true; }
   if (!isSupported(op) && !BUILTIN_FUNCTIONS.has(op)) return false;
   if (BUILTIN_FUNCTIONS.has(op) && !isSupported(op) && !game.routines.has(op))
     parse(`${op}(${args})`);
@@ -246,14 +289,16 @@ export async function checkSyntax(game: Game): Promise<SyntaxReport> {
     report.references.push({ file: source.file, line: source.line, message });
   };
   const seen = new Set(report.diagnostics.map((d) => `${d.file}:${d.line}:${d.message}`));
+  const diagnostic = (source: Source, message: string): void => {
+    const id = `${source.file}:${source.line}:${message}`;
+    if (!seen.has(id)) { seen.add(id); report.diagnostics.push({ file: source.file, line: source.line, message }); }
+  };
   const attempt = (source: Source, check: () => void): void => {
     try { check(); }
     catch (error) {
       if (!(error instanceof EraError)) throw error;
       const location = error.source ?? source;
-      const diagnostic = { file: location.file, line: location.line, message: error.message };
-      const id = `${diagnostic.file}:${diagnostic.line}:${diagnostic.message}`;
-      if (!seen.has(id)) { seen.add(id); report.diagnostics.push(diagnostic); }
+      diagnostic(location, error.message);
     }
   };
   const globals = new Map(BUILTIN_STRINGS.map((name) => [name, true]));
@@ -269,7 +314,7 @@ export async function checkSyntax(game: Game): Promise<SyntaxReport> {
       report.lines++;
       if (/^#DIMS?(?:\s|$)/i.test(line.text)) attempt(line, () => declaration(line, (source) => {
         const expr = parseExpression(source);
-        inspectReferences(expr, game, globalVariables, (message) => reference(line, message));
+        inspectReferences(expr, game, globalVariables, (message) => reference(line, message), (message) => diagnostic(line, message));
         return expr;
       }));
     }
@@ -295,7 +340,7 @@ export async function checkSyntax(game: Game): Promise<SyntaxReport> {
       });
       const parse = (line: Source, source: string): Expr => {
         const expr = parseExpression(source);
-        inspectReferences(expr, game, scope, (message) => reference(line, message));
+        inspectReferences(expr, game, scope, (message) => reference(line, message), (message) => diagnostic(line, message));
         return expr;
       };
       for (const parameter of routine.parameters) attempt(routine, () => {
@@ -311,7 +356,7 @@ export async function checkSyntax(game: Game): Promise<SyntaxReport> {
         report.lines++;
         attempt(line, () => {
           if (!checkLine(line, game, strings,
-            (expr) => inspectReferences(expr, game, scope, (message) => reference(line, message)),
+            (expr) => inspectReferences(expr, game, scope, (message) => reference(line, message), (message) => diagnostic(line, message)),
             (name) => reference(line, `Unknown routine: ${name}`))) report.skippedLines++;
         });
       }

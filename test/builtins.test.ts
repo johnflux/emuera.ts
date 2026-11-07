@@ -1670,6 +1670,30 @@ QUIT`).start();
   assert.deepEqual(texts(result), ["1 1 -1", "me said"]);
 });
 
+test(".NET repeated and nested inline options preserve scope, alternatives and captures", () => {
+  for (const jit of [false, true]) {
+    const result = runtime(`@SYSTEM_TITLE
+REPEAT 5
+CALL PROBE
+REND
+QUIT
+@PROBE
+#DIMS FOUND, 8
+FOUND:0 = HOuJuU
+PRINTFORML {STRCOUNT("NUE HOuJuU", "^(?i)nue$|(?i)houjuu")} {STRCOUNT("NUE", "^(?i)nue$|(?i)houjuu")}
+PRINTFORML {STRCOUNT("C", "a(?i)b|c")} {STRCOUNT("X", "a(?i)b|c(?-i)d|x")}
+PRINTFORML {STRCOUNT("aBCd aBCD", "a((?i)b(c))d")} {STRCOUNT("aBc", "(?i)a(?-i)b(?i)c")}
+PRINTFORML {STRCOUNT("a\\nb", "a(?s).(?i)b")} {STRCOUNT("a\\nB", "(?m)^b(?i)$")}
+PRINTFORML {STRCOUNT("(?i)", "[(?i)]")} {STRCOUNT("(?i)", "\\\\(\\\\?i\\\\)")}
+PRINTSL REPLACE("NUE HOuJuU", "^(?i)nue$|(?i)houjuu", "matched")
+PRINTFORML {FINDELEMENT(FOUND, "(?i)NUE|(?i)HOUJUU", 0, 1, 1)}
+PRINTFORML {REGEXPMATCH("aBCd", "a((?i)b(c))d", 1)} {RESULT:1} %RESULTS:1% %RESULTS:2%
+RETURN`, undefined, { jit }).start();
+    const expected = ["1 1", "1 0", "1 0", "1 0", "4 1", "NUE matched", "0", "1 3 BC C"];
+    assert.deepEqual(texts(result), Array.from({ length: 5 }, () => expected).flat());
+  }
+});
+
 test("FORM conditionals close at the next \\@ like Emuera, with literal quotes in arms", () => {
   const result = runtime(`@SYSTEM_TITLE
 #DIM VALUE = 5

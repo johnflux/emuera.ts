@@ -934,12 +934,42 @@ while the page is hidden or an app menu/dialog is open, and starts a fresh 500 m
 delay when playback resumes. Script-controlled timeout behavior is unchanged.
 `web/auto-advance.js` owns the cancellable timer; a failed Continue is not retried
 automatically at the same wait.
+If an automatic Continue clears output (`CLEARLINE` or a full screen clear),
+auto-continue pauses so the newly shown screen or GUI is not skipped. The next
+Continue shows a light-grey italic "Click to continue" hint and requires a click
+or Enter. The hint is client UI, not a game output line, so it does not affect
+`CLEARLINE` counts or remain in scrollback. It pulses subtly unless reduced motion
+is preferred. A successful manual input resumes normal
+auto-continue; opening settings or toggling the preference does not dismiss this
+pause. Starting or restoring a run resets it.
 
 Two-state settings and game controls use native checkboxes with the shared
 `.checkbox-control` styling. `web/controls.js` creates game checkboxes; their checked
 state comes from the runtime snapshot, not an optimistic local toggle. Controller
-hints and Auto-moan retain their three-state cycles; run/view/tab actions and the
-Stalk star remain buttons.
+hints and Auto-moan use three-state checkboxes (empty, checked, indeterminate dash)
+with the mode name visible and their existing cycle order unchanged. Debug mode
+is in Settings under Interpreter. Controller hints highlights its row only when
+hints are actually enabled: Auto (Off) keeps the dash without the active tint.
+Run/view/tab actions and the Stalk star remain
+buttons.
+Font name and font size share one row in Settings so the dialog fits the Steam
+Deck's 1280 x 800 viewport without scrolling; narrow screens stack the controls.
+The large **Reset all** button beside Close restores the main Settings controls:
+game-default font and colors, default font size, device-default handheld layout,
+Auto controller hints, auto-continue, platform-default character history and
+built-in translation, clipboard/local-model translation off, and debug mode off.
+Translation-model endpoint, model and language, and LLM configuration are
+preserved. Resetting an active debug run asks for confirmation before restarting;
+cancelling leaves all settings unchanged.
+Shared directional navigation focuses editable controls without entering edit
+mode. Enter/A activates them; a pointer click edits directly. Escape/B leaves
+editing first, then dismisses the dialog on a second press. Single-line fields
+also leave editing on Enter; textareas retain multiline Enter. Ordinary Tab focus
+and the game command field keep native editing. Controller D-pad presses adjust
+an activated range input and emit its normal input/change events. These behaviors
+are shared by `web/controls.js` and `web/handheld.js`, not Settings-specific.
+Shared button and checkbox hover styling is limited to `(hover: hover)` devices
+to avoid sticky touch hover; keyboard focus and checked-state styling remain.
 
 While waiting at `WAIT`, clicking the terminal also continues (in addition to
 Enter or the Continue button). Links and drags that select text do not
@@ -1245,6 +1275,8 @@ Both functions report overflow instead of wrapping or quietly returning zero.
 Full 64-bit hexadecimal/binary bit patterns still convert to signed values.
 
 Regex compatibility includes Unicode predefined classes and word boundaries,
+.NET inline `i`, `m` and `s` options (including repeated, nested and disabled
+options), preserving group scope and alternation precedence,
 .NET capture numbering (unnamed groups before named groups), `Regex.Escape`
 punctuation/whitespace, and replacement tokens `${name}`, `$0`, `$+`, `$_`,
 `$&`, ``$` ``, `$'`, and `$$`. An undefined numeric group such as `$12`
@@ -1692,6 +1724,14 @@ Its **Check syntax** action parses every loaded, active routine, including paths
 not yet played, without executing scripts or changing game state. It checks block
 structure, declarations, parameters, assignments, expressions and FORM text, and
 lists file/line diagnostics. Unsupported instructions are counted separately.
+Static regex patterns in `STRCOUNT`, `REPLACE`, `REGEXPMATCH`, `FINDELEMENT`
+and `FINDLASTELEMENT` are compiled with the same .NET-to-JavaScript translation
+used during play. Invalid patterns and unsupported regex constructs appear as errors with
+the function name and source location. String literals, macro-expanded literals,
+literal concatenations and constant FORM strings are checked without matching
+input or running game code. Literal `REPLACE` mode 2 is a plain-text operation
+and is excluded; dynamic patterns and dynamic regex/plain-text modes are not
+resolved. User-defined functions overriding these built-ins are also excluded.
 Ignored duplicate routine definitions are marked with an info symbol and counted
 as info rather than errors; calls continue to use the first definition.
 Informational diagnostics are dimmed in both report sections. Unsupported
