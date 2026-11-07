@@ -9,8 +9,36 @@ const require = createRequire(import.meta.url);
 const beforePack = require("../electron/before-pack.cjs");
 const gamePaths = require("../electron/game-paths.cjs");
 const isSteamLaunch = require("../electron/steam-launch.cjs");
+const { compareVersions, getLatestVersion } = require("../electron/update-check.cjs");
 const { Arch } = require("electron-builder");
 const appDir = path.resolve(import.meta.dirname, "..");
+
+test("release version comparison handles stable, prerelease, and v-prefixed tags", () => {
+  assert.equal(compareVersions("0.1.10", "v0.1.9"), 1);
+  assert.equal(compareVersions("1.0.0", "2.0.0"), -1);
+  assert.equal(compareVersions("1.0.0", "v1.0.0"), 0);
+  assert.equal(compareVersions("1.0.0", "1.0.0-rc.1"), 1);
+  assert.equal(compareVersions("1.0.0-rc.2", "1.0.0-rc.10"), -1);
+  assert.throws(() => compareVersions("1.0", "1.0.0"), /Invalid release version/);
+});
+
+test("latest release lookup reads and validates the GitHub tag", async () => {
+  let requestUrl: string | undefined;
+  const version = await getLatestVersion(async (url: string, options: { headers: Record<string, string>; signal: AbortSignal }) => {
+    requestUrl = url;
+    assert.equal(options.headers.Accept, "application/vnd.github+json");
+    assert.ok(options.signal instanceof AbortSignal);
+    return { ok: true, json: async () => ({ tag_name: "v0.2.0" }) };
+  });
+  assert.equal(requestUrl, "https://api.github.com/repos/johnflux/emuera.ts/releases/latest");
+  assert.equal(version, "v0.2.0");
+  await assert.rejects(getLatestVersion(async () => ({
+    ok: false, status: 503, json: async () => ({}),
+  })), /HTTP 503/);
+  await assert.rejects(getLatestVersion(async () => ({
+    ok: true, json: async () => ({ tag_name: "latest" }),
+  })), /Invalid release version/);
+});
 
 test("Steam launches default to fullscreen for games and non-Steam shortcuts", () => {
   assert.equal(isSteamLaunch({ SteamAppId: "480" }), true);
@@ -29,6 +57,7 @@ test("normal launches and unset Steam IDs remain windowed", () => {
 test("desktop packages include Steam launch detection", () => {
   const { build } = require("../package.json");
   assert.ok(build.files.includes("electron/steam-launch.cjs"));
+  assert.ok(build.files.includes("electron/update-check.cjs"));
 });
 
 test("desktop window applies fullscreen only when launched through Steam", async () => {

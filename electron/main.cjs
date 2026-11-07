@@ -3,9 +3,11 @@ const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 const gamePaths = require("./game-paths.cjs");
 const isSteamLaunch = require("./steam-launch.cjs");
+const { compareVersions, getLatestVersion } = require("./update-check.cjs");
 
 let server;
 let window;
+let updateCheckStarted = false;
 
 function requireGameWindow(event, action) {
   const address = server?.address();
@@ -29,6 +31,36 @@ ipcMain.handle("era:write-clipboard", (event, text) => {
   }
   clipboard.writeText(text);
 });
+
+async function checkForUpdates() {
+  if (!app.isPackaged || updateCheckStarted) return;
+  updateCheckStarted = true;
+  try {
+    const currentVersion = app.getVersion();
+    const latestVersion = await getLatestVersion();
+    if (compareVersions(latestVersion, currentVersion) <= 0 || !window) return;
+    const { response } = await dialog.showMessageBox(window, {
+      type: "info",
+      title: "Update available",
+      message: `Era ${latestVersion} is available`,
+      detail: `You are using Era ${currentVersion}. Open the release page to download it?`,
+      buttons: ["Open release page", "Later"],
+      defaultId: 0,
+      cancelId: 1,
+    });
+    if (response === 0) {
+      try {
+        await shell.openExternal("https://github.com/johnflux/emuera.ts/releases/latest");
+      } catch (error) {
+        console.error("Failed to open the Era release page:", error);
+        dialog.showErrorBox("Unable to open the release page",
+          error instanceof Error ? error.message : String(error));
+      }
+    }
+  } catch (error) {
+    console.error("Failed to check for Era updates:", error);
+  }
+}
 
 async function createWindow() {
   const { installDirectory, searchDirectories } = gamePaths(
@@ -83,6 +115,7 @@ async function createWindow() {
     if (url !== `http://127.0.0.1:${address.port}/`) event.preventDefault();
   });
   await window.loadURL(`http://127.0.0.1:${address.port}/`);
+  void checkForUpdates();
 }
 
 app.whenReady().then(createWindow).catch((error) => {

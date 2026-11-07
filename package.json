@@ -61,6 +61,7 @@
       "electron/preload.cjs",
       "electron/game-paths.cjs",
       "electron/steam-launch.cjs",
+      "electron/update-check.cjs",
       "package.json",
       "!GAMES/**",
       "!test/**",

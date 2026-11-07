@@ -64,6 +64,8 @@ show an error and can be retried from the library or by restarting the app.
 Other game downloads also go beside `emuera-ts.exe`; Mac and Linux downloads use
 application data. If the same game is in both locations, the download location takes precedence. Refresh the library
 after adding games manually. Saves remain in each game's normal save directory.
+Packaged desktop builds check GitHub for a newer release at startup and offer to
+open its release page. The update is downloaded and installed manually.
 
 Install dependencies with `npm install`, then build on the target operating
 system:
