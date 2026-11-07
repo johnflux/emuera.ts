@@ -1932,7 +1932,9 @@ async function renderSteps(steps, fresh = false, keepFocus = false, toBottom = f
     layoutMapPictures();
     restoreSetupScroll();
     revealSelectedOccupants();
+    organizeMovePlaces();
     markMapLabels();
+    markMapCleanliness();
     profileEnd("render.layout", phaseStarted);
     phaseStarted = profileStart();
     const printed = gameOutputText(steps.flatMap(({ snapshot }) => snapshot.output ?? []));
@@ -2787,7 +2789,7 @@ terminal.addEventListener("pointerup", (event) => {
 // On the map screens a room's number on the map, its label beside it, its legend entry, its "Walk to" entry and
 // "You are here" are separate elements for the same room; pointing at (or focusing) one highlights the others.
 const roomLinkTarget = "button.choice, [data-room]";
-function roomOf(element) { return element.dataset.value ?? element.dataset.room; }
+function roomOf(element) { return element.dataset.room ?? element.dataset.value; }
 function linkRooms(target) {
   const element = target instanceof Element ? target.closest(roomLinkTarget) : null;
   const scope = element?.closest(".screen.is-active .era-move");
@@ -2824,6 +2826,66 @@ function markMapLabels() {
       node.dataset.room = button.dataset.value;
       labelButtons.set(node, button);
     }
+  }
+}
+function markMapCleanliness() {
+  for (const list of terminal.querySelectorAll(".screen.is-active .era-move-dests, .screen.is-active .era-move-more-list")) {
+    const scope = list.closest(".era-move");
+    for (const button of list.querySelectorAll("button.choice")) {
+      const mapRoom = [...(scope?.querySelectorAll(".era-map-art button.choice") ?? [])]
+        .find((candidate) => candidate.dataset.value === button.dataset.value);
+      const cleanliness = mapRoom?.dataset.tooltip?.match(/Cleanliness: (High|Medium|Low|Garbage Mountain)/)?.[1];
+      if (!cleanliness || button.querySelector(".era-move-cleanliness")) continue;
+      const marker = document.createElement("span");
+      marker.className = `era-move-cleanliness era-move-cleanliness-${cleanliness.toLowerCase().replaceAll(" ", "-")}`;
+      marker.textContent = "●";
+      marker.setAttribute("aria-hidden", "true");
+      button.append(marker);
+      describe(button, `Cleanliness: ${cleanliness}`);
+    }
+  }
+}
+function organizeMovePlaces() {
+  for (const side of terminal.querySelectorAll(".screen.is-active .era-move-side")) {
+    const map = side.closest(".era-move")?.querySelector(".era-map-art");
+    const mapPlaces = [...(map?.querySelectorAll("button.choice") ?? [])];
+    for (const row of side.querySelectorAll(".era-move-current, .era-move-return")) {
+      const mapPlace = mapPlaces.find((candidate) => candidate.dataset.value === row.dataset.room);
+      const number = row.querySelector(".era-move-num");
+      if (mapPlace && number) number.style.color = getComputedStyle(mapPlace).color;
+    }
+    const currentRoom = side.querySelector(".era-move-current")?.dataset.room;
+    if (currentRoom !== undefined) {
+      for (const place of mapPlaces) {
+        place.classList.toggle("era-map-current-room", place.dataset.value === currentRoom);
+      }
+    }
+    const nearby = side.querySelector(".era-move-dests");
+    const more = side.querySelector(".era-move-more-list");
+    if (!nearby || !more) continue;
+    const nearbyList = document.createElement("div");
+    nearbyList.className = "era-move-place-list";
+    const moreList = document.createElement("div");
+    moreList.className = "era-move-place-list";
+    for (const button of side.querySelectorAll("button.choice.era-move-nearby, button.choice.era-move-more")) {
+      const mapPlace = mapPlaces.find((candidate) => candidate.dataset.value === button.dataset.value);
+      const number = button.querySelector(".era-move-num");
+      if (mapPlace && number) number.style.color = getComputedStyle(mapPlace).color;
+      (button.classList.contains("era-move-nearby") ? nearbyList : moreList).append(button);
+    }
+    if (!nearbyList.childElementCount) {
+      const empty = document.createElement("span");
+      empty.className = "era-move-none";
+      empty.textContent = "No places within walking distance";
+      nearbyList.append(empty);
+    }
+    nearby.replaceChildren(nearbyList);
+    more.replaceChildren(moreList);
+    const moreTitle = side.querySelector(".era-move-more-title");
+    if (moreTitle) moreTitle.hidden = !moreList.childElementCount;
+    side.querySelectorAll(".line").forEach((line) => {
+      if (!line.textContent.trim() && !line.querySelector("button")) line.remove();
+    });
   }
 }
 const commandHistory = [];

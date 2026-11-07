@@ -669,53 +669,63 @@ SIF FLAG:なりきり && CFLAG:(FLAG:なりきり):出禁 && MAIN_MAP == GET_MAP
 SIF MAIN_MAP != 3
 	CALL SET_QUEST_FLAG(LSScarletAlias, QLSScarletActive, 0)
 
-@HOTPATCH_SETUP_FARMING
+@HOTPATCH_SETUP_FARMING(nLandlord = -1, nDifficulty = 0, nLoan = 0, nInGame = 0, nCanQuit = 1)
+#DIM DYNAMIC nLandlord
+#DIM DYNAMIC nDifficulty
+#DIM DYNAMIC nLoan
+#DIM DYNAMIC nInGame
+#DIM DYNAMIC nCanQuit
 #DIM DYNAMIC nIndex
 #DIM DYNAMIC nFarmPlace
 #DIM DYNAMIC nMonthlyHundredths
 #DIMS DYNAMIC sInterest
 #DIMS DYNAMIC sHardcoreInterest
-IF FLAG:地主
-	sInterest '= TOSTR(INT_NOUMIN(FLAG:地主, "金利")) + "% "
-	SIF INT_NOUMIN(FLAG:地主, "金利") < 10
-		sInterest '= TOSTR(INT_NOUMIN(FLAG:地主, "金利")) + ".0% "
-	nMonthlyHundredths = (INT_NOUMIN(FLAG:地主, "金利") * 100 + 6) / 12
+IF nLandlord < 0
+	nLandlord = FLAG:地主
+	nDifficulty = FLAG:農民難易度
+	nLoan = FLAG:地主貸付金
+ENDIF
+IF nLandlord
+	sInterest '= TOSTR(INT_NOUMIN(nLandlord, "金利")) + "% "
+	SIF INT_NOUMIN(nLandlord, "金利") < 10
+		sInterest '= TOSTR(INT_NOUMIN(nLandlord, "金利")) + ".0% "
+	nMonthlyHundredths = (INT_NOUMIN(nLandlord, "金利") * 100 + 6) / 12
 	sHardcoreInterest '= TOSTR(nMonthlyHundredths / 100) + "." + TOSTR(nMonthlyHundredths % 100, "00") + "% "
-	IF INT_NOUMIN(FLAG:地主, "金利") >= 12
-		nMonthlyHundredths = (INT_NOUMIN(FLAG:地主, "金利") * 10 + 6) / 12
+	IF INT_NOUMIN(nLandlord, "金利") >= 12
+		nMonthlyHundredths = (INT_NOUMIN(nLandlord, "金利") * 10 + 6) / 12
 		sHardcoreInterest '= TOSTR(nMonthlyHundredths / 10) + "." + TOSTR(nMonthlyHundredths % 10) + "% "
 	ENDIF
 ENDIF
 HTML_PRINT "<era-open class='era-setup-card'>"
 HTML_PRINT "<span class='era-launch-eyebrow'>Contract Terms</span>"
 HTML_PRINT "<era-open class='era-setup-farm-summary'>"
-IF FLAG:地主
-	nFarmPlace = INT_NOUMIN(FLAG:地主, "場所ID")
+IF nLandlord
+	nFarmPlace = INT_NOUMIN(nLandlord, "場所ID")
 	SIF GET_MAPID(nFarmPlace) != MAIN_MAP
 		nFarmPlace = GET_MAP_REPLACEMENT(nFarmPlace)
-	CALL HOTPATCH_FACE(FLAG:地主, 74)
+	CALL HOTPATCH_FACE(nLandlord, 74)
 	HTML_PRINT @"<div class='era-info-face era-setup-landlord-face'>%RESULTS%</div>"
-	HTML_PRINT @"<div class='era-setup-description'>Landlord: %HTML_ESCAPE(CALLNAME:(FLAG:地主))% · Initial loan: %HTML_ESCAPE(金額表示(FLAG:地主貸付金))%</div>"
-	HTML_PRINT @"<div class='era-setup-description'>You will grow <strong>%HTML_ESCAPE(CROP_NAME_TR(STR_NOUMIN(FLAG:地主, "作物")))%</strong> for %HTML_ESCAPE(CALLNAME:(FLAG:地主))%. Work the rented plot from <strong>%HTML_ESCAPE(NAME_FROM_PLACE(nFarmPlace))%</strong> in <strong>%HTML_ESCAPE(FARM_LOCATION_TR(STR_NOUMIN(FLAG:地主, "畑のマップ")))%</strong> using the field-work action each day. Your landlord collects the harvest each month. Good harvests can earn money and Trust; poor harvests can reduce Trust.</div>"
+	HTML_PRINT @"<div class='era-setup-description'>Landlord: %HTML_ESCAPE(CALLNAME:nLandlord)% · %(nInGame ? "Debt" # "Initial loan")%: %HTML_ESCAPE(金額表示(nLoan))%</div>"
+	HTML_PRINT @"<div class='era-setup-description'>You will grow <strong>%HTML_ESCAPE(CROP_NAME_TR(STR_NOUMIN(nLandlord, "作物")))%</strong> for %HTML_ESCAPE(CALLNAME:nLandlord)%. Work the rented plot from <strong>%HTML_ESCAPE(NAME_FROM_PLACE(nFarmPlace))%</strong> in <strong>%HTML_ESCAPE(FARM_LOCATION_TR(STR_NOUMIN(nLandlord, "畑のマップ")))%</strong> using the field-work action each day. Your landlord collects the harvest each month. Good harvests can earn money and Trust; poor harvests can reduce Trust.</div>"
 ELSE
 	HTML_PRINT "<div class='era-setup-description'>Farming means tending a rented field daily. Your landlord collects the harvest each month. Good harvests can earn money and Trust; poor harvests can reduce Trust. Select a landlord below to choose contract terms.</div>"
 	HTML_PRINT "<div class='era-setup-description'>No farming obligations or starting loan without a contract.</div>"
 ENDIF
 HTML_PRINT "<era-close>"
 HTML_PRINT "<era-open class='era-setup-grid'>"
-HTML_PRINT HOTPATCH_SETUP_CHOICE(3101, "Normal Peasant", FLAG:農民難易度 == 1, "Kind landlord. No interest; buy your own tools.", FLAG:地主 != 0)
-HTML_PRINT HOTPATCH_SETUP_CHOICE(3102, "Hardcore Peasant", FLAG:農民難易度 == 2, "Strict landlord. " + sHardcoreInterest + "monthly interest; tools lent with monthly fees.", FLAG:地主 != 0, "", 0, REPLACE(sHardcoreInterest, " ", ""))
-HTML_PRINT HOTPATCH_SETUP_CHOICE(3103, "Extreme Peasant", FLAG:農民難易度 == 3, "Tyrannical landlord. " + sInterest + "monthly interest; tools lent with higher monthly fees.", FLAG:地主 != 0, "", 0, REPLACE(sInterest, " ", ""))
+HTML_PRINT HOTPATCH_SETUP_CHOICE(3101, "Normal Peasant", nDifficulty == 1, "Kind landlord. No interest; buy your own tools.", nLandlord != 0)
+HTML_PRINT HOTPATCH_SETUP_CHOICE(3102, "Hardcore Peasant", nDifficulty == 2, "Strict landlord. " + sHardcoreInterest + "monthly interest; tools lent with monthly fees.", nLandlord != 0, "", 0, REPLACE(sHardcoreInterest, " ", ""))
+HTML_PRINT HOTPATCH_SETUP_CHOICE(3103, "Extreme Peasant", nDifficulty == 3, "Tyrannical landlord. " + sInterest + "monthly interest; tools lent with higher monthly fees.", nLandlord != 0, "", 0, REPLACE(sInterest, " ", ""))
 HTML_PRINT "<era-close>"
 HTML_PRINT "<era-close>"
 HTML_PRINT "<era-open class='era-setup-card'>"
 HTML_PRINT @"<div class='era-setup-farm-heading'><span class='era-launch-eyebrow'>Farming Contract</span><span class='era-setup-description'>Your home region: <strong>%HTML_ESCAPE(GET_MAPNAME(MAIN_MAP))%</strong></span></div>"
 HTML_PRINT "<era-open class='era-setup-grid'>"
-HTML_PRINT HOTPATCH_SETUP_CHOICE(3000, "No farming contract", !FLAG:地主)
+HTML_PRINT HOTPATCH_SETUP_CHOICE(3000, "No farming contract", !nLandlord, nCanQuit ? "" # "Cannot quit while in debt.", nCanQuit)
 FOR nIndex, 1, CHARANUM
 	SIF nIndex == FLAG:なりきり || !STRLENS(STR_NOUMIN(nIndex, "説明"))
 		CONTINUE
-	HTML_PRINT HOTPATCH_SETUP_CHOICE(30000 + nIndex, CALLNAME:nIndex, FLAG:地主 == nIndex, FARMING_DESCRIPTION_TR(STR_NOUMIN(nIndex, "説明")) + " · " + CROP_NAME_TR(STR_NOUMIN(nIndex, "作物")), 1, FARM_LOCATION_TR(STR_NOUMIN(nIndex, "畑のマップ")), INT_NOUMIN(nIndex, "マップID") == MAIN_MAP)
+	HTML_PRINT HOTPATCH_SETUP_CHOICE(30000 + nIndex, CALLNAME:nIndex, nLandlord == nIndex, FARMING_DESCRIPTION_TR(STR_NOUMIN(nIndex, "説明")) + " · " + CROP_NAME_TR(STR_NOUMIN(nIndex, "作物")), 1, FARM_LOCATION_TR(STR_NOUMIN(nIndex, "畑のマップ")), INT_NOUMIN(nIndex, "マップID") == MAIN_MAP)
 NEXT
 HTML_PRINT "<era-close>"
 HTML_PRINT "<era-close>"

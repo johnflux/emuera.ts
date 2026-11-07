@@ -117,6 +117,33 @@ test("hotpatches replace game routines and may add HOTPATCH_ helpers", async () 
   assert.equal(output, "patched");
 });
 
+test("Move map destination rows render their reachability class", {
+  skip: !existsSync(GAME_ROOT),
+}, async () => {
+  const game = await loadGame();
+  assert.ok((await applyHotpatches(game)).includes("PRINT_DESTINATION"));
+  indexScript(game, [
+    "@PROBE_MOVE_MAP",
+    "ADDVOIDCHARA",
+    "MASTER = 0",
+    "CFLAG:MASTER:現在位置 = 53",
+    "MAIN_MAP = 0",
+    "TFLAG:マップ切り替え = 1",
+    "CALL MAP_0_1",
+    "WAIT",
+  ].join("\n"), "<move-map-test>");
+
+  const snapshot = new Runtime(game).start("PROBE_MOVE_MAP");
+  assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
+  const destinations = snapshot.output
+    .filter((item) => item.type === "html" && item.text.includes("era-move-place"));
+  assert.ok(destinations.length > 1, "the current map page should emit destination rows");
+  assert.ok(destinations.some((item) => item.text.includes("era-move-more")),
+    "non-reachable destinations should be available for the More on this map list");
+  assert.ok(destinations.every((item) => !item.text.includes("CAN_MOVE(")),
+    "the reachability class expression must be evaluated before rendering");
+});
+
 test("main and wake-up clock hotpatches pass their exact time in one logical line", () => {
   for (const jit of [false, true]) {
     for (const [file, minutes, title] of [

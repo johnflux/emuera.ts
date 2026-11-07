@@ -2,13 +2,86 @@
 ; Hotpatch for the menu shown while you sleep, before waking (ERB/SHOP関連/SHOP.ERB @SHOW_SHOP), laid out in panels like
 ; the main screen (MAIN_SCREEN.ERB): a header with the sky, the waking time's clock, the date, the waking time and a
 ; large Wake Up button; your card (meters and funds) and your home's; the menu grouped into cards; the tip at the
-; bottom. The commands and their numbers are the original's (USERSHOP handles them unchanged), greyed out as before
-; while you are fainted. Dropped: the DRAWLINE rules and the blank lines that spaced the menu.
+; bottom. Commands retain their original numbers and fainting restrictions. Farm Settings uses the startup controls;
+; other commands delegate to the original. Dropped: the DRAWLINE rules and the blank lines that spaced the menu.
 ;-------------------------------------------------------------------------------
 @USERSHOP
+IF RESULT == 151 && !FLAG:気絶中断
+	CALL HOTPATCH_FARM_SETTINGS
+	RETURN
+ENDIF
 SIF RESULT == 100
 	CLEARLINE LINECOUNT
 JUMP HOTPATCH_ORIGINAL_USERSHOP
+
+@HOTPATCH_FARM_SETTINGS
+#DIM DYNAMIC nStart
+#DIM DYNAMIC nLandlord
+#DIM DYNAMIC nDifficulty
+#DIM DYNAMIC nLoan
+#DIM DYNAMIC nAction
+#DIM DYNAMIC nIndex
+nStart = LINECOUNT
+nLandlord = FLAG:地主
+nDifficulty = FLAG:農民難易度
+DO
+	CLEARLINE LINECOUNT - nStart
+	nLoan = 0
+	IF nLandlord
+		IF nLandlord == FLAG:地主
+			nLoan = FLAG:地主貸付金
+		ELSE
+			nLoan = INT_NOUMIN(nLandlord, "報酬") * 1000 + FLAG:地主貸付金
+		ENDIF
+	ENDIF
+	HTML_PRINT "<era-open class='era-dialog era-setup'>"
+	HTML_PRINT "<div class='era-inventory-header'><div class='era-inventory-heading'><span class='era-inventory-title'>Farm Settings</span><button value='999' class='era-dialog-close' title='Cancel'>×</button></div></div>"
+	HTML_PRINT "<era-open class='era-inventory-body era-setup-body'>"
+	SIF nLandlord && nLandlord != FLAG:地主 && FLAG:地主貸付金 > 0
+		HTML_PRINT "<div class='era-setup-description'>Your existing debt will transfer to the new landlord.</div>"
+	CALL HOTPATCH_SETUP_FARMING(nLandlord, nDifficulty, nLoan, 1, FLAG:地主貸付金 <= 0)
+	HTML_PRINT "<era-close>"
+	HTML_PRINT "<div class='era-inventory-footer'><button value='999' class='era-launch-load'>Cancel</button><button value='100' class='era-launch-primary'>Apply</button></div>"
+	HTML_PRINT "<era-close>"
+	INPUT
+	nAction = RESULT
+	SELECTCASE nAction
+	CASE 999
+		BREAK
+	CASE 100
+		IF nLandlord != FLAG:地主
+			CALL RESET_NOUMIN
+			IF nLandlord
+				FLAG:地主 = nLandlord
+				FLAG:地主貸付金 = nLoan
+				FLAG:年始貸付金 = INT_NOUMIN(nLandlord, "報酬") * 1000
+			ENDIF
+		ENDIF
+		IF nLandlord && FLAG:農民難易度 != nDifficulty
+			FLAG:農民難易度 = nDifficulty
+			FLAG:畑拡張 = nDifficulty
+			SETBIT FLAG:1000, 2
+		ENDIF
+		BREAK
+	CASE 3000
+		SIF FLAG:地主貸付金 <= 0
+			nLandlord = 0
+		SIF !nLandlord
+			nDifficulty = 0
+	CASE 30001 TO 39999
+		nIndex = nAction - 30000
+		SIF nIndex >= CHARANUM || nIndex == FLAG:なりきり || !STRLENS(STR_NOUMIN(nIndex, "説明"))
+			CONTINUE
+		IF nIndex != nLandlord
+			nLandlord = nIndex
+			nDifficulty = nIndex == FLAG:地主 ? FLAG:農民難易度 # 1
+		ENDIF
+	CASE 3101 TO 3103
+		SIF nLandlord
+			nDifficulty = nAction - 3100
+	ENDSELECT
+LOOP 1
+CLEARLINE LINECOUNT - nStart
 
 @SHOW_SHOP
 #DIMS DYNAMIC sHtml

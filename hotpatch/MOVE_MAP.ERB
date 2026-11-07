@@ -8,11 +8,10 @@
 ; BARE argument leaves out the "== page name ==" header for screens that show it themselves.
 ;
 ; @COM400 keeps the original's logic and input handling; only its display is laid out in panels: the map's pages as
-; tabs with Back, the map and its list of places in one card, and beside it where you are, the places you can walk to,
+; tabs with Back and the map in one card, and beside it where you are, the places listed for the current map page,
 ; Return to your room, the senses (detection mode, whereabouts, cleanliness) and the Lunatic Survival tasks. The tabs
-; send MAP<page>; switching a tab or the detection mode erases the screen before redrawing it, so the history keeps one
-; copy. Dropped: the DRAWLINE, the "Change Map" arrows (the tabs replace them) and the [C] display-mode
-; switch (the list of places and the walkable places are always shown).
+; send MAP<page>; switching a tab or the detection mode erases the screen before redrawing it, so the history keeps
+; one copy. Dropped: the DRAWLINE, the "Change Map" arrows (the tabs replace them) and the [C] display-mode switch.
 ;-------------------------------------------------------------------------------
 @COM400
 #DIM 入浴拒否
@@ -480,30 +479,23 @@ IF FLAG:察知モード == 1 || FLAG:察知モード == 2
 	PRINTL
 	HTML_PRINT "<era-close>"
 ENDIF
-HTML_PRINT "<era-open class='era-move-legend'>"
-TRYCALLFORM MAP_{MAIN_MAP}_{TFLAG:マップ切り替え}
-HTML_PRINT "<era-close>"
 HTML_PRINT "<era-close>"
 
 HTML_PRINT "<era-open class='era-card era-move-side'>"
-HTML_PRINT "<div class='era-card-title'>You are here</div>"
-HTML_PRINT @"<div class='era-move-here' data-room='{nHere}'><span class='era-move-num'>{nHere % 100}</span>%HTML_ESCAPE(THE_CASE_SHIFT(NAME_FROM_PLACE(nHere)))%</div>"
+HTML_PRINT "<div class='era-card-title'>Places</div>"
+HTML_PRINT @"<div class='era-move-current' data-room='{nHere}'><span class='era-move-num'>{nHere % 100}</span>%HTML_ESCAPE(THE_CASE_SHIFT(NAME_FROM_PLACE(nHere)))%<span class='era-move-place-note'>You are here</span></div>"
 SIF nHere != CFLAG:MASTER:初期位置 && IN_HOME(CFLAG:MASTER:初期位置) == 1
-	HTML_PRINT @"<div class='era-shop-chips'><button value='0' class='era-chip-button' title='%HTML_ESCAPE(THE_CASE_SHIFT(NAME_FROM_PLACE(CFLAG:MASTER:初期位置)))%'>Return to your room</button></div>"
-sHtml '= ""
-FOR LOCAL, MINROOM(), MAXROOM
-	SIF !(CAN_MOVE(nHere, LOCAL) & 1)
-		CONTINUE
-	SIF NAME_FROM_PLACE(LOCAL) == ""
-		CONTINUE
-	sHtml += @"<button value='{LOCAL}' class='era-move-dest'><span class='era-move-num'>{LOCAL % 100}</span>%HTML_ESCAPE(THE_CASE_SHIFT(NAME_FROM_PLACE(LOCAL)))%</button>"
-NEXT
-SIF !(CAN_MOVE(nHere, ENTRANCE) & 1) && nHere != ENTRANCE
-	sHtml += @"<button value='{ENTRANCE}' class='era-move-dest' title='The way out'><span class='era-move-num'>{ENTRANCE % 100}</span>%HTML_ESCAPE(THE_CASE_SHIFT(NAME_FROM_PLACE(ENTRANCE)))%</button>"
-HTML_PRINT "<div class='era-move-subtitle'>Walk to</div>"
-SIF sHtml == ""
-	sHtml '= "<span class='era-move-none'>Nowhere from here</span>"
-HTML_PRINT @"<div class='era-move-dests'>%sHtml%</div>"
+	HTML_PRINT @"<button value='0' class='era-move-place era-move-return' data-room='{CFLAG:MASTER:初期位置}' title='Return to your room'><span class='era-move-num'>{CFLAG:MASTER:初期位置 % 100}</span>%HTML_ESCAPE(THE_CASE_SHIFT(NAME_FROM_PLACE(CFLAG:MASTER:初期位置)))%<span class='era-move-place-note'>Return to your room</span></button>"
+HTML_PRINT "<div class='era-move-subtitle era-move-places-title'>Nearby</div>"
+HTML_PRINT "<era-open class='era-move-dests'>"
+TRYCALLFORM MAP_{MAIN_MAP}_{TFLAG:マップ切り替え}
+HTML_PRINT "<era-close>"
+HTML_PRINT "<div class='era-move-subtitle era-move-more-title'>More on this map</div>"
+HTML_PRINT "<era-open class='era-move-more-list'>"
+HTML_PRINT "<era-close>"
+IF TALENT:MASTER:汚部屋察知
+	HTML_PRINT "<div class='era-move-cleanliness-key'><span><i class='era-move-cleanliness-high'>●</i> Clean</span><span><i class='era-move-cleanliness-medium'>●</i> A little dirty</span><span><i class='era-move-cleanliness-low'>●</i> Dirty</span><span><i class='era-move-cleanliness-garbage-mountain'>●</i> Garbage Mountain</span></div>"
+ENDIF
 IF TALENT:MASTER:居場所察知 || TALENT:MASTER:汚部屋察知
 	IF FLAG:察知モード == 1
 		sMode '= "People"
@@ -529,6 +521,18 @@ ENDIF
 HTML_PRINT "<era-close>"
 HTML_PRINT "<era-close>"
 HTML_PRINT "<era-close>"
+
+@PRINT_DESTINATION(ARG, ARG:1 = -1)
+#DIM ID
+SIF ARG:1 < 0
+	ARG:1 = ARG
+FOR LOCAL, ARG, ARG:1 + 1
+	ID = 100 * MAIN_MAP + LOCAL
+	SIF ID == CFLAG:MASTER:現在位置
+		CONTINUE
+	LOCALS '= (CAN_MOVE(CFLAG:MASTER:現在位置, ID) & 1) ? "era-move-place era-move-nearby" # "era-move-place era-move-more"
+	HTML_PRINT @"<button value='{ID}' class='%LOCALS%' data-room='{ID}'><span class='era-move-num'>{LOCAL % 100}</span>%HTML_ESCAPE(STR_TR(8000 + ID))%</button>"
+NEXT
 
 @HOTPATCH_MAP_OPEN(KEY)
 #DIMS KEY
