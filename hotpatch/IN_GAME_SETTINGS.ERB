@@ -1,0 +1,120 @@
+; Reuse startup controls without applying startup-only changes to an existing game.
+@HOTPATCH_WORLD_SETTINGS
+#DIM DYNAMIC nStart
+#DIM DYNAMIC nAction
+nStart = LINECOUNT
+DO
+	CLEARLINE LINECOUNT - nStart
+	HTML_PRINT "<era-open class='era-dialog era-setup'>"
+	HTML_PRINT "<div class='era-inventory-header'><div class='era-inventory-heading'><span class='era-inventory-title'>World Settings</span><button value='999' class='era-dialog-close' title='Close'>×</button></div></div>"
+	HTML_PRINT "<era-open class='era-inventory-body era-setup-body'>"
+	CALL HOTPATCH_SETUP_WORLD_SETTINGS
+	HTML_PRINT "<era-close>"
+	HTML_PRINT "<div class='era-inventory-footer'><button value='999' class='era-launch-primary'>Done</button></div>"
+	HTML_PRINT "<era-close>"
+	INPUT
+	nAction = RESULT
+	SIF nAction == 999
+		BREAK
+	SIF GROUPMATCH(nAction, 4110, 4130, 4131, 4132, 4141, 4142, 4143)
+		CALL HOTPATCH_SETUP_WORLD_INPUT(nAction, 0)
+LOOP 1
+CLEARLINE LINECOUNT - nStart
+
+@HOTPATCH_DIALOGUE_SETTINGS
+#DIM DYNAMIC nStart
+#DIM DYNAMIC nAction
+#DIM DYNAMIC nIndex
+#DIM DYNAMIC nChoice
+#DIM DYNAMIC nNeedsReset
+nStart = LINECOUNT
+DO
+	CLEARLINE LINECOUNT - nStart
+	HTML_PRINT "<era-open class='era-dialog era-setup'>"
+	HTML_PRINT "<div class='era-inventory-header'><div class='era-inventory-heading'><span class='era-inventory-title'>Dialogue Settings</span><button value='999' class='era-dialog-close' title='Close'>×</button></div></div>"
+	HTML_PRINT "<era-open class='era-inventory-body era-setup-body'>"
+	CALL HOTPATCH_SETUP_DIALOGUE
+	HTML_PRINT "<era-close>"
+	HTML_PRINT "<div class='era-inventory-footer'><button value='999' class='era-launch-primary'>Done</button></div>"
+	HTML_PRINT "<era-close>"
+	INPUT
+	nAction = RESULT
+	SIF nAction == 999
+		BREAK
+	IF INRANGE(nAction, 20004, 23999)
+		nIndex = (nAction - 20000) / 4
+		nChoice = (nAction - 20000) % 4
+		SIF nIndex <= 0 || nIndex >= CHARANUM || nIndex == FLAG:なりきり || NO:nIndex != nIndex || CFLAG:nIndex:口上実装状況 <= 1 || CFLAG:nIndex:口上セレクタ == nChoice
+			CONTINUE
+		CALL HOTPATCH_SETUP_DIALOGUE_INFO(nIndex, nChoice)
+		SIF !RESULT
+			CONTINUE
+		nNeedsReset = !GETBIT(RESULT:1, CFLAG:nIndex:口上セレクタ)
+		CLEARLINE LINECOUNT - nStart
+		HTML_PRINT "<era-open class='era-dialog era-setup era-setup-editor'>"
+		HTML_PRINT "<div class='era-inventory-header'><span class='era-inventory-title'>Dialogue Settings</span></div>"
+		HTML_PRINT "<era-open class='era-inventory-body'>"
+		IF nNeedsReset
+			PRINTFORML Changing this dialogue resets the character's relationships, events, abilities and flags.
+			PRINTBUTTON "Reset and change dialogue", 1
+			PRINTBUTTON "Cancel", 0
+			INPUT
+			IF RESULT != 1
+				HTML_PRINT "<era-close>"
+				HTML_PRINT "<era-close>"
+				CONTINUE
+			ENDIF
+		ENDIF
+		CALL CHARACTER_GET_NEW_DIALOGUE(nIndex, nChoice, nNeedsReset)
+		HTML_PRINT "<era-close>"
+		HTML_PRINT "<era-close>"
+	ENDIF
+LOOP 1
+CLEARLINE LINECOUNT - nStart
+
+@CUSTOM_OPTION_RESULT_4
+#DIM DYNAMIC nStart
+#DIM DYNAMIC nAction
+#DIM DYNAMIC nControl
+nStart = LINECOUNT
+DO
+	CLEARLINE LINECOUNT - nStart
+	HTML_PRINT "<era-open class='era-dialog era-setup'>"
+	HTML_PRINT "<div class='era-inventory-header'><div class='era-inventory-heading'><span class='era-inventory-title'>Yandere Settings</span><button value='999' class='era-dialog-close' title='Close'>×</button></div></div>"
+	HTML_PRINT "<era-open class='era-inventory-body era-setup-body'>"
+	CALL HOTPATCH_SETUP_YANDERE
+	HTML_PRINT "<button value='32' class='era-chip-button'>More options &amp; help</button>"
+	HTML_PRINT "<era-close>"
+	HTML_PRINT "<div class='era-inventory-footer'><button value='999' class='era-launch-primary'>Done</button></div>"
+	HTML_PRINT "<era-close>"
+	INPUT
+	nAction = RESULT
+	IF nAction == 999
+		BREAK
+	ELSEIF nAction == 31 || nAction == 32
+		CLEARLINE LINECOUNT - nStart
+		HTML_PRINT "<era-open class='era-dialog era-setup era-setup-editor'>"
+		HTML_PRINT "<div class='era-inventory-header'><span class='era-inventory-title'>Yandere Settings</span></div>"
+		HTML_PRINT "<era-open class='era-inventory-body'>"
+		IF nAction == 31
+			CALL YANDERE_SET_MENU
+		ELSE
+			CALL HOTPATCH_ORIGINAL_CUSTOM_OPTION_RESULT_4
+		ENDIF
+		HTML_PRINT "<era-close>"
+		HTML_PRINT "<era-close>"
+	ELSEIF INRANGE(nAction, 9900, 9911)
+		nControl = nAction - 9500
+		PRINTFORML Enter a whole number (0-100)
+		INPUT
+		SIF INRANGE(RESULT, 0, 100)
+			CALL HOTPATCH_SETUP_INPUT(160000 + nControl * 10000 + RESULT)
+	ELSEIF INRANGE(nAction, 4160000, 4270100)
+		nControl = (nAction - 160000) / 10000
+		SIF INRANGE(nControl, 400, 411)
+			CALL HOTPATCH_SETUP_INPUT(nAction)
+	ELSEIF GROUPMATCH(nAction, 4200, 4201, 4202, 4203, 4204, 4205, 4210, 4211, 4401, 4402, 4403, 4405, 4410, 4450) || INRANGE(nAction, 4300, 4317)
+		CALL HOTPATCH_SETUP_INPUT(nAction)
+	ENDIF
+LOOP 1
+CLEARLINE LINECOUNT - nStart

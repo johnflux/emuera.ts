@@ -1,0 +1,172 @@
+; Native move-home flow, with the shared region selector in place of its numbered list.
+@HOTPATCH_MOVE_HOME
+#DIM CHK_TRAINING
+#DIM CHK_GARDENING
+#DIM 設定前MAIN_MAP
+#DIM 設定前酒虫
+#DIM 設定前初期位置
+#DIM 設定前大家
+#DIM ANIMATION_SEED
+#DIM PREV_REDRAW
+
+CALL LS_RESTRICT_PRINT("Change home") ;Custom code, restrict moving during Lunatic Survival.
+SIF RESULT
+	RETURN
+ANIMATION_SEED = 0
+;qol custom code, allow for consistent testing
+[IF_DEBUG]
+	IF ANIMATERECOLOREDMAPS
+		LOCAL = GETMILLISECOND()
+		ANIMATION_SEED = LOCAL / ANIMATERECOLOREDMAPS % 20
+	ENDIF
+[ENDIF]
+PREV_REDRAW = CURRENTREDRAW()
+
+;Map Animation Code
+$MAPANIMATION
+LINESTART = LINECOUNT
+SIF ANIMATERECOLOREDMAPS && !FLAG:70 && !MAP_ANIMATION_PAUSE ;qol custom code, allow pausing for debugging
+	ANIMATION_SEED ++
+;
+;
+;メンバーの起床時間再設定
+;
+IF !引っ越し
+	IF ゲーム開始処理中 || ゲーム引き継ぎ処理中
+		MAIN_MAP = 0
+		TRYCALLFORM ROOMSETTING_{MAIN_MAP}
+	ENDIF
+	設定前MAIN_MAP = MAIN_MAP
+	設定前酒虫 = 拠点_酒虫
+	設定前初期位置 = デフォルト初期位置
+	設定前大家 = 拠点_大家
+	引っ越し = 1
+ENDIF
+IF FLAG:一時滞在
+	PRINTFORMW Unable to move when a person is staying over.
+	RETURN
+ENDIF
+DRAWLINE
+;Color map
+IF RECOLOREDMAPS
+	CALL DRAW_COLOREDMAP(ANIMATION_SEED, "HIKKOSHI")
+ELSE
+	CALL DRAW_MAP("HIKKOSHI")
+ENDIF
+DRAWLINE
+PRINTFORML ■%GET_MAPNAME(MAIN_MAP)%
+CALL 物件データ(MAIN_MAP)
+PRINTFORM Foraging spots: 
+CALL ShowGatheringSpots(MAIN_MAP)
+PRINTFORML
+FONTITALIC
+CALLFORM マップ紹介_{MAIN_MAP}
+FONTREGULAR
+PRINTL
+DRAWLINEFORM =
+PRINT Select a place to stay. 
+PRINTBUTTON @"[Switch Preview Map({TFLAG:マップ切り替え})]", 1997
+PRINTL
+HTML_PRINT "<era-open class='era-setup era-setup-editor'>"
+HTML_PRINT "<era-open class='era-setup-card'>"
+CALL HOTPATCH_SETUP_HOME_CHOICES
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-close>"
+;-----------
+PRINT [1999] Choose This One 
+SIF !ゲーム開始処理中 && !ゲーム引き継ぎ処理中
+	PRINT [1998] Cancel
+PRINTL
+;Map Animation Code
+IF ANIMATERECOLOREDMAPS && !FLAG:70
+	REDRAW PREV_REDRAW
+	;qol custom code, keep synced with actual time
+	TINPUT ANIMATERECOLOREDMAPS - (GETMILLISECOND() % ANIMATERECOLOREDMAPS),99999,0,""
+ELSE
+	INPUT
+ENDIF
+;拠点切り替え
+IF RESULT == 99999
+	PREV_REDRAW = CURRENTREDRAW()
+	REDRAW 0
+	CLEARLINE LINECOUNT - LINESTART
+	GOTO MAPANIMATION
+ELSEIF RESULT >= 2000 && GET_EXISTMAP(RESULT - 2000)
+	MAIN_MAP = RESULT - 2000
+	CALLFORM ROOMSETTING_{MAIN_MAP}
+	CALLFORM DEFAULT_OWNER_{MAIN_MAP}
+	TFLAG:マップ切り替え = 1
+	RESTART
+;プレビュー切り替え
+ELSEIF RESULT == 1997
+	TFLAG:マップ切り替え += 1
+	SIF TFLAG:マップ切り替え > MAP_PAGES
+		TFLAG:マップ切り替え = 1
+	RESTART
+;キャンセル
+ELSEIF RESULT == 1998 && !ゲーム開始処理中 && !ゲーム引き継ぎ処理中
+	引っ越し = 0
+	MAIN_MAP = 設定前MAIN_MAP
+	拠点_酒虫 = 設定前酒虫
+	デフォルト初期位置 = 設定前初期位置
+	拠点_大家 = 設定前大家
+	TFLAG:マップ切り替え = 0
+	CALL ROOMSETTING
+	RETURN
+;決定
+ELSEIF RESULT == 1999
+	SIF 設定前MAIN_MAP == MAIN_MAP
+	CALLFORM DEFAULT_OWNER_{MAIN_MAP}
+;qol custom code
+[IF_DEBUG]
+ELSEIF RESULT == -1001
+	ANIMATION_SEED--
+	SIF ANIMATION_SEED < 0
+		ANIMATION_SEED = 19
+	MAP_ANIMATION_PAUSE = 1
+	CLEARLINE LINECOUNT - LINESTART
+	GOTO MAPANIMATION
+ELSEIF RESULT == -1002
+	ANIMATION_SEED++
+	MAP_ANIMATION_PAUSE = 1
+	CLEARLINE LINECOUNT - LINESTART
+	GOTO MAPANIMATION
+ELSEIF RESULT == -1003
+	MAP_ANIMATION_PAUSE = !MAP_ANIMATION_PAUSE
+	CLEARLINE LINECOUNT - LINESTART
+	GOTO MAPANIMATION
+[ENDIF]
+ELSE
+	RESTART
+ENDIF
+;決定後
+;FLAG:おみくじ契約 = 0
+CALL Qol_MoveIn_Omikuji ;qol custom code
+TFLAG:マップ切り替え = 0
+CALL SET_ENKAI_LOCATIONDISPLAY
+CALL MAP_DEFAULTRESIDENT(MAIN_MAP)
+;施錠
+VARSET LOCK
+
+FOR LOCAL,1,CHARANUM
+	CALL CHARA_SLEEP, LOCAL, 0
+NEXT
+CHK_TRAINING = 0
+CHK_GARDENING = 0
+FOR LOCAL,1,100
+	SIF ROOMDATA:LOCAL & 場所_訓練
+		CHK_TRAINING = 1
+	SIF ROOMDATA:LOCAL & 場所_菜園
+		CHK_GARDENING = 1
+NEXT
+SIF !CHK_TRAINING
+	CALL COLORMESSAGE(@"[Combat Training] is not available on this map.",C_YELLOW,2)
+SIF !CHK_GARDENING
+	CALL COLORMESSAGE(@"[Kitchen Garden] is not available on this map.",C_YELLOW,2)
+SIF !SUMIKOMI_ROOM
+	CALL COLORMESSAGE(@"[Lodger Move-In] event is not available on this map.",C_YELLOW,2)
+;addition custom code, duplicated characters
+SIF FLAG:なりきり && CFLAG:(FLAG:なりきり):出禁 && MAIN_MAP == GET_MAPID(CSVCFLAG(NO:(FLAG:なりきり),311)) && CSVCFLAG(NO:(FLAG:なりきり),311) != SUKIMA() ;ATW Note: When using Dev Quicktest as a character with no home, going to the Hakurei Shrine will take you to the gap space, hence for a SUKIMA() check
+	CFLAG:MASTER:初期位置 = CSVCFLAG(NO:(FLAG:なりきり),311)
+;罠ポイントの張替え
+CALL TRAP_MOVING

@@ -599,9 +599,25 @@ IF ISNUMERIC(ニューゲーム特典)
 ENDIF
 
 @HOTPATCH_SETUP_WORLD
-#DIM DYNAMIC nIndex
 HTML_PRINT "<era-open class='era-setup-card'>"
 HTML_PRINT @"<span class='era-launch-eyebrow'>Home</span><div class='era-setup-indent'><div class='era-setup-name'>%HTML_ESCAPE(GET_MAPNAME(MAIN_MAP))%</div><div class='era-setup-description'>%HTML_ESCAPE(STR_TR(デフォルト初期位置 + (MAIN_MAP ? 8000 # 0)))%</div></div>"
+CALL HOTPATCH_SETUP_HOME_CHOICES
+HTML_PRINT "<div class='era-setup-indent'><button value='20' class='era-chip-button'>Map details and room selection</button></div>"
+HTML_PRINT "<era-close>"
+CALL HOTPATCH_SETUP_WORLD_SETTINGS
+HTML_PRINT "<era-open class='era-setup-card'>"
+HTML_PRINT "<span class='era-launch-eyebrow'>Lunatic Survival</span>"
+IF MAIN_MAP == 3 && IS_MASTER(0)
+	HTML_PRINT "<era-open class='era-setup-grid'>"
+	HTML_PRINT @"<div class='era-setup-help-row'>%HOTPATCH_SETUP_CHOICE(4120, "Lunatic Survival", QUEST_FLAG(LSScarletAlias, QLSScarletActive))%<div class='era-setup-choice-description'>Scarlet Devil Mansion survival mode. Restricts movement, waking times and character behaviour. <button value='32' class='era-chip-button'>Detailed rules</button></div></div>"
+	HTML_PRINT "<era-close>"
+ELSE
+	HTML_PRINT "<div class='era-setup-description era-setup-indent'>Requires Scarlet Devil Mansion and a custom character.</div>"
+ENDIF
+HTML_PRINT "<era-close>"
+
+@HOTPATCH_SETUP_HOME_CHOICES
+#DIM DYNAMIC nIndex
 HTML_PRINT "<era-open class='era-setup-grid'>"
 FOR nIndex, 0, 11
 	SIF !GET_EXISTMAP(nIndex)
@@ -609,8 +625,8 @@ FOR nIndex, 0, 11
 	HTML_PRINT HOTPATCH_SETUP_CHOICE(2000 + nIndex, GET_MAPNAME(nIndex), MAIN_MAP == nIndex)
 NEXT
 HTML_PRINT "<era-close>"
-HTML_PRINT "<div class='era-setup-indent'><button value='20' class='era-chip-button'>Map details and room selection</button></div>"
-HTML_PRINT "<era-close>"
+
+@HOTPATCH_SETUP_WORLD_SETTINGS
 HTML_PRINT "<era-open class='era-setup-card'>"
 HTML_PRINT "<span class='era-launch-eyebrow'>Romance Mode</span>"
 HTML_PRINT "<era-open class='era-setup-grid'>"
@@ -632,16 +648,6 @@ HTML_PRINT "<span class='era-launch-eyebrow'>Pregnancy Restrictions</span>"
 HTML_PRINT "<era-open class='era-setup-grid'>"
 HTML_PRINT HOTPATCH_SETUP_CHOICE(4110, "Allow sex throughout pregnancy", FLAG:STABLEBYPASS, "Off by default: sex is only allowed during the stable (middle) stage of pregnancy. Turn on to also allow it during the early and late stages.")
 HTML_PRINT "<era-close>"
-HTML_PRINT "<era-close>"
-HTML_PRINT "<era-open class='era-setup-card'>"
-HTML_PRINT "<span class='era-launch-eyebrow'>Lunatic Survival</span>"
-IF MAIN_MAP == 3 && IS_MASTER(0)
-	HTML_PRINT "<era-open class='era-setup-grid'>"
-	HTML_PRINT @"<div class='era-setup-help-row'>%HOTPATCH_SETUP_CHOICE(4120, "Lunatic Survival", QUEST_FLAG(LSScarletAlias, QLSScarletActive))%<div class='era-setup-choice-description'>Scarlet Devil Mansion survival mode. Restricts movement, waking times and character behaviour. <button value='32' class='era-chip-button'>Detailed rules</button></div></div>"
-	HTML_PRINT "<era-close>"
-ELSE
-	HTML_PRINT "<div class='era-setup-description era-setup-indent'>Requires Scarlet Devil Mansion and a custom character.</div>"
-ENDIF
 HTML_PRINT "<era-close>"
 
 @HOTPATCH_SETUP_HOME(nMap)
@@ -756,6 +762,7 @@ HTML_PRINT "<era-close>"
 #DIM DYNAMIC nIndex
 #DIM DYNAMIC nChoice
 RESULT = 0
+RESULT:1 = 0
 RESULTS:1 '= "Default"
 RESULTS:2 '= ""
 IF !nChoice
@@ -806,6 +813,28 @@ HTML_PRINT "<era-close>"
 #DIM DYNAMIC nPercent
 CALL HOTPATCH_SETUP_NUMBER(nValue < 4300 ? 400 + (nValue - 4200) / 2 # 403 + (nValue - 4300) / 2, nValue, sName, nPercent, nPercent > 0, nPercent < 100, "&#37;", "era-setup-percent")
 
+@HOTPATCH_SETUP_WORLD_INPUT(nAction, nMarkVersion = 1)
+#DIM DYNAMIC nAction
+#DIM DYNAMIC nMarkVersion
+SELECTCASE nAction
+CASE 4130 TO 4132
+	FLAG:甲斐性無 = nAction == 4130 ? 0 # MAX(FLAG:甲斐性無, 1)
+	FLAG:LUSTMODE = nAction == 4132
+	IF nMarkVersion
+		SETBIT FLAG:1000, 3
+		SETBIT FLAG:1000, 4
+	ENDIF
+CASE 4141 TO 4143
+	SIF !FLAG:甲斐性無
+		RETURN 0
+	FLAG:甲斐性無 = nAction - 4140
+CASE 4110
+	FLAG:STABLEBYPASS = !FLAG:STABLEBYPASS
+CASEELSE
+	RETURN 0
+ENDSELECT
+RETURN 1
+
 @HOTPATCH_SETUP_INPUT(nAction)
 #DIM DYNAMIC nAction
 #DIM DYNAMIC nIndex
@@ -841,7 +870,8 @@ CASE 160000 TO 4279999
 	CASE 403 TO 411
 		YANDERE_CHANCE:(nIndex - 403) = nChoice
 	ENDSELECT
-	CALL CHARA_VALIDATE(MASTER)
+	SIF nIndex < 400
+		CALL CHARA_VALIDATE(MASTER)
 CASE 140000 TO 150930
 	nIndex = (nAction - 140000) / 100
 	nChoice = (nAction - 140000) % 100
@@ -926,17 +956,10 @@ CASE 3101 TO 3103
 		RETURN 0
 	FLAG:農民難易度 = nAction - 3100
 	FLAG:畑拡張 = FLAG:農民難易度
-CASE 4130 TO 4132
-	FLAG:甲斐性無 = nAction == 4130 ? 0 # MAX(FLAG:甲斐性無, 1)
-	FLAG:LUSTMODE = nAction == 4132
-	SETBIT FLAG:1000, 3
-	SETBIT FLAG:1000, 4
-CASE 4141 TO 4143
-	SIF !FLAG:甲斐性無
+CASE 4110, 4130 TO 4132, 4141 TO 4143
+	CALL HOTPATCH_SETUP_WORLD_INPUT(nAction)
+	SIF !RESULT
 		RETURN 0
-	FLAG:甲斐性無 = nAction - 4140
-CASE 4110
-	FLAG:STABLEBYPASS = !FLAG:STABLEBYPASS
 CASE 4120
 	SIF MAIN_MAP != 3 || !IS_MASTER(0)
 		RETURN 0

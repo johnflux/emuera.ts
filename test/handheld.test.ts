@@ -272,7 +272,7 @@ test("compact home screens bound their height and scroll long cards instead of t
   assert.match(css, /\.is-handheld \.screen\.is-active \.era-shop \{ height: max\(540px, calc\(100cqh - 8px\)\); min-height: 0;/);
   assert.match(css, /\.era-shop > :is\(\.era-shop-home, \.era-shop-menu, \.era-shop-system\) \{ min-height: 0; overflow: auto;/);
   const app = readFileSync(new URL("../web/app.js", import.meta.url), "utf8");
-  assert.ok(app.includes('if (terminal.querySelector(".screen.is-active :is(.era-main, .era-shop)")) terminal.scrollLeft = 0;'));
+  assert.match(app, /terminal\.scrollLeft = fresh \|\| steps\.some\(\(\{ advanceScreen \}\) => advanceScreen\)[\s\S]*\.screen\.is-active \.era-layout/);
 });
 
 test("compact gameplay errors appear at the top without covering the menu button", () => {
@@ -321,6 +321,13 @@ test("compact save pickers remove outer gutters and relationship actions use equ
   assert.match(css, /\.is-handheld \.era-relationship \.line \.era-relationship-select \{ height: 56px; min-height: 56px;[^}]*background: #493040;/);
   assert.match(css, /\.era-relationship \.line \.era-relationship-select:is\(:disabled, span\) \{ background: #23232b;/);
   assert.ok(css.includes('.has-controller .screen.is-active .era-relationship:popover-open .line button.choice.era-relationship-select:focus { filter: none; outline: 2px solid #8ddaff; outline-offset: 2px; }'));
+});
+
+test("compact main and wake-up screens retain their horizontal gutters", () => {
+  const css = readFileSync(new URL("../web/handheld.css", import.meta.url), "utf8");
+  const reset = css.indexOf("body:not(.is-home) #terminal:has(.screen.is-active :is(.era-main, .era-shop, .era-dialog))");
+  const gutter = "body:not(.is-home) #terminal:has(.screen.is-active :is(.era-main, .era-shop)) { padding-inline: 12px; }";
+  assert.ok(css.indexOf(gutter) > reset, "main/wake-up gutters must override the compact dialog padding reset");
 });
 
 test("render decorates command numbers after buttons have their surrounding labels", () => {
@@ -423,12 +430,13 @@ function navigationHarness() {
   };
   const handlers = new Map<string, (event: ReturnType<typeof event>) => void>();
   const state = { activeElement: null as Control | null, allowed: true, home: false, modal: false, closed: false, touch: false, handheld: false,
-    nestedClosed: false };
+    nestedClosed: false, title: false };
   function control(left: number, top: number, editable = false): Control {
     return {
       tabIndex: 0, hidden: false, editable, visible: true, scrolled: false, saveSlot: false, page: "", tabGroup: "", dataset: { value: "" },
       matches(selector) { return selector === ".era-load .era-save-slot" ? this.saveSlot : selector === this.page; },
       closest(selector) {
+        if (selector === ".era-launch-actions button.choice:enabled") return state.title && !this.editable ? this : null;
         if (selector === ".era-page-prev, .era-page-next") return this.page ? this : null;
         if (selector === "button[data-value]") return this;
         if (selector === this.tabGroup) return this;
@@ -443,7 +451,11 @@ function navigationHarness() {
     };
   }
   const items = [control(0, 0), control(60, 0), control(0, 60), control(60, 60)];
-  const root = { querySelectorAll: () => items, closest: () => state.home ? null : root };
+  const root = {
+    querySelectorAll: () => items,
+    querySelector: (selector: string) => selector === ".era-launch-actions" && state.title ? root : null,
+    closest: () => state.home ? null : root,
+  };
   const command = control(0, 180, true);
   const terminal = {
     querySelector: (selector: string) => selector === ".screen.is-active" ? root : null,
@@ -512,6 +524,22 @@ test("hidden command input focuses a visible choice instead and stays out of arr
   assert.equal(state.activeElement, items[2]);
 });
 
+test("title starts without a focused choice but keeps deliberate keyboard focus", () => {
+  const { state, items, command, navigation, key } = navigationHarness();
+  state.title = true;
+  command.hidden = true;
+  navigation.focusInput();
+  assert.equal(state.activeElement, null);
+  navigation.focusInput();
+  assert.equal(state.activeElement, null);
+  key("ArrowDown");
+  assert.equal(state.activeElement, items[0]);
+  navigation.focusInput();
+  assert.equal(state.activeElement, items[0]);
+  key("ArrowDown");
+  assert.equal(state.activeElement, items[2]);
+});
+
 test("a newly visible input prompt takes focus instead of returning to choices", () => {
   const { state, command, navigation, key } = navigationHarness();
   command.hidden = true;
@@ -552,8 +580,8 @@ test("load dialog focuses its first selectable save rather than Close, with an e
   assert.equal(state.activeElement, items[0]);
 });
 
-test("redrawn setup and sheet tabs retain focus, but other commands clear the preference", () => {
-  for (const group of [".era-start-tabs", ".era-player-tabs", ".era-sheet-pages", ".era-sheet-subpages"]) {
+test("redrawn setup, sheet and map tabs retain focus, but other commands clear the preference", () => {
+  for (const group of [".era-start-tabs", ".era-player-tabs", ".era-sheet-pages", ".era-sheet-subpages", ".era-move-tabs"]) {
     const { state, items, command, navigation, handlers, event } = navigationHarness();
     command.hidden = true;
     items[2]!.tabGroup = group;

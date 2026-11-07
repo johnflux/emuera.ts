@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { compatibility } from "./compatibility.js";
 import { checkSyntax } from "./syntax-check.js";
 import { demoGame } from "./demo.js";
-import { applyHotpatches, displayDefaults, displayMetrics, discoverGames, emptyGame, gameDirectory, GAMES_DIR, KNOWN_GAMES, isGameRoot, loadGame, stillFrame, type DisplaySettings, type Game } from "./loader.js";
+import { applyHotpatches, displayDefaults, displayMetrics, discoverGames, emptyGame, gameDirectory, GAMES_DIR, KNOWN_GAMES, isGameRoot, loadGame, loadGameConfig, stillFrame, type DisplaySettings, type Game, type GameDefinition } from "./loader.js";
 import { CATALOG_UPDATED, downloadedCatalogGames, GAME_CATALOG, installGame } from "./library.js";
 import { EraError, key } from "./model.js";
 import { GAME_INSTRUCTION_LIMIT, Runtime, type BackgroundLayer, type ClientState, type Snapshot } from "./runtime.js";
@@ -85,12 +85,24 @@ const mime: Record<string, string> = {
 /** How the browser renders a step: a fresh run, after a submitted input, after a click-to-continue, or a timeout. */
 type Advance = "start" | "input" | "continue" | "timeout";
 /** A game the server runs; the first entry is the default, and also hosts the conformance demo. */
-export interface GameEntry {
-  id: string; title: string; game: Game; store?: GlobalStore; saves?: SaveStore;
+export type GameEntry = {
+  id: string; title: string; store?: GlobalStore; saves?: SaveStore;
   /** Character voices edited for LLM chat; by default V2 PNGs in character-cards/<game id>/ outside GAMES. */
   voices?: VoiceStore;
   /** Loads the game in Emuera's debug mode (with its [IF_DEBUG] code); by default a copy of `game` with the debug flag. */
   loadDebug?: () => Promise<Game>;
+} & ({ game: Game; root?: never; load?: never } | { root: string; load: () => Promise<Game>; game?: never });
+
+function discoveredEntry(definition: GameDefinition): GameEntry {
+  const load = async (debug = false) => {
+    console.log(`Loading ${definition.title}${debug ? " in debug mode" : ""} from ${definition.root} ...`);
+    const game = await loadGame(definition.root, { debug });
+    const patched = definition.hotpatch ? await applyHotpatches(game, definition.hotpatch) : [];
+    if (patched.length) console.log(`Hotpatched ${patched.map((name) => `@${name}`).join(", ")}`);
+    console.log(`Loaded ${game.scriptFiles} scripts, ${game.routines.size} function names and ${game.sprites.size} sprites`);
+    return game;
+  };
+  return { id: definition.id, title: definition.title, root: definition.root, load: () => load(), loadDebug: () => load(true) };
 }
 interface Session {
   runtime: Runtime;
@@ -106,6 +118,7 @@ interface Session {
   /** The CBG layers as last delivered, which a trimmed history may no longer contain. */
   cbg?: BackgroundLayer[];
   cbgMap?: Snapshot["cbgMap"];
+  islands?: Snapshot["islands"];
   tooltip?: Snapshot["tooltip"];
   audio?: Snapshot["audio"];
   textbox?: string;
@@ -227,23 +240,47 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
   }) ?? gamesDir;
   const list = Array.isArray(games) ? games as readonly GameEntry[] : [{ id: "game", title: "Game", game: games as Game }];
   function register(entry: GameEntry, index: number) {
-    const { game } = entry;
+    const game = entry.game ?? emptyGame(entry.root);
     if (!/^[a-z0-9-]+$/.test(entry.id)) throw new Error(`Invalid game id: ${entry.id}`);
     game.resourceBase = index === 0 ? "/resources/" : `/games/${entry.id}/resources/`;
-    const saveDirectory = game.root && gameSaveDirectory(game.root, game.config);
-    return {
+    const registered = {
       ...entry,
-      store: entry.store ?? (saveDirectory ? new FileGlobalStore(path.join(saveDirectory, "global.sav")) : new MemoryGlobalStore()),
-      saves: entry.saves ?? (saveDirectory ? new FileSaveStore(saveDirectory, path.join(game.root, "dat")) : new MemorySaveStore()),
-      voices: entry.voices ?? (saveDirectory ? new CardVoiceStore(
-        path.join(path.dirname(libraryDirectoryFor(game.root)), "character-cards", entry.id),
-        new FileVoiceStore(path.join(saveDirectory, "llm-voices.json")),
-      ) : new MemoryVoiceStore()),
+      game,
+      store: entry.store ?? new MemoryGlobalStore(),
+      saves: entry.saves ?? new MemorySaveStore(),
+      voices: entry.voices ?? new MemoryVoiceStore(),
       report: undefined as ReturnType<typeof compatibility> | undefined,
       syntax: undefined as ReturnType<typeof checkSyntax> | undefined,
       debugGame: undefined as Promise<Game> | undefined,
+      loading: undefined as Promise<Game> | undefined,
+      metadata: undefined as Promise<void> | undefined,
+      demo: undefined as Game | undefined,
+      debugDemo: undefined as Game | undefined,
+      initializeStores(loaded: Game) {
+        const saveDirectory = loaded.root && gameSaveDirectory(loaded.root, loaded.config);
+        registered.store = entry.store ?? (saveDirectory ? new FileGlobalStore(path.join(saveDirectory, "global.sav")) : new MemoryGlobalStore());
+        registered.saves = entry.saves ?? (saveDirectory ? new FileSaveStore(saveDirectory, path.join(loaded.root, "dat")) : new MemorySaveStore());
+        registered.voices = entry.voices ?? (saveDirectory ? new CardVoiceStore(
+          path.join(path.dirname(libraryDirectoryFor(loaded.root)), "character-cards", entry.id),
+          new FileVoiceStore(path.join(saveDirectory, "llm-voices.json")),
+        ) : new MemoryVoiceStore());
+      },
     };
+    if (!entry.load) registered.initializeStores(game);
+    return registered;
   }
+  const ensureGame = (entry: ReturnType<typeof register>): Promise<Game> => entry.loading ??= (async () => {
+    if (!entry.load) return entry.game;
+    const game = await entry.load();
+    game.resourceBase = entry.game.resourceBase;
+    entry.initializeStores(game);
+    entry.game = game;
+    return game;
+  })().catch((error: unknown) => { entry.loading = undefined; throw error; });
+  const ensureMetadata = (entry: ReturnType<typeof register>): Promise<void> => entry.metadata ??= (async () => {
+    const game = entry.game;
+    if (entry.load) game.config = await loadGameConfig(game.root);
+  })().catch((error: unknown) => { entry.metadata = undefined; throw error; });
   const entries = new Map(list.map((entry, index) => [entry.id, register(entry, index)]));
   const demoEntry = register({ id: "demo", title: "Demo", game: emptyGame() }, 0);
   const defaultEntry = () => entries.values().next().value ?? demoEntry;
@@ -275,6 +312,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
       session.step++;
       if (patched.cbg) session.cbg = patched.cbg;
       if (patched.cbgMap !== undefined) session.cbgMap = patched.cbgMap;
+      if (patched.islands !== undefined) session.islands = patched.islands;
       if (patched.tooltip) session.tooltip = patched.tooltip;
       if (patched.audio) session.audio = { ...patched.audio, sounds: [], stopSounds: true };
       if (patched.textbox !== undefined) session.textbox = patched.textbox;
@@ -303,10 +341,9 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
     if (gossip) return { other: gossip, aside: true };
     throw new HttpError(409, "The selected character has changed; reopen history on the current screen");
   }
-  const demo = demoGame(defaultEntry().game);
-  let debugDemo: Game | undefined;
   /** Debug-mode games are loaded the first time a debug run asks for one. */
   const debugGame = (entry: ReturnType<typeof register>): Promise<Game> => entry.debugGame ??= (async () => {
+    await ensureGame(entry);
     const game = entry.loadDebug ? await entry.loadDebug() : { ...entry.game };
     game.debug = true;
     game.resourceBase = entry.game.resourceBase;
@@ -317,12 +354,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
   async function refreshGames() {
     for (const definition of discoverLibraryGames(searchDirectories)) {
       if (entries.has(definition.id) || [...entries.values()].some((entry) => entry.game.root === definition.root)) continue;
-      const load = async (debug = false) => {
-        const game = await loadGame(definition.root, { debug });
-        if (definition.hotpatch) await applyHotpatches(game, definition.hotpatch);
-        return game;
-      };
-      entries.set(definition.id, register({ id: definition.id, title: definition.title, game: await load(), loadDebug: () => load(true) }, entries.size));
+      entries.set(definition.id, register(discoveredEntry(definition), entries.size));
     }
   }
   return createServer((request, response) => {
@@ -373,6 +405,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
         return;
       }
       if (request.method === "GET" && url.pathname === "/api/runtime") {
+        await Promise.all([...entries.values()].map(ensureMetadata));
         const games = [...entries.values()].map(({ id, title, game }) => ({ id, title, display: displayDefaults(game), metrics: displayMetrics(game) }));
         json(response, { instance, development, games, display: displayDefaults(defaultEntry().game), metrics: displayMetrics(defaultEntry().game) });
         return;
@@ -386,12 +419,13 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
       }
       if (request.method === "GET" && url.pathname === "/api/compatibility") {
         const entry = entryFor(url.searchParams.get("game"));
-        json(response, entry.report ??= compatibility(entry.game));
+        json(response, entry.report ??= compatibility(await ensureGame(entry)));
         return;
       }
       if (request.method === "POST" && url.pathname === "/api/compatibility/syntax") {
         const data = await body(request);
         const entry = entryFor(data.game);
+        await ensureGame(entry);
         entry.syntax ??= checkSyntax(entry.game).catch((error: unknown) => {
           entry.syntax = undefined;
           throw error;
@@ -415,8 +449,10 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
         if (sessions.size >= 8) throw new HttpError(429, "Too many sessions; restart the server or wait for expiry");
         const id = randomUUID();
         try {
-          const game = data.mode === "demo" ? debug ? debugDemo ??= { ...demo, debug: true } : demo
-            : debug ? await debugGame(entry) : entry.game;
+          const baseGame = await ensureGame(entry);
+          const demo = data.mode === "demo" ? entry.demo ??= demoGame(baseGame) : undefined;
+          const game = demo ? debug ? entry.debugDemo ??= { ...demo, debug: true } : demo
+            : debug ? await debugGame(entry) : baseGame;
           const runtime = new Runtime(game, GAME_INSTRUCTION_LIMIT, {
             store: data.mode === "game" ? entry.store : new MemoryGlobalStore(),
             saves: data.mode === "game" ? entry.saves : new MemorySaveStore(),
@@ -609,6 +645,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
         session.used = Date.now();
         json(response, { session: data.session, mode: session.mode, game: session.game, debug: session.debug, step: session.step,
           cbg: session.cbg ?? [], cbgMap: session.cbgMap ?? null, tooltip: session.tooltip, audio: session.audio, textbox: session.textbox ?? "",
+          islands: session.islands ?? [],
           history: session.history.map(({ advance, snapshot }) => ({ advance, snapshot })) });
         return;
       }
@@ -626,7 +663,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
       }
       if (request.method === "GET" && url.pathname === "/api/sprite") {
         const name = url.searchParams.get("name") ?? "";
-        const { game } = entryFor(url.searchParams.get("game"));
+        const game = await ensureGame(entryFor(url.searchParams.get("game")));
         const definition = game.sprites.get(key(name));
         if (!definition) throw new HttpError(404, `Unknown sprite: ${name}`);
         const sprite = stillFrame(definition);
@@ -719,23 +756,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
 }
 export async function startServer(port = 3003, gamesDir = GAMES_DIR, development = false, additionalGamesDirs: readonly string[] = []): Promise<Server> {
   gamesDir = path.resolve(gamesDir);
-  const loaded: GameEntry[] = [];
-  for (const definition of discoverLibraryGames(libraryDirectories(gamesDir, additionalGamesDirs))) {
-    console.log(`Loading ${definition.title} from ${definition.root} ...`);
-    const game = await loadGame(definition.root);
-    const patched = definition.hotpatch ? await applyHotpatches(game, definition.hotpatch) : [];
-    if (patched.length) console.log(`Hotpatched ${patched.map((name) => `@${name}`).join(", ")}`);
-    console.log(`Loaded ${game.scriptFiles} scripts, ${game.routines.size} function names and ${game.sprites.size} sprites`);
-    loaded.push({
-      id: definition.id, title: definition.title, game,
-      loadDebug: async () => {
-        console.log(`Loading ${definition.title} in debug mode ...`);
-        const debug = await loadGame(definition.root, { debug: true });
-        if (definition.hotpatch) await applyHotpatches(debug, definition.hotpatch);
-        return debug;
-      },
-    });
-  }
+  const loaded = discoverLibraryGames(libraryDirectories(gamesDir, additionalGamesDirs)).map(discoveredEntry);
   const app = createApp(loaded, development, gamesDir, additionalGamesDirs);
   await new Promise<void>((resolve, reject) => {
     const onError = (error: Error) => reject(error);

@@ -14,6 +14,249 @@ test("HTML renderer supports semantic headings while keeping executable tags dis
   assert.match(source, /node\.getAttribute\("role"\) === "checkbox"[\s\S]*element\.setAttribute\("aria-checked", checked\)/);
 });
 
+test("Move viewport fills the game area without capping destination groups", async () => {
+  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  const handheld = await readFile(new URL("../web/handheld.css", import.meta.url), "utf8");
+  assert.match(css, /#terminal:has\(\.screen\.is-active \.era-move\) \{ container-type: size; \}/);
+  assert.match(css, /\.era-layout \{ margin-top: 1em; \}/);
+  assert.match(css, /\.screen\.is-active \.era-move \{ height: calc\(100cqh - 8px\); \}/);
+  assert.match(css, /\.era-move-body \{ flex: 1; min-height: 0;[^}]*align-items: stretch;/);
+  assert.match(css, /\.era-move-side > \* \{ flex-shrink: 0; \}/);
+  assert.match(css, /\.era-move-dests, \.era-move-more-list \{ min-height: 0; \}/);
+  assert.doesNotMatch(css, /\.era-move-(?:dests|more-list|side|map) \{[^}]*max-height:/);
+  assert.match(handheld, /\.is-handheld \.era-move-body \{[^}]*grid-template-rows: minmax\(0, 1fr\);/);
+});
+
+test("resize following reveals output vertically without shifting the horizontal gutter", async () => {
+  const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
+  let bounds = { top: 510, bottom: 530 };
+  const terminal = {
+    scrollTop: 100, scrollLeft: 0, clientTop: 2, clientHeight: 400,
+    getBoundingClientRect: () => ({ top: 20 }),
+  };
+  const start = source.indexOf("function revealOutputVertically(");
+  const reveal = runInNewContext(`${source.slice(start, source.indexOf("async function watchDevelopment(", start))}\nrevealOutputVertically`, {
+    terminal, lastOutputLine: () => ({ getBoundingClientRect: () => bounds }),
+  });
+  reveal();
+  assert.equal(terminal.scrollTop, 208);
+  assert.equal(terminal.scrollLeft, 0);
+  terminal.scrollLeft = 37;
+  bounds = { top: 100, bottom: 120 };
+  reveal();
+  assert.equal(terminal.scrollTop, 208);
+  assert.equal(terminal.scrollLeft, 37, "manual horizontal scrolling is preserved");
+  bounds = { top: 10, bottom: 30 };
+  reveal();
+  assert.equal(terminal.scrollTop, 196);
+  assert.equal(terminal.scrollLeft, 37);
+});
+
+test("layout markers apply accessibility attributes without allowing arbitrary HTML attributes", async () => {
+  const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
+  const parser = source.slice(source.indexOf("const boxMarker ="), source.indexOf("// A line ending"));
+  const opener = source.slice(source.indexOf("function openBox("), source.indexOf("function closeBox("));
+  const applied = new Map<string, string>();
+  const classes: string[] = [];
+  const box = {
+    classList: { add: (...names: string[]) => classes.push(...names) },
+    setAttribute: (name: string, value: string) => applied.set(name, value),
+  };
+  const { parseBoxMarker: parse, openBox: open } = runInNewContext(`${parser}\n${opener}\n({ parseBoxMarker, openBox })`, {
+    currentLine: null, boxLine() {},
+    container: () => ({ append: (element: typeof box) => assert.equal(element, box) }),
+    document: { createElement: () => box },
+    DOMParser: class {
+      parseFromString(text: string) {
+        const fragment = parseFragment(text);
+        const node = fragment.childNodes[0] as DefaultTreeAdapterMap["element"];
+        return { body: { firstElementChild: {
+          attributes: node.attrs,
+          getAttribute: (name: string) => node.attrs.find((attr) => attr.name === name)?.value ?? null,
+        } } };
+      }
+    },
+  });
+  const marker = parse(`<era-open aria-label="Rooms &amp; exits > here" role='group' class='era-card' aria-live='polite'>`);
+  assert.equal(marker.classes, "era-card");
+  assert.equal(marker.closing, false);
+  open(marker.classes, false, marker.attributes);
+  assert.deepEqual(classes, ["era-box", "era-card"]);
+  assert.equal(applied.get("aria-label"), "Rooms & exits > here");
+  assert.equal(applied.get("role"), "group");
+  assert.equal(applied.get("aria-live"), "polite");
+  assert.equal(parse("<era-close>").closing, true);
+  assert.equal(parse("<era-open class='era-card'>").classes, "era-card");
+  assert.equal(parse("<span>not a marker</span>"), null);
+  for (const attr of ["onclick", "style", "id"])
+    assert.throws(() => parse(`<era-open ${attr}='unsafe'>`), /Unsupported layout marker attribute/);
+  assert.throws(() => parse("<era-close aria-label='no'>"), /Unsupported layout marker attribute/);
+});
+
+test("Move places mirror map ink, sort names, and hide empty or off-page sections", async () => {
+  const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
+  const helpers = source.slice(source.indexOf("function mapRoomColor("), source.indexOf("const commandHistory ="));
+  class Place {
+    children: Place[] = [];
+    hidden = false;
+    dataset: Record<string, string> = {};
+    style = { color: "", setProperty: (name: string, value: string) => { this.properties.set(name, value); } };
+    properties = new Map<string, string>();
+    classes = new Set<string>();
+    classList = {
+      contains: (name: string) => this.classes.has(name),
+      toggle: (name: string, enabled: boolean) => enabled ? this.classes.add(name) : this.classes.delete(name),
+    };
+    number?: Place;
+    name?: Place;
+    constructor(public textContent = "") {}
+    append(...items: Place[]) {
+      this.children = this.children.filter((child) => !items.includes(child));
+      this.children.push(...items);
+    }
+    replaceChildren(...items: Place[]) { this.children = items; }
+    get childElementCount() { return this.children.length; }
+    querySelector(selector: string) { return selector === ".era-move-num" ? this.number : this.name; }
+    querySelectorAll() { return this.children; }
+    remove() {}
+  }
+  const room = (id: string, name: string, nearby = false) => {
+    const place = new Place();
+    place.dataset.room = id;
+    place.number = new Place();
+    place.name = new Place(name);
+    place.classes.add(nearby ? "era-move-nearby" : "era-move-more");
+    return place;
+  };
+  const current = room("109", "Living Room");
+  const back = room("153", "Player's Back Room");
+  const exit = room("122", "The Way Out");
+  const destinations = [room("113", "Zebra", true), room("112", "zoo"), room("111", "apple"), room("110", "Bath")];
+  const mapPlaces = ["9", "53", "22", "13", "12", "11", "10"].map((id, index) => {
+    const button = new Place();
+    button.dataset.value = id;
+    const wrapper = new Place("Room");
+    const ink = new Place("Room");
+    ink.style.color = ["#00ff00", "#ff80ff", "#ffff00", "#c080ff"][index % 4]!;
+    wrapper.append(ink);
+    button.append(wrapper, ink);
+    return button;
+  });
+  const nearby = new Place(), more = new Place(), nearbyTitle = new Place(), moreTitle = new Place();
+  const map = { querySelectorAll: () => mapPlaces };
+  const side = {
+    closest: () => ({ querySelector: () => map }),
+    querySelector: (selector: string) => ({
+      ".era-move-current": current, ".era-move-dests": nearby, ".era-move-more-list": more,
+      ".era-move-places-title": nearbyTitle, ".era-move-more-title": moreTitle,
+    }[selector]),
+    querySelectorAll: (selector: string) => selector === "[data-room]" ? [current, back, exit, ...destinations]
+      : selector === ".line" ? [] : destinations,
+  };
+  const organize = runInNewContext(`function roomOf(element) { return element.dataset.room ?? element.dataset.value; }
+${helpers}
+organizeMovePlaces`, {
+    terminal: { querySelectorAll: () => [side] },
+    document: { createElement: () => new Place() },
+    getComputedStyle: () => ({ color: "#c0c0c0" }),
+  });
+  organize();
+  assert.equal(current.hidden, false);
+  assert.equal(current.number!.properties.get("--era-move-room-color"), "#00ff00");
+  assert.equal(back.number!.properties.get("--era-move-room-color"), "#ff80ff");
+  assert.equal(exit.number!.properties.get("--era-move-room-color"), "#ffff00");
+  assert.deepEqual(more.children[0]!.children.map((place) => place.name!.textContent), ["apple", "Bath", "zoo"]);
+  assert.equal(nearbyTitle.hidden, false);
+  assert.ok(mapPlaces[0]!.classes.has("era-map-current-room"));
+  mapPlaces.splice(0, 1);
+  destinations.splice(0, 1);
+  organize();
+  assert.equal(current.hidden, true);
+  assert.equal(nearby.hidden, true);
+  assert.equal(nearbyTitle.hidden, true);
+  assert.equal(moreTitle.hidden, false);
+});
+
+test("Move text maps fit both dimensions, grow again after resize, and retain a readable minimum", async () => {
+  const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
+  const art = {
+    style: { fontSize: "" },
+    querySelectorAll: () => [{}],
+    get scrollWidth() { return parseFloat(art.style.fontSize) * 50; },
+    getBoundingClientRect: () => ({ width: parseFloat(art.style.fontSize) * 50, height: parseFloat(art.style.fontSize) * 20 }),
+  };
+  const key = { getBoundingClientRect: () => ({ height: 40 }) };
+  const card = {
+    clientWidth: 675, clientHeight: 700, children: [key, art],
+    querySelector: () => art,
+  };
+  const fit = runInNewContext(`${source.slice(source.indexOf("function fitMoveMaps("), source.indexOf("function mapRoomColor("))}\nfitMoveMaps`, {
+    terminal: { querySelectorAll: () => [card] },
+    getComputedStyle: () => ({
+      fontSize: "20px", paddingLeft: "0px", paddingRight: "0px",
+      paddingTop: "0px", paddingBottom: "0px", marginTop: "0px", marginBottom: "0px",
+    }),
+    document: { createRange: () => ({
+      selectNodeContents() {},
+      getBoundingClientRect: () => ({ width: parseFloat(art.style.fontSize) * 50 }),
+    }) },
+  });
+  fit();
+  assert.equal(art.style.fontSize, "13.46px");
+  card.clientWidth = 1200;
+  card.clientHeight = 242;
+  fit();
+  assert.equal(art.style.fontSize, "10px", "height must reserve space for the legend");
+  card.clientHeight = 700;
+  fit();
+  assert.equal(art.style.fontSize, "20px", "a larger viewport must undo earlier shrinking");
+  card.clientWidth = 100;
+  fit();
+  assert.equal(art.style.fontSize, "8px", "very small cards scroll rather than becoming unreadable");
+});
+
+test("Move fitting includes intrinsic overflow beyond the visible row text", async () => {
+  const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
+  const art = {
+    style: { fontSize: "" },
+    querySelectorAll: () => [{}],
+    get scrollWidth() { return parseFloat(art.style.fontSize) * 60; },
+    getBoundingClientRect: () => ({ width: parseFloat(art.style.fontSize) * 60, height: parseFloat(art.style.fontSize) * 20 }),
+  };
+  const card = { clientWidth: 602, clientHeight: 700, children: [art], querySelector: () => art };
+  const fit = runInNewContext(`${source.slice(source.indexOf("function fitMoveMaps("), source.indexOf("function mapRoomColor("))}\nfitMoveMaps`, {
+    terminal: { querySelectorAll: () => [card] },
+    getComputedStyle: () => ({ fontSize: "20px", paddingLeft: "0px", paddingRight: "0px", paddingTop: "0px", paddingBottom: "0px" }),
+    document: { createRange: () => ({ selectNodeContents() {}, getBoundingClientRect: () => ({ width: 800 }) }) },
+  });
+  fit();
+  assert.equal(art.style.fontSize, "10px", "the complete art box must fit, not just its text range");
+});
+
+test("Move hidden rows collapse their line even inside alignment wrappers", async () => {
+  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  assert.match(css, /\.era-move-side > \.line:has\(:is\(\.era-move-current, \.era-move-places-title, \.era-move-more-title\)\[hidden\]\) \{ display: none; \}/);
+  assert.match(css, /\.era-move-key \{[^}]*align-self: flex-end;[^}]*flex-wrap: wrap;/);
+});
+
+test("fallback double-line map glyphs occupy Emuera's single-column cells in HTML and plain text", async () => {
+  const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
+  const start = source.indexOf("function appendCells(");
+  const end = source.indexOf("/** CSS pixels per Emuera pixel:", start);
+  const nodes: { textContent: string; style?: { width?: string }; className?: string }[] = [];
+  const append = runInNewContext(`${source.slice(start, end)}\nappendCells`, {
+    document: {
+      createTextNode: (textContent: string) => ({ textContent }),
+      createElement: () => ({ style: {}, textContent: "", append() {} }),
+    },
+  });
+  append({ append: (...items: typeof nodes) => nodes.push(...items) }, "森╔══╗林║09║森");
+  const cells = nodes.filter((node) => node.className === "half-cells");
+  assert.deepEqual(cells.map((node) => node.style!.width), ["4ch", "1ch", "1ch"]);
+  assert.equal(nodes.map((node) => node.textContent).join(""), "森╔══╗林║09║森");
+  assert.match(source, /node\.nodeType === Node\.TEXT_NODE\) \{ appendCells\(destination, node\.textContent\); return; \}/);
+});
+
 test("custom action button wrappers participate directly in the action flex row", async () => {
   const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
   assert.match(css, /^\.era-actions-group span:has\(> \.era-guard-control\) \{ display: contents; \}/m);
@@ -996,6 +1239,7 @@ test("last command is a placeholder, never input data, and defaults and waits ta
     activeLlm: (): object | null => ({}),
     lastOutputLine: () => null,
     terminal: { ...element, querySelectorAll: () => [], querySelector: () => chatHost },
+    islandRoot: { querySelectorAll: () => [] },
     command: field, send: { ...element, disabled: false, textContent: "" },
     document: { querySelector: () => ({ hidden: false }) },
     startButtons: [], restartButton: element,
@@ -1075,6 +1319,14 @@ test("active title fills the terminal below the visible interpreter header", asy
   assert.match(css, /#terminal:has\(\.screen\.is-active \.era-launch\) \{[^}]*container-type: size;/);
   assert.match(css, /\.screen\.is-active \.era-launch \{[^}]*100cqw[^}]*100cqh[^}]*height: 100%;/);
   assert.match(css, /body:has\(\.screen\.is-active \.era-launch\) #input-form \{ display: none; \}/);
+});
+
+test("title choices highlight the focused or hovered button without an outline", async () => {
+  const css = await readFile(new URL("../web/style.css", import.meta.url), "utf8");
+  assert.match(css, /\.era-launch-actions:has\(button\.choice:is\(\.is-pending, \.is-selected\)\) button\.choice:not\(\.is-pending, \.is-selected\)::before/);
+  assert.match(css, /:has\(button\.choice:enabled:focus-visible\) button\.choice:not\(:focus-visible\)::before \{ opacity: \.7; transform: translateY\(-50%\) scale\(\.95\); \}/);
+  assert.match(css, /@media \(hover: hover\) \{\s*\.era-launch-actions[^{}]*:has\(button\.choice:enabled:hover\) button\.choice:not\(:hover\)::before \{ opacity: \.7; transform: translateY\(-50%\) scale\(\.95\); \}/);
+  assert.match(css, /\.is-handheld \.era-launch \.era-launch-actions button\.choice:focus-visible \{ outline: none; \}/);
 });
 
 test("room overlays reserve no layout height and chat follows every responsive main layout", async () => {
@@ -2144,6 +2396,7 @@ test("client dimensions, background scaling and mouse coordinates share game-pix
   const handlers = new Map<string, (event: object) => void>();
   const document = {
     hidden: false, hasFocus: () => true, querySelectorAll: () => [canvas],
+    documentElement: { style: { setProperty() {} } },
     addEventListener: (name: string, handler: (event: object) => void) => handlers.set(name, handler),
   };
   const canvas = { dataset: { x: 10, y: -20, width: 600, height: 400 }, style: {} as Record<string, string> };
@@ -2156,7 +2409,7 @@ test("client dimensions, background scaling and mouse coordinates share game-pix
     snippet("function clientPoint(", "function submitMouseKey("),
     "({ clientState, placeBackground, clientPoint })",
   ].join("\n"), {
-    terminal, document, backgroundLayers: layers, metrics: { lineHeight: 19 },
+    terminal, document, backgroundLayers: layers, islandRoot: { style: {} }, metrics: { lineHeight: 19 },
     getComputedStyle: () => ({ lineHeight: String(lineHeight) }),
   });
   assert.equal(JSON.stringify(browser.clientState()), JSON.stringify({ width: 600, height: 400, active: true, mouseX: 0, mouseY: 0 }));
@@ -2345,12 +2598,110 @@ function parsed(node: DefaultTreeAdapterMap["node"]): Element {
   return result;
 }
 
+test("island subareas use client corners, auto sizes and Megaten's box attribute aliases", async () => {
+  const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
+  const sizes = source.slice(source.indexOf("function sizeAttribute("), source.indexOf("async function loadImage("));
+  const areas = source.slice(source.indexOf("const subareaAttributes ="), source.indexOf("async function renderHtml("));
+  const make = runInNewContext(`${sizes}\n${areas}\nsubarea`, {
+    metrics: { fontSize: 20 },
+    document: { createElement: (tag: string) => new Element(tag.toUpperCase()) },
+  });
+  const top = make(new Element("DIV", new Map([
+    ["display", "absolute-lefttop"], ["xpos", "10px"], ["ypos", "25px"],
+    ["width", "300px"], ["height", "100px"], ["border_width", "2px"],
+    ["border_color", "#123456"], ["background_color", "#abcdef"],
+  ])), 1).children[0] as Element;
+  assert.equal(top.style.left, "calc(var(--client-left) + 10px)");
+  assert.equal(top.style.top, "calc(var(--client-top) + 25px)");
+  assert.equal(top.style.width, "300px");
+  assert.equal(top.style.height, "100px");
+  assert.equal(top.style.borderWidth, "2px");
+  assert.equal(top.style.borderColor, "#123456");
+  assert.equal(top.style.background, "#abcdef");
+  const bottom = make(new Element("DIV", new Map([
+    ["display", "absolute-leftbottom"], ["ypos", "-1000"],
+  ])), 1).children[0] as Element;
+  assert.equal(bottom.style.top, "calc(var(--client-top) + var(--client-height) + -200px)");
+  assert.equal(bottom.style.width, "max-content");
+  assert.equal(bottom.style.height, "auto");
+  const legacy = make(new Element("DIV", new Map([
+    ["display", "absolute"], ["ypos", "30px"], ["width", "20px"], ["height", "10px"],
+  ])), 1).children[0] as Element;
+  assert.equal(legacy.style.bottom, "30px", "existing absolute placement is unchanged");
+  assert.throws(() => make(new Element("DIV", new Map([["display", "invalid"]])), 1), /Unsupported div display/);
+});
+
+test("HTML islands paint layers in ascending order, preserve same-layer order and replace without scrollback", async () => {
+  const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
+  const start = source.indexOf("async function showIslands(");
+  const end = source.indexOf("// A browser's page translator", start);
+  let children: Element[] = [];
+  const render = runInNewContext(`${source.slice(start, end)}\nshowIslands`, {
+    document: { createElement: (tag: string) => new Element(tag.toUpperCase()) },
+    islandRoot: { replaceChildren: (...elements: Element[]) => { children = elements; } },
+    applyStyle() {}, placeBackground() {},
+    renderHtml: async (text: string, element: Element) => { element.textContent = text; },
+    message: (text: string) => assert.fail(text),
+  });
+  const islands = [
+    { layer: 99, text: "dialog" }, { layer: 98, text: "dimmer" }, { layer: 99, text: "button" },
+  ];
+  await render(islands);
+  assert.deepEqual(children.map((element) => [element.dataset.layer, element.textContent]),
+    [["98", "dimmer"], ["99", "dialog"], ["99", "button"]]);
+  assert.deepEqual(islands.map((island) => island.layer), [99, 98, 99], "snapshot data stays unchanged");
+  await render([]);
+  assert.deepEqual(children, []);
+  assert.match(source, /button\.disabled = !button\.closest\("\.screen\.is-active, \.island-root"\)/);
+  assert.match(source, /if \(!button\.closest\("\.screen\.is-active, \.island-root"\)\) return;/);
+});
+
+test("client-absolute islands use game pixel scale rather than text-column scale", async () => {
+  const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
+  const sizes = source.slice(source.indexOf("function sizeAttribute("), source.indexOf("async function loadImage("));
+  const html = source.slice(source.indexOf("const subareaAttributes ="), source.indexOf("// A browser's page translator"));
+  const cells = source.slice(source.indexOf("function appendCells("), source.indexOf("/** CSS pixels per Emuera pixel:"));
+  const render = runInNewContext(`${sizes}\n${cells}\n${html}\nrenderHtml`, {
+    metrics: { fontSize: 20 }, generation: 0,
+    imageScale: () => 2, columnScale: () => .5,
+    Element, Node: { TEXT_NODE: 3 },
+    DOMParser: class { parseFromString(markup: string) { return { head: { children: [] }, body: parsed(parseFragment(markup)) }; } },
+    document: { createElement: (tag: string) => new Element(tag.toUpperCase()), createTextNode: (text: string) => new Element("TEXT", new Map(), text) },
+    applyClasses() {}, decorateLabel() {}, allowedTags: new Set(["SPAN"]),
+  });
+  const parent = new Element("DIV");
+  await render("<div display='absolute-lefttop' width='600px' height='400px' background_color='#000000'><span>cover</span></div>", parent);
+  const area = parent.children[0]!.children[0]!;
+  assert.equal(area.style.width, "1200px");
+  assert.equal(area.style.height, "800px");
+  assert.equal(area.style.background, "#000000");
+});
+
+test("map legend font swatches retain their colors through HTML rendering", async () => {
+  const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
+  const html = source.slice(source.indexOf("async function renderHtml("), source.indexOf("// A browser's page translator"));
+  const cells = source.slice(source.indexOf("function appendCells("), source.indexOf("/** CSS pixels per Emuera pixel:"));
+  const render = runInNewContext(`${cells}\n${html}\nrenderHtml`, {
+    generation: 0, Element, Node: { TEXT_NODE: 3 },
+    DOMParser: class { parseFromString(markup: string) { return { head: { children: [] }, body: parsed(parseFragment(markup)) }; } },
+    document: {
+      createElement: (tag: string) => new Element(tag.toUpperCase()),
+      createTextNode: (text: string) => new Element("TEXT", new Map(), text),
+    },
+    applyClasses() {}, decorateLabel() {}, markTextColor() {}, allowedTags: new Set(["SPAN", "FONT"]),
+  });
+  const parent = new Element("DIV");
+  await render("<span class='era-move-key-item'><font color='#0078B4'>●</font> Asleep</span>", parent);
+  assert.equal(parent.children[0]!.children[0]!.style.color, "#0078B4");
+});
+
 test("HTML pos stacks unequal image layers, resets the cursor and remains stable across renders", async () => {
   const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
   const functionSource = (start: string, end: string) => source.slice(source.indexOf(start), source.indexOf(end, source.indexOf(start)));
   const terminal = new Element("DIV");
   const { renderHtml, layoutHtmlPositions } = runInNewContext([
     functionSource("function sizeAttribute(", "async function loadImage("),
+    functionSource("function appendCells(", "/** CSS pixels per Emuera pixel:"),
     functionSource("function layoutHtmlPositions(", "let htmlPositionsFrame"),
     functionSource("async function renderHtml(", "// A browser's page translator"),
     "({ renderHtml, layoutHtmlPositions })",

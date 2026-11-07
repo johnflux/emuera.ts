@@ -6,9 +6,95 @@ import path from "node:path";
 import { once } from "node:events";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { createApp } from "../src/server.js";
+import { createApp, startServer } from "../src/server.js";
 import { discoverGames, emptyGame, gameDirectory, indexScript, loadGame, readText } from "../src/loader.js";
 import { EraError } from "../src/model.js";
+
+test("startup and refresh leave broken games unloaded while selected games load and cache", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "era-lazy-startup-"));
+  const fixture = async (id: string, script: string) => {
+    const gameRoot = path.join(root, id);
+    await Promise.all(["ERB", "CSV"].map(dir => mkdir(path.join(gameRoot, dir), { recursive: true })));
+    await writeFile(path.join(gameRoot, "ERB", "title.erb"), script);
+    return gameRoot;
+  };
+  const broken = await fixture("broken", "@SYSTEM_TITLE\n}");
+  const good = await fixture("good", "@SYSTEM_TITLE\nPRINTL original\nINPUT");
+  await writeFile(path.join(good, "emuera.config"), "FontSize:24\nUseSaveFolder:YES");
+  await mkdir(path.join(broken, "resources"));
+  await writeFile(path.join(broken, "resources", "image.png"), "fixture image");
+  const app = await startServer(0, root);
+  try {
+    const address = app.address();
+    assert.ok(address && typeof address !== "string");
+    const base = `http://127.0.0.1:${address.port}`;
+    const post = (route: string, data: unknown) => fetch(base + route, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data),
+    });
+    assert.equal((await fetch(base)).status, 200);
+    const metadata = await (await fetch(base + "/api/runtime")).json();
+    assert.equal(metadata.games.find((game: { id: string }) => game.id === "good").metrics.fontSize, 24);
+    assert.equal(await (await fetch(base + "/games/broken/resources/image.png")).text(), "fixture image");
+    assert.equal((await (await fetch(base + "/api/library")).json()).installed.length, 2);
+    await writeFile(path.join(good, "ERB", "title.erb"), "@SYSTEM_TITLE\nPRINTL first access\nSAVEGLOBAL\nINPUT");
+    const first = await (await post("/api/start", { mode: "game", game: "good" })).json();
+    assert.equal(first.status, "waiting");
+    assert.match(JSON.stringify(first.output), /first access/);
+    assert.ok((await stat(path.join(good, "sav", "global.sav"))).size > 0);
+    await writeFile(path.join(good, "ERB", "title.erb"), "@SYSTEM_TITLE\n}");
+    const cached = await (await post("/api/start", { mode: "game", game: "good" })).json();
+    assert.equal(cached.status, "waiting");
+    assert.match(JSON.stringify(cached.output), /first access/);
+    const failed = await (await post("/api/start", { mode: "game", game: "broken" })).json();
+    assert.equal(failed.status, "error");
+    assert.match(failed.error.message, /Unmatched multiline/);
+    await fixture("broken", "@SYSTEM_TITLE\nPRINTL repaired\nINPUT");
+    assert.equal((await (await post("/api/start", { mode: "game", game: "broken" })).json()).status, "waiting");
+    await fixture("new-broken", "@SYSTEM_TITLE\n}");
+    assert.equal((await post("/api/library/refresh", {})).status, 200);
+    assert.equal((await (await fetch(base + "/api/library")).json()).installed.length, 3);
+    assert.equal((await fetch(base + "/api/runtime")).status, 200);
+  } finally {
+    app.closeAllConnections();
+    await new Promise<void>((resolve, reject) => app.close(error => error ? reject(error) : resolve()));
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("concurrent game access shares one load and debug, demo and compatibility use the selected cache", async () => {
+  let loads = 0, debugLoads = 0;
+  const game = emptyGame();
+  indexScript(game, "@SYSTEM_TITLE\nPRINTL lazy\nINPUT", "fixture.ERB");
+  const app = createApp([{
+    id: "lazy", title: "Lazy", root: "",
+    load: async () => { loads++; await new Promise(resolve => setTimeout(resolve, 20)); return game; },
+    loadDebug: async () => { debugLoads++; return { ...game, debug: true }; },
+  }]);
+  app.listen(0, "127.0.0.1");
+  await once(app, "listening");
+  try {
+    const address = app.address();
+    assert.ok(address && typeof address !== "string");
+    const base = `http://127.0.0.1:${address.port}`;
+    const start = (mode = "game", debug = false) => fetch(base + "/api/start", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode, game: "lazy", debug }),
+    }).then(response => response.json());
+    assert.equal(loads, 0);
+    const runs = await Promise.all([start(), start()]);
+    assert.ok(runs.every(run => run.status === "waiting"));
+    assert.equal(loads, 1);
+    assert.equal((await fetch(base + "/api/compatibility?game=lazy")).status, 200);
+    assert.equal((await start("demo")).status, "waiting");
+    assert.equal((await start("game", true)).status, "waiting");
+    assert.equal((await start("game", true)).status, "waiting");
+    assert.equal(loads, 1);
+    assert.equal(debugLoads, 1);
+  } finally {
+    app.closeAllConnections();
+    await new Promise<void>((resolve, reject) => app.close(error => error ? reject(error) : resolve()));
+  }
+});
 
 test("static resources revalidate, versioned art stays fresh and APIs remain uncached", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "era-http-cache-"));

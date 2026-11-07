@@ -194,9 +194,14 @@ function decodeText(buffer: Buffer): string {
     return shiftJisDecoder.decode(buffer);
   }
 }
-function* csvRecords(source: string, file: string): Generator<{ row: string[]; line: number }> {
+function* csvRecords(source: string, file: string, character = false): Generator<{ row: string[]; line: number }> {
   // Strip each physical line's comments before multiline blocks are joined.
   const cleaned = source.split(/\r\n|[\r\n]/).map((raw, line) => {
+    // Native character templates split on every comma and retain literal quotes and inline semicolons.
+    if (character) {
+      if (raw.replace(/^\uFEFF/, "").trimStart().startsWith(";")) return "";
+      return raw.replace(/^(\s*[{}]\s*);.*$/, "$1");
+    }
     let quoted = false;
     for (let i = 0; i < raw.length; i++) {
       if (raw[i] === '"') {
@@ -209,6 +214,10 @@ function* csvRecords(source: string, file: string): Generator<{ row: string[]; l
   }).join("\n");
   for (const { text: raw, line } of logicalLines(cleaned, file)) {
     if (!raw.trim()) continue;
+    if (character) {
+      yield { row: raw.split(",").map(value => value.trim()), line };
+      continue;
+    }
     const row: string[] = [];
     let value = "", quoted = false;
     for (let i = 0; i < raw.length; i++) {
@@ -405,15 +414,14 @@ export async function applyHotpatches(game: Game, dir = HOTPATCH_ROOT): Promise<
   }
   return replaced;
 }
-export async function loadGame(root = GAME_ROOT, options: { debug?: boolean; anchorTranslation?: boolean } = {}): Promise<Game> {
-  const game = emptyGame(root);
-  if (options.debug) game.debug = true;
+/** Read display and save-path settings without loading scripts, tables or resources. */
+export async function loadGameConfig(root: string): Promise<Map<string, string>> {
+  const config = new Map<string, string>();
   const anchor = existsSync(path.join(root, "Emuera-Anchor.exe"));
-  const anchorTranslation = options.anchorTranslation ?? anchor;
   // Anchor games such as Reverse rely on integer arguments to string parameters.
   // Keep this compatibility default local to the detected fork; explicit config still wins.
   if (anchor)
-    game.config.set("ユーザー関数の引数に自動的にTOSTRを補完する", "YES");
+    config.set("ユーザー関数の引数に自動的にTOSTRを補完する", "YES");
   const csvRoot = gameDirectory(root, "CSV");
   const defaultConfig = ["_default.config", "default.config"].map((name) => path.join(csvRoot, name)).find(existsSync);
   const fixedConfig = ["_fixed.config", "fixed.config"].map((name) => path.join(csvRoot, name)).find(existsSync);
@@ -425,10 +433,18 @@ export async function loadGame(root = GAME_ROOT, options: { debug?: boolean; anc
       if (separator > 0 && !row.startsWith(";")) {
         const name = row.slice(0, separator).trim();
         const item = CONFIG_ITEMS.find((entry) => entry.slice(0, 3).some((alias) => String(alias).toUpperCase() === name.toUpperCase()));
-        game.config.set(item?.[1] ?? name, row.slice(separator + 1).trim());
+        config.set(item?.[1] ?? name, row.slice(separator + 1).trim());
       }
     }
   }
+  return config;
+}
+export async function loadGame(root = GAME_ROOT, options: { debug?: boolean; anchorTranslation?: boolean } = {}): Promise<Game> {
+  const game = emptyGame(root);
+  if (options.debug) game.debug = true;
+  const anchorTranslation = options.anchorTranslation ?? existsSync(path.join(root, "Emuera-Anchor.exe"));
+  game.config = await loadGameConfig(root);
+  const csvRoot = gameDirectory(root, "CSV");
   const csvFiles = (await filesUnder(csvRoot)).filter((file) => /\.csv$/i.test(file));
   for (const file of csvFiles.filter((file) => path.basename(file).toUpperCase() === "_RENAME.CSV")) {
     for (const row of csvRows(await readText(file))) {
@@ -480,7 +496,8 @@ export async function loadGame(root = GAME_ROOT, options: { debug?: boolean; anc
   for await (const { file, source } of readTexts(dataCsvFiles)) {
     const relative = path.relative(csvRoot, file).split(path.sep).join("/");
     const name = key(relative.replace(/\.csv$/i, ""));
-    const records = [...csvRecords(source, path.relative(root, file))];
+    const character = /^CHARA/i.test(path.basename(name));
+    const records = [...csvRecords(source, path.relative(root, file), character)];
     const rows = records.map(({ row }) => row);
     if (/^VAREXT/.test(path.basename(name))) {
       for (const row of rows) {
@@ -500,7 +517,7 @@ export async function loadGame(root = GAME_ROOT, options: { debug?: boolean; anc
         }
       }
     }
-    if (/^CHARA/i.test(path.basename(name))) {
+    if (character) {
       let id: number | undefined;
       const characterRows: string[][] = [];
       const characterFile = path.relative(root, file);

@@ -167,6 +167,7 @@ function applySettings() {
   for (const name of ["foreground", "background", "selection", "font"])
     if (form.elements[name] !== document.activeElement) form.elements[name].value = settings[name];
   terminalColumns();
+  fitMoveMaps();
 }
 function updateSetting(name, value) {
   const saved = savedSettings();
@@ -233,9 +234,20 @@ function showGames() {
 new ResizeObserver(() => {
   placeBackground();
   scheduleHtmlPositions();
-  // scrollIntoView would also scroll an open dialog's body to its end.
-  if (input && !busy && !terminal.querySelector(".era-dialog:popover-open")) lastOutputLine()?.scrollIntoView({ block: "nearest" });
+  fitMoveMaps();
+  if (input && !busy && !terminal.querySelector(".era-dialog:popover-open")) revealOutputVertically();
 }).observe(terminal);
+
+function revealOutputVertically() {
+  const line = lastOutputLine();
+  if (!line) return;
+  const viewport = terminal.getBoundingClientRect();
+  const top = viewport.top + terminal.clientTop;
+  const bottom = top + terminal.clientHeight;
+  const at = line.getBoundingClientRect();
+  if (at.bottom > bottom) terminal.scrollTop += at.bottom - bottom;
+  else if (at.top < top) terminal.scrollTop += at.top - top;
+}
 
 async function watchDevelopment() {
   let runtime;
@@ -356,9 +368,9 @@ function updateControls() {
     || input.buttonValues !== undefined || !!inlineSetup || !!mainMenu;
   command.placeholder = input?.kind === "wait" ? "" : input?.defaultValue !== undefined
     ? `Enter for ${JSON.stringify(input.defaultValue)}` : chatting ? "Command number, or say something…" : input ? lastCommand : "";
-  terminal.querySelectorAll("button.choice").forEach((button) => {
+  [...terminal.querySelectorAll("button.choice"), ...islandRoot.querySelectorAll("button.choice")].forEach((button) => {
     const value = input?.kind === "integer" && /^-?\d+$/.test(button.dataset.value) ? BigInt(button.dataset.value).toString() : button.dataset.value;
-    button.disabled = !button.closest(".screen.is-active") || button.classList.contains("is-stale") || (busy && !expiring) || !input || input.kind === "wait" || !!input.blocking
+    button.disabled = !button.closest(".screen.is-active, .island-root") || button.classList.contains("is-stale") || (busy && !expiring) || !input || input.kind === "wait" || !!input.blocking
       || button.getAttribute("aria-disabled") === "true"
       || !!input.buttonValues && !input.buttonValues.includes(value);
   });
@@ -542,7 +554,7 @@ function describe(element, description) {
   element.dataset.tooltip = description;
   if (!element.matches("button, a[href]")) element.tabIndex = 0;
   async function show() {
-    if (busy || !element.closest(".screen.is-active, .cbg-layer") || element.matches(".is-stale")) return;
+    if (busy || !element.closest(".screen.is-active, .cbg-layer, .island-root") || element.matches(".is-stale")) return;
     if (element.closest(".era-occupant-list") && element.querySelector(".sprite")) return;
     hideTooltip();
     if (element.matches(".era-setup-trait, .era-setup-detail")) {
@@ -895,7 +907,19 @@ function line() {
  * screen in output order, so CLEARLINE still removes the last lines printed. Each marker is a hidden line because
  * the runtime counts every HTML_PRINT as one.
  */
-const boxMarker = /^\s*<era-(open|close)(?:\s+class\s*=\s*(?:'([^']*)'|"([^"]*)"))?\s*\/?>\s*$/i;
+const boxMarker = /^\s*<era-(open|close)((?:\s+[\w-]+\s*=\s*(?:'[^']*'|"[^"]*"))*)\s*\/?>\s*$/i;
+function parseBoxMarker(text) {
+  const match = boxMarker.exec(text);
+  if (!match) return null;
+  const closing = match[1].toLowerCase() === "close";
+  const node = new DOMParser().parseFromString(text, "text/html").body.firstElementChild;
+  const attributes = [...node.attributes].map(({ name, value }) => [name, value]);
+  for (const [name] of attributes) {
+    if (closing || (name !== "class" && name !== "role" && !/^aria-[a-z-]+$/.test(name)))
+      throw new Error(`Unsupported layout marker attribute: ${name}`);
+  }
+  return { closing, classes: node.getAttribute("class") ?? "", attributes: attributes.filter(([name]) => name !== "class") };
+}
 // A line ending in a run of one rule character (DRAWLINE, or a "□ Title □-----" heading padded to the width) is
 // clipped rather than wrapped when it is wider than its box, e.g. after the window was made narrower.
 const ruleTail = /([-─━═=＝～~_])\1{9,}$/u;
@@ -913,7 +937,7 @@ function boxLine(parent, closing, shared) {
   if (shared) marker.dataset.logicalLines = "0";
   parent.append(marker);
 }
-function openBox(classes, shared) {
+function openBox(classes, shared, attributes = []) {
   currentLine = null;
   const names = classes.split(/\s+/).filter((name) => /^era-[a-z0-9-]+$/.test(name));
   // A layout starts afresh: one left open by a restarted function (RESTART) must not swallow it.
@@ -921,6 +945,7 @@ function openBox(classes, shared) {
     for (let box = container(); box.classList.contains("era-box"); box = box.parentElement) box.dataset.closed = "forced";
   const box = document.createElement("div");
   box.classList.add("era-box", ...names);
+  for (const [name, value] of attributes) box.setAttribute(name, value);
   container().append(box);
   boxLine(box, false, shared);
 }
@@ -1005,7 +1030,7 @@ function choice(label, value, title = "") {
   button.addEventListener("click", (event) => {
     // detail is 0 for keyboard activation, which is deliberate.
     if (event.detail > 0 && settling()) return;
-    if (!button.closest(".screen.is-active")) return;
+    if (!button.closest(".screen.is-active, .island-root")) return;
     if (input?.kind === "mousekey") {
       // RESULT:5 is an integer button's value; a string button sets RESULTS instead.
       const numeric = /^-?\d+$/.test(value) && Number.isSafeInteger(Number(value));
@@ -1058,11 +1083,12 @@ function appendText(parent, value) {
 /**
  * Block elements (▀▄█…) and the corner triangles ◢◣◤◥ aren't in Shift-JIS, so Emuera counts them as one column and
  * MS Gothic draws them half-width. Our fonts draw them wider, which would push bars (and sliders) out of their columns.
- * Blocks are clipped to a column; triangles are squeezed so they keep their shape.
+ * Double-line box drawing also falls back to wider glyphs despite counting as one column.
+ * Blocks and double lines are clipped to a column; triangles are squeezed so they keep their shape.
  */
 function appendCells(parent, value) {
   let start = 0;
-  for (const match of value.matchAll(/[\u2580-\u259F]+|[\u25E2-\u25E5]+/g)) {
+  for (const match of value.matchAll(/[\u2550-\u256C]+|[\u2580-\u259F]+|[\u25E2-\u25E5]+/g)) {
     parent.append(document.createTextNode(value.slice(start, match.index)));
     const cells = document.createElement("span");
     cells.style.width = `${match[0].length}ch`;
@@ -1310,6 +1336,7 @@ function animate(name, holder, layers, delays, token) {
   animationLoop ||= requestAnimationFrame(tickAnimations);
 }
 const backgroundLayers = { back: document.querySelector("#cbg-back"), front: document.querySelector("#cbg-front") };
+const islandRoot = document.querySelector("#html-islands");
 let backgroundVersion = 0;
 let backgroundMap = null;
 let backgroundMapVersion = 0;
@@ -1343,12 +1370,17 @@ function selectBackground(value) {
 }
 /** Puts the CBG layers over the terminal's visible box (Emuera's client area, without the scrollbar). */
 function placeBackground() {
-  for (const layer of Object.values(backgroundLayers)) {
+  for (const layer of [...Object.values(backgroundLayers), islandRoot]) {
     Object.assign(layer.style, {
       left: `${terminal.offsetLeft + terminal.clientLeft}px`, top: `${terminal.offsetTop + terminal.clientTop}px`,
       width: `${terminal.clientWidth}px`, height: `${terminal.clientHeight}px`,
     });
   }
+  const client = terminal.getBoundingClientRect();
+  const style = document.documentElement.style;
+  style.setProperty("--client-left", `${client.left + terminal.clientLeft}px`);
+  style.setProperty("--client-top", `${client.top + terminal.clientTop}px`);
+  style.setProperty("--client-height", `${terminal.clientHeight}px`);
   const scale = imageScale();
   for (const canvas of document.querySelectorAll(".cbg-layer canvas")) {
     const { x, y, width, height } = canvas.dataset;
@@ -1547,8 +1579,7 @@ function layoutMapPictures() {
       const label = button.textContent.trim().replace(/[０-９]/g, (digit) => String.fromCharCode(digit.charCodeAt(0) - 0xfee0));
       const copy = choice(label, button.dataset.value, button.dataset.tooltip ?? "");
       copy.classList.add("era-map-room");
-      const inked = [...button.querySelectorAll("*")].find((node) => node.textContent.trim());
-      copy.style.color = getComputedStyle(inked ?? button).color;
+      copy.style.color = mapRoomColor(button);
       copy.style.left = `${x}%`;
       copy.style.top = `${y}%`;
       picture.append(copy);
@@ -1585,6 +1616,7 @@ function layoutMapPictures() {
       const text = box.classList.contains("is-picture");
       if (text) localStorage.setItem(MAP_TEXT_KEY, "1"); else localStorage.removeItem(MAP_TEXT_KEY);
       show(text);
+      fitMoveMaps();
     });
     box.append(picture, toggle);
     show(localStorage.getItem(MAP_TEXT_KEY) === "1");
@@ -1634,6 +1666,7 @@ function scheduleHtmlPositions() {
     htmlPositionsFrame = 0;
     layoutHtmlPositions();
     layoutClockOverhang();
+    fitMoveMaps();
     if (clockOverhangTransition) scheduleHtmlPositions();
   });
 }
@@ -1727,17 +1760,17 @@ function meter(node) {
  * Games lay sub-areas out against the window width, so they and their images use the column scale: the layout then
  * spans the same columns as in Emuera even though our lines are taller.
  */
-const subareaAttributes = ["width", "height", "xpos", "ypos", "size", "rect", "depth", "color", "display", "margin", "padding", "border", "bcolor", "radius"];
+const subareaAttributes = ["width", "height", "xpos", "ypos", "size", "rect", "depth", "color", "display", "margin", "padding", "border", "bcolor", "radius", "background_color", "border_width", "border_color"];
 function subarea(node, scale) {
   const size = (value) => sizeAttribute(value, 0, scale);
-  const list = (name, count = 4) => {
-    const value = node.getAttribute(name);
+  const list = (name, count = 4, alias) => {
+    const value = node.getAttribute(name) ?? (alias ? node.getAttribute(alias) : null);
     if (value === null) return null;
     const parts = value.split(",");
     if (parts.length > count) throw new Error(`Unsupported div ${name}: ${value}`);
     return parts.map((part) => size(part));
   };
-  const box = (name) => list(name)?.map((part) => `${Math.max(0, part)}px`).join(" ");
+  const box = (name, alias) => list(name, 4, alias)?.map((part) => `${Math.max(0, part)}px`).join(" ");
   const rect = list("rect"), pair = list("size", 2);
   const [x, y, width, height] = rect?.length === 4 ? rect : [
     size(node.getAttribute("xpos")), size(node.getAttribute("ypos")),
@@ -1747,18 +1780,28 @@ function subarea(node, scale) {
   anchor.className = "subarea-anchor";
   const area = document.createElement("div");
   area.className = "subarea";
-  const absolute = node.getAttribute("display")?.toLowerCase() === "absolute";
+  const display = node.getAttribute("display")?.toLowerCase() ?? "relative";
+  if (!["relative", "absolute", "absolute-lefttop", "absolute-leftbottom"].includes(display))
+    throw new Error(`Unsupported div display: ${display}`);
+  const absolute = display === "absolute";
   if (absolute) anchor.classList.add("subarea-fixed");
   Object.assign(area.style, {
     left: `${x}px`, [absolute ? "bottom" : "top"]: `${y}px`, width: `${Math.max(0, width)}px`, height: `${Math.max(0, height)}px`,
-    margin: box("margin") ?? "", padding: box("padding") ?? "", borderWidth: box("border") ?? "", borderRadius: box("radius") ?? "",
+    margin: box("margin") ?? "", padding: box("padding") ?? "", borderWidth: box("border", "border_width") ?? "", borderRadius: box("radius") ?? "",
   });
+  if (!node.hasAttribute("width") && !pair && !rect) area.style.width = "max-content";
+  if (!node.hasAttribute("height") && !pair && !rect) area.style.height = "auto";
+  if (display === "absolute-lefttop" || display === "absolute-leftbottom") {
+    anchor.classList.add("subarea-fixed");
+    area.style.left = `calc(var(--client-left) + ${x}px)`;
+    area.style.top = `calc(var(--client-top) + ${display === "absolute-leftbottom" ? "var(--client-height) + " : ""}${y}px)`;
+  }
   const depth = Number(node.getAttribute("depth") ?? 0);
   if (Number.isFinite(depth) && depth) area.style.zIndex = String(-Math.trunc(depth));
   const colour = /^(?:#[0-9a-f]{6}|[a-z]+)$/i;
-  const background = node.getAttribute("color");
+  const background = node.getAttribute("color") ?? node.getAttribute("background_color");
   if (background && colour.test(background)) area.style.background = background;
-  const borderColours = node.getAttribute("bcolor")?.split(",").map((part) => part.trim());
+  const borderColours = (node.getAttribute("bcolor") ?? node.getAttribute("border_color"))?.split(",").map((part) => part.trim());
   if (borderColours?.length && borderColours.length <= 4 && borderColours.every((part) => colour.test(part))) area.style.borderColor = borderColours.join(" ");
   anchor.append(area);
   anchor.subareaContent = area;
@@ -1772,7 +1815,7 @@ async function renderHtml(markup, parent, sprites) {
     throw new Error(`Unsupported HTML tag: <${documentNode.head.firstElementChild.tagName.toLowerCase()}>`);
   const token = generation;
   async function copy(node, destination, scale) {
-    if (node.nodeType === Node.TEXT_NODE) { destination.append(document.createTextNode(node.textContent)); return; }
+    if (node.nodeType === Node.TEXT_NODE) { appendCells(destination, node.textContent); return; }
     if (!(node instanceof Element)) return;
     let element;
     if (node.tagName === "IMG") element = await image(node, token, sprites?.[node.getAttribute("src")], scale, sprites?.[node.getAttribute("srcb")],
@@ -1803,7 +1846,8 @@ async function renderHtml(markup, parent, sprites) {
     else if (node.tagName === "DIV" && node.classList.contains("era-relationship-timeline")) element = relationshipTimeline(node);
     else if (node.tagName === "METER") element = meter(node);
     else if (node.tagName === "DIV" && node.classList.contains("era-clock") && node.hasAttribute("data-minutes")) element = clock(node);
-    else if (node.tagName === "DIV" && subareaAttributes.some((name) => node.hasAttribute(name))) element = subarea(node, scale = columnScale());
+    else if (node.tagName === "DIV" && subareaAttributes.some((name) => node.hasAttribute(name)))
+      element = subarea(node, scale = /^absolute-left(?:top|bottom)$/i.test(node.getAttribute("display") ?? "") ? imageScale() : scale ?? columnScale());
     else if (node.tagName === "BUTTON") {
       const value = node.getAttribute("value");
       if (value !== null) element = choice("", value, node.classList.contains("era-dialog-close") ? "" : node.getAttribute("title") ?? "");
@@ -1859,6 +1903,25 @@ async function renderHtml(markup, parent, sprites) {
   for (const child of documentNode.body.childNodes) await copy(child, parent, undefined);
   parent.querySelectorAll("button.choice, .has-tooltip").forEach(decorateLabel);
 }
+async function showIslands(islands) {
+  const elements = [];
+  for (const island of [...islands].sort((a, b) => a.layer - b.layer)) {
+    const element = document.createElement("div");
+    element.className = "html-island";
+    element.dataset.layer = String(island.layer);
+    applyStyle(element, island.style);
+    element.style.background = "transparent";
+    try { await renderHtml(island.text, element, island.sprites); }
+    catch (error) {
+      element.classList.add("missing");
+      element.textContent = `[HTML island renderer: ${error.message}]`;
+      message(`Could not draw HTML island: ${error.message}`, true);
+    }
+    elements.push(element);
+  }
+  islandRoot.replaceChildren(...elements);
+  placeBackground();
+}
 // A browser's page translator (Chrome/Edge mark <html> with translated-ltr/-rtl and wrap
 // translated text in <font>, which our renderer never emits) only notices nodes added
 // to the live page, so while one is active updates are rendered in place.
@@ -1890,6 +1953,7 @@ async function renderSteps(steps, fresh = false, keepFocus = false, toBottom = f
     }
   };
   const scrollTop = terminal.scrollTop;
+  const scrollLeft = terminal.scrollLeft;
   const followBottom = toBottom || terminal.scrollHeight - terminal.clientHeight - scrollTop < 2;
   const live = pageTranslated();
   const staged = live ? terminal : document.createElement("div");
@@ -1933,6 +1997,7 @@ async function renderSteps(steps, fresh = false, keepFocus = false, toBottom = f
     restoreSetupScroll();
     revealSelectedOccupants();
     organizeMovePlaces();
+    fitMoveMaps();
     markMapLabels();
     markMapCleanliness();
     profileEnd("render.layout", phaseStarted);
@@ -1947,7 +2012,8 @@ async function renderSteps(steps, fresh = false, keepFocus = false, toBottom = f
     updateControls();
     if (followBottom) terminal.scrollTop = terminal.scrollHeight;
     else terminal.scrollTop = scrollTop;
-    if (terminal.querySelector(".screen.is-active :is(.era-main, .era-shop)")) terminal.scrollLeft = 0;
+    terminal.scrollLeft = fresh || steps.some(({ advanceScreen }) => advanceScreen)
+      || terminal.querySelector(".screen.is-active .era-layout") ? 0 : scrollLeft;
     scheduleTimedWait();
     if (clickingThrough && input && input.kind !== "wait") settle();
     profileEnd("render.controls", phaseStarted);
@@ -2110,6 +2176,7 @@ async function renderSnapshot(snapshot, advanceScreen) {
   await Promise.all([
     snapshot.cbg ? showBackground(snapshot.cbg) : undefined,
     snapshot.cbgMap !== undefined ? showBackgroundMap(snapshot.cbgMap) : undefined,
+    snapshot.islands !== undefined ? showIslands(snapshot.islands) : undefined,
   ]);
   if (snapshot.tooltip) useTooltipSettings(snapshot.tooltip);
   if (snapshot.audio) useAudioSettings(snapshot.audio);
@@ -2218,12 +2285,12 @@ async function renderSnapshot(snapshot, advanceScreen) {
       if (output.newline) currentLine = null;
       continue;
     }
-    const marker = output.type === "html" && boxMarker.exec(output.text);
+    const marker = output.type === "html" && parseBoxMarker(output.text);
     if (marker) {
       const shared = target.childNodes.length > 0;
       if (!shared) target.remove();
-      if (marker[1].toLowerCase() === "open") openBox(marker[2] ?? marker[3] ?? "", shared);
-      else closeBox(shared);
+      if (marker.closing) closeBox(shared);
+      else openBox(marker.classes, shared, marker.attributes);
       continue;
     }
     const span = document.createElement("span");
@@ -2451,6 +2518,7 @@ function resetRun() {
   showCommandHint();
   currentLine = null;
   void showBackground([]);
+  void showIslands([]);
   void showBackgroundMap(null);
   useTooltipSettings(null);
 }
@@ -2502,7 +2570,7 @@ async function resume(id) {
     await renderSteps(data.history.map(({ advance: how, snapshot }, i) =>
       ({ snapshot: { ...snapshot, session: id, audio: undefined }, advanceScreen: i === 0 ? false : advance[how] })), true);
     // The trimmed history may have lost the step that set them.
-    await Promise.all([showBackground(data.cbg ?? []), showBackgroundMap(data.cbgMap ?? null)]);
+    await Promise.all([showBackground(data.cbg ?? []), showBackgroundMap(data.cbgMap ?? null), showIslands(data.islands ?? [])]);
     useTooltipSettings(data.tooltip ?? null);
     if (data.audio) useAudioSettings(data.audio);
     command.value = data.textbox ?? "";
@@ -2823,17 +2891,53 @@ function markMapLabels() {
     if (run.length < 2) continue;
     for (const node of run) {
       node.classList.add("era-map-label");
-      node.dataset.room = button.dataset.value;
+      node.dataset.room = roomOf(button);
       labelButtons.set(node, button);
     }
   }
+}
+function fitMoveMaps() {
+  for (const card of terminal.querySelectorAll(".screen.is-active .era-move-map")) {
+    const art = card.querySelector(".era-map-art:not(.is-picture)");
+    if (!art || !card.clientWidth || !card.clientHeight) continue;
+    const rows = [...art.querySelectorAll(":scope > .line:not(.era-marker)")];
+    if (!rows.length) continue;
+    const base = parseFloat(getComputedStyle(terminal).fontSize);
+    art.style.fontSize = `${base}px`;
+    const style = getComputedStyle(card);
+    const width = card.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+    const siblings = [...card.children].filter((child) => child !== art);
+    const height = card.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom)
+      - siblings.reduce((total, child) => {
+        const css = getComputedStyle(child);
+        return total + child.getBoundingClientRect().height + parseFloat(css.marginTop) + parseFloat(css.marginBottom);
+      }, 0);
+    const textWidth = Math.max(art.getBoundingClientRect().width, art.scrollWidth, ...rows.map((row) => {
+      const range = document.createRange();
+      range.selectNodeContents(row);
+      return range.getBoundingClientRect().width;
+    }));
+    const textHeight = art.getBoundingClientRect().height;
+    if (textWidth && textHeight) {
+      // Leave a pixel for rounding and outlines; tiny cards retain readable, scrollable text.
+      const scale = Math.min(1, (width - 2) / textWidth, (height - 2) / textHeight);
+      art.style.fontSize = `${Math.max(8, Math.floor(base * scale * 100) / 100)}px`;
+    }
+  }
+}
+function mapRoomColor(button) {
+  const children = [...button.querySelectorAll("*")];
+  const colored = children.find((node) => node.style.color && node.textContent.trim());
+  const inked = colored ?? children.find((node) => node.textContent.trim());
+  const ink = inked ?? button;
+  return ink.style.color || button.style.color || getComputedStyle(ink).color;
 }
 function markMapCleanliness() {
   for (const list of terminal.querySelectorAll(".screen.is-active .era-move-dests, .screen.is-active .era-move-more-list")) {
     const scope = list.closest(".era-move");
     for (const button of list.querySelectorAll("button.choice")) {
       const mapRoom = [...(scope?.querySelectorAll(".era-map-art button.choice") ?? [])]
-        .find((candidate) => candidate.dataset.value === button.dataset.value);
+        .find((candidate) => roomOf(candidate) === roomOf(button));
       const cleanliness = mapRoom?.dataset.tooltip?.match(/Cleanliness: (High|Medium|Low|Garbage Mountain)/)?.[1];
       if (!cleanliness || button.querySelector(".era-move-cleanliness")) continue;
       const marker = document.createElement("span");
@@ -2849,16 +2953,20 @@ function organizeMovePlaces() {
   for (const side of terminal.querySelectorAll(".screen.is-active .era-move-side")) {
     const map = side.closest(".era-move")?.querySelector(".era-map-art");
     const mapPlaces = [...(map?.querySelectorAll("button.choice") ?? [])];
-    for (const row of side.querySelectorAll(".era-move-current, .era-move-return")) {
-      const mapPlace = mapPlaces.find((candidate) => candidate.dataset.value === row.dataset.room);
-      const number = row.querySelector(".era-move-num");
-      if (mapPlace && number) number.style.color = getComputedStyle(mapPlace).color;
-    }
-    const currentRoom = side.querySelector(".era-move-current")?.dataset.room;
+    const current = side.querySelector(".era-move-current");
+    const currentRoom = current?.dataset.room;
     if (currentRoom !== undefined) {
+      const area = Math.floor(Number(currentRoom) / 100) * 100;
       for (const place of mapPlaces) {
-        place.classList.toggle("era-map-current-room", place.dataset.value === currentRoom);
+        place.dataset.room = String(area + Number(place.dataset.value));
+        place.classList.toggle("era-map-current-room", roomOf(place) === currentRoom);
       }
+      current.hidden = !mapPlaces.some((place) => roomOf(place) === currentRoom);
+    }
+    for (const row of side.querySelectorAll("[data-room]")) {
+      const mapPlace = mapPlaces.find((candidate) => roomOf(candidate) === roomOf(row));
+      const number = row.querySelector(".era-move-num");
+      if (mapPlace && number) number.style.setProperty("--era-move-room-color", mapRoomColor(mapPlace));
     }
     const nearby = side.querySelector(".era-move-dests");
     const more = side.querySelector(".era-move-more-list");
@@ -2868,19 +2976,15 @@ function organizeMovePlaces() {
     const moreList = document.createElement("div");
     moreList.className = "era-move-place-list";
     for (const button of side.querySelectorAll("button.choice.era-move-nearby, button.choice.era-move-more")) {
-      const mapPlace = mapPlaces.find((candidate) => candidate.dataset.value === button.dataset.value);
-      const number = button.querySelector(".era-move-num");
-      if (mapPlace && number) number.style.color = getComputedStyle(mapPlace).color;
       (button.classList.contains("era-move-nearby") ? nearbyList : moreList).append(button);
     }
-    if (!nearbyList.childElementCount) {
-      const empty = document.createElement("span");
-      empty.className = "era-move-none";
-      empty.textContent = "No places within walking distance";
-      nearbyList.append(empty);
-    }
+    moreList.append(...[...moreList.children].sort((a, b) =>
+      a.querySelector(".era-move-place-name").textContent.localeCompare(b.querySelector(".era-move-place-name").textContent, "en", { sensitivity: "base" })));
     nearby.replaceChildren(nearbyList);
     more.replaceChildren(moreList);
+    nearby.hidden = !nearbyList.childElementCount;
+    const nearbyTitle = side.querySelector(".era-move-places-title");
+    if (nearbyTitle) nearbyTitle.hidden = nearby.hidden;
     const moreTitle = side.querySelector(".era-move-more-title");
     if (moreTitle) moreTitle.hidden = !moreList.childElementCount;
     side.querySelectorAll(".line").forEach((line) => {

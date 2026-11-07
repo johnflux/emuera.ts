@@ -9,6 +9,19 @@ import { Runtime } from "../src/runtime.js";
 import { createApp } from "../src/server.js";
 import { checkSyntax } from "../src/syntax-check.js";
 
+test("parenthesized postfix indices and extended CSV/hash functions pass syntax checks", async () => {
+  const game = emptyGame();
+  indexScript(game, `@SYSTEM_TITLE
+LOCALS:(LOCAL+LOCAL:1+(LOCAL:2)++) = text
+LOCALS:(LOCAL+(LOCAL:1)++) = text
+PRINTFORML {GETCSVNOBYNICKNAME("name")} {HASH_XXH32("name")}
+`, "extended.ERB");
+  const report = await checkSyntax(game);
+  assert.deepEqual(report.diagnostics, []);
+  assert.deepEqual(report.references, []);
+  assert.throws(() => parseExpression("(LOCAL + 1)++"), /needs a variable/);
+});
+
 test("syntax checks report unvisited errors by source and continue after broken routines", async () => {
   const game = emptyGame();
   indexScript(game, `@SYSTEM_TITLE

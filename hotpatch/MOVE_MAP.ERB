@@ -457,35 +457,38 @@ HTML_PRINT @"<div class='era-move-header'><div class='era-move-tabs'>%sHtml%</di
 
 HTML_PRINT "<era-open class='era-move-body'>"
 HTML_PRINT "<era-open class='era-card era-move-map'>"
+HTML_PRINT "<era-open class='era-move-key' role='group' aria-label='Room color legend'>"
+CALL HOTPATCH_MAP_KEY("You are here", C_GREEN)
+IF FLAG:察知モード <= 1
+	CALL HOTPATCH_MAP_KEY("Resident", C_H_PINK)
+	CALL HOTPATCH_MAP_KEY("Working", C_D_ORANGE)
+	CALL HOTPATCH_MAP_KEY("Asleep", C_N_BLUE)
+	CALL HOTPATCH_MAP_KEY("Mob", C_D_PINK)
+	CALL HOTPATCH_MAP_KEY("Idle activity", C_YELLOW)
+ELSEIF FLAG:察知モード == 2 && TALENT:MASTER:汚部屋察知
+	CALL HOTPATCH_MAP_KEY("Spotless", GETDEFCOLOR())
+	CALL HOTPATCH_MAP_KEY("Clean", C_CREAM)
+	CALL HOTPATCH_MAP_KEY("A little dirty", C_YELLOW)
+	CALL HOTPATCH_MAP_KEY("Dirty", C_V_PINK)
+	CALL HOTPATCH_MAP_KEY("Garbage Mountain", C_RED)
+ENDIF
+SIF CFLAG:MASTER:睡眠 || (DAY == 1 && TIME == 0)
+	CALL HOTPATCH_MAP_KEY("Starting room", C_ORANGE)
+HTML_PRINT "<era-close>"
 IF RECOLOREDMAPS
 	CALL DRAW_COLOREDMAP(SEED, "", 1)
 ELSE
 	CALL DRAW_MAP("", 1)
 ENDIF
-IF FLAG:察知モード == 1 || FLAG:察知モード == 2
-	HTML_PRINT "<era-open class='era-move-key'>"
-	IF FLAG:察知モード == 1
-		CALL COLORMESSAGE("Resident　", C_H_PINK, 0)
-		CALL COLORMESSAGE("Working　", C_D_ORANGE, 0)
-		CALL COLORMESSAGE("Asleep　", C_N_BLUE, 0)
-		CALL COLORMESSAGE("Mob　", C_D_PINK, 0)
-		CALL COLORMESSAGE("Idle Activity", C_YELLOW, 0)
-	ELSE
-		CALL COLORMESSAGE("Clean　", C_CREAM, 0)
-		CALL COLORMESSAGE("A little dirty　", C_YELLOW , 0)
-		CALL COLORMESSAGE("Dirty　", C_V_PINK, 0)
-		CALL COLORMESSAGE("Garbage Mountain", C_RED, 0)
-	ENDIF
-	PRINTL
-	HTML_PRINT "<era-close>"
-ENDIF
 HTML_PRINT "<era-close>"
 
 HTML_PRINT "<era-open class='era-card era-move-side'>"
 HTML_PRINT "<div class='era-card-title'>Places</div>"
-HTML_PRINT @"<div class='era-move-current' data-room='{nHere}'><span class='era-move-num'>{nHere % 100}</span>%HTML_ESCAPE(THE_CASE_SHIFT(NAME_FROM_PLACE(nHere)))%<span class='era-move-place-note'>You are here</span></div>"
+HTML_PRINT @"<div class='era-move-current' data-room='{nHere}'><span class='era-move-num'>{nHere % 100}</span><span class='era-move-place-name'>%HTML_ESCAPE(THE_CASE_SHIFT(NAME_FROM_PLACE(nHere)))%<span class='era-move-place-note'>You are here</span></span></div>"
 SIF nHere != CFLAG:MASTER:初期位置 && IN_HOME(CFLAG:MASTER:初期位置) == 1
-	HTML_PRINT @"<button value='0' class='era-move-place era-move-return' data-room='{CFLAG:MASTER:初期位置}' title='Return to your room'><span class='era-move-num'>{CFLAG:MASTER:初期位置 % 100}</span>%HTML_ESCAPE(THE_CASE_SHIFT(NAME_FROM_PLACE(CFLAG:MASTER:初期位置)))%<span class='era-move-place-note'>Return to your room</span></button>"
+	HTML_PRINT @"<button value='0' class='era-move-place era-move-return' data-room='{CFLAG:MASTER:初期位置}' title='Return to your room'><span class='era-move-num'>{CFLAG:MASTER:初期位置 % 100}</span><span class='era-move-place-name'>%HTML_ESCAPE(THE_CASE_SHIFT(NAME_FROM_PLACE(CFLAG:MASTER:初期位置)))%<span class='era-move-place-note'>Return to your room</span></span></button>"
+SIF nHere != ENTRANCE
+	HTML_PRINT @"<button value='{ENTRANCE}' class='era-move-place era-move-exit' data-room='{ENTRANCE}' title='The way out to other regions'><span class='era-move-num'>{ENTRANCE % 100}</span><span class='era-move-place-name'>%HTML_ESCAPE(THE_CASE_SHIFT(NAME_FROM_PLACE(ENTRANCE)))%<span class='era-move-place-note'>The way out to other regions</span></span></button>"
 HTML_PRINT "<div class='era-move-subtitle era-move-places-title'>Nearby</div>"
 HTML_PRINT "<era-open class='era-move-dests'>"
 TRYCALLFORM MAP_{MAIN_MAP}_{TFLAG:マップ切り替え}
@@ -528,11 +531,14 @@ SIF ARG:1 < 0
 	ARG:1 = ARG
 FOR LOCAL, ARG, ARG:1 + 1
 	ID = 100 * MAIN_MAP + LOCAL
-	SIF ID == CFLAG:MASTER:現在位置
+	SIF ID == CFLAG:MASTER:現在位置 || ID == ENTRANCE
 		CONTINUE
 	LOCALS '= (CAN_MOVE(CFLAG:MASTER:現在位置, ID) & 1) ? "era-move-place era-move-nearby" # "era-move-place era-move-more"
-	HTML_PRINT @"<button value='{ID}' class='%LOCALS%' data-room='{ID}'><span class='era-move-num'>{LOCAL % 100}</span>%HTML_ESCAPE(STR_TR(8000 + ID))%</button>"
+	HTML_PRINT @"<button value='{ID}' class='%LOCALS%' data-room='{ID}'><span class='era-move-num'>{LOCAL % 100}</span><span class='era-move-place-name'>%HTML_ESCAPE(STR_TR(8000 + ID))%</span></button>"
 NEXT
+
+@HOTPATCH_MAP_KEY(ARGS, ARG)
+HTML_PRINT @"<span class='era-move-key-item'><font color='#%TOSTR(ARG, "X6")%'>●</font> %HTML_ESCAPE(ARGS)%</span>"
 
 @HOTPATCH_MAP_OPEN(KEY)
 #DIMS KEY

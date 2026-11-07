@@ -731,6 +731,50 @@ PRINTFORML {--ARG:1 > 0 ? 1 # 0}{--ARG:1 > 0 ? 1 # 0} {3 - -1}`).start();
   assert.deepEqual(texts(result), ["1 1 2 1 2", "[0]", "[1]", "[2]", "[3]", "", "[4]", "[5]", "", "2 780", "first 1", "10 4"]);
 });
 
+test("parenthesized variable increments evaluate once in interpreted and JIT routines", () => {
+  for (const jit of [false, true]) {
+    const result = runtime(`@SYSTEM_TITLE
+FOR A, 0, 40
+  CALL UPDATE
+NEXT
+PRINTFORML {RESULT}
+RETURN
+@UPDATE
+LOCAL = 2
+LOCAL:1 = 1
+LOCAL:2 = 0
+LOCALS:(LOCAL+LOCAL:1+(LOCAL:2)++) = first
+LOCALS:(LOCAL+LOCAL:1+(LOCAL:2)++) = second
+LOCALS:(LOCAL+(LOCAL:1)++) = third
+PRINTFORML {LOCAL:1} {LOCAL:2} %LOCALS:3% %LOCALS:4%
+RETURN (LOCAL:1)-- + (++(LOCAL:2))`, undefined, { jit }).start();
+    const output = texts(result);
+    assert.equal(output.length, 41);
+    assert.ok(output.slice(0, 40).every((line) => line === "2 2 third second"));
+    assert.equal(output[40], "5");
+  }
+});
+
+test("CSV reverse lookup and UTF-8 xxHash32 are available as functions and commands", () => {
+  for (const jit of [false, true]) {
+    const result = runtime(`@SYSTEM_TITLE
+PRINTFORML {GETCSVNOBYNAME("Name")} {GETCSVNOBYNICKNAME("Nick")} {GETCSVNOBYCALLNAME("Call")} {GETCSVNOBYMASTERNAME("Master")}
+PRINTFORML {GETCSVNOBYNICKNAME("nick")} {GETCSVNOBYNICKNAME("missing")}
+GETCSVNOBYNICKNAME "Nick"
+PRINTFORML {RESULT}
+PRINTFORML {HASH_XXH32("")} {HASH_XXH32("abc")} {HASH_XXH32("0123456789abcdef")} {HASH_XXH32("日本語")}
+HASH_XXH32 "a"
+PRINTFORML {RESULT}`, (game) => {
+      template(game);
+      game.characters.set(17, { file: "Chara17.csv", rows: [
+        ["NAME", "Other"], ["NICKNAME", "Nick"], ["CALLNAME", "Another"], ["MASTERNAME", "Master"],
+      ] });
+    }, { jit }).start();
+    assert.deepEqual(texts(result), ["0 17 0 17", "-1 -1", "17",
+      `${0x02cc5d05} ${0x32d153ff} ${0xc2c45b69} ${0xc8ae20bd}`, String(0x550d7456)]);
+  }
+});
+
 test("ISNUMERIC and TOINT accept Emuera integer literals and return 0 for non-numbers", () => {
   const result = runtime(`@SYSTEM_TITLE
 PRINTFORML {ISNUMERIC("0x786450")}{ISNUMERIC("12")}{ISNUMERIC("-5")}{ISNUMERIC("1.5")}{ISNUMERIC("def")}{ISNUMERIC("")}{ISNUMERIC("１２")}{ISNUMERIC("12a")}

@@ -4,6 +4,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
+import { runInNewContext } from "node:vm";
 import { demoGame } from "../src/demo.js";
 import { applyHotpatches, emptyGame, GAME_ROOT, indexScript, loadGame } from "../src/loader.js";
 import { GAME_INSTRUCTION_LIMIT, Runtime } from "../src/runtime.js";
@@ -128,6 +129,7 @@ test("Move map destination rows render their reachability class", {
     "MASTER = 0",
     "CFLAG:MASTER:現在位置 = 53",
     "MAIN_MAP = 0",
+    "ENTRANCE = 22",
     "TFLAG:マップ切り替え = 1",
     "CALL MAP_0_1",
     "WAIT",
@@ -142,6 +144,87 @@ test("Move map destination rows render their reachability class", {
     "non-reachable destinations should be available for the More on this map list");
   assert.ok(destinations.every((item) => !item.text.includes("CAN_MOVE(")),
     "the reachability class expression must be evaluated before rendering");
+  assert.ok(destinations.every((item) => item.text.includes("era-move-place-name")),
+    "room names have a separate element for alphabetical sorting");
+  assert.ok(destinations.every((item) => !item.text.includes("value='22'")),
+    "the region exit is promoted to the top rather than duplicated in the page list");
+});
+
+test("Move sidebar includes numbered current, home and region-exit rows with notes under names", {
+  skip: !existsSync(GAME_ROOT),
+}, async () => {
+  const game = await loadGame();
+  await applyHotpatches(game);
+  const stub = emptyGame();
+  indexScript(stub, `@DRAW_MAP(ARGS, ARG)
+HTML_PRINT "<era-open class='era-map-art'>"
+PRINTL Map fixture
+HTML_PRINT "<era-close>"
+@LS_MOVE_PRINT`, "<move-map-stubs>");
+  for (const name of ["DRAW_MAP", "LS_MOVE_PRINT"]) game.routines.set(name, stub.routines.get(name)!);
+  indexScript(game, `@PROBE_MOVE_SIDEBAR
+ADDVOIDCHARA
+MASTER = 0
+CFLAG:MASTER:現在位置 = 9
+CFLAG:MASTER:初期位置 = 53
+MAIN_MAP = 0
+MAXROOM = 57
+ENTRANCE = 22
+MAP_PAGES = 4
+TFLAG:マップ切り替え = 1
+CALL HOTPATCH_MOVE_SCREEN(0, 100)
+WAIT`, "<move-sidebar-test>");
+  const snapshot = new Runtime(game).start("PROBE_MOVE_SIDEBAR");
+  assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
+  const html = snapshot.output.filter((item) => item.type === "html").map((item) => item.text).join("");
+  const client = readFileSync(new URL("../web/app.js", import.meta.url), "utf8");
+  const marker = runInNewContext(`${client.match(/^const boxMarker = .+;$/m)![0]}\nboxMarker`) as RegExp;
+  const boxes: string[] = [];
+  for (const item of snapshot.output.filter((item) => item.type === "html")) {
+    if (!item.text.startsWith("<era-")) continue;
+    const match = marker.exec(item.text);
+    assert.ok(match, `the client must recognize every layout marker: ${item.text}`);
+    if (match[1] === "open") {
+      const classes = match[2]!.match(/class='([^']*)'/)![1]!;
+      if (classes.includes("era-move-key")) assert.equal(boxes.at(-1), "era-card era-move-map");
+      if (classes.includes("era-map-art")) assert.equal(boxes.at(-1), "era-card era-move-map");
+      if (classes.includes("era-move-side")) assert.equal(boxes.at(-1), "era-move-body");
+      boxes.push(classes);
+    } else {
+      assert.ok(boxes.length, "a closing marker must have a matching open box");
+      boxes.pop();
+    }
+  }
+  assert.deepEqual(boxes, [], "layout boxes must be balanced");
+  assert.match(html, /class='era-move-current' data-room='9'/);
+  assert.match(html, /value='0' class='era-move-place era-move-return' data-room='53'/);
+  assert.match(html, /value='22' class='era-move-place era-move-exit' data-room='22'/);
+  assert.equal((html.match(/value='22'/g) ?? []).length, 1);
+  for (const note of ["You are here", "Return to your room", "The way out to other regions"])
+    assert.match(html, new RegExp(`class='era-move-place-name'>[^<]+<span class='era-move-place-note'>${note}</span></span>`));
+  assert.ok(html.indexOf("era-move-key") < html.indexOf("era-move-side"));
+  assert.match(html, /era-move-key-item.*Asleep/);
+  assert.match(html, /<font color='#0078B4'>●<\/font> Asleep/);
+  assert.doesNotMatch(html, /Room colors:|style='color:/);
+  for (const mode of [1, 2]) {
+    indexScript(game, `@PROBE_MOVE_KEY_${mode}
+ADDVOIDCHARA
+MASTER = 0
+CFLAG:MASTER:現在位置 = 9
+MAIN_MAP = 0
+ENTRANCE = 22
+MAP_PAGES = 4
+TFLAG:マップ切り替え = 1
+TALENT:MASTER:汚部屋察知 = 1
+FLAG:察知モード = ${mode}
+CALL HOTPATCH_MOVE_SCREEN(0, 100)
+WAIT`, "<move-legend-test>");
+    const output = new Runtime(game).start(`PROBE_MOVE_KEY_${mode}`);
+    assert.equal(output.error, null, JSON.stringify(output.error));
+    const markup = output.output.filter((item) => item.type === "html").map((item) => item.text).join("");
+    assert.match(markup, new RegExp(`era-move-key-item.*${mode === 1 ? "Asleep" : "Garbage Mountain"}`));
+    if (mode === 2) assert.doesNotMatch(markup, /era-move-key-item.*Asleep/);
+  }
 });
 
 test("main and wake-up clock hotpatches pass their exact time in one logical line", () => {

@@ -24,6 +24,14 @@ function harness(canExit = true, savedHints = "auto", legacyForce = "0", deck = 
   const errors: Error[] = [];
   const events: string[] = [];
   const pages = [0, 0];
+  let mapVisible = false, mapIndex = 1;
+  const mapClicks: number[] = [];
+  let mapBackClicks = 0;
+  const mapTabs = [0, 1, 2].map((index) => ({
+    disabled: false, classList: { contains: () => index === mapIndex },
+    closest: () => null, getClientRects: () => [1], focus() {},
+    click: () => { mapClicks.push(index); mapIndex = index; },
+  }));
   let hasController = false;
   let yActions = 0;
   let hintsClick = () => {};
@@ -85,6 +93,13 @@ function harness(canExit = true, savedHints = "auto", legacyForce = "0", deck = 
         if (selector === "#controller-menu-close") return { addEventListener: (_type: string, listener: () => void) => { closeClick = listener; } };
         if (selector === "dialog[open]") return nested || dialog.open ? dialog : null;
         if (selector === ".screen.is-active .era-dialog:popover-open") return popover ? dialog : null;
+        if (selector.startsWith("dialog[open],")) return nested || dialog.open || popover ? dialog : null;
+        if (selector === ".screen.is-active .era-move-tabs") return mapVisible ? {
+          closest: () => null, getClientRects: () => [1], querySelectorAll: () => mapTabs,
+        } : null;
+        if (selector === ".screen.is-active button.era-move-back:enabled:not(.is-stale)") return mapVisible ? {
+          closest: () => null, getClientRects: () => [1], click: () => { mapBackClicks++; },
+        } : null;
         throw new Error(`Unexpected selector: ${selector}`);
       },
       addEventListener(type: string, listener: (() => void) | ((event: Key) => void)) {
@@ -93,6 +108,7 @@ function harness(canExit = true, savedHints = "auto", legacyForce = "0", deck = 
       },
     },
     navigator: { getGamepads: () => pads },
+    getComputedStyle: () => ({ visibility: "visible", display: "block" }),
     window: { addEventListener: (type: string, listener: () => void) => handlers.set(type, listener) },
     requestAnimationFrame: (callback: () => void) => { frames.set(++nextId, callback); return nextId; },
     cancelAnimationFrame: (id: number) => frames.delete(id),
@@ -140,6 +156,9 @@ function harness(canExit = true, savedHints = "auto", legacyForce = "0", deck = 
     set hidden(value: boolean) { hidden = value; },
     set restartable(value: boolean) { restartable = value; },
     set failExit(value: boolean) { failExit = value; },
+    set mapVisible(value: boolean) { mapVisible = value; },
+    mapClicks,
+    get mapBackClicks() { return mapBackClicks; },
     disconnect() {
       pads = [];
       const [id, callback] = frames.entries().next().value!;
@@ -149,7 +168,79 @@ function harness(canExit = true, savedHints = "auto", legacyForce = "0", deck = 
   };
 }
 
-test("L1 and R1 page dialogs once per press and do nothing without a dialog", () => {
+test("map bumpers select adjacent tabs without wrapping or acting through overlays", () => {
+  let overlay = false, hidden = false;
+  const clicks: number[] = [], focused: number[] = [];
+  let current = 1;
+  const tabs = [0, 1, 2].map((index) => ({
+    disabled: false,
+    classList: { contains: () => index === current },
+    closest: () => null, getClientRects: () => [1],
+    focus: () => { focused.push(index); },
+    click: () => { clicks.push(index); current = index; },
+  }));
+  const activate = runInNewContext(`${source}\nactivateMapTab`, {
+    document: { querySelector: (selector: string) => {
+      if (selector.startsWith("dialog[open]")) return overlay ? {} : null;
+      assert.equal(selector, ".screen.is-active .era-move-tabs");
+      return { closest: () => null, getClientRects: () => hidden ? [] : [1], querySelectorAll: () => tabs };
+    } },
+  });
+  activate(1);
+  activate(1);
+  assert.deepEqual(clicks, [2], "R1 stops at the last tab");
+  activate(-1);
+  activate(-1);
+  activate(-1);
+  assert.deepEqual(clicks, [2, 1, 0], "L1 stops at the first tab");
+  overlay = true;
+  activate(1);
+  overlay = false;
+  hidden = true;
+  activate(1);
+  hidden = false;
+  tabs[1]!.disabled = true;
+  activate(1);
+  assert.deepEqual(clicks, [2, 1, 0]);
+  assert.deepEqual(focused, clicks);
+  const css = readFileSync(new URL("../web/handheld.css", import.meta.url), "utf8");
+  assert.match(css, /\.has-controller \.era-move-tabs::before \{ content: "L1"; \}/);
+  assert.match(css, /\.has-controller \.era-move-tabs::after \{ content: "R1"; \}/);
+});
+
+test("controller polling routes L1 and R1 to map tabs once per press without changing dialog paging", () => {
+  const h = harness();
+  h.mapVisible = true;
+  h.poll([5]);
+  h.poll([5]);
+  assert.deepEqual(h.mapClicks, [2]);
+  h.poll([]);
+  h.poll([4]);
+  assert.deepEqual(h.mapClicks, [2, 1]);
+  h.poll([]);
+  h.popover = true;
+  h.poll([5]);
+  assert.deepEqual(h.mapClicks, [2, 1]);
+  assert.deepEqual(h.pages, [0, 1]);
+});
+
+test("B activates map Back once per press and stays with dialogs when a modal is open", () => {
+  const h = harness();
+  h.mapVisible = true;
+  h.poll([1]);
+  h.poll([1]);
+  assert.equal(h.mapBackClicks, 1);
+  h.poll([]);
+  h.popover = true;
+  h.focus(0);
+  h.poll([1]);
+  assert.equal(h.mapBackClicks, 1);
+  assert.deepEqual(h.events, ["Escape"]);
+  const css = readFileSync(new URL("../web/handheld.css", import.meta.url), "utf8");
+  assert.match(css, /\.has-controller \.screen\.is-active button\.era-move-back:enabled:not\(\.is-stale\)::after \{ content: "B";/);
+});
+
+test("L1 and R1 page dialogs once per press and do nothing without a dialog or map", () => {
   const h = harness();
   h.poll([4, 5]);
   assert.deepEqual(h.pages, [0, 0]);

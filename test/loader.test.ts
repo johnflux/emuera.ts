@@ -6,6 +6,49 @@ import { test } from "node:test";
 import { loadGame, readText } from "../src/loader.js";
 import { EraError } from "../src/model.js";
 
+test("character templates preserve literal quotes and semicolons, including unmatched quotes", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "era-loader-character-quotes-"));
+  try {
+    await Promise.all(["ERB", "CSV/people"].map(dir => mkdir(path.join(root, dir), { recursive: true })));
+    await writeFile(path.join(root, "CSV", "people", "cHaRa0.csv"), [
+      "\uFEFF; ignored comment with an unmatched \"",
+      "番号,0",
+      '名前,A "stage" name',
+      'CSTR,0,as a "performer" but as a "producer.',
+      'CSTR,1,band "NAME"; retained',
+      'CSTR,2,"quoted,value"',
+      "{ ; block",
+      "CSTR,3,",
+      'first "part',
+      'second "part"',
+      "} ; end",
+      "UNKNOWN,0,ignored",
+      "CSTR,4,after",
+    ].join("\r\n"));
+    await writeFile(path.join(root, "CSV", "Str.csv"), '0,"quoted,value"; ignored');
+    const game = await loadGame(root);
+    assert.deepEqual(game.characters.get(0)?.rows, [
+      ["番号", "0"],
+      ["名前", 'A "stage" name'],
+      ["CSTR", "0", 'as a "performer" but as a "producer.'],
+      ["CSTR", "1", 'band "NAME"; retained'],
+      ["CSTR", "2", '"quoted', 'value"'],
+      ["CSTR", "3", 'first "part second "part"'],
+      ["UNKNOWN", "0", "ignored"],
+      ["CSTR", "4", "after"],
+    ]);
+    assert.deepEqual(game.tables.get("STR")?.get(0), ["quoted,value"]);
+    assert.deepEqual(game.diagnostics, [{
+      file: path.join("CSV", "people", "cHaRa0.csv"), line: 12,
+      message: 'Unknown character CSV field "UNKNOWN"; this row is ignored',
+    }]);
+    await writeFile(path.join(root, "CSV", "Str.csv"), '0,"unterminated');
+    await assert.rejects(loadGame(root), (error: unknown) =>
+      error instanceof EraError && error.message === "Unterminated CSV quote"
+      && error.source?.file === path.join("CSV", "Str.csv") && error.source.line === 1);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
 test("batched loading preserves header, routine, event and character precedence across batches", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "era-loader-order-"));
   try {

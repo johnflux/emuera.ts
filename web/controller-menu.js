@@ -8,6 +8,28 @@ export function activateControllerAction() {
   action.click();
 }
 
+export function activateMapTab(direction) {
+  if (document.querySelector("dialog[open], .era-dialog:popover-open, #menu-panel:not([hidden])")) return;
+  const group = document.querySelector(".screen.is-active .era-move-tabs");
+  if (!group || group.closest("[hidden], [inert]") || !group.getClientRects().length) return;
+  const tabs = [...group.querySelectorAll("button.choice:not(.is-stale)")];
+  const current = tabs.findIndex((tab) => tab.classList.contains("era-move-current"));
+  if (current < 0) return;
+  const next = tabs[current + direction];
+  if (!next || next.disabled || next.closest("[hidden], [inert]") || !next.getClientRects().length) return;
+  next.focus({ preventScroll: true });
+  next.click();
+}
+
+export function activateMapBack() {
+  if (document.querySelector("dialog[open], .era-dialog:popover-open, #menu-panel:not([hidden])")) return;
+  const back = document.querySelector(".screen.is-active button.era-move-back:enabled:not(.is-stale)");
+  if (!back || back.closest("[hidden], [inert]") || !back.getClientRects().length) return;
+  const style = getComputedStyle(back);
+  if (style.visibility === "hidden" || style.display === "none") return;
+  back.click();
+}
+
 export function setupControllerMenu({ restart, library, settings, exit, canRestart, canExit, onError, onY = activateControllerAction }) {
   const hintsKey = "era-typescript.controller-hints";
   const hintsToggle = document.querySelector("#controller-hints-toggle");
@@ -83,6 +105,9 @@ export function setupControllerMenu({ restart, library, settings, exit, canResta
         ?? document.querySelector(".screen.is-active .era-dialog:popover-open");
       if (!modal) {
         if (down(3)) onY();
+        if (down(1)) activateMapBack();
+        if (down(4)) activateMapTab(-1);
+        if (down(5)) activateMapTab(1);
         continue;
       }
       for (const [button, selector] of [[4, ".era-page-prev:enabled"], [5, ".era-page-next:enabled"]]) {

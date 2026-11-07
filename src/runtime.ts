@@ -20,12 +20,14 @@ import { ASYNC, Jit, type CallAnalysis } from "./jit.js";
 import { readNativeSave, writeNativeSave, type NativeSave, type SavedContainers, type SaveMetadata } from "./save-format.js";
 import { fixHistoryHtml, SHARP_METHODS, supportedSharpCall, translateHistoryDate } from "./plugin-compat.js";
 import { regexCharacterClasses, regexGroupOrder, replaceRegex } from "./regex.js";
+import { xxhash32 } from "./xxhash.js";
 import { compactPicture, decodePicture, encodePicture, InvalidGraphicsImage, pictureColor, PixelCache, resourceColor } from "./graphics.js";
 import { TwInteractionHistory, type CharacterHistory, type Encounter, type Gossip, type HistoryCharacter, type Memory } from "./interaction-history.js";
 import { runCharacterTool, toolCallSummary, unquoteSpeech, type CharacterAction, type ToolHost } from "./character-tools.js";
 import { characterVoice, MemoryVoiceStore, type CharacterVoice, type EditableVoice, type VoiceStore } from "./character-voice.js";
 
 export interface Style { color: string; background: string; alignment: "left" | "center" | "right"; fontStyle: number; font?: string }
+export interface HtmlIsland { layer: number; text: string; style: Style; sprites?: Record<string, SpriteDefinition> }
 type Rect = [x: number, y: number, width: number, height: number];
 /** A 5x5 GDI+ ColorMatrix: output channel j = sum of [r, g, b, a, 1][i] * matrix[i][j]. */
 type ColorMatrix = number[][];
@@ -145,6 +147,7 @@ export interface Snapshot {
   debugClear?: boolean;
   /** Every CBG layer, in drawing order, when they changed during this step. */
   cbg?: BackgroundLayer[];
+  islands?: HtmlIsland[];
   /** Present only when SETTEXTBOX changed the command field during this step. */
   textbox?: string;
   tooltip?: TooltipSettings;
@@ -267,6 +270,7 @@ const BUILTIN_ARITIES: Record<string, [number, number]> = {
     HTML_POPPRINTINGSTR: [0, 0], STRFIND: [2, 3], STRFINDU: [2, 3], TOFULL: [1, 1], TOHALF: [1, 1], HTML_TOPLAINTEXT: [1, 1], STRLENS: [1, 1],
     STRCOUNT: [2, 2],     REPLACE: [3, 4], SUBSTRING: [2, 3],
     EXISTCSV: [1, 2], RAND: [1, 2], ISSKIP: [0, 0], GETPALAMLV: [2, 2], GETEXPLV: [2, 2], MOUSESKIP: [0, 0], GETCHARA: [1, 2], CSVNAME: [1, 2], CSVCALLNAME: [1, 2], CSVNICKNAME: [1, 2], CSVMASTERNAME: [1, 2],
+    GETCSVNOBYNAME: [1, 1], GETCSVNOBYNICKNAME: [1, 1], GETCSVNOBYCALLNAME: [1, 1], GETCSVNOBYMASTERNAME: [1, 1], HASH_XXH32: [1, 1],
     CHKCHARADATA: [1, 1], SAVETEXT: [2, 4], LOADTEXT: [1, 3],
     INRANGE: [3, 3], ESCAPE: [1, 1],
     ISNUMERIC: [1, 1], ISDEFINED: [1, 1], VARSETEX: [2, 5], GETFOCUSCOLOR: [0, 0], GETLINESTR: [1, 1], GETDISPLAYLINE: [1, 1], GETSPCHARA: [1, 1],
@@ -383,6 +387,7 @@ export class Runtime {
   private style: Style;
   private finished = false;
   private expressionCache = new Map<string, Expr>();
+  private characterNameIndices = new Map<string, Map<string, bigint>>();
   private kojoCache = new Map<string, Routine[]>();
   private voices: VoiceStore;
   /** Names that resolved to a user function without REF parameters, so later calls skip builtin dispatch. */
@@ -421,6 +426,10 @@ export class Runtime {
   private debugClear = false;
   /** CBG layers ordered back to front (descending z, then insertion), and whether they changed since the last snapshot. */
   private background: BackgroundSource[] = [];
+  private islands: HtmlIsland[] = [];
+  private islandBytes = 0;
+  private islandsChanged = false;
+  private lastIslands = "";
   private backgroundChanged = false;
   private lastBackground = "[]";
   private lastBackgroundMap = "null";
@@ -671,6 +680,9 @@ export class Runtime {
     this.lineButtons = [];
     this.textboxChanged = this.debugClear = true;
     this.background = [];
+    this.islands = [];
+    this.islandBytes = 0;
+    this.islandsChanged = true;
     this.backgroundMap = undefined;
     this.backgroundChanged = true;
     this.tooltipSettings = { custom: false, font: "", fontSize: 12, delay: 500, duration: 5000, color: "#000000", background: "#ffffe1" };
@@ -2310,6 +2322,21 @@ export class Runtime {
             const field = ({ CSVNAME: "名前", CSVCALLNAME: "呼び名", CSVNICKNAME: "あだ名", CSVMASTERNAME: "主人の呼び方" } as Record<string, string>)[name]!;
             return this.characterTemplate(argInt(args, name, 0)).rows.find((r) => r[0] === field)?.[1] ?? "";
           }
+          case "GETCSVNOBYNAME": case "GETCSVNOBYNICKNAME": case "GETCSVNOBYCALLNAME": case "GETCSVNOBYMASTERNAME": {
+            const field = name.slice("GETCSVNOBY".length), sought = argText(args, name, 0);
+            let index = this.characterNameIndices.get(field);
+            if (!index) {
+              index = new Map();
+              for (const [number, template] of this.game.characters) {
+                let value: string | undefined;
+                for (const row of template.rows) if (characterField(row[0]) === field) value = row[1] ?? "";
+                if (value !== undefined) index.set(value, BigInt(number));
+              }
+              this.characterNameIndices.set(field, index);
+            }
+            return index.get(sought) ?? -1n;
+          }
+          case "HASH_XXH32": return BigInt(xxhash32(argText(args, name, 0)));
           case "INRANGE": return argInt(args, name, 0) >= argInt(args, name, 1) && argInt(args, name, 0) <= argInt(args, name, 2) ? 1n : 0n;
           case "SIGN": return argInt(args, name, 0) > 0n ? 1n : argInt(args, name, 0) < 0n ? -1n : 0n;
           case "ALLSAMES": case "NOSAMES": {
@@ -3016,6 +3043,56 @@ export class Runtime {
     const capacity = dimensions.length ? dimensions.at(-1)! - start : 1;
     if (items.length) variables.setMany(reference.name, indices, items.slice(0, Math.max(0, capacity)), context);
   }
+  private matchAll(args: string, variables: Variables, context: EvaluationContext): void {
+    const parts = args.trim() ? this.arguments(args).map((part) => part ? this.parse(part) : { kind: "omitted" } as const) : [];
+    const reference = parts.shift();
+    if (reference?.kind !== "variable") throw new EraError("MATCHALL expects an array variable");
+    if (variables.isConstant(reference.name, context)) throw new EraError("MATCHALL requires a non-constant array");
+    const character = variables.isCharacter(reference.name, context);
+    const dimensions = variables.dimensions(reference.name, context);
+    const rank = character ? variables.characterRank(reference.name, context) : dimensions.length;
+    if (rank > 1) throw new EraError("MATCHALL requires a one-dimensional array or character variable");
+    let index: Expr | undefined;
+    if (character && rank === 1) {
+      index = parts.shift();
+      const constant = (expr: Expr): boolean => {
+        switch (expr.kind) {
+          case "literal": return true;
+          case "variable": return variables.isConstant(expr.name, context) && expr.indices.every(constant);
+          case "unary": return constant(expr.operand);
+          case "binary": return constant(expr.left) && constant(expr.right);
+          case "conditional": return constant(expr.condition) && constant(expr.yes) && constant(expr.no);
+          default: return false;
+        }
+      };
+      if (!index || !constant(index)) throw new EraError("MATCHALL expects a constant character element index");
+      const value = integer(evaluate(index, context));
+      if (value < 0n || value >= BigInt(dimensions[0]!))
+        throw new EraError("MATCHALL expects a valid constant character element index");
+      index = literal(value);
+    }
+    if (parts.length < 1 || parts.length > 3 || parts.some((part) => part.kind === "omitted"))
+      throw new EraError("MATCHALL expects a value[, start[, end]]");
+    const sought = evaluate(parts[0]!, context);
+    if ((typeof sought === "string") !== variables.isString(reference.name, context))
+      throw new EraError("MATCHALL value type does not match the array");
+    const length = character ? Number(integer(context.get("CHARANUM", []))) : dimensions[0]!;
+    const from = optionalInteger(parts[1], 0, context), to = optionalInteger(parts[2], length, context);
+    if (!Number.isSafeInteger(from) || !Number.isSafeInteger(to) || from < 0 || to < from || to > length)
+      throw new EraError("Invalid MATCHALL range");
+    const capacity = this.globals.dimensions("RESULT", context)[0]! - 1;
+    const matches: Value[] = [];
+    const row = character ? undefined : variables.row(reference.name, [literal(0n)], context);
+    let count = 0;
+    for (let i = from; i < to; i++) {
+      const value = row ? row.get(i) : variables.get(reference.name, [literal(BigInt(i)), ...(index ? [index] : [])], context);
+      if (value !== sought) continue;
+      if (matches.length < capacity) matches.push(BigInt(i));
+      count++;
+    }
+    this.writeArray(this.globals, context, { kind: "variable", name: "RESULT", indices: [literal(1n)] }, matches);
+    this.globals.set("RESULT", [], BigInt(count), context);
+  }
   /** Emuera-EM XML functions over XML strings, string variables (written back) or stored XmlDocuments. */
   private xmlFunction(name: string, args: Expr[], variables: Variables, context: EvaluationContext): Value {
     const base = name.replace(/_BYNAME$/, "");
@@ -3170,6 +3247,16 @@ export class Runtime {
     if (this.debugText) snapshot.debug = this.debugText;
     this.debugText = "";
     this.debugClear = false;
+    if (this.islandsChanged || this.islands.length) {
+      const islands = this.islands.map((island) => {
+        const sprites = this.htmlSprites(island.text);
+        return { ...island, ...(sprites ? { sprites } : {}) };
+      });
+      const signature = JSON.stringify(islands);
+      if (this.islandsChanged || signature !== this.lastIslands) snapshot.islands = islands;
+      this.lastIslands = signature;
+      this.islandsChanged = false;
+    }
     if (this.backgroundChanged || this.background.length) {
       const layers = this.background.flatMap((layer): BackgroundLayer[] => {
         const picture = layer.graphics !== undefined ? this.picture(layer.graphics) : this.spritePicture(layer.sprite!);
@@ -4020,6 +4107,35 @@ export class Runtime {
             this.style.fontStyle = Number(style);
             break;
           }
+          case "MATCHALL":
+            this.matchAll(args, frame.variables, frame.context);
+            break;
+          case "HTML_PRINT_ISLAND": {
+            const parts = this.arguments(args);
+            if (parts.length < 1 || parts.length > 2 || !parts[0])
+              throw new EraError("HTML_PRINT_ISLAND expects html[, layer]");
+            const html = text(ev(parts[0]));
+            const layer = Number(BigInt.asIntN(32, parts[1] ? num(parts[1]) : 0n));
+            if (!html || this.skipDisplay) break;
+            const island: HtmlIsland = { layer, text: html, style: { ...this.style } };
+            const bytes = JSON.stringify(island).length;
+            if (html.length > 1_000_000 || this.islandBytes + bytes > 2_000_000)
+              throw new EraError("HTML island output exceeds limit");
+            this.accountOutput({ type: "html", text: html, newline: false, style: island.style });
+            this.islands.push(island);
+            this.islandBytes += bytes;
+            this.islandsChanged = true;
+            break;
+          }
+          case "HTML_PRINT_ISLAND_CLEAR": {
+            const parts = args.trim() ? this.arguments(args) : [];
+            if (parts.length > 1) throw new EraError("HTML_PRINT_ISLAND_CLEAR expects [layer]");
+            const layer = parts[0] ? Number(BigInt.asIntN(32, num(parts[0]))) : undefined;
+            this.islands = layer === undefined ? [] : this.islands.filter((island) => island.layer !== layer);
+            this.islandBytes = this.islands.reduce((size, island) => size + JSON.stringify(island).length, 0);
+            this.islandsChanged = true;
+            break;
+          }
           case "HTML_PRINT": {
             const parts = this.arguments(args);
             if (parts.length < 1 || parts.length > 2 || !parts[0]) throw new EraError("HTML_PRINT expects html[, toPrintBuffer]");
@@ -4248,7 +4364,7 @@ export class Runtime {
               this.globals.set(numeric ? "RESULT" : "RESULTS", [], numeric ? BigInt(fallback) : fallback, frame.context);
               break;
             }
-            const values = [...new Set([...this.buttonLines.flat(), ...this.lineButtons])]
+            const values = [...new Set([...this.buttonLines.flat(), ...this.lineButtons, ...this.islands.flatMap((island) => htmlButtons(island.text))])]
               .filter((value) => !numeric || /^-?\d+$/.test(value))
               .map((value) => numeric ? BigInt(value).toString() : value);
             if (!values.length) {

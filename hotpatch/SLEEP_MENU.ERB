@@ -2,12 +2,19 @@
 ; Hotpatch for the menu shown while you sleep, before waking (ERB/SHOP関連/SHOP.ERB @SHOW_SHOP), laid out in panels like
 ; the main screen (MAIN_SCREEN.ERB): a header with the sky, the waking time's clock, the date, the waking time and a
 ; large Wake Up button; your card (meters and funds) and your home's; the menu grouped into cards; the tip at the
-; bottom. Commands retain their original numbers and fainting restrictions. Farm Settings uses the startup controls;
-; other commands delegate to the original. Dropped: the DRAWLINE rules and the blank lines that spaced the menu.
+; bottom. Commands retain their original numbers and fainting restrictions. Farm Settings and the added World and
+; Dialogue Settings use startup controls; other commands delegate to the original. DRAWLINE rules and spacing are dropped.
 ;-------------------------------------------------------------------------------
 @USERSHOP
 IF RESULT == 151 && !FLAG:気絶中断
 	CALL HOTPATCH_FARM_SETTINGS
+	RETURN
+ENDIF
+IF RESULT == 1701
+	CALL HOTPATCH_WORLD_SETTINGS
+	RETURN
+ELSEIF RESULT == 1702
+	CALL HOTPATCH_DIALOGUE_SETTINGS
 	RETURN
 ENDIF
 SIF RESULT == 100
@@ -185,6 +192,8 @@ RESETCOLOR
 PRINTC Reset Clothing[161]
 PRINTC Automatic Item Use[162]
 PRINTC Options[400]
+PRINTC World Settings[1701]
+PRINTC Dialogue Settings[1702]
 HTML_PRINT "<era-close>"
 HTML_PRINT "<era-open class='era-actions-group'>"
 HTML_PRINT "<div class='era-actions-title'>Guides</div>"

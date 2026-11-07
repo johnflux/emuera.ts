@@ -8,6 +8,14 @@ and hotpatches; the server offers each one whose directory exists. At startup it
 also offers any other folder in `GAMES/` that holds `ERB/` and `CSV/`, directly
 or one level down (e.g. an unzipped `name/name-master`), titled and identified
 by the folder name. Use **Refresh library** after adding a game; a restart is not required.
+Startup and library refresh only discover game folders. Scripts, CSV tables,
+resources and hotpatches load on first access to that game (play, demo,
+compatibility checks or sprite lookup), then remain cached for the server's
+lifetime. Concurrent requests share one load; a failed load affects only that
+game and can be retried after repairing its files. Debug games are separately
+loaded and cached when requested. The runtime listing reads only configuration
+files to preserve each game's display defaults, without loading its scripts or
+CSV tables. Raw resource requests serve files directly without loading the game.
 Standard folder names are matched case-insensitively, including `erb/`, `csv/`,
 `Resources/` and `Sound/`, on Linux as well as macOS/Windows. Files are not renamed.
 ERB files normally load in each directory before its subdirectories.
@@ -22,6 +30,11 @@ still processed in discovery order. Headers are indexed before scripts, and
 duplicate-function/character precedence is unchanged. Read-ahead source text is
 limited to one batch rather than retaining every file. Text decoders are reused
 without streaming state; UTF-8, UTF-16LE and Shift-JIS detection is unchanged.
+Character templates (`Chara*.csv`, including subdirectories) follow native
+Emuera's literal comma splitting: quotes and inline semicolons are retained as
+text, and an unmatched quote does not prevent loading. Full-line semicolon
+comments are ignored. Other data CSVs retain quoted-field parsing, including
+escaped quotes and quoted commas or semicolons.
 As in Emuera, a non-event function defined
 twice keeps its first definition and the later one is reported in the
 loader diagnostics; only the system `EVENT*` functions may have several.
@@ -126,6 +139,18 @@ table, and skill XML documents are loaded, rather than bypassing initialization.
 alignments and sends changes to the browser tooltip. Other text-format flags
 fail explicitly. `HTML_PRINT html, 1` appends to the current print buffer;
 the omitted/zero flag retains standalone HTML printing.
+`HTML_PRINT_ISLAND html[, layer]` appends persistent HTML overlays outside
+scrollback without flushing the print buffer or changing `LINECOUNT`. Layers
+default to zero and paint from lowest to highest; prints on the same layer
+accumulate. `HTML_PRINT_ISLAND_CLEAR [layer]` removes one layer, or all overlays
+when omitted. Overlay buttons participate in button-only input; overlays survive
+normal input and `CLEARLINE`, and are cleared on restart.
+`MATCHALL array, value[, start[, end]]` writes the exact-match count to
+`RESULT:0` and ascending indices to `RESULT:1` onward, clipping stored indices
+to RESULT's capacity while counting every match. The range is end-exclusive;
+unused result slots are unchanged. For character arrays, use
+`MATCHALL array, constantElementIndex, value[, start[, end]]` to scan characters;
+character scalars such as `NAME` omit the element index.
 `VARI` and `VARS` declare per-call numeric/string locals, including
 arrays. Storage is available throughout the routine, while executing each
 declaration resets its contents and evaluates scalar initializers at that point.
@@ -839,6 +864,10 @@ bottom-left. Games size these from the window width, so sub-areas and the
 images in them are scaled to the text columns (149 columns are 1200 px wide)
 rather than to the line height, keeping the Body page's layout within the
 column width.
+The .netEmuera aliases `background_color`, `border_width`, and `border_color`
+are supported. Omitted dimensions size to the content. `absolute-lefttop`
+uses the drawable client's top-left; `absolute-leftbottom` uses its bottom-left
+with downward-positive `ypos` (negative values lift the box above the bottom).
 
 Browser snapshots are buffered: the previous completed display remains visible
 while clears, HTML and image decoding are prepared off-screen, then the finished
@@ -1347,6 +1376,10 @@ declarations and the expression evaluator. No single routine dominates.
   Character CSV numeric fields follow Emuera's leading-integer parsing, allowing
   trailing notes; omitted values mean 1. Invalid nonempty values that default to
   1 are explicitly recorded in diagnostics.
+  `GETCSVNOBYNAME`, `GETCSVNOBYNICKNAME`, `GETCSVNOBYCALLNAME` and
+  `GETCSVNOBYMASTERNAME` look up template numbers by exact name, returning -1
+  when absent and the last loaded match for duplicates. `HASH_XXH32` hashes
+  UTF-8 strings using seed-zero xxHash32 and returns an unsigned 32-bit value.
 - `RAND:n` rejects non-positive bounds by default. With `CompatiRAND` enabled,
   zero returns 0 and other bounds use a random number from 0 to 32767 modulo
   the bound's absolute value, matching Emuera's eraMaker compatibility mode.

@@ -136,7 +136,16 @@ export function parseExpression(source: string): Expr {
       return { kind: "increment", target, delta: token.value === "++" ? 1n : -1n, postfix: false };
     }
     if (["!", "~", "+", "-"].includes(token.value)) return { kind: "unary", op: token.value, operand: primary() };
-    if (token.value === "(") { const result = expression(0); expect(")"); return result; }
+    if (token.value === "(") {
+      const result = expression(0);
+      expect(")");
+      if (at("++") || at("--")) {
+        const op = take().value;
+        if (result.kind !== "variable") throw new EraError(`${op} needs a variable in expression: ${source}`);
+        return { kind: "increment", target: result, delta: op === "++" ? 1n : -1n, postfix: true };
+      }
+      return result;
+    }
     if (token.type !== "name") throw new EraError(`Expected value in expression: ${source}`);
     if (at("(")) {
       take();

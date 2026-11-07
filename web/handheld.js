@@ -109,7 +109,7 @@ export function setupKeyboardNavigation({ terminal, command, canNavigate }) {
   let usingChoices = false;
   let inputWasHidden = null;
   let pageAction = null;
-  const tabGroups = [".era-start-tabs", ".era-player-tabs", ".era-sheet-pages", ".era-sheet-subpages"];
+  const tabGroups = [".era-start-tabs", ".era-player-tabs", ".era-sheet-pages", ".era-sheet-subpages", ".era-move-tabs"];
   let tabAction = null;
   function activeDialog() {
     return document.activeElement?.closest("dialog[open]") ?? document.querySelector("dialog[open]");
@@ -183,7 +183,12 @@ export function setupKeyboardNavigation({ terminal, command, canNavigate }) {
       const inputAppeared = inputWasHidden === true && !hiddenInput;
       inputWasHidden = hiddenInput;
       if (inputAppeared) usingChoices = false;
-      const items = usingChoices || hiddenInput ? controls(scope()) : [];
+      const root = scope();
+      if (hiddenInput && root === terminal.querySelector(".screen.is-active") && root?.querySelector(".era-launch-actions")) {
+        if (!document.activeElement?.closest(".era-launch-actions button.choice:enabled")) terminal.focus({ preventScroll: true });
+        return;
+      }
+      const items = usingChoices || hiddenInput ? controls(root) : [];
       const next = items.find((element) => pageAction && element.matches(pageAction))
         ?? items.find((element) => tabAction && element.closest(tabAction.group) && element.dataset.value === tabAction.value)
         ?? items.find((element) => element.matches(".era-load .era-save-slot")) ?? items[0];
