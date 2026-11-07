@@ -109,6 +109,20 @@ test("timer rechecks eligibility even before an observer can cancel it", () => {
   assert.equal(h.advances, 0);
 });
 
+test("page lifecycle cleanup cancels the timer and permits a fresh delay on return", () => {
+  const h = harness();
+  h.controller.update();
+  h.tick(400);
+  h.controller.clear();
+  h.tick(500);
+  assert.equal(h.advances, 0);
+  h.controller.update();
+  h.tick(499);
+  assert.equal(h.advances, 0);
+  h.tick(1);
+  assert.equal(h.advances, 1);
+});
+
 test("auto-continue settings persist and only permit ordinary waits", () => {
   const app = readFileSync(new URL("../web/app.js", import.meta.url), "utf8");
   const start = app.indexOf("const autoAdvance = createAutoAdvance(");

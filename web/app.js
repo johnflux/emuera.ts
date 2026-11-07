@@ -140,6 +140,7 @@ autoAdvanceToggle.addEventListener("change", () => {
   autoAdvance.update();
 });
 document.addEventListener("visibilitychange", () => autoAdvance.update());
+window.addEventListener("pageshow", () => autoAdvance.update());
 window.addEventListener("pagehide", () => autoAdvance.clear());
 const autoAdvanceObserver = new MutationObserver(() => autoAdvance.update());
 autoAdvanceObserver.observe(document.body, { attributes: true, attributeFilter: ["class"] });
@@ -465,7 +466,7 @@ function reviveScreen(group) {
     link.removeAttribute("tabindex");
   });
   group.querySelectorAll("[data-tooltip]").forEach((element) => {
-    if (element.matches("button, a[href]")) element.removeAttribute("tabindex");
+    if (element.matches("button, a[href], .checkbox-control")) element.removeAttribute("tabindex");
     else element.tabIndex = 0;
   });
   group.querySelectorAll(".choice").forEach((button) => { button.classList.add("is-revived"); });

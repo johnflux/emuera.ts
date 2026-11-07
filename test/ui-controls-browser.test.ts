@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { promisify } from "node:util";
+import { runInNewContext } from "node:vm";
 
 const execute = promisify(execFile);
 const browser = [
@@ -17,6 +18,27 @@ const browser = [
   "/usr/bin/chromium-browser",
   process.env.PROGRAMFILES && join(process.env.PROGRAMFILES, "Google/Chrome/Application/chrome.exe"),
 ].find((path): path is string => !!path && existsSync(path));
+
+test("reviving a checkbox restores only its native input as a tab stop", async () => {
+  const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
+  const start = source.indexOf("function reviveScreen(");
+  const end = source.indexOf("const SCROLLBACK_LINES", start);
+  let tabIndex: number | null = -1;
+  const label = {
+    matches: (selector: string) => selector.includes(".checkbox-control"),
+    removeAttribute(name: string) { assert.equal(name, "tabindex"); tabIndex = null; },
+    set tabIndex(value: number) { tabIndex = value; },
+  };
+  const group = {
+    classList: { replace() {} },
+    querySelectorAll: (selector: string) => selector === "[data-tooltip]" ? [label] : [],
+  };
+  const revive = runInNewContext(`${source.slice(start, end)}\nreviveScreen`, {
+    restoreHistoryScreen() {}, currentScreen: null, currentLine: null,
+  });
+  revive(group);
+  assert.equal(tabIndex, null, "the label must not duplicate its input's tab stop");
+});
 
 test("native game checkboxes share clear styling and preserve runtime state on activation", {
   skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH",
