@@ -1662,6 +1662,30 @@ RETURNF GETDOINGFUNCTION()
   assert.deepEqual(texts(result).at(-1), "<p align='left'><nobr> </nobr></p>|<p align='left'><nobr><font color='#FF0000'>red</font></nobr></p>|<p align='left'><nobr>first</nobr></p>| 0 1 Helper");
 });
 
+test(".NET literal closing brackets preserve matches, classes and replacements", () => {
+  for (const jit of [false, true]) {
+    const result = runtime(`@SYSTEM_TITLE
+REPEAT 5
+CALL PROBE
+REND
+QUIT
+@PROBE
+#DIMS CHOICE, 2
+CHOICE:0 = [1] one
+CHOICE:1 = [2] two
+PRINTFORML {STRCOUNT("[1] one / [2] two", "]")} {STRCOUNT("none", "]")}
+PRINTFORML {STRCOUNT("]a]aa]", "]a*")} {STRCOUNT("a]b]", "[ab]]")}
+PRINTFORML {STRCOUNT("]a", "[]a]")} {STRCOUNT("b]", "[^]a]")}
+PRINTFORML {STRCOUNT("]1x", "[]\\\\d]")} {STRCOUNT("]", "\\\\]")}
+PRINTSL REPLACE("a]b]", "]", "!")
+PRINTFORML {FINDELEMENT(CHOICE, "]")} {FINDLASTELEMENT(CHOICE, "]")}
+PRINTFORML {REGEXPMATCH("a]b]", "(])", 1)} {RESULT:1} %RESULTS:1%
+RETURN`, undefined, { jit }).start();
+    const expected = ["2 0", "3 2", "2 1", "2 1", "a!b!", "0 1", "2 2 ]"];
+    assert.deepEqual(texts(result), Array.from({ length: 5 }, () => expected).flat());
+  }
+});
+
 test(".NET inline regex options become JS flags or scoped modifier groups", () => {
   const result = runtime(`@SYSTEM_TITLE
 PRINTFORML {STRCOUNT("Unicorn", "(?i)^uni|^usa")} {STRCOUNT("aBc", "a(?i)b")} {FINDELEMENT(LOCALS, "(?i)X", 0, 2, 1)}

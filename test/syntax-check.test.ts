@@ -168,6 +168,25 @@ LOCAL = 1 +
   assert.deepEqual(report.references, []);
 });
 
+test("syntax checks accept Megaten's literal closing bracket but reject unclosed classes", async () => {
+  const game = emptyGame();
+  const file = "ERB/関数/組み込み関数/入力関数/INPUT_SELECT_M.ERB";
+  indexScript(game, `@INPUT_SELECT_M
+#DIMS CHOICE, 2
+FOR LOCAL, 0, 2
+IF STRCOUNT(CHOICE:LOCAL, "]")
+ENDIF
+NEXT
+PRINTFORML {STRCOUNT("", "[]a]")} {STRCOUNT("", "[^]a]")}
+LOCAL = STRCOUNT("", "[")
+LOCAL = STRCOUNT("", "[]")
+`, file);
+  const report = await checkSyntax(game);
+  assert.deepEqual(report.references, []);
+  assert.deepEqual(report.diagnostics.map((d) => [d.file, d.line]), [[file, 8], [file, 9]]);
+  assert.ok(report.diagnostics.every((d) => d.message.startsWith("STRCOUNT: Invalid regular expression:")));
+});
+
 test("regex checks skip dynamic patterns, literal replacement modes and overridden built-ins", async () => {
   const game = emptyGame();
   indexScript(game, `@UNVISITED

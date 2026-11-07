@@ -1275,6 +1275,8 @@ Both functions report overflow instead of wrapping or quietly returning zero.
 Full 64-bit hexadecimal/binary bit patterns still convert to signed values.
 
 Regex compatibility includes Unicode predefined classes and word boundaries,
+literal closing brackets outside character classes and at the start of a class
+(including after `^`),
 .NET inline `i`, `m` and `s` options (including repeated, nested and disabled
 options), preserving group scope and alternation precedence,
 .NET capture numbering (unnamed groups before named groups), `Regex.Escape`

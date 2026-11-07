@@ -3,8 +3,8 @@ import { EraError } from "./model.js";
 let characterClasses: Record<string, string> | undefined;
 const groupOrders = new WeakMap<RegExp, readonly number[]>();
 
-function inlineOptions(pattern: string): string {
-  let result = "", inClass = false;
+function regexSyntax(pattern: string): string {
+  let result = "", inClass = false, classStart = 0;
   const scopes: string[][] = [[]];
   const closeOptions = (): void => { result += ")".repeat(scopes.at(-1)!.length); };
   for (let i = 0; i < pattern.length; i++) {
@@ -13,12 +13,18 @@ function inlineOptions(pattern: string): string {
       result += c + (pattern[++i] ?? "");
       continue;
     }
-    if (c === "[" && !inClass) { inClass = true; result += c; continue; }
+    if (c === "[" && !inClass) { inClass = true; classStart = i + 1; result += c; continue; }
     if (inClass) {
+      // .NET treats a leading ] (also after ^) as a class member.
+      if (c === "]" && (i === classStart || i === classStart + 1 && pattern[classStart] === "^")) {
+        result += "\\]";
+        continue;
+      }
       if (c === "]") inClass = false;
       result += c;
       continue;
     }
+    if (c === "]") { result += "\\]"; continue; }
     if (c === "(") {
       const option = /^\(\?([ims]+(?:-[ims]+)?|-[ims]+)\)/.exec(pattern.slice(i));
       if (option) {
@@ -53,7 +59,7 @@ export function compileRegex(pattern: string): RegExp {
     source = source.slice(leading[0].length);
     for (const flag of leading[1]!) if (!flags.includes(flag)) flags += flag;
   }
-  source = inlineOptions(source);
+  source = regexSyntax(source);
   // .NET accepts escaped punctuation that JS rejects under the Unicode flag.
   source = source.replace(/\\(.)/g, (escape: string, character: string) =>
     /^[ ,#=!:%&@<>;"'`~]$/.test(character) ? character : escape);
