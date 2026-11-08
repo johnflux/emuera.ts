@@ -1,7 +1,7 @@
-export function activateControllerAction() {
+export function activateControllerAction(selector = ".era-timestop-button") {
   if (document.body.classList.contains("is-home")
     || document.querySelector("dialog[open], .era-dialog:popover-open, #menu-panel:not([hidden])")) return;
-  const action = document.querySelector(".screen.is-active button.era-timestop-button:enabled:not(.is-stale)");
+  const action = document.querySelector(`.screen.is-active button${selector}:enabled:not(.is-stale)`);
   if (!action || action.closest("[hidden], [inert]") || !action.getClientRects().length) return;
   const style = getComputedStyle(action);
   if (style.visibility === "hidden" || style.display === "none") return;
@@ -30,7 +30,7 @@ export function activateMapBack() {
   back.click();
 }
 
-export function setupControllerMenu({ restart, library, settings, exit, canRestart, canExit, onError, onY = activateControllerAction }) {
+export function setupControllerMenu({ restart, library, settings, exit, canRestart, canExit, onError, onY = activateControllerAction, onX = () => activateControllerAction(".era-repeat") }) {
   const hintsKey = "era-typescript.controller-hints";
   const hintsToggle = document.querySelector("#controller-hints-toggle");
   const saved = localStorage.getItem(hintsKey)
@@ -108,6 +108,7 @@ export function setupControllerMenu({ restart, library, settings, exit, canResta
         ?? document.querySelector(".screen.is-active .era-dialog:popover-open");
       if (!modal) {
         if (down(3)) onY();
+        if (down(2)) onX();
         if (down(1)) activateMapBack();
         if (down(4)) activateMapTab(-1);
         if (down(5)) activateMapTab(1);

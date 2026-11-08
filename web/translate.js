@@ -65,7 +65,8 @@ export function createTranslation({ onChange = () => {} } = {}) {
       },
     });
     set("ready");
-    for (const root of roots) translateTree(root);
+    // Staged panels can be removed and re-added by translateTree; a live Set would revisit them forever.
+    for (const root of [...roots]) translateTree(root);
   }
   // Downloading a language model needs a user gesture; the next click or key press starts it.
   function createOnGesture(language) {
@@ -170,7 +171,7 @@ export function createTranslation({ onChange = () => {} } = {}) {
     else localStorage.setItem(STORAGE_KEY, on ? "on" : "off");
     if (enabled()) {
       set(translator ? "ready" : "off");
-      for (const root of roots) translateTree(root);
+      for (const root of [...roots]) translateTree(root);
     } else {
       for (const root of roots) restore(root);
       set("off");

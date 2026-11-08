@@ -37,6 +37,46 @@ function script(source: string, headers = "") {
   return game;
 }
 
+test("native autosave logs timing without changing the default slot or custom hook", (t) => {
+  const logs = t.mock.method(console, "log", () => {});
+  for (const custom of [false, true]) {
+    const game = script(`@SYSTEM_TITLE
+BEGIN SHOP
+@EVENTSHOP
+@SHOW_SHOP
+PRINTL shop
+@SAVEINFO
+SAVEDATA_TEXT = timing test
+${custom ? '@SYSTEM_AUTOSAVE\nSAVEDATA 12, "custom timing test"' : ""}`);
+    const saves = new MemorySaveStore();
+    const snapshot = new Runtime(game, 50_000, { saves }).start();
+    assert.equal(snapshot.error, null);
+    assert.equal(snapshot.status, "waiting");
+    const saved = saves.read(custom ? "save12.sav" : "save99.sav");
+    assert.ok(Buffer.isBuffer(saved));
+    assert.match(readNativeSave(saved).text, custom ? /^custom timing test$/ : /timing test$/);
+    if (custom) assert.equal(saves.read("save99.sav"), null);
+    const start = logs.mock.calls.at(-2)!.arguments;
+    const finish = logs.mock.calls.at(-1)!.arguments;
+    assert.equal(start[0], "[era autosave] started");
+    assert.equal(finish[0], "[era autosave] completed");
+    assert.equal(finish[1].custom, custom);
+    assert.ok(Number.isFinite(finish[1].totalMs) && finish[1].totalMs >= 0);
+  }
+});
+
+test("native autosave logs interruption without hiding save failures", (t) => {
+  const logs = t.mock.method(console, "log", () => {});
+  const game = script("@SYSTEM_TITLE\nBEGIN SHOP\n@EVENTSHOP\n@SHOW_SHOP\nPRINTL shop");
+  const saves = new MemorySaveStore();
+  t.mock.method(saves, "write", () => { throw new Error("Disk full"); });
+  assert.throws(() => new Runtime(game, 50_000, { saves }).start(), /Disk full/);
+  assert.equal(saves.read("save99.sav"), null);
+  assert.equal(logs.mock.callCount(), 2);
+  assert.equal(logs.mock.calls[1].arguments[0], "[era autosave] interrupted");
+  assert.ok(logs.mock.calls[1].arguments[1].totalMs >= 0);
+});
+
 test("reads an independently specified Emuera binary save and writes the same wire format", () => {
   const record = readNativeSave(FIXTURE);
   assert.equal(record.code, "7");

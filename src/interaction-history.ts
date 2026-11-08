@@ -172,6 +172,25 @@ export class TwInteractionHistory {
   private gossips = new Map<string, Interaction>();
   constructor(private store: SaveStore, private host: Host) {}
 
+  suspendState() {
+    return {
+      ids: this.ids, head: this.head, heads: this.heads, active: this.active, conversations: this.conversations,
+      scopes: this.scopes, notice: this.notice, presence: this.presence, frozenPresence: this.frozenPresence,
+      turn: this.turn, memories: this.memories, day: this.day, together: this.together, told: this.told, gossips: this.gossips,
+      heard: [...this.conversations.values()].flatMap((event) => event.lines.flatMap((line) => {
+        const copies = this.heard.get(line);
+        return copies ? [{ line, copies }] : [];
+      })),
+    };
+  }
+  restoreSuspend(state: ReturnType<TwInteractionHistory["suspendState"]>): void {
+    const { heard, ...fields } = state;
+    Object.assign(this, fields);
+    this.heard = new WeakMap(heard.map(({ line, copies }) => [line, copies]));
+    for (const event of [...this.conversations.values(), ...this.gossips.values()])
+      this.store.write(eventFile(event.id), JSON.stringify({ version: 1, event }));
+  }
+
   reset(): void {
     this.ids = [];
     this.head = null;

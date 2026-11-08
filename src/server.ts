@@ -13,10 +13,12 @@ import { EraError, key } from "./model.js";
 import { GAME_INSTRUCTION_LIMIT, Runtime, type BackgroundLayer, type ClientState, type Snapshot } from "./runtime.js";
 import { editableVoice, FileVoiceStore, MemoryVoiceStore, type VoiceStore } from "./character-voice.js";
 import { CardVoiceStore } from "./character-card.js";
-import { FileGlobalStore, FileSaveStore, gameSaveDirectory, MemoryGlobalStore, MemorySaveStore, type GlobalStore, type SaveStore } from "./storage.js";
+import { FileGlobalStore, FileSaveStore, gameSaveDirectory, latestGameSave, MIDDAY_FILE, MemoryGlobalStore, MemorySaveStore, type GlobalStore, type SaveStore } from "./storage.js";
 import { patchTitleImage } from "./render-patches.js";
 import type { CharacterHistory, Encounter, HistoryCharacter } from "./interaction-history.js";
 import { LLM_REQUEST_BYTES, LlmRequestError, proxyLlm } from "./llm.js";
+import { readSuspend, writeSuspend } from "./suspend-format.js";
+import { backgroundQuicksave } from "./background-quicksave.js";
 
 type BrowserSnapshot = ReturnType<typeof patchTitleImage>;
 
@@ -122,8 +124,16 @@ interface Session {
   tooltip?: Snapshot["tooltip"];
   audio?: Snapshot["audio"];
   textbox?: string;
+  lastSaveAt?: number;
+  quicksaveError?: string;
 }
 const HISTORY_BYTES = 8 * 1024 * 1024;
+const QUICKSAVE_INTERVAL = 4 * 60_000;
+interface MiddaySave {
+  game: string;
+  debug: boolean;
+  runtime: Buffer;
+}
 class HttpError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
@@ -295,6 +305,62 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
     return entry;
   };
   const sessions = new Map<string, Session>();
+  const pendingQuicksaves = new Map<string, Promise<void>>();
+  function quicksave(session: Session, trigger: "automatic" | "manual"): void {
+    const started = performance.now();
+    const details = { game: session.game, step: session.step, trigger };
+    console.log("[era quicksave] started", details);
+    const saved: MiddaySave = { game: session.game, debug: session.debug, runtime: session.runtime.exportMidday() };
+    const captured = performance.now();
+    const encoded = writeSuspend(saved);
+    const serialized = performance.now();
+    entryFor(session.game).saves.write(MIDDAY_FILE, encoded);
+    const written = performance.now();
+    session.lastSaveAt = Date.now();
+    delete session.quicksaveError;
+    console.log("[era quicksave] completed", { ...details, bytes: encoded.length,
+      captureMs: +(captured - started).toFixed(1), encodeMs: +(serialized - captured).toFixed(1),
+      writeMs: +(written - serialized).toFixed(1), totalMs: +(written - started).toFixed(1) });
+  }
+  function automaticQuicksave(session: Session): void {
+    const started = performance.now();
+    const details = { game: session.game, step: session.step, trigger: "automatic" };
+    const saves = entryFor(session.game).saves;
+    const baseline = latestGameSave(saves, true);
+    const revision = saves.revision;
+    console.log("[era quicksave] started", details);
+    const writing = backgroundQuicksave({
+      game: session.game, debug: session.debug, runtime: session.runtime.captureMidday(),
+      ...(saves instanceof FileSaveStore ? { directory: saves.backgroundDirectory(MIDDAY_FILE) } : {}),
+    });
+    const captureMs = performance.now() - started;
+    const pending = writing.then((result) => {
+      const prepared = result.prepared;
+      let committed = false;
+      try {
+        const newest = latestGameSave(saves, true);
+        if (saves.revision !== revision || newest?.name !== baseline?.name || newest?.modified !== baseline?.modified) {
+          console.log("[era quicksave] skipped (newer save)", details);
+          return;
+        }
+        if (prepared && saves instanceof FileSaveStore) saves.commitWrite(prepared);
+        else if (result.encoded) saves.write(MIDDAY_FILE, Buffer.from(result.encoded));
+        else throw new EraError("Background quicksave returned no save data");
+        committed = true;
+        session.lastSaveAt = Date.now();
+        delete session.quicksaveError;
+        console.log("[era quicksave] completed", { ...details, bytes: result.bytes,
+          captureMs: +captureMs.toFixed(1), encodeMs: +result.encodeMs.toFixed(1),
+          writeMs: +result.writeMs.toFixed(1), totalMs: +(performance.now() - started).toFixed(1) });
+      } finally {
+        if (prepared && saves instanceof FileSaveStore && !committed) saves.discardWrite(prepared);
+      }
+    }).catch((error: unknown) => {
+      console.error(`Automatic quicksave failed for ${session.game}:`, error);
+      session.quicksaveError = error instanceof Error ? error.message : String(error);
+    }).finally(() => { pendingQuicksaves.delete(session.game); });
+    pendingQuicksaves.set(session.game, pending);
+  }
   function executionBreadcrumb(id: string, game: string, step: number, action: string, debug: boolean): void {
     if (!development) return;
     const { heapUsed, heapTotal, rss } = process.memoryUsage();
@@ -305,10 +371,16 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
   function deliver(response: ServerResponse, id: string, session: Session | undefined, advance: Advance, snapshot: Snapshot, game: Game, gameId = session?.game ?? path.basename(game.root)): void {
     const started = performance.now();
     const patched = patchTitleImage(game, snapshot);
+    if (session && patched.output.some((item) => item.type === "html" && item.text.includes("era-launch-continue")))
+      patched.continueAvailable = session.mode === "game" && latestGameSave(entryFor(session.game).saves, session.runtime.middaySupported) !== null;
     if (patched.error?.context) patched.error.context.server = {
       game: gameId, session: id, step: session ? session.step + 1 : 0, action: advance,
     };
     if (session) {
+      if (session.mode === "game" && session.runtime.middaySupported) {
+        const newest = latestGameSave(entryFor(session.game).saves, true);
+        session.lastSaveAt = Math.max(session.lastSaveAt ?? newest?.modified ?? Date.now(), newest?.modified ?? 0);
+      }
       session.step++;
       if (patched.cbg) session.cbg = patched.cbg;
       if (patched.cbgMap !== undefined) session.cbgMap = patched.cbgMap;
@@ -322,6 +394,27 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
       session.bytes += bytes;
       // The oldest steps go first; the browser keeps a bounded scrollback anyway.
       while (session.bytes > HISTORY_BYTES && session.history.length > 1) session.bytes -= session.history.shift()!.bytes;
+      if (session.mode === "game" && session.runtime.canSaveMidday
+        && !pendingQuicksaves.has(session.game)
+        && session.lastSaveAt !== undefined && Date.now() - session.lastSaveAt >= QUICKSAVE_INTERVAL) {
+        try { automaticQuicksave(session); }
+        catch (error) {
+          if (!(error instanceof EraError)) throw error;
+          console.error(`Automatic quicksave failed for ${session.game}:`, error);
+          patched.quicksaveError = error.message;
+        }
+      }
+      if (pendingQuicksaves.has(session.game)) patched.quicksavePending = true;
+      if (session.quicksaveError) {
+        patched.quicksaveError = session.quicksaveError;
+        delete session.quicksaveError;
+      }
+      if (patched.quicksavePending || patched.quicksaveError) {
+        const last = session.history.at(-1)!;
+        const deliveredBytes = JSON.stringify(patched).length;
+        session.bytes += deliveredBytes - last.bytes;
+        last.bytes = deliveredBytes;
+      }
     }
     serverTiming(response, "prepare", started);
     json(response, { session: id, step: session?.step ?? 0, ...patched });
@@ -361,7 +454,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
     void (async () => {
       response.setHeader("Cache-Control", "no-store");
       response.setHeader("X-Content-Type-Options", "nosniff");
-      response.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
+      response.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
       const host = request.headers.host ?? "";
       const allowedHost = /^(?:127\.0\.0\.1|localhost|\[::1\]):\d+$/.test(host);
       if (!allowedHost) throw new HttpError(403, "Only localhost access is allowed");
@@ -636,6 +729,76 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
         }
         return;
       }
+      if (request.method === "POST" && (url.pathname === "/api/midday/save" || url.pathname === "/api/midday/load" || url.pathname === "/api/continue")) {
+        const data = await body(request);
+        if (typeof data.session !== "string" || !Number.isSafeInteger(data.step))
+          throw new HttpError(400, "Expected session and step");
+        const current = sessions.get(data.session);
+        if (!current) throw new HttpError(404, "Session expired or does not exist; start a new run");
+        if (data.step !== current.step) throw new HttpError(409, "This run was continued in another tab");
+        const continuing = url.pathname === "/api/continue";
+        if (current.mode !== "game" || (!continuing && !current.runtime.middaySupported))
+          throw new HttpError(400, "Midday saves are supported only for patched TW");
+        if (continuing && current.history.at(-1)?.snapshot.continueAvailable === undefined)
+          throw new HttpError(400, "Continue is available only on the title screen");
+        const entry = entryFor(current.game);
+        try {
+          await pendingQuicksaves.get(current.game);
+          if (sessions.get(data.session) !== current || data.step !== current.step)
+            throw new HttpError(409, "This run was continued in another tab");
+          const newest = continuing ? latestGameSave(entry.saves, current.runtime.middaySupported) : null;
+          if (continuing && !newest) throw new HttpError(404, "No game saves are available");
+          if (newest?.kind === "native") {
+            const snapshot = current.runtime.continueNative(newest.name);
+            const id = randomUUID();
+            const session: Session = { runtime: current.runtime, used: Date.now(), mode: "game", game: current.game,
+              debug: current.debug, history: [], bytes: 0, step: 0 };
+            sessions.delete(data.session);
+            if (snapshot.status === "waiting") sessions.set(id, session);
+            deliver(response, id, session, "start", snapshot, current.runtime.game);
+            return;
+          }
+          if (url.pathname.endsWith("/save")) {
+            quicksave(current, "manual");
+            current.used = Date.now();
+            json(response, { ok: true });
+          } else {
+            const bytes = entry.saves.read(MIDDAY_FILE);
+            if (bytes === null) throw new HttpError(404, "No midday save for this game");
+            if (!Buffer.isBuffer(bytes)) throw new EraError("Invalid midday save file");
+            const saved = readSuspend<MiddaySave>(bytes);
+            if (!saved || saved.game !== current.game || !Buffer.isBuffer(saved.runtime))
+              throw new EraError("Invalid midday save state");
+            const game = current.debug ? await debugGame(entry) : await ensureGame(entry);
+            if (sessions.get(data.session) !== current || data.step !== current.step)
+              throw new HttpError(409, "This run was continued in another tab");
+            const runtime = new Runtime(game, GAME_INSTRUCTION_LIMIT, { store: entry.store, saves: entry.saves, voices: entry.voices });
+            const snapshot = runtime.restoreMidday(saved.runtime);
+            if (snapshot.error) throw new EraError(snapshot.error.message);
+            if (snapshot.status !== "waiting") throw new EraError("Midday save did not restore a command prompt");
+            const id = randomUUID();
+            const session: Session = { runtime, mode: "game", game: current.game, debug: current.debug,
+              history: [], bytes: 0, step: 0, used: Date.now(), lastSaveAt: entry.saves.modified(MIDDAY_FILE) ?? Date.now() };
+            sessions.set(id, session);
+            sessions.delete(data.session);
+            deliver(response, id, session, "start", snapshot, game);
+          }
+        } catch (error) {
+          if (!(error instanceof EraError)) throw error;
+          throw new HttpError(400, error.message);
+        }
+        return;
+      }
+      if (request.method === "POST" && url.pathname === "/api/quicksave/status") {
+        const data = await body(request);
+        if (typeof data.session !== "string") throw new HttpError(400, "Expected a session string");
+        const session = sessions.get(data.session);
+        if (!session) throw new HttpError(404, "Session expired or does not exist; start a new run");
+        await pendingQuicksaves.get(session.game);
+        json(response, { error: session.quicksaveError ?? null });
+        delete session.quicksaveError;
+        return;
+      }
       if (request.method === "POST" && url.pathname === "/api/resume") {
         // Lets a reloaded page reattach to its still-running session: replays what was shown, without advancing it.
         const data = await body(request);
@@ -714,6 +877,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
         "/controls.js": "controls.js", "/auto-advance.js": "auto-advance.js",
         "/art-demo.js": "art-demo.js", "/art-demo.css": "generated/art-demo.css", "/sky.js": "sky.js",
         "/title/new-game.webp": "title/new-game.webp", "/title/load-game.webp": "title/load-game.webp",
+        "/title/continue.webp": "title/continue.webp",
         "/moon.svg": "moon.svg",
         "/relationship-icons.svg": "relationship-icons.svg",
         "/calendar.svg": "calendar.svg",
@@ -726,6 +890,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
         "/underworld-lantern-mask.png": "underworld-lantern-mask.png",
         "/clock-frame.png": "clock-frame.png",
         "/clock-frame-hover.png": "clock-frame-hover.png",
+        "/repeat.webp": "repeat.webp", "/repeat-active.webp": "repeat-active.webp",
         "/fonts/BIZUDGothic-Regular.ttf": "fonts/BIZUDGothic-Regular.ttf",
         "/fonts/OFL.txt": "fonts/OFL.txt",
       };

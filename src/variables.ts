@@ -374,6 +374,14 @@ export class Variables {
       }
     };
   }
+  suspendState() {
+    return { values: this.values, declarations: this.declarations };
+  }
+  restoreSuspend(state: ReturnType<Variables["suspendState"]>): void {
+    this.values = state.values;
+    this.declarations = state.declarations;
+    this.invalidate();
+  }
   exportGlobals(context: EvaluationContext): GlobalData {
     const result: GlobalData = {};
     for (const name of this.globalNames()) {

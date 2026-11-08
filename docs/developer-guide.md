@@ -1,6 +1,82 @@
 # Emuera.ts
 
 A TypeScript/Node.js interpreter for Emuera/eramaker ERB, with a browser terminal.
+
+### TW midday quick saves
+
+The quick/controller menu exposes **Quicksave** at TW's system TRAIN
+command prompt, and **Quickload** throughout the running game, including its
+title screen. Quicksave is also below Config on the main screen; neither action
+appears in the burger menu. Saving replaces the slot without confirmation;
+loading confirms loss of unsaved progress. `/api/midday/save` and `/api/midday/load` require the current
+session and step; demos and other games are rejected. The single
+`midday.erasuspend` slot is written atomically through the existing save store.
+It contains normal `Variables.exportSave` game data, declared SAVE containers
+(MAPs, XML documents and DataTables), and interaction history. The game data
+already includes temporary built-ins such as TFLAG, TCVAR, TEQUIP and PALAM;
+midday loading skips TRAIN's reset of these arrays. It does not capture
+declarations, routine statics, random sequence, graphics or renderer history.
+Earlier immutable interaction events remain in the game's existing history files.
+Native `.sav` files and layouts are not changed.
+
+After recording a delivered snapshot at a safe TRAIN prompt, the server uses the
+an automatic quicksave when at least 240,000 ms have elapsed since
+the latest native or quicksave write. Runs without saves start timing at their
+first delivered snapshot. Returning from events or refreshing the main menu
+checks the deadline; replaying a saved view does not. There is no idle timer
+or tab-switch/blur trigger. Capture clones the game data at
+that prompt, then a one-shot worker encodes both
+suspend layers and writes an atomic temporary file while the response returns.
+Only the final rename runs on the server thread. At most one automatic save per
+game is in flight. A newer native/quicksave write makes the older job discard
+its temporary file; manual quicksave, quickload and Continue wait for an in-flight
+job and recheck the request's session/step before proceeding.
+File and memory stores track game-save write generations as well as timestamps,
+so same-millisecond writes are detected; unrelated history writes do not cancel
+an autosave.
+Failed writes are logged and do not reset the deadline. A `quicksavePending`
+snapshot starts a single `/api/quicksave/status` wait (not polling), so failures
+appear in the browser even while the player reads. Errors can also be returned
+as `quicksaveError` on the next snapshot. Manual quicksave remains synchronous.
+
+The server console logs `[era quicksave]` start/completion messages for automatic
+and manual quicksaves, including game, step, file size and capture/encoding/write
+times in milliseconds. `[era autosave]` logs native autosave start and
+completion/interruption with total elapsed time and whether `SYSTEM_AUTOSAVE`
+handled it. These are backend logs (the terminal running the server), not browser
+DevTools logs. Automatic `captureMs` includes the worker-message clone;
+`encodeMs` covers encoding, and `totalMs` includes worker startup.
+Native autosave scheduling and its save format are unchanged.
+
+The TW title's **Continue** button calls `/api/continue`. `latestGameSave`
+compares save-store modification times for `save<number>.sav` (case-insensitive,
+including autosaves) and `midday.erasuspend`. Midday wins only with a strictly
+newer timestamp; native wins ties. Global/character saves and unrelated files
+are excluded. Selection is repeated on click so newly written saves are included.
+Native Continue uses the same restore helper and EVENTLOAD/SHOP flow as LOADDATA;
+midday loads game data into a new runtime and rebuilds the main screen. Missing, corrupt or incompatible selected
+saves produce explicit errors rather than falling back to older progress.
+
+Loading uses native game-code/version compatibility and variable-import rules:
+current declarations and dimensions are authoritative. `HOTPATCH_MIDDAY_LOAD`
+rebuilds TW's title-initialized talent maps and loads global preferences.
+SYSTEM_LOADEND and EVENTLOAD then run normally, followed directly by TRAIN.
+It skips SHOP, EVENTTRAIN and TRAIN's start-of-day variable/stain resets.
+SHOW_STATUS and SHOW_USERCOM rerun, and available commands are recomputed.
+Load/display hooks may rebuild or migrate data; the engine does not start
+another day. Arbitrary event stacks, CALLTRAIN,
+and prefetched waits cannot be saved. This is deliberately TW-only until other
+games' safe continuation points are verified.
+
+The internal V8 format in `src/suspend-format.ts` has a versioned header and
+SHA-256 integrity check. Version 2 stores game data without a script fingerprint.
+Version 1 frozen quicksaves can also be read: their variables and SAVE containers
+are converted to game data, discarding execution state and old declarations.
+The outer game ID and normal game-version rules still reject other games or
+unsupported versions. Loads use the current session's debug mode.
+Suspend files are not editable/native saves; keep regular saves for
+cross-engine transfers.
+
 Games live under `GAMES/`: eraToho The World (`GAMES/anon-tw-anon-tw_eng-modding`,
 the default), eraTohoK (`GAMES/eraTohoK/eraTohoK-master`) and eraRanceK
 (`GAMES/eraRanceK`). `KNOWN_GAMES` in `src/loader.ts` fixes their ids, titles
@@ -901,7 +977,11 @@ and **Menu → Translate Japanese** turns it off, restoring the original text.
 The first use downloads the language model, which starts on your next click or
 key press. Map art and box-drawing text art are left alone, and tooltips are
 translated too, as is the interaction history each time it is drawn (its preview,
-panel and dialog); the history itself is stored in the original language. Chrome's own Translate button only translates a page once, so it
+panel and dialog); the history itself is stored in the original language.
+Model-readiness and enable passes iterate a snapshot of pending translation roots:
+staged panels may be detached, and translating them can remove and re-add them to
+the pending set. Iterating that set directly can loop indefinitely.
+Chrome's own Translate button only translates a page once, so it
 misses lines printed later. While it is on (Chrome/Edge's `translated-ltr` class
 or its `<font>` wrappers), updates are rendered straight into the live page
 (marked `lang="ja"`), but the built-in translator above is the reliable option.
@@ -927,11 +1007,18 @@ the portable print fixture was also run unchanged under native Emuera.
 Output continued past a click-to-continue wait stays bright: a run of dialogue
 greys out together only once the game stops at a real input (a menu or prompt),
 so new choices are shown against greyed history.
-Settings → Playback enables **Auto-continue after 0.5 seconds** by default. The
+Settings → Playback enables **Auto-advance text** by default, with a 0.5-second delay. The
 preference is saved in this browser. It submits Continue only for an untimed,
 non-blocking click-to-continue wait, never a command choice or text input. It pauses
-while the page is hidden or an app menu/dialog is open, and starts a fresh 500 ms
-delay when playback resumes. Script-controlled timeout behavior is unchanged.
+while the page is hidden or an app menu/dialog or active game dialog is open,
+including "Gaze at the sky". Game dialogs require manual continuation; automatic
+text playback resumes after they close, with a fresh 500 ms delay.
+Script-controlled timeout behavior is unchanged.
+When automatic playback (including timer-driven text such as the radio) reaches
+a new game dialog or layout after narration, the client retains the last text
+and shows "Click to continue". Continue reveals the buffered screen without
+sending another game input. Text printed immediately before the transition is
+retained too. Starting or restoring a run discards any buffered screen.
 `web/auto-advance.js` owns the cancellable timer; a failed Continue is not retried
 automatically at the same wait.
 If an automatic Continue clears output (`CLEARLINE` or a full screen clear),
@@ -1251,6 +1338,9 @@ Copied graphics snapshots whose drawing history exceeds 64 KiB are rasterized
 to PNG before further compositing or output. This prevents nested outline and
 image copies from expanding exponentially in the serialized output; the normal
 output limit still applies. Small histories retain their original paint operations.
+The browser replays compacted PNGs from data URLs, which are allowed by the
+server's image content-security policy; scripts and network requests remain
+restricted to the same origin.
 The server uses the native Node modules `@napi-rs/canvas` and `@napi-rs/image`;
 dependency installation must include the package for the host OS/CPU.
 Fonts, text rasterization, triangle dash caps, and antialiasing can differ from

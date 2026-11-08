@@ -46,13 +46,15 @@
 .era-room-stage .era-scene { position: absolute; top: 2em; left: 8px; right: 8px; z-index: 2; margin: 0; padding: 6px 9px; border-left: 2px solid #41829b; font-size: .9em; font-style: normal; pointer-events: none; text-shadow: 0 1px 3px #000; }
 .era-room-stage > .era-occupants { display: flex; flex: none; flex-direction: column; margin-top: auto; }
 .era-room-stage .era-occupant-list { flex: none; height: var(--era-occupant-height); align-items: flex-end; padding: 0 4px; overflow-y: hidden; }
+.era-room-stage .era-occupant-list:has(.era-portrait) { height: auto; }
 .era-room-stage .era-occupant-list:has(.era-alone-message) { align-items: stretch; }
 .era-room-stage .era-occupant { position: relative; padding: 0 2px; gap: 0; }
 .era-room-stage .era-occupant > .line:has(.era-occupant-label), .era-room-stage .era-occupant > .era-occupant-text { position: absolute; bottom: 4px; left: 2px; right: 2px; z-index: 1; width: auto; }
-.era-room-stage .line button.choice.era-occupant-label { padding: 1px 4px; border: 0; border-radius: 0; background: transparent; text-shadow: 0 1px 3px #000, 0 0 5px #000; }
+.era-room-stage .line button.choice.era-occupant-label { padding: 1px 4px; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
 .screen.is-active .era-room-stage .line button.choice.era-occupant-label:enabled:is(:hover, :focus-visible) { background: transparent; text-decoration: underline; }
-.era-room-stage .era-occupant-state { color: #c1ccd3; text-shadow: 0 1px 3px #000, 0 0 5px #000; }
-.era-room-stage .era-occupant .era-occupant-text .era-occupant-name { color: #fff; text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 2px 3px #000; }
+.era-room-stage .era-occupant-state { color: #c1ccd3; }
+.era-room-stage .era-occupant-text, .era-room-stage .era-occupant-label { text-shadow: -1px -1px 0 #000, 0 -1px 0 #000, 1px -1px 0 #000, -1px 0 0 #000, 1px 0 0 #000, -1px 1px 0 #000, 0 1px 0 #000, 1px 1px 0 #000, 0 2px 3px #000; }
+.era-room-stage .era-occupant .era-occupant-text .era-occupant-name { color: #fff; }
 .era-room-stage .era-occupant:has(.era-portrait) { flex-basis: auto; min-width: 180px; width: max-content; }
 .era-room-stage .era-occupant-caged { flex-basis: 110px; gap: 6px; padding-bottom: 5px; font-size: .85em; }
 .era-room-stage .era-occupant-caged > .era-occupant-text { position: static; }

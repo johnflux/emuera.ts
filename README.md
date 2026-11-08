@@ -32,6 +32,34 @@ Going past the newest entry restores your unfinished input. History lasts until
 the page is reloaded. Recalled commands show their button label as a non-editable
 hint (for example, `400 [Move]`); editing the input hides the hint.
 
+## Midday saves (TW)
+
+In TW, use **Quicksave** below **Config** at the main command screen. **Quickload**
+restores the current day's game data and temporary stats, then rebuilds the main
+screen without starting another
+day. Both actions are also in the quick/controller menu, not the burger menu.
+Each game has one quicksave slot; Quicksave replaces it immediately.
+
+Returning to the main command screen also quicksaves automatically if no native
+or quicksave has been written in the last four minutes. With no existing saves,
+the four-minute timer starts when the run starts. It waits for a safe command
+screen rather than interrupting an event or saving while you sit in a menu.
+
+**Continue** above **New game** loads the most recently modified native game
+save (including autosaves), unless the midday quick save is strictly newer.
+It uses midday when that is the only save, and is disabled when neither exists.
+Global data is not a game save. Invalid or incompatible saves report an error.
+
+The separate `midday.erasuspend` file lives in the game's save directory and
+survives app restarts. It is not a native Emuera `.sav` file. Script, display and
+debug-mode edits no longer invalidate it: loading uses the current scripts and
+normal game-version compatibility rules. It runs load hooks, not morning
+initialization; unsaved routine locals, random sequence and the old screen are
+not restored. Older frozen quicksaves are converted to game data on load.
+Incompatible or damaged saves report an error. Keep regular game saves for
+native Emuera. Other games and saves inside ongoing events are not
+supported yet.
+
 ## Translation and clipboard
 
 Both options below are off by default and available under **Settings…**:
@@ -164,6 +192,9 @@ controls in a scrollable dialog. **Handheld layout** there increases text to at 
 or the device reports touch support or a coarse pointer. Other devices,
 including non-touch Macs, can enable it manually. The toggle is saved
 and overrides the automatic default without changing your normal font setting.
+Only handheld layout hides the bottom command input on button-only menus,
+inline setup screens, the title screen, and while waiting or processing.
+With handheld layout off, the command input stays visible.
 
 In handheld layout, at viewport sizes of 1280 x 800 px or less, or when a touch pointer is available,
 named game buttons hide their bracketed command numbers. Number-only buttons
@@ -220,7 +251,14 @@ With a standard-mapped controller connected, **Y** activates **Wake Up** or
 **Time Stop / Resume**, whichever is available on the current screen. A circular
 **Y** hint appears on that button. Holding Y does not repeat the action; release
 it before pressing again. The shortcut is inactive while menus/dialogs are open,
-the game is busy, or the action is unavailable. Detection uses the Gamepad API,
+the game is busy, or the action is unavailable. **X** activates the **Repeat** button
+at the right of the action filters to repeat the last game action (not a menu or
+filter change). It uses the game's normal availability checks, requires release
+between presses, and only works on the main action screen, under the same
+conditions as Y. The button is hidden until there is a previous action; its X
+hint appears whenever controller hints are enabled.
+The repeat-arrow artwork lights up on hover, focus, and activation.
+Detection uses the Gamepad API,
 not the screen size or Steam launch status; browsers may require a controller
 button press before exposing the connected device. The hint disappears when
 the last supported controller disconnects, unless Steam Deck is detected or

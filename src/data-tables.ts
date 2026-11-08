@@ -34,6 +34,12 @@ export class DataTables {
   private filters = new Map<string, (row: RowReader) => boolean>();
 
   clear(): void { this.tables.clear(); }
+  suspendState() { return { tables: this.tables, nextId: this.nextId }; }
+  restoreSuspend(state: ReturnType<DataTables["suspendState"]>): void {
+    this.tables = state.tables;
+    this.nextId = state.nextId;
+    this.filters.clear();
+  }
   /** VarExt reset: an existing table keeps its schema but loses its rows. */
   clearRows(name: string): void { const table = this.tables.get(name); if (table) table.rows = []; }
   export(name: string): [schema: string, data: string] | undefined {

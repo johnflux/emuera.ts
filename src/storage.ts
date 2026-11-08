@@ -1,4 +1,4 @@
-import { mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { closeSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { EraError } from "./model.js";
@@ -77,11 +77,27 @@ export class FileGlobalStore implements GlobalStore {
 
 /** Native binary saves and plain text files in the game's save directory. */
 export interface SaveStore {
+  /** In-process game-save write generation, when the store supports it. */
+  readonly revision?: number;
   read(name: string): string | Buffer | null;
   write(name: string, data: string | Buffer): void;
   remove(name: string): void;
   /** Names of all stored files. */
   list(): string[];
+  /** Modification time in epoch milliseconds, or null when the file is missing. */
+  modified(name: string): number | null;
+}
+export const MIDDAY_FILE = "midday.erasuspend";
+function isGameSave(name: string): boolean { return /^save\d+\.sav$/i.test(name) || name.toLowerCase() === MIDDAY_FILE; }
+export function latestGameSave(store: SaveStore, midday: boolean): { name: string; kind: "native" | "midday"; modified: number } | null {
+  let newest: ReturnType<typeof latestGameSave> = null;
+  for (const name of store.list().filter((name) => /^save\d+\.sav$/i.test(name)).sort()) {
+    const modified = store.modified(name);
+    if (modified !== null && (!newest || modified > newest.modified)) newest = { name, kind: "native", modified };
+  }
+  const modified = midday ? store.modified(MIDDAY_FILE) : null;
+  if (modified !== null && (!newest || modified > newest.modified)) return { name: MIDDAY_FILE, kind: "midday", modified };
+  return newest;
 }
 function validSaveName(name: string): boolean {
   return !!name && !/[<>:"/\\|?*\x00-\x1f]/.test(name) && !name.startsWith(".") && !/[. ]$/.test(name);
@@ -91,13 +107,26 @@ function checkSaveName(name: string): string {
   return name;
 }
 export class MemorySaveStore implements SaveStore {
+  revision = 0;
   private files = new Map<string, string | Buffer>();
+  private modifiedTimes = new Map<string, number>();
   read(name: string): string | Buffer | null { return this.files.get(checkSaveName(name)) ?? null; }
-  write(name: string, data: string | Buffer): void { this.files.set(checkSaveName(name), data); }
-  remove(name: string): void { this.files.delete(checkSaveName(name)); }
+  write(name: string, data: string | Buffer): void {
+    this.files.set(checkSaveName(name), data);
+    this.modifiedTimes.set(name, Date.now());
+    if (isGameSave(name)) this.revision++;
+  }
+  remove(name: string): void {
+    this.files.delete(checkSaveName(name));
+    this.modifiedTimes.delete(name);
+    if (isGameSave(name)) this.revision++;
+  }
   list(): string[] { return [...this.files.keys()]; }
+  modified(name: string): number | null { return this.modifiedTimes.get(checkSaveName(name)) ?? null; }
 }
+export interface PreparedSaveWrite { file: string; temporary: string }
 export class FileSaveStore implements SaveStore {
+  revision = 0;
   constructor(private directory: string, private characterDirectory = directory) {}
   private directoryFor(name: string): string {
     return /^chara_.*\.dat$/i.test(name) ? this.characterDirectory : this.directory;
@@ -105,30 +134,57 @@ export class FileSaveStore implements SaveStore {
   read(name: string): string | Buffer | null {
     try {
       const bytes = readFileSync(savePath(this.directoryFor(name), checkSaveName(name)));
-      return /\.(sav|dat|png)$/i.test(name) ? bytes : bytes.toString("utf8");
+      return /\.(sav|dat|png|erasuspend)$/i.test(name) ? bytes : bytes.toString("utf8");
     }
     catch (error) {
       if (error instanceof Error && "code" in error && error.code === "ENOENT") return null;
       throw new EraError(`Cannot read save file ${name}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
-  write(name: string, data: string | Buffer): void {
+  modified(name: string): number | null {
+    try { return statSync(savePath(this.directoryFor(name), checkSaveName(name))).mtimeMs; }
+    catch (error) {
+      if (error instanceof Error && "code" in error && error.code === "ENOENT") return null;
+      throw new EraError(`Cannot inspect save file ${name}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  backgroundDirectory(name: string): string { return this.directoryFor(checkSaveName(name)); }
+  prepareWrite(name: string, data: string | Buffer): PreparedSaveWrite {
     const directory = this.directoryFor(name);
     const temporary = `${path.join(directory, checkSaveName(name))}.${randomUUID()}.tmp`;
     let created = false;
     try {
       const file = savePath(directory, name);
       mkdirSync(directory, { recursive: true });
-      writeFileSync(temporary, data, { mode: 0o600, flag: "wx" });
+      const fd = openSync(temporary, "wx", 0o600);
       created = true;
-      renameSync(temporary, file);
+      try { writeFileSync(fd, data); } finally { closeSync(fd); }
       created = false;
+      return { file, temporary };
     } catch (error) {
       throw new EraError(`Cannot write save file ${name}: ${error instanceof Error ? error.message : String(error)}`);
     } finally { if (created) unlinkSync(temporary); }
   }
+  commitWrite(prepared: PreparedSaveWrite): void {
+    try {
+      renameSync(prepared.temporary, prepared.file);
+      if (isGameSave(path.basename(prepared.file))) this.revision++;
+    }
+    catch (error) {
+      throw new EraError(`Cannot commit save file ${path.basename(prepared.file)}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  discardWrite(prepared: PreparedSaveWrite): void { unlinkSync(prepared.temporary); }
+  write(name: string, data: string | Buffer): void {
+    const prepared = this.prepareWrite(name, data);
+    try { this.commitWrite(prepared); }
+    catch (error) { this.discardWrite(prepared); throw error; }
+  }
   remove(name: string): void {
-    try { unlinkSync(savePath(this.directoryFor(name), checkSaveName(name))); }
+    try {
+      unlinkSync(savePath(this.directoryFor(name), checkSaveName(name)));
+      if (isGameSave(name)) this.revision++;
+    }
     catch (error) {
       if (error instanceof Error && "code" in error && error.code === "ENOENT") return;
       throw new EraError(`Cannot delete save file ${name}: ${error instanceof Error ? error.message : String(error)}`);
@@ -182,6 +238,10 @@ export class StagedStores {
           else names.add(name);
         }
         return [...names];
+      },
+      modified: (name) => {
+        const staged = this.files?.get(checkSaveName(name));
+        return staged === null ? null : staged !== undefined ? Date.now() : innerSaves.modified(name);
       },
     };
     this.store = {

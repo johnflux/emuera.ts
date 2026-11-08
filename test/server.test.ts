@@ -480,8 +480,10 @@ test("HTTP UI, isolated sessions, real image bytes, sprite metadata, errors and 
     const page = await fetch(base);
     assert.match(await page.text(), /id="game"[^>]*>eraToho The World</);
     assert.match(page.headers.get("content-security-policy")!, /script-src 'self'/);
+    assert.match(page.headers.get("content-security-policy")!, /img-src 'self' data:;/);
+    assert.match(page.headers.get("content-security-policy")!, /connect-src 'self';/);
     assert.equal((await fetch(base + "/rooms/shrine.svg")).status, 404);
-    for (const name of ["new-game", "load-game"]) {
+    for (const name of ["continue", "new-game", "load-game"]) {
       const asset = await fetch(base + `/title/${name}.webp`);
       assert.equal(asset.status, 200);
       assert.equal(asset.headers.get("content-type"), "image/webp");
@@ -490,6 +492,14 @@ test("HTTP UI, isolated sessions, real image bytes, sprite metadata, errors and 
       assert.equal(bytes.subarray(8, 12).toString(), "WEBP");
     }
     assert.equal((await fetch(base + "/title/unknown.webp")).status, 404);
+    for (const name of ["repeat", "repeat-active"]) {
+      const asset = await fetch(base + `/${name}.webp`);
+      assert.equal(asset.status, 200);
+      assert.equal(asset.headers.get("content-type"), "image/webp");
+      const bytes = Buffer.from(await asset.arrayBuffer());
+      assert.equal(bytes.subarray(0, 4).toString(), "RIFF");
+      assert.equal(bytes.subarray(8, 12).toString(), "WEBP");
+    }
     const clockFrame = await fetch(base + "/clock-frame.png");
     assert.equal(clockFrame.status, 200);
     assert.equal(clockFrame.headers.get("content-type"), "image/png");

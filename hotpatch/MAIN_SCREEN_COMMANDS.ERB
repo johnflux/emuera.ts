@@ -593,6 +593,7 @@ RETURNF sName:nGroup
 ;-------------------------------------------------------------------------------
 @HOTPATCH_FILTERS(nFilters)
 #DIM DYNAMIC nFilters
+#DIM DYNAMIC nRepeatCommand
 #DIMS DYNAMIC sHtml
 #DIMS DYNAMIC sTitle
 IF TARGET > 0 && TARGET != MASTER
@@ -627,6 +628,12 @@ SIF GETBIT(nFilters, 7)
 	sHtml += HOTPATCH_TOGGLE("Housekeeping", 840, FLAG:家事アンフィルタ, "chores", "Show the housekeeping actions (green)")
 SIF GETBIT(nFilters, 8)
 	sHtml += HOTPATCH_TOGGLE("Dialogue", 839, !CFLAG:TARGET:hideKojoCom, "dialogue", "Show their own dialogue topics (blue)")
+IF PREVCOM >= 0
+	nRepeatCommand = PREVCOM
+	SIF PREVCOM == ADD_CUSTOM_COM && ADD_PREVCUSTOMCOM >= 0
+		nRepeatCommand = Add_Custom_COM_To_Number(ADD_PREVCUSTOMCOM)
+	sHtml += @"<button value='{nRepeatCommand}' class='era-repeat' title='Repeat last action' aria-label='Repeat last action'></button>"
+ENDIF
 HTML_PRINT @"<div class='era-card-title era-actions-header'><span>%sTitle%</span><span class='era-toggles'>%sHtml%</span></div>"
 
 ;-------------------------------------------------------------------------------

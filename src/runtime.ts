@@ -25,6 +25,22 @@ import { compactPicture, decodePicture, encodePicture, InvalidGraphicsImage, pic
 import { TwInteractionHistory, type CharacterHistory, type Encounter, type Gossip, type HistoryCharacter, type Memory } from "./interaction-history.js";
 import { runCharacterTool, toolCallSummary, unquoteSpeech, type CharacterAction, type ToolHost } from "./character-tools.js";
 import { characterVoice, MemoryVoiceStore, type CharacterVoice, type EditableVoice, type VoiceStore } from "./character-voice.js";
+import { readSuspend, writeSuspend } from "./suspend-format.js";
+
+interface LegacyMiddayState {
+  globals: ReturnType<Variables["suspendState"]>;
+  dataTables: ReturnType<DataTables["suspendState"]>;
+  xmls: [string, string][];
+  history: ReturnType<TwInteractionHistory["suspendState"]>;
+  fields: { maps: Map<string, Map<string, string>> };
+}
+export interface MiddayState {
+  code: string;
+  gameVersion: string;
+  data: SaveData;
+  containers: SavedContainers;
+  history: ReturnType<TwInteractionHistory["suspendState"]>;
+}
 
 export interface Style { color: string; background: string; alignment: "left" | "center" | "right"; fontStyle: number; font?: string }
 export interface HtmlIsland { layer: number; text: string; style: Style; sprites?: Record<string, SpriteDefinition> }
@@ -135,6 +151,10 @@ export interface Snapshot {
   timeStopped?: boolean;
   /** eraTW's formatted last-command hint, only at its command prompt. */
   lastCommand?: string;
+  midday?: { available: boolean };
+  continueAvailable?: boolean;
+  quicksaveError?: string;
+  quicksavePending?: boolean;
   characterHistory?: CharacterHistory;
   /** At a command prompt: characters the player has just run into (eraTW), for the LLM to have them speak up. */
   encounters?: Encounter[];
@@ -449,6 +469,8 @@ export class Runtime {
   private characterActions: CharacterAction[] = [];
   /** The TRAIN command prompt currently awaited, which refresh() may resume without a command. */
   private trainRequest: InputRequest | undefined;
+  private trainAvailable: number[] | undefined;
+  private resumeTrain = false;
   /** The result of continuing a click-to-continue wait ahead of the click; see prefetch(). */
   private ahead: { snapshot: Snapshot } | { error: unknown } | null = null;
   /** Who the player ran into, found at the command prompt and passed on with its snapshot. */
@@ -751,13 +773,12 @@ export class Runtime {
     this.iterator = this.run(entry);
     return this.advance();
   }
-  private *run(entry: string): Generator<Yield, Value | undefined, string> {
+  private *run(entry: string, loaded = false, midday = false): Generator<Yield, Value | undefined, string> {
     let state = key(entry) === "SYSTEM_TITLE" ? "TITLE" : key(entry);
     let previous = "";
-    let loaded = false;
     while (true) {
       try {
-        if (loaded) yield* this.afterLoad();
+        if (loaded) yield* this.afterLoad(midday);
         else yield* this.state(state, previous);
         return;
       } catch (error) {
@@ -767,9 +788,11 @@ export class Runtime {
           state = "TITLE";
           previous = "";
           loaded = false;
+          midday = false;
           continue;
         }
         loaded = error instanceof LoadTransition;
+        midday = false;
         if (!loaded && !(error instanceof StateChange)) throw error;
         previous = state;
         state = error instanceof StateChange ? error.state : "SHOP";
@@ -1206,16 +1229,21 @@ export class Runtime {
     }
   }
   private *train(): Generator<Yield, void, string> {
-    this.setNumber("ASSIPLAY", 0n);
-    this.setNumber("PREVCOM", -1n);
-    this.setNumber("NEXTCOM", -1n);
-    this.clearVariables(TRAIN_RESET);
-    const characters = this.globals.characterCount();
-    for (let i = 0; i < characters; i++) this.resetStain(i);
+    const resumed = this.resumeTrain;
+    this.resumeTrain = false;
+    if (!resumed) {
+      this.setNumber("ASSIPLAY", 0n);
+      this.setNumber("PREVCOM", -1n);
+      this.setNumber("NEXTCOM", -1n);
+      this.clearVariables(TRAIN_RESET);
+      const characters = this.globals.characterCount();
+      for (let i = 0; i < characters; i++) this.resetStain(i);
+    }
     const names = this.game.tables.get("TRAIN") ?? new Map<number, string[]>();
     const ids = [...names.keys()].filter((id) => id >= 0).sort((a, b) => a - b);
-    yield* this.trainPhase("EVENTTRAIN", false);
+    if (!resumed) yield* this.trainPhase("EVENTTRAIN", false);
     while (true) {
+      const available: number[] = [];
       let command: bigint | undefined = this.takeTrain();
       if (command === undefined && this.number("NEXTCOM") >= 0n) {
         command = this.number("NEXTCOM");
@@ -1227,7 +1255,6 @@ export class Runtime {
         yield* this.trainPhase("SHOW_STATUS", true);
         command = this.takeTrain();
       }
-      const available: number[] = [];
       if (command === undefined) {
         let printed = 0;
         let line = "";
@@ -1267,6 +1294,7 @@ export class Runtime {
         }
         if (command === undefined) {
           this.clearVariables(COMMAND_RESET);
+          this.trainAvailable = available;
           const value = yield* this.commandInput();
           // refresh(): redraw the status, where eraTW also acts on flags such as nForcePushDown.
           if (value === undefined) break;
@@ -1361,18 +1389,36 @@ export class Runtime {
     }
   }
   private *autosave(): Generator<Yield, void, string> {
-    if (yield* this.system("SYSTEM_AUTOSAVE", false, false)) return;
-    this.globals.set("SAVEDATA_TEXT", [], "", this.context(this.globals));
-    yield* this.system("SAVEINFO", false, false);
-    const now = new Date();
-    const pad = (n: number): string => String(n).padStart(2, "0");
-    const stamp = `${now.getFullYear()}/${pad(now.getMonth() + 1)}/${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
-    this.saveGame(99n, `${stamp} ${text(this.globals.get("SAVEDATA_TEXT", [], this.context(this.globals)))}`.trimEnd());
+    const started = performance.now();
+    const game = this.game.root;
+    console.log("[era autosave] started", { game });
+    let completed = false;
+    let custom = false;
+    try {
+      custom = yield* this.system("SYSTEM_AUTOSAVE", false, false);
+      if (!custom) {
+        this.globals.set("SAVEDATA_TEXT", [], "", this.context(this.globals));
+        yield* this.system("SAVEINFO", false, false);
+        const now = new Date();
+        const pad = (n: number): string => String(n).padStart(2, "0");
+        const stamp = `${now.getFullYear()}/${pad(now.getMonth() + 1)}/${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+        this.saveGame(99n, `${stamp} ${text(this.globals.get("SAVEDATA_TEXT", [], this.context(this.globals)))}`.trimEnd());
+      }
+      completed = true;
+    } finally {
+      console.log(`[era autosave] ${completed ? "completed" : "interrupted"}`, {
+        game, custom, totalMs: +(performance.now() - started).toFixed(1),
+      });
+    }
   }
-  private *afterLoad(): Generator<Yield, void, string> {
+  private *afterLoad(midday = false): Generator<Yield, void, string> {
+    if (midday) yield* this.system("HOTPATCH_MIDDAY_LOAD", false);
     yield* this.system("SYSTEM_LOADEND", false);
     yield* this.system("EVENTLOAD", false);
-    yield* this.shop();
+    if (midday) {
+      this.resumeTrain = true;
+      yield* this.train();
+    } else yield* this.shop();
   }
   /** A sprite from resources/*.csv (sized from its image when the rectangle is omitted) or one made by SPRITECREATE. */
   private sprite(name: string): SpriteInfo | undefined {
@@ -1627,6 +1673,10 @@ export class Runtime {
       record = readNativeSave(raw);
       if (record.type !== (file.endsWith(".dat") ? 3 : 0)) throw new EraError("Wrong Emuera save file type");
     } catch (error) { return { state: 4n, message: `セーブデータが壊れています: ${error instanceof Error ? error.message : String(error)}` }; }
+    const compatibility = this.checkSaveVersion(record);
+    return compatibility.state === 0n ? { state: 0n, message: record.text, record } : compatibility;
+  }
+  private checkSaveVersion(record: Pick<NativeSave, "code" | "gameVersion">): { state: bigint; message: string } {
     const { code, gameVersion } = this.gameStamp();
     if (record.code !== "0" && record.code !== code) return { state: 2n, message: "異なるゲームのセーブデータです" };
     const target = BigInt(record.gameVersion);
@@ -1636,7 +1686,7 @@ export class Runtime {
       || (minimum !== undefined && /^-?\d+$/.test(minimum.trim()) && BigInt(minimum.trim()) <= target)
       || target === BigInt(gameVersion);
     if (!compatible) return { state: 3n, message: "セーブデータのバーションが異なります" };
-    return { state: 0n, message: record.text, record };
+    return { state: 0n, message: "" };
   }
   /** Restores a save: everything but global data returns to its defaults before the saved values are applied. */
   private loadGame(data: SaveData, containers?: SavedContainers): void {
@@ -1645,6 +1695,30 @@ export class Runtime {
     this.globals.set("CHARANUM", [], BigInt(data.characters), context);
     this.globals.importSave(data, context);
     this.importContainers(containers);
+  }
+  private restoreNative(file: string, slot: bigint): void {
+    const result = this.checkSave(file);
+    if (result.state !== 0n || !result.record?.data) throw new EraError(`LOADDATA: ${result.message}`);
+    this.loadGame(result.record.data, result.record.containers);
+    if (this.interactionHistory) {
+      const bytes = this.saves.read(file);
+      if (!Buffer.isBuffer(bytes)) throw new EraError("Expected binary save for interaction history");
+      this.interactionHistory.restore(file, bytes);
+    }
+    this.lastLoad = { version: BigInt(result.record.gameVersion), slot, text: result.record.text };
+  }
+  continueNative(file: string): Snapshot {
+    const match = /^save(\d+)\.sav$/i.exec(file);
+    if (!match) throw new EraError("Expected a native game save");
+    if (!this.iterator || !this.pending || this.ahead) throw new EraError("Continue is available only while waiting for input");
+    this.restoreNative(file, BigInt(match[1]!));
+    this.iterator.return(undefined);
+    this.pending = null;
+    this.pendingBegin = undefined;
+    this.pendingTrain = undefined;
+    this.iterator = this.run("SYSTEM_TITLE", true);
+    this.action = "continue native";
+    return this.advance();
   }
   private saveGame(slot: bigint, message: string): void {
     if (message.includes("\n")) throw new EraError("SAVEDATA text must not contain a newline");
@@ -1678,6 +1752,59 @@ export class Runtime {
   }
   /** Whether a click-to-continue has been run ahead and is waiting for the player. */
   get prefetched(): boolean { return this.ahead !== null; }
+  get middaySupported(): boolean { return this.interactionHistory !== undefined; }
+  get canSaveMidday(): boolean {
+    return this.middaySupported && !!this.pending && this.pending === this.trainRequest
+      && !!this.trainAvailable && !this.ahead && !this.ctrain
+      && this.pendingBegin === undefined && this.pendingTrain === undefined;
+  }
+  private middayState(): MiddayState {
+    if (!this.canSaveMidday) throw new EraError("Midday saves are available only at TW's main command screen");
+    return {
+      ...this.gameStamp(),
+      data: this.globals.exportSave(this.context(this.globals)),
+      containers: this.exportContainers("SAVE"),
+      history: this.interactionHistory!.suspendState(),
+    };
+  }
+  /** The caller must clone this state before allowing any more runtime input. */
+  captureMidday(): MiddayState { return this.middayState(); }
+  exportMidday(): Buffer { return writeSuspend(this.middayState()); }
+  restoreMidday(bytes: Buffer): Snapshot {
+    if (this.iterator) throw new EraError("Load midday saves into a new runtime");
+    if (!this.middaySupported) throw new EraError("Midday saves are supported only for patched TW");
+    let state = readSuspend<ReturnType<Runtime["middayState"]> | LegacyMiddayState>(bytes);
+    if (!state || typeof state !== "object") throw new EraError("Invalid midday save state");
+    if ("globals" in state) {
+      // Recover old quicksaves as game data, not old declarations or execution state.
+      if (!state.globals || !(state.globals.values instanceof Map) || !(state.globals.declarations instanceof Map)
+        || !state.fields || !(state.fields.maps instanceof Map) || !Array.isArray(state.xmls) || !state.dataTables || !state.history)
+        throw new EraError("Invalid legacy midday save state");
+      const variables = new Variables(this.game);
+      variables.restoreSuspend(state.globals);
+      const context = this.context(variables);
+      this.maps = state.fields.maps;
+      this.xmlDocuments = new Map(state.xmls.map(([name, source]) => [name, parseXml(source)]));
+      this.dataTables.restoreSuspend(state.dataTables);
+      state = { code: String(variables.get("GAMEBASE_CODE", [], context)),
+        gameVersion: String(variables.get("GAMEBASE_VERSION", [], context)),
+        data: variables.exportSave(context), containers: this.exportContainers("SAVE"), history: state.history };
+      this.maps = new Map();
+      this.xmlDocuments = new Map();
+      this.dataTables = new DataTables();
+    }
+    if (typeof state.code !== "string" || typeof state.gameVersion !== "string" || !/^-?\d+$/.test(state.gameVersion)
+      || !state.data || !state.data.variables || !state.containers || !state.history)
+      throw new EraError("Invalid midday save state");
+    const compatibility = this.checkSaveVersion(state);
+    if (compatibility.state !== 0n) throw new EraError(`Midday save: ${compatibility.message}`);
+    this.loadGame(state.data, state.containers);
+    this.interactionHistory!.restoreSuspend(state.history);
+    this.lastLoad = { version: BigInt(state.gameVersion), slot: -1n, text: "Midday save" };
+    this.action = "load midday";
+    this.iterator = this.run("TRAIN", true, true);
+    return this.advance();
+  }
   /** The whole history with a character the player has just run into, as it stands now. */
   encounterHistory(character: HistoryCharacter): CharacterHistory {
     if (!this.interactionHistory) throw new EraError("Interaction history is unavailable for this game");
@@ -3206,6 +3333,7 @@ export class Runtime {
   }
   /** Adds the debug window text gathered since the last snapshot. */
   private withDebug(snapshot: Snapshot): Snapshot {
+    if (this.middaySupported) snapshot.midday = { available: this.canSaveMidday };
     if (this.interactionHistory)
       snapshot.timeStopped = this.globals.get("FLAG", [literal(70n)], this.context(this.globals)) !== 0n;
     if (this.interactionHistory && snapshot.input && snapshot.input === this.trainRequest && this.number("PREVCOM") >= 0n) {
@@ -3903,15 +4031,7 @@ export class Runtime {
           case "LOADDATA": {
             const slot = num(args);
             const file = this.saveFile(slot);
-            const result = this.checkSave(file);
-            if (result.state !== 0n || !result.record?.data) throw new EraError(`LOADDATA: ${result.message}`);
-            this.loadGame(result.record.data, result.record.containers);
-            if (this.interactionHistory) {
-              const bytes = this.saves.read(file);
-              if (!Buffer.isBuffer(bytes)) throw new EraError("Expected binary save for interaction history");
-              this.interactionHistory.restore(file, bytes);
-            }
-            this.lastLoad = { version: BigInt(result.record.gameVersion), slot, text: result.record.text };
+            this.restoreNative(file, slot);
             throw new LoadTransition();
           }
           case "DELDATA": {

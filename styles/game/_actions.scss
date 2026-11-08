@@ -2,6 +2,9 @@
 .era-actions-header { flex-wrap: wrap; justify-content: space-between; align-items: center; min-height: max(22px, calc(1lh + 6px)); }
 .era-main .era-actions-header::after { order: 1; min-width: 2ch; }
 .era-actions-header > .era-toggles { order: 2; justify-content: flex-end; margin-left: auto; }
+.era-main .era-actions-header .era-repeat { position: relative; display: inline-flex; flex: 0 0 40px; align-self: flex-start; width: 40px; height: 40px; min-height: 40px; margin: -8px -10px -2px 2px; padding: 0; border: 0; border-radius: 6px; background: url("/repeat.webp") center / contain no-repeat; box-shadow: none; }
+.screen.is-active .era-main .line button.choice.era-repeat:enabled:is(:hover, :focus, :active),
+.era-main .era-actions-header .era-repeat:is(.is-pending, .is-selected) { background-image: url("/repeat-active.webp"); box-shadow: none; }
 .era-actions-group { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin: 6px 0 2px; }
 .era-main-actions { display: flex; flex-wrap: wrap; align-content: flex-start; align-items: flex-start; gap: 0 16px; }
 .era-main-actions > .line { flex-basis: 100%; }
@@ -38,6 +41,7 @@
 .era-player-management .era-auto-toggles { gap: var(--era-player-control-gap); margin-top: 0; }
 .era-player-management .era-settings { display: flex; flex-wrap: wrap; gap: var(--era-player-control-gap); margin-top: 0; padding-top: 0; border-top: 0; }
 .era-player-management .era-settings > .line { display: contents; }
+.era-player-management .era-settings .era-quicksave-row { flex-basis: 100%; }
 .era-player-management .era-settings .era-chip-button { min-width: 12ch; text-align: center; }
 .era-main .era-player :is(.print-cell, .era-guard-control),
 .era-main .era-player .line button.choice:is(.era-player-control, .era-chip-button) { padding: 6px 10px; border: 1px solid #35566d; border-radius: 4px; background: linear-gradient(#102330, #0b1822); color: #b7d5e2; font: inherit; line-height: 1.25; text-align: left; }

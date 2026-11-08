@@ -19,7 +19,11 @@
   .era-main-header > .era-watch-control { max-width: 100%; }
 }
 /* Labels are real controls over the artwork's plaque, not a second painted frame. */
-.era-watch-control .line button.choice.era-timestop-button, .era-watch-control .era-timestop-button { min-width: 0; width: 100%; height: 100%; padding: 2px 12px; border: 0; border-radius: 24px; background: transparent; box-shadow: none; color: #cceeea; text-shadow: 0 1px 2px #000; letter-spacing: 0; font-size: 1.15em; backdrop-filter: none; -webkit-backdrop-filter: none; }
+.era-watch-control .line button.choice.era-timestop-button, .era-watch-control .era-timestop-button { min-width: 0; width: 100%; height: 100%; padding: 2px 12px; border: 0; border-radius: 24px; background: transparent; box-shadow: none; color: #cceeea; text-shadow: 0 1px 2px #000; letter-spacing: 0; font-size: min(1.15em, var(--clock-label-size, 6cqi)); backdrop-filter: none; -webkit-backdrop-filter: none; }
+@media (min-width: 1281px), (min-height: 801px) {
+  body:not(.is-handheld) .era-watch-control .line button.choice.era-timestop-button:has(.era-timestop-gauge) { gap: 0; }
+}
+.era-watch-control :is(.era-unavailable, .era-wake-button) { --clock-label-size: 4.8cqi; }
 .era-watch-control .line button.choice.era-timestop-button.era-wake-button { color: #ffe8b8; }
 .era-watch-control .line button.choice.era-timestop-button.era-stopped { color: #f0d8ff; background: transparent; }
 .era-watch-control .era-timestop-button.era-unavailable { color: #999; background: transparent; }

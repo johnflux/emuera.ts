@@ -17,7 +17,7 @@ DO
 		HTML_PRINT "<p align='center'><img src='TW_title" + TOSTR(LOCAL, "000") + "'></p>"
 	NEXT
 	HTML_PRINT "<era-close>"
-	HTML_PRINT "<div class='era-launch-actions'><button value='0' class='era-launch-primary'>New game</button><button value='1' class='era-launch-load'>Load game</button></div>"
+	HTML_PRINT "<div class='era-launch-actions'><button value='2' class='era-launch-continue' aria-disabled='true'>Continue</button><button value='0' class='era-launch-primary'>New game</button><button value='1' class='era-launch-load'>Load game</button></div>"
 	[IF_DEBUG]
 	HTML_PRINT "<div class='era-launch-debug'><button value='99'>Dev Quicktest</button><button value='3'>Quicktest settings</button></div>"
 	[ENDIF]
@@ -52,6 +52,11 @@ DO
 		sError '= "Choose New game or Load game."
 	ENDSELECT
 LOOP 1
+
+@HOTPATCH_MIDDAY_LOAD
+LOADGLOBAL
+WINDOW_TITLE = %GAMEBASE_TITLE% %ATWVersionName()%
+CALL MAKE_TALENT_MAP
 
 ; Prepare on the title side so Cancel returns before EVENTFIRST performs updates or autosaves.
 @HOTPATCH_NEWGAME_PREPARE

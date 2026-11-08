@@ -843,7 +843,7 @@ test("action filters and command categories share vaginal, anal, SM and service 
 }, async () => {
   const game = await loadGame();
   await applyHotpatches(game);
-  for (const on of [0, 1]) {
+  for (const [on, previous, custom, repeat] of [[0, -1, -1, null], [1, 300, -1, 300], [1, 412, -1, 412], [1, 381, 0, 9000]]) {
     const stub = emptyGame(game.root);
     indexScript(stub, `@SYSTEM_TITLE
 ADDCHARA 0
@@ -856,6 +856,8 @@ CFLAG:1:Ａアンフィルタ = ${on}
 CFLAG:1:ＳＭアンフィルタ = ${on}
 CFLAG:1:奉仕アンフィルタ = ${on}
 CFLAG:1:RevServiceFilter = ${on}
+PREVCOM = ${previous}
+ADD_PREVCUSTOMCOM = ${custom}
 CALL HOTPATCH_FILTERS(63)
 PRINTFORML Kinds: %HOTPATCH_ACTION_KIND(3)%,%HOTPATCH_ACTION_KIND(5)%,%HOTPATCH_ACTION_KIND(100)%,%HOTPATCH_ACTION_KIND(81)%
 QUIT`, "<filter-colors-test>");
@@ -866,6 +868,8 @@ QUIT`, "<filter-colors-test>");
     for (const [id, kind] of [[831, "vaginal"], [832, "anal"], [836, "sm"], [835, "service"], [-9120, "service"]]) {
       assert.match(html, new RegExp(`value='${id}' class='era-toggle era-kind-${kind}${on ? " era-on" : ""}' role='checkbox' aria-checked='${on ? "true" : "false"}'`));
     }
+    if (repeat !== null) assert.match(html, new RegExp(`<button value='${repeat}' class='era-repeat' title='Repeat last action' aria-label='Repeat last action'></button></span></div>$`));
+    else assert.doesNotMatch(html, /era-repeat|🔁/);
     assert.ok(snapshot.output.some((item) => item.type === "text" && item.text === "Kinds: vaginal,anal,sm,service"));
   }
 });

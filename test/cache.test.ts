@@ -108,6 +108,44 @@ test("source images and painted canvases reuse loads and obey actual pixel budge
   assert.equal(loads, 2);
 });
 
+test("translation revisits detached staged panels only once when the model starts or is enabled", async () => {
+  const source = await readFile(new URL("../web/translate.js", import.meta.url), "utf8");
+  let visits = 0;
+  const states: string[] = [];
+  const root = {
+    isConnected: false,
+    querySelectorAll: () => {
+      assert.ok(++visits <= 3, "a detached root must not be revisited by live Set iteration");
+      return [];
+    },
+  };
+  const context = {
+    LruCache,
+    navigator: { language: "en" },
+    localStorage: { getItem: () => "on", setItem: () => {} },
+    document: { createTreeWalker: () => ({ nextNode: () => null }) },
+    NodeFilter: { SHOW_TEXT: 4 },
+    Translator: {
+      availability: async () => "available",
+      create: async () => ({ translate: async (value: string) => value }),
+    },
+    setTimeout: (callback: () => void, delay: number, ...args: unknown[]) => {
+      const timer = setTimeout(callback, delay, ...args);
+      timer.unref();
+      return timer;
+    },
+  };
+  const translation = runInNewContext(`${source.replace(/^import .+;\n/gm, "").replace(/^export /gm, "")}\ncreateTranslation`, context)({
+    onChange: ({ state }: { state: string }) => states.push(state),
+  });
+  translation.translateTree(root);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(visits, 2, "model readiness translates the staged panel once");
+  assert.deepEqual(states, ["starting", "ready"]);
+  translation.setEnabled(true);
+  assert.equal(visits, 3, "enabling translation translates the staged panel once");
+});
+
 test("translation cache stays bounded while preserving results and retrying errors", async () => {
   const source = await readFile(new URL("../web/translate.js", import.meta.url), "utf8");
   let translations = 0;

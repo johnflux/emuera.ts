@@ -1,3 +1,13 @@
+export function screenTransitionIndex(output, hasText, isScreen,
+  isText = entry => entry.type === "text" && entry.text.trim()) {
+  const screen = output.findIndex(isScreen);
+  if (screen < 0) return -1;
+  const clear = output.findLastIndex((entry, index) => index <= screen && entry.type === "clear" && entry.count > 0);
+  const boundary = clear < 0 ? screen : clear;
+  const printed = output.slice(0, boundary).some(isText);
+  return hasText || printed ? boundary : -1;
+}
+
 export function createAutoAdvance(currentWait, advance) {
   let timer = null;
   let pending = null;
@@ -32,5 +42,9 @@ export function createAutoAdvance(currentWait, advance) {
     consumed = null;
     paused = false;
   }
-  return { update, clear, observeResult, reset, isPaused: () => paused };
+  function pause() {
+    paused = true;
+    clear();
+  }
+  return { update, clear, observeResult, reset, pause, isPaused: () => paused };
 }

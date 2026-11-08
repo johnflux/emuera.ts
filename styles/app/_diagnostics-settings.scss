@@ -20,6 +20,7 @@
 .controller-menu-actions { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
 .controller-menu-actions button { min-height: 48px; font-size: 20px; text-align: center; border-radius: 6px; }
 .has-controller .screen.is-active button.era-timestop-button:enabled:not(.is-stale)::after,
+.has-controller .screen.is-active button.era-repeat:not(.is-stale)::after,
 .has-controller .screen.is-active button.era-move-back:enabled:not(.is-stale)::after,
 .has-controller :is(dialog[open], .screen.is-active .era-dialog:popover-open) :is(button:enabled, a[href]):focus:not([data-controller-hint]):not(.era-dialog-close)::after,
 .has-controller :is(dialog[open], .screen.is-active .era-dialog:popover-open) :is(button[data-controller-hint]:enabled, button.era-dialog-close:enabled)::after {
@@ -28,6 +29,7 @@
   color: #a4efbb; font: bold 12px/1 system-ui, sans-serif; pointer-events: none;
 }
 .has-controller .screen.is-active button.era-timestop-button:enabled:not(.is-stale)::after { content: "Y"; position: absolute; top: -.4em; right: -.4em; border-color: #e8c85b; background: #171923; color: #ffe083; }
+.has-controller .screen.is-active button.era-repeat:not(.is-stale)::after { content: "X"; position: absolute; top: 2px; right: 2px; border-color: #7ebcff; background: #101923; color: #a6d4ff; }
 .has-controller .screen.is-active button.era-move-back:enabled:not(.is-stale)::after { content: "B"; border-color: #e89a96; color: #ffb8b2; }
 .has-controller :is(dialog[open], .screen.is-active .era-dialog:popover-open) :is(button:enabled, a[href], input[type="checkbox"]:enabled, input[type="radio"]:enabled):focus { outline: 2px solid #8ddaff; outline-offset: 2px; }
 .has-controller :is(dialog[open], .screen.is-active .era-dialog:popover-open) :is(button:enabled, a[href]):focus:not([data-controller-hint]):not(.era-dialog-close) { position: relative; }

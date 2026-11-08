@@ -360,7 +360,7 @@ OUTPUTLOG`, undefined, { saves }).start();
   assert.equal(saves.read("emuera.log"), "kept\nstyled & decoded\npending\n");
   assert.ok(texts(result).includes("Log written to emuera.log"));
   const failed = runtime("@SYSTEM_TITLE\nOUTPUTLOG", undefined, { saves: {
-    read: () => null, list: () => [], remove: () => {},
+    read: () => null, list: () => [], modified: () => null, remove: () => {},
     write: () => { throw new EraError("Disk full"); },
   } }).start();
   assert.equal(failed.status, "error");

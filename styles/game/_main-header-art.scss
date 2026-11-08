@@ -5,7 +5,7 @@
 .era-main-header > .line:has(.era-sky), .era-main-header > .line > span:has(> .era-sky) { display: contents; }
 .era-sky { position: absolute; inset: 0; z-index: 0; overflow: hidden; border-radius: inherit; pointer-events: none; background: #0d1014; }
 .era-main-header > .era-main-when { order: 0; flex: 0 1 auto; padding: 6px 12px; border-radius: 8px; background: #0a0e1428; backdrop-filter: blur(3px); }
-.era-main-header > .era-watch-control { order: 1; margin-left: auto; margin-right: -60px; margin-top: -44px; margin-bottom: -16px; width: 420px; max-width: 100%; aspect-ratio: 825 / 509; flex: 0 0 auto; min-width: 0; isolation: isolate; }
+.era-main-header > .era-watch-control { order: 1; margin-left: auto; margin-right: -60px; margin-top: -44px; margin-bottom: -16px; width: 420px; max-width: 100%; aspect-ratio: 825 / 509; flex: 0 0 auto; min-width: 0; isolation: isolate; container-type: inline-size; }
 .era-watch-control > .line:has(.era-clock) { position: static; }
 .era-watch-control > .line { position: static; z-index: auto; min-width: 0; }
 .era-watch-control > .line:has(.era-timestop-button) { position: absolute; left: 49%; top: 40.5%; width: 37.5%; height: 31%; z-index: 2; }

@@ -637,7 +637,7 @@ test("hover artwork is an additive layer that fades above the normal frame", asy
   assert.match(css, /\.era-watch-control > \.line:has\(\.era-timestop-button\) \{[^}]*left: 49%; top: 40\.5%; width: 37\.5%; height: 31%;/);
   assert.match(css, /\.era-watch-control::after \{[^}]*left: 45%; top: 40\.5%; width: 41\.5%; height: 31%; z-index: 0; pointer-events: none; background:/);
   assert.match(css, /\.era-watch-control:has\(\.era-timestop-button:enabled:is\(:hover, :focus-visible\)\)::after \{ filter: brightness\(1\.35\); \}/);
-  assert.match(css, /\.era-watch-control \.line button\.choice\.era-timestop-button,[^}]*font-size: 1\.15em;/);
+  assert.match(css, /\.era-watch-control \.line button\.choice\.era-timestop-button,[^}]*font-size: min\(1\.15em, var\(--clock-label-size, 6cqi\)\);/);
   assert.match(css, /\.era-clock::after, \.clock-overhang::after \{[^}]*background: url\("\.\/clock-frame-hover\.png"\)[^}]*opacity: 0; transition: opacity 220ms ease-in-out;/);
   assert.match(css, /\.era-watch-control:has\(\.era-timestop-button:enabled:is\(:hover, :focus-visible\)\) \.era-clock::after \{ opacity: 1; \}/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\) \{ \.era-clock::after \{ transition: none; \} \}/);
@@ -1258,6 +1258,7 @@ test("last command is a placeholder, never input data, and defaults and waits ta
     startButtons: [], restartButton: element, debugButton: { disabled: false },
     autoAdvance: { update() {}, isPaused: () => false },
     busy: false, expiring: false,
+    middaySaveButtons: [], middayLoadButtons: [], midday: null, continueAvailable: false,
     input: { kind: "integer", defaultValue: undefined as string | undefined },
     lastCommand: "Last Command: Time Stop",
   };
@@ -1343,6 +1344,138 @@ test("title choices highlight the focused or hovered button without an outline",
   assert.match(css, /\.is-handheld \.era-launch \.era-launch-actions button\.choice:focus-visible \{ outline: none; \}/);
 });
 
+test("Continue uses its supplied artwork and has a visibly disabled state", () => {
+  const css = styleSource("style");
+  assert.match(css, /\.era-launch-continue::before \{ background-image: url\("\/title\/continue\.webp"\); \}/);
+  assert.match(css, /\.era-launch-continue:disabled:not\(\.is-pending, \.is-selected\)::before \{ opacity: \.35; filter: grayscale\(\.8\); \}/);
+});
+
+test("quicksave controls live in the quick menu and below Config, not the burger menu", async () => {
+  const html = await readFile(new URL("../web/index.html", import.meta.url), "utf8");
+  const burger = html.slice(html.indexOf('<nav id="menu-panel"'), html.indexOf("</nav>"));
+  assert.doesNotMatch(burger, /midday|Quicksave|Quickload/);
+  assert.match(html, /id="controller-midday-save"[^>]*>Quicksave<\/button>/);
+  assert.match(html, /id="controller-midday-load"[^>]*>Quickload<\/button>/);
+  const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
+  const sidebar = source.slice(source.indexOf("function setupMainSidebar("), source.indexOf("function mainChatInput("));
+  assert.match(sidebar, /choice\("Quicksave", "quicksave"\)/);
+  assert.match(sidebar, /config\.after\(row\)/);
+  const css = styleSource("style");
+  assert.match(css, /\.era-settings \.era-quicksave-row \{ flex-basis: 100%; \}/);
+  const save = source.slice(source.indexOf("async function saveMidday("), source.indexOf("async function loadMidday("));
+  assert.doesNotMatch(save, /confirmAction/);
+});
+
+test("the main sidebar inserts an actionable Quicksave directly after Config only once", async () => {
+  const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
+  const sidebarSource = source.slice(source.indexOf("function setupMainSidebar("), source.indexOf("function mainChatInput("));
+  type Element = { className: string; children: Element[]; append(child: Element): void };
+  const element = (): Element => ({ className: "", children: [], append(child) { this.children.push(child); } });
+  const configRows: Element[] = [];
+  const player = element(), management = element();
+  let sidebar: Element | null = null;
+  let label = "", value = "";
+  const main = {
+    querySelector(selector: string) {
+      if (selector === ".era-main-sidebar") return sidebar;
+      if (selector === ".era-player") return player;
+      if (selector === ".era-player-management") return management;
+      if (selector === ".era-settings button[data-value='809']") return { after: (row: Element) => configRows.push(row) };
+      return null;
+    },
+    querySelectorAll: () => [],
+    append: (node: Element) => { sidebar = node; },
+  };
+  const context = {
+    main, document: { createElement: element },
+    choice: (text: string, input: string) => {
+      label = text;
+      value = input;
+      return { ...element(), classList: { add() {} } };
+    },
+  };
+  runInNewContext(`${sidebarSource}\nsetupMainSidebar(main); setupMainSidebar(main);`, context);
+  assert.equal(configRows.length, 1);
+  assert.equal(configRows[0]!.className, "era-quicksave-row");
+  assert.equal(label, "Quicksave");
+  assert.equal(value, "quicksave");
+  assert.equal(player.children[0], management);
+});
+
+test("Continue stays pending throughout its request and view restoration, and clears on failure", async () => {
+  const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
+  const flow = source.slice(source.indexOf("async function continueGame("), source.indexOf("for (const button of middaySaveButtons)", source.indexOf("async function continueGame(")));
+  for (const fail of [false, true]) {
+    const classes = new Set<string>();
+    let finishRequest!: (value: { session: string }) => void;
+    let failRequest!: (error: Error) => void;
+    let finishRestore!: () => void;
+    let restoring = false;
+    const request = new Promise<{ session: string }>((resolve, reject) => { finishRequest = resolve; failRequest = reject; });
+    const restored = new Promise<void>((resolve) => { finishRestore = resolve; });
+    const messages: string[] = [];
+    const context = {
+      terminal: { querySelector: () => ({ classList: {
+        add: (name: string) => classes.add(name), remove: (name: string) => classes.delete(name),
+      } }) },
+      busy: false, session: "current", step: 1,
+      beginActivity() {}, endActivity() {}, activityResponded() {}, updateControls() {},
+      message: (text: string) => messages.push(text), staleTab: () => false,
+      api: () => request, render: async () => {},
+      resume: async () => { restoring = true; await restored; },
+    };
+    const running: Promise<void> = runInNewContext(`${flow}\ncontinueGame();`, context);
+    assert.equal(classes.has("is-pending"), true, "clicked Continue is highlighted even while disabled");
+    if (fail) {
+      failRequest(new Error("Cannot load save"));
+      await running;
+      assert.ok(messages.includes("Could not continue: Cannot load save"));
+    } else {
+      finishRequest({ session: "restored" });
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.equal(restoring, true);
+      assert.equal(classes.has("is-pending"), true, "highlight remains while the saved view is being replayed");
+      finishRestore();
+      await running;
+    }
+    assert.equal(classes.has("is-pending"), false, "pending state is cleaned up");
+  }
+});
+
+test("title Continue is disabled without a save and enabled when a save is available", async () => {
+  const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
+  const controls = source.slice(source.indexOf("function updateControls("), source.indexOf("function screen("));
+  const attributes = new Map<string, string>();
+  const button = {
+    dataset: { value: "2" }, disabled: false, title: "",
+    matches: () => false, closest: () => ({}),
+    classList: { contains: () => false },
+    setAttribute: (name: string, value: string) => attributes.set(name, value),
+    getAttribute: (name: string) => attributes.get(name),
+  };
+  const element = { classList: { toggle() {} }, setAttribute() {} };
+  const context = {
+    terminal: { ...element, querySelector: () => null,
+      querySelectorAll: (selector: string) => selector.includes("era-quicksave") ? [] : [button] },
+    islandRoot: { querySelectorAll: () => [] }, choiceControl: () => button,
+    document: { querySelector: () => ({ hidden: false }) },
+    command: {}, send: element, startButtons: [], restartButton: element, debugButton: {},
+    autoAdvance: { update() {}, isPaused: () => false }, mainChatInput: () => false, lastOutputLine: () => null,
+    busy: false, expiring: false, input: { kind: "integer", buttonValues: ["2", "0", "1"] },
+    middaySaveButtons: [], middayLoadButtons: [], midday: null, continueAvailable: false, lastCommand: "",
+  };
+  const update = () => runInNewContext(`${controls}\nupdateControls();`, context);
+  update();
+  assert.equal(button.disabled, true);
+  assert.equal(button.title, "No game saves");
+  context.continueAvailable = true;
+  update();
+  assert.equal(button.disabled, false);
+  context.busy = true;
+  update();
+  assert.equal(button.disabled, true, "cannot submit another Continue while loading");
+});
+
 test("room overlays reserve no layout height and chat follows every responsive main layout", async () => {
   const css = styleSource("style");
   assert.match(css, /\.era-room-stage \.era-scene \{[^}]*position: absolute;[^}]*top: 2em;[^}]*pointer-events: none;/);
@@ -1354,6 +1487,7 @@ test("room overlays reserve no layout height and chat follows every responsive m
   assert.doesNotMatch(css, /"chat sidebar"|"chat"/);
   assert.match(css, /\.era-room-stage \{ --era-occupant-height: 216px;/);
   assert.match(css, /\.era-room-stage \.era-occupant-list \{[^}]*flex: none;[^}]*height: var\(--era-occupant-height\);/);
+  assert.match(css, /\.era-room-stage \.era-occupant-list:has\(\.era-portrait\) \{ height: auto; \}/);
   assert.match(css, /\.era-room-stage \.era-occupant-caged > \.era-occupant-text \{ position: static; \}/);
   assert.doesNotMatch(css, /\.era-room-stage \{[^}]*min-height:/);
   assert.doesNotMatch(css, /era-history-preview|era-info-with-preview/);
@@ -1364,7 +1498,7 @@ test("room overlays reserve no layout height and chat follows every responsive m
   assert.match(css, /\.era-main:not\(:has\(\.era-counters\)\) \{\s*grid-template-rows: auto auto 1fr auto;\s*grid-template-areas: "header header" "center sidebar" "actions sidebar" "last last";/);
   assert.match(css, /\.era-info-face \.sprite-clip \{[^}]*scale\(1\.1\);[^}]*transform-origin: center bottom;/);
   assert.match(css, /\.era-info-body \.era-look \{ margin-top: auto; font: inherit;/);
-  assert.match(css, /\.era-main-chat \{[^}]*align-self: stretch;[^}]*min-height: calc\(5 \* 14px \* 1\.25 \+ 26px\);/);
+  assert.match(css, /\.era-main-chat \{[^}]*align-self: stretch;[^}]*min-height: calc\(3 \* var\(--era-history-size\) \* var\(--era-history-line\)\);/);
   assert.match(css, /\.era-main-chat \{ --era-history-size: 14px; \}/);
   assert.match(css, /\.era-history-body \{[^}]*padding: 0;/);
   assert.match(css, /\.era-history-more-overlay \{ position: sticky; top: 0; height: 0;/);
@@ -1375,6 +1509,7 @@ test("room overlays reserve no layout height and chat follows every responsive m
   assert.match(css, /\.era-main > \.era-main-actions \{ align-self: stretch; \}/);
   assert.match(css, /\.era-main:has\(\.era-main-chat\) \{ grid-template-rows: auto 1fr auto auto auto; \}/);
   assert.match(css, /\.era-main:has\(\.era-main-chat\):not\(:has\(\.era-counters\)\) \{ grid-template-rows: auto 1fr auto auto; \}/);
+  assert.match(css, /\.era-main:has\(\.era-main-chat\) \{ grid-template-rows: auto 1fr auto auto auto auto; \}/);
   assert.match(css, /\.era-character:has\(\.era-main-chat\) \{ grid-template-rows: auto 1fr; \}/);
   assert.match(css, /\.era-actions-group span:has\(> \.era-guard-control\) \{ display: contents; \}/);
   assert.match(css, /\.era-player-management \.era-actions-group :is\(\.print-cell, \.era-guard-control\) \{ display: block; flex: 1 1 100%; \}/);

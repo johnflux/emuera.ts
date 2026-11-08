@@ -32,6 +32,7 @@
 }
 @container (max-width: 760px) {
   .era-main { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-template-areas: "header" "center" "actions" "sidebar" "counters" "last"; }
+  .era-main:has(.era-main-chat) { grid-template-rows: auto 1fr auto auto auto auto; }
 }
 .era-card { padding: 8px 10px; border: 1px solid #2a3138; border-radius: 10px; background: #111518; }
 .line .era-card { display: block; }

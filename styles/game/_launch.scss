@@ -1,6 +1,6 @@
 /* Keep the original TW title graphic, with its neon colors against black. */
 #terminal:has(.screen.is-active .era-launch)::before { margin-top: 0; }
-body:has(.screen.is-active .era-launch) #input-form { display: none; }
+body.is-handheld:has(.screen.is-active .era-launch) #input-form { display: none; }
 body:has(.screen.is-active .era-launch) { overflow: hidden; }
 main:has(.screen.is-active .era-launch) { padding: 0; background: #000; }
 #terminal:has(.screen.is-active .era-launch) { padding: 0; overflow: hidden; scrollbar-gutter: auto; background: #000; container-type: size; }
@@ -18,8 +18,11 @@ main:has(.screen.is-active .era-launch) { padding: 0; background: #000; }
 .era-setup .line button.choice.era-launch-primary:enabled:hover { background: #204856; border-color: #83e3db; }
 .era-launch .era-launch-actions button.choice { --era-button-glow: #7dff42; position: relative; display: block; flex: none; width: 67%; min-height: min(44px, 10dvh); aspect-ratio: 1672 / 286; margin: 0; padding: 0; border: 0; border-radius: 0; background: none; font-size: 0; text-shadow: none; box-shadow: none; }
 .era-launch .era-launch-actions button.choice.era-launch-load { --era-button-glow: #aa53ff; align-self: flex-end; aspect-ratio: 1545 / 273; }
+.era-launch .era-launch-actions button.choice.era-launch-continue { --era-button-glow: #34e9ff; align-self: center; aspect-ratio: 2172 / 421; }
 .era-launch-actions button.choice::before { content: ""; position: absolute; left: 0; top: 50%; width: 100%; aspect-ratio: inherit; transform: translateY(-50%) scale(1); pointer-events: none; background: url("/title/new-game.webp") center / 100% 100% no-repeat; filter: brightness(1) saturate(1) drop-shadow(0 0 0 transparent) drop-shadow(0 0 0 transparent); transition: filter 90ms ease-out, transform 60ms ease-out, opacity 90ms ease-out; }
 .era-launch-actions button.choice.era-launch-load::before { background-image: url("/title/load-game.webp"); }
+.era-launch-actions button.choice.era-launch-continue::before { background-image: url("/title/continue.webp"); }
+.era-launch-actions button.choice.era-launch-continue:disabled:not(.is-pending, .is-selected)::before { opacity: .35; filter: grayscale(.8); }
 .era-launch .era-launch-actions button.choice:enabled:is(:hover, :focus-visible) { background: transparent; }
 .era-launch-actions button.choice:is(:enabled:hover, :enabled:focus-visible, .is-pending, .is-selected)::before { transition: filter 180ms cubic-bezier(.34, 1.56, .64, 1), transform 60ms ease-out, opacity 90ms ease-out; filter: brightness(1.35) saturate(1.25) drop-shadow(0 0 2px var(--era-button-glow)) drop-shadow(0 0 7px #34e9ff80); }
 .screen.is-active .era-launch-actions button.choice.is-pending { animation: none; }

@@ -12,7 +12,7 @@ import { decorateCommandNumbers, setupHandheld, setupKeyboardNavigation, touchIn
 import { setupArtworkDemo } from "./art-demo.js";
 import { activateControllerAction, setupControllerMenu } from "./controller-menu.js";
 import { createCheckbox, choiceControl } from "./controls.js";
-import { createAutoAdvance } from "./auto-advance.js";
+import { createAutoAdvance, screenTransitionIndex } from "./auto-advance.js";
 
 const terminal = document.querySelector("#terminal");
 const timeEffect = document.querySelector("#time-effect");
@@ -70,6 +70,10 @@ const demoButton = document.querySelector("#demo");
 /** The menu's run buttons: the demo, then one per game (#game is the default game's; see showGames()). */
 const startButtons = [demoButton, document.querySelector("#game")];
 const restartButton = document.querySelector("#restart");
+const middaySaveButtons = [document.querySelector("#controller-midday-save")];
+const middayLoadButtons = [document.querySelector("#controller-midday-load")];
+let midday = null;
+let continueAvailable = false;
 /** The games the server offers ({ id, title, display, metrics }, from /api/runtime); the first is the default. */
 let games = [];
 let runMode = "game";
@@ -131,7 +135,7 @@ autoAdvanceToggle.checked = localStorage.getItem(AUTO_ADVANCE_KEY) !== "0";
 const autoAdvance = createAutoAdvance(
   () => autoAdvanceToggle.checked && session && !busy && !document.hidden
     && !document.body.classList.contains("is-home")
-    && !document.querySelector("dialog[open], #menu-panel:not([hidden])")
+    && !document.querySelector("dialog[open], #menu-panel:not([hidden]), .screen.is-active .era-dialog:popover-open")
     && input?.kind === "wait" && !input.blocking && !input.timeout ? input : null,
   () => { void submit("", null, true); },
 );
@@ -201,7 +205,10 @@ function updateSetting(name, value) {
   settings = { ...gameDefaults, ...saved };
   applySettings();
 }
-const handheld = setupHandheld(applySettings);
+const handheld = setupHandheld(() => {
+  applySettings();
+  updateControls();
+});
 const keyboardNavigation = setupKeyboardNavigation({
   terminal, command,
   canNavigate: () => (!busy || expiring) && input?.kind !== "mousekey",
@@ -370,6 +377,21 @@ function endActivity() {
   activityChip.title = `Last step took ${seconds(total)}: script ${seconds(script)}, render ${seconds(total - script)}`;
 }
 function updateControls() {
+  for (const button of terminal.querySelectorAll(".screen.is-active .era-launch-continue")) {
+    button.setAttribute("aria-disabled", String(!continueAvailable));
+    button.title = continueAvailable ? "Continue the newest save" : "No game saves";
+  }
+  for (const button of middaySaveButtons) {
+    button.hidden = runMode !== "game" || !midday;
+    button.disabled = busy || !midday?.available;
+    button.title = midday?.available ? "Replace the quicksave" : "Return to TW's main command screen to quicksave";
+  }
+  for (const button of middayLoadButtons) {
+    button.hidden = runMode !== "game" || !midday;
+    button.disabled = busy || !session;
+  }
+  for (const button of terminal.querySelectorAll(".screen.is-active .era-quicksave"))
+    button.setAttribute("aria-disabled", String(runMode !== "game" || !midday?.available));
   autoAdvance.update();
   document.querySelector("#continue-hint").hidden = !autoAdvance.isPaused() || busy
     || input?.kind !== "wait" || !!input.blocking || !!input.timeout;
@@ -392,8 +414,8 @@ function updateControls() {
     && lastOutputLine()?.closest(".screen.is-active .era-setup:not(.era-setup-editor)");
   const mainMenu = input?.kind === "integer"
     && terminal.querySelector(".screen.is-active .era-main, .screen.is-active .era-shop");
-  document.querySelector("#input-form").hidden = !input || input.kind === "mousekey" || input.kind === "wait"
-    || input.buttonValues !== undefined || !!inlineSetup || !!mainMenu;
+  document.querySelector("#input-form").hidden = handheld.enabled() && (!input || input.kind === "mousekey" || input.kind === "wait"
+    || input.buttonValues !== undefined || !!inlineSetup || !!mainMenu);
   command.placeholder = input?.kind === "wait" ? "" : input?.defaultValue !== undefined
     ? `Enter for ${JSON.stringify(input.defaultValue)}` : chatting ? "Command number, or say something…" : input ? lastCommand : "";
   [...terminal.querySelectorAll(".choice"), ...islandRoot.querySelectorAll(".choice")].forEach((button) => {
@@ -1965,6 +1987,50 @@ function pageTranslated() {
 function render(snapshot, advanceScreen = false, fresh = false, keepFocus = false, toBottom = fresh) {
   return renderSteps([{ snapshot, advanceScreen }], fresh, keepFocus, toBottom);
 }
+let pendingScreen = null;
+async function deferScreen(snapshot, advanceScreen, automatic) {
+  if (!automatic || !autoAdvanceToggle.checked || snapshot.error) return false;
+  const hasText = [...terminal.querySelectorAll(".screen.is-active .line:not(.era-marker)")].some(line =>
+    !line.closest(".era-layout, .era-dialog") && line.textContent.trim());
+  const boundary = screenTransitionIndex(snapshot.output, hasText,
+    output => output.type === "html"
+      && !!new DOMParser().parseFromString(output.text, "text/html").body.querySelector(".era-dialog, .era-layout, .era-main"),
+    output => output.type === "text" ? !!output.text.trim() : output.type === "html"
+      && !!new DOMParser().parseFromString(output.text, "text/html").body.textContent.trim());
+  if (boundary < 0) return false;
+  pendingScreen = { snapshot: { ...snapshot, output: snapshot.output.slice(boundary) },
+    advanceScreen: boundary > 0 ? false : advanceScreen };
+  autoAdvance.pause();
+  clearTimedWait();
+  continueQueued = false;
+  skipRequested = false;
+  queuedSubmit = null;
+  input = { kind: "wait" };
+  if (snapshot.step !== undefined) step = snapshot.step;
+  if (boundary > 0) await render({ ...snapshot, output: snapshot.output.slice(0, boundary), input }, advanceScreen);
+  return true;
+}
+async function revealPendingScreen() {
+  const pending = pendingScreen;
+  busy = true;
+  updateControls();
+  try {
+    await render(pending.snapshot, pending.advanceScreen, false, false, true);
+    pendingScreen = null;
+    autoAdvance.observeResult(pending.snapshot, false);
+  } catch (error) {
+    input = { kind: "wait" };
+    if (!staleTab(error)) message(error.message, true);
+  } finally {
+    busy = false;
+    updateControls();
+    if (input) keyboardNavigation.focusInput();
+  }
+  if (!pendingScreen) {
+    runQueuedContinue();
+    void reactToEncounters();
+  }
+}
 /** Renders steps in order and shows the result at once; several steps rebuild a reloaded run's output. */
 async function renderSteps(steps, fresh = false, keepFocus = false, toBottom = fresh) {
   const totalStarted = profileStart();
@@ -2099,7 +2165,8 @@ async function expire() {
   expiring = true;
   try {
     const snapshot = await api("/api/timeout", { session, step, columns: terminalColumns(), display: displaySettings(), client: clientState() });
-    if (current === generation) await render(snapshot, false, false, true);
+    if (current === generation && !await deferScreen(snapshot, false, true))
+      await render(snapshot, false, false, true);
   } catch (error) { if (!staleTab(error)) message(error.message, true); }
   finally {
     busy = false;
@@ -2210,6 +2277,8 @@ function useAudioSettings(settings) {
 }
 /** advanceScreen: true after a submitted input (retires the screen), "continue" after a click-to-continue wait. */
 async function renderSnapshot(snapshot, advanceScreen) {
+  midday = snapshot.midday ?? null;
+  continueAvailable = snapshot.continueAvailable ?? false;
   lastCommand = snapshot.lastCommand ?? "";
   if (snapshot.animationTimer !== undefined) animationInterval = snapshot.animationTimer ?? undefined;
   hideTooltip();
@@ -2418,6 +2487,8 @@ async function renderSnapshot(snapshot, advanceScreen) {
   } else message(snapshot.status !== "waiting" ? "Execution finished."
     : input.kind === "wait" ? "Click or press Enter to continue."
     : input.kind === "mousekey" ? "Click, scroll or press a key." : `Waiting for ${input.kind} input.`);
+  if (snapshot.quicksaveError) message(`Could not automatically quicksave: ${snapshot.quicksaveError}`, true);
+  if (snapshot.quicksavePending) void watchQuicksave(session);
   trimScrollback();
 }
 function showCharacterHistory(history) {
@@ -2517,6 +2588,7 @@ async function continueSkipping() {
   }
 }
 function runQueuedContinue() {
+  if (pendingScreen) return;
   if (skipRequested) { void continueSkipping(); return; }
   const queued = continueQueued;
   continueQueued = false;
@@ -2536,6 +2608,8 @@ async function terminalReady() {
 }
 /** Clears the run's client state before a new or resumed run is shown. */
 function resetRun() {
+  pendingScreen = null;
+  midday = null;
   autoAdvance.reset();
   resetAudio();
   lastCommand = "";
@@ -2650,6 +2724,15 @@ function setupMainSidebar(main) {
   const stats = main.querySelector(".era-stats");
   if (stats) stats.tabIndex = 0;
   if (player && management) player.append(management);
+  const config = main.querySelector(".era-settings button[data-value='809']");
+  if (config) {
+    const row = document.createElement("div");
+    row.className = "era-quicksave-row";
+    const button = choice("Quicksave", "quicksave");
+    button.classList.add("era-chip-button", "era-quicksave");
+    row.append(button);
+    config.after(row);
+  }
   for (const selector of [".era-main-left", ".era-main-right"]) {
     const panel = main.querySelector(selector);
     if (panel) sidebar.append(panel);
@@ -2671,6 +2754,18 @@ async function submit(value, selectedChoice = null, automatic = false) {
   // Input made while an animation frame is loading is sent once that frame is shown.
   if (expiring) { queuedSubmit = { value, choice: selectedChoice?.dataset.value }; return; }
   if (busy || !input || input.blocking) return;
+  if (pendingScreen) {
+    if (!automatic) await revealPendingScreen();
+    return;
+  }
+  if (selectedChoice?.matches(".era-quicksave")) {
+    await saveMidday();
+    return;
+  }
+  if (value === "2" && terminal.querySelector(".screen.is-active .era-launch-continue")) {
+    if (continueAvailable) await continueGame();
+    return;
+  }
   rememberCommand(value, selectedChoice);
   const chat = terminal.querySelector(".screen.is-active .era-main-chat");
   if (routesToCharacter(value, selectedChoice, input, chat)) {
@@ -2735,7 +2830,8 @@ async function submit(value, selectedChoice = null, automatic = false) {
     selectedChoice?.classList.add("is-selected");
     command.value = "";
     // Anything the player sends (typed or clicked) jumps to the newest output.
-    await render(snapshot, waiting ? "continue" : true, false, false, true);
+    if (!await deferScreen(snapshot, waiting ? "continue" : true, automatic))
+      await render(snapshot, waiting ? "continue" : true, false, false, true);
   } catch (error) { if (!staleTab(error)) message(error.message, true); }
   finally {
     busy = false;
@@ -2759,6 +2855,7 @@ async function submit(value, selectedChoice = null, automatic = false) {
  * input cancels it.
  */
 async function reactToEncounters() {
+  if (pendingScreen) return;
   const pendingRun = pendingEncounters;
   pendingEncounters = null;
   if (!pendingRun || pendingRun.session !== session || pendingRun.step !== step || busy || !input) return;
@@ -2790,7 +2887,7 @@ async function reactToEncounters() {
 }
 /** Redraws the command screen after LLM character tools changed the game, showing what they did in the room. */
 async function refreshScreen() {
-  if (busy || !input) return;
+  if (busy || !input || pendingScreen) return;
   busy = true;
   message("Updating the room...");
   beginActivity();
@@ -3207,6 +3304,72 @@ async function chooseRun(mode, game = games[0]?.id) {
 demoButton.addEventListener("click", () => { void chooseRun("demo"); });
 startButtons[1].addEventListener("click", () => { void chooseRun("game", games[0]?.id); });
 restartButton.addEventListener("click", () => { void chooseRun(runMode, runGame); });
+async function saveMidday() {
+  if (busy || !midday?.available) return;
+  busy = true;
+  updateControls();
+  try {
+    await api("/api/midday/save", { session, step });
+    message("Quicksaved.");
+  } catch (error) {
+    if (!staleTab(error)) message(`Could not quicksave: ${error.message}`, true);
+  } finally { busy = false; updateControls(); }
+}
+const watchedQuicksaves = new Set();
+async function watchQuicksave(id) {
+  if (watchedQuicksaves.has(id)) return;
+  watchedQuicksaves.add(id);
+  try {
+    const result = await api("/api/quicksave/status", { session: id });
+    if (id === session && result.error) message(`Could not automatically quicksave: ${result.error}`, true);
+  } catch (error) {
+    if (id === session) message(`Could not check automatic quicksave: ${error.message}`, true);
+  } finally { watchedQuicksaves.delete(id); }
+}
+async function loadMidday() {
+  if (busy || !session) return;
+  if (!await confirmAction("Quickload?", "Unsaved progress in this run will be lost.", "Load")) return;
+  busy = true;
+  updateControls();
+  let id;
+  try {
+    const data = await api("/api/midday/load", { session, step });
+    id = data.session;
+  } catch (error) {
+    if (!staleTab(error)) message(`Could not quickload: ${error.message}`, true);
+  } finally { busy = false; updateControls(); }
+  if (id) await resume(id);
+}
+async function continueGame() {
+  const pending = terminal.querySelector(".screen.is-active .era-launch-continue");
+  pending?.classList.add("is-pending");
+  busy = true;
+  beginActivity();
+  message("Continuing...");
+  updateControls();
+  try {
+    let result;
+    try {
+      result = await api("/api/continue", { session, step });
+      activityResponded();
+      if (result.status && result.status !== "waiting") {
+        await render(result, false, true);
+        result = null;
+      }
+    } catch (error) {
+      if (!staleTab(error)) message(`Could not continue: ${error.message}`, true);
+    } finally { busy = false; endActivity(); updateControls(); }
+    if (result) await resume(result.session);
+  } finally { pending?.classList.remove("is-pending"); }
+}
+for (const button of middaySaveButtons) button.addEventListener("click", () => {
+  document.querySelector("#controller-menu").close();
+  void saveMidday();
+});
+for (const button of middayLoadButtons) button.addEventListener("click", () => {
+  document.querySelector("#controller-menu").close();
+  void loadMidday();
+});
 // Debug mode changes what the game loads ([IF_DEBUG]), so switching it restarts the run.
 debugButton.addEventListener("click", async (event) => {
   event.preventDefault();
@@ -3325,6 +3488,7 @@ translationConfig.addEventListener("keydown", (event) => event.stopPropagation()
 const settingsPanel = document.querySelector("#settings");
 const controllerMenu = setupControllerMenu({
   onY: () => { if (!busy && input && !input.blocking) activateControllerAction(); },
+  onX: () => { if (!busy && input && !input.blocking) activateControllerAction(".era-repeat"); },
   restart: () => chooseRun(runMode, runGame),
   library: () => document.querySelector("#library-toggle").click(),
   settings: () => settingsPanel.showModal(),

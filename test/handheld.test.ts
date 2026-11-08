@@ -382,12 +382,13 @@ test("compact room uses content height instead of reserving hidden chat space", 
 
 test("room occupant names are white with a dark outline and summary portraits fit their frame", () => {
   const css = styleSource("style");
-  assert.match(css, /\.era-room-stage \.era-occupant \.era-occupant-text \.era-occupant-name \{ color: #fff; text-shadow: -1px -1px 0 #000,/);
+  assert.match(css, /\.era-room-stage \.era-occupant \.era-occupant-text \.era-occupant-name \{ color: #fff; \}/);
+  assert.match(css, /\.era-room-stage \.era-occupant-text, \.era-room-stage \.era-occupant-label \{ text-shadow: -1px -1px 0 #000,/);
   const app = readFileSync(new URL("../web/app.js", import.meta.url), "utf8");
   assert.match(app, /await image\(node,[\s\S]*?!!destination\.closest\("\.era-info-head \.era-info-face"\)\)/);
 });
 
-test("command bar hides for button-only input and inline setup but preserves free text and amount prompts", () => {
+test("command bar only hides in handheld mode and preserves free text and amount prompts", () => {
   const app = readFileSync(new URL("../web/app.js", import.meta.url), "utf8");
   const start = app.indexOf("  const inlineSetup =");
   const end = app.indexOf("  command.placeholder =", start);
@@ -407,21 +408,46 @@ test("command bar hides for button-only input and inline setup but preserves fre
     { input: { kind: "wait" }, setup: false, main: true, expected: true },
   ]) {
     const form = { hidden: false };
-    runInNewContext(app.slice(start, end), {
-      input,
-      activeLlm: () => llm ? {} : null,
-      terminal: { querySelector: (selector: string) => {
-        assert.equal(selector, ".screen.is-active .era-main, .screen.is-active .era-shop");
-        return main ? {} : null;
-      } },
-      lastOutputLine: () => ({ closest: (selector: string) => {
-        if (selector === ".screen.is-active .era-setup:not(.era-setup-editor)") return setup ? {} : null;
-        assert.fail(`Unexpected selector: ${selector}`);
-      } }),
-      document: { querySelector: () => form },
-    });
-    assert.equal(form.hidden, expected, JSON.stringify({ input, setup }));
+    for (const enabled of [true, false, true]) {
+      runInNewContext(app.slice(start, end), {
+        handheld: { enabled: () => enabled },
+        input,
+        activeLlm: () => llm ? {} : null,
+        terminal: { querySelector: (selector: string) => {
+          assert.equal(selector, ".screen.is-active .era-main, .screen.is-active .era-shop");
+          return main ? {} : null;
+        } },
+        lastOutputLine: () => ({ closest: (selector: string) => {
+          if (selector === ".screen.is-active .era-setup:not(.era-setup-editor)") return setup ? {} : null;
+          assert.fail(`Unexpected selector: ${selector}`);
+        } }),
+        document: { querySelector: () => form },
+      });
+      assert.equal(form.hidden, enabled && expected, JSON.stringify({ input, setup, main, enabled }));
+    }
   }
+});
+
+test("handheld changes immediately refresh display settings and command visibility", () => {
+  const app = readFileSync(new URL("../web/app.js", import.meta.url), "utf8");
+  const start = app.indexOf("const handheld = setupHandheld(");
+  const end = app.indexOf("const keyboardNavigation =", start);
+  assert.ok(start > 0 && end > start);
+  let onChange = () => {};
+  const refreshed: string[] = [];
+  runInNewContext(app.slice(start, end), {
+    setupHandheld: (callback: () => void) => { onChange = callback; },
+    applySettings: () => { refreshed.push("settings"); },
+    updateControls: () => { refreshed.push("controls"); },
+  });
+  onChange();
+  assert.deepEqual(refreshed, ["settings", "controls"]);
+});
+
+test("title screen only hides the command bar in handheld mode", () => {
+  const css = styleSource("style");
+  assert.match(css, /body\.is-handheld:has\(\.screen\.is-active \.era-launch\) #input-form \{ display: none; \}/);
+  assert.doesNotMatch(css, /body:has\(\.screen\.is-active \.era-launch\) #input-form \{ display: none; \}/);
 });
 
 test("small screens hide LLM configuration and the opener blocks all entry points", () => {

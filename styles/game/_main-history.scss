@@ -1,5 +1,6 @@
-.era-main-chat { grid-column: 1 / -1; align-self: stretch; display: flex; flex-direction: column; min-width: 0; min-height: calc(5 * 14px * 1.25 + 26px); }
-.era-main-chat > .era-history-pane { flex: 1; min-height: 0; contain: size; overflow: auto; }
+.era-main-chat { grid-column: 1 / -1; align-self: stretch; display: flex; flex-direction: column; min-width: 0; min-height: calc(3 * var(--era-history-size) * var(--era-history-line)); }
+.era-alone > .era-main-chat { flex: 1 1 auto; }
+.era-main-chat > .era-history-pane { flex: 1; min-height: calc(3 * var(--era-history-size) * var(--era-history-line)); contain: size; overflow: auto; }
 .era-main-chat .era-history-body { max-height: none; }
 .screen:not(.is-active) .era-main-chat { display: none; }
 @container (min-width: 761px) and (max-width: 1100px) {
