@@ -44,10 +44,12 @@ HTML_PRINT HOTPATCH_BUTTON("Bad", 0, "", "invented")`, "<button-test>");
       assert.match(markup, /^<button[^>]*>A&amp;B &lt;label&gt;/);
       assert.match(markup, /title='It&#39;s &lt;safe&gt;'/);
       assert.match(markup, new RegExp(`class='era-button era-button-${variants[i]} '`));
-      assert.equal(markup.includes("command-number"), i < 3);
+      assert.equal(markup.includes("command-number"), i < 3 || variants[i] === "inventory");
       assert.equal(markup.includes("aria-disabled='true'"), variants[i] === "unavailable");
     }
     assert.match(buttons[5]!, /era-control-arrow/);
+    assert.match(buttons[5]!, /command-number'>\[5\]/);
+    assert.match(buttons[5]!, /A&amp;B &lt;label&gt; <span class='command-number'>/);
     assert.match(buttons[6]!, /\[\.\.\.\]/);
     const bad = new Runtime(game, undefined, { jit }).start("TEST_BAD_VARIANT");
     assert.ok(bad.error);
@@ -650,7 +652,7 @@ test("main screen hotpatch opens and closes its panel boxes in balance", {
   const step = (value: string) => {
     markup = [];
     snapshot = runtime.input(value);
-    if (value === "355" || value === "999") {
+    if (value === "355" || value === "999" || value === "490" || value === "9999") {
       assert.notEqual(snapshot.input?.kind, "wait", `${value} has no generic transition pause: ${
         snapshot.output.flatMap((item) => "text" in item ? [item.text] : []).join("\n")}`);
       assert.ok(!snapshot.output.some((item) => item.type === "text" &&
@@ -710,7 +712,8 @@ test("main screen hotpatch opens and closes its panel boxes in balance", {
     assert.doesNotMatch(html, /<div class='era-clock'><img/);
     assert.equal((html.match(/value='805'/g) ?? []).length, 1, "inventory has exactly one entry point");
     assert.match(html, /era-player-actions'><button value='805' class='era-button era-button-inventory /, "inventory is on the player card");
-    assert.doesNotMatch(html, /value='490'/, "the legacy Items command is replaced by the GUI inventory");
+    assert.match(html, /Inventory <span class='command-number'>\[805\]/, "inventory displays its typed shortcut");
+    assert.match(html, /value='490'/, "the game's Items command remains available alongside the GUI inventory");
     assert.match(html, /class='era-toggles era-auto-toggles'><button value='995'[^]*<button value='-9200' class='era-toggle[^']*' role='checkbox' aria-checked='(?:true|false)'[^>]*>Pushdown Guard<\/button><\/div>/, "the guard shares the compact checkbox row with Auto-TSP and Auto-Clean");
     assert.doesNotMatch(html, /era-player-toggles|Go &amp; Manage|Auto Items/);
   }
@@ -719,6 +722,13 @@ test("main screen hotpatch opens and closes its panel boxes in balance", {
   assert.ok(markup.some((text) => text.includes("era-dialog era-inventory")), "805 opens the inventory from the main screen");
   step("999");
   assert.ok(markup.some((text) => text.includes("era-player-actions")), "closing inventory returns to the player panel");
+  step("490");
+  assert.equal(snapshot.input?.kind, "integer", "Items opens directly at item selection without a Continue wait");
+  assert.ok(!snapshot.output.some(item => item.type === "text" && item.text === "Pick an item to use."));
+  assert.ok(markup.some((text) => text.includes("era-dialog era-inventory era-item-use")), "490 opens the shared item picker");
+  step("9999");
+  assert.equal(snapshot.input?.kind, "integer", "cancelling Items returns directly to command input");
+  assert.ok(markup.some((text) => text.includes("era-player-actions")), "closing Items returns to the player panel");
   step("993");
   assert.ok(markup.some(text => text.includes("era-dialog era-calendar")),
     "993 opens the calendar from the main screen");
@@ -1039,6 +1049,12 @@ QUIT`, "<settings-test>");
     assert.match(html, /title='Auto-moan: [^']+Cycles this character through No, Yes and Yes \(Ahegao\)/);
     assert.match(html, new RegExp(`value='4000' class='era-toggle' role='checkbox' aria-checked='${["false", "true", "mixed"][mode]}'`));
     assert.match(html, /Automatic Condom/);
+    assert.ok(
+      html.indexOf("Automatic Condom") < html.indexOf("value='809'")
+      && html.indexOf("Auto-moan") < html.indexOf("value='809'")
+      && html.indexOf("Standing") < html.indexOf("value='809'"),
+      "character-specific checkboxes appear above Config",
+    );
   }
 });
 
@@ -1341,6 +1357,171 @@ test("character More opens the selected person's sheet while See more still open
   settle();
   const second = html().match(/value='-9200' class='era-toggle(?: era-on)?' role='checkbox' aria-checked='(true|false)'/)![1];
   assert.notEqual(first, second, "guard still toggles through the game's command");
+});
+
+test("item-use dialog shares inventory rows and filters owned usable items for each recipient", () => {
+  const game = emptyGame();
+  game.characters.set(0, { file: "<item-picker-character>", rows: [] });
+  game.names.set("ITEM", new Map([["昆虫採集セット", 40]]));
+  game.names.set("FLAG", new Map([["Cスキマ自動仕様", 1]]));
+  const attributes = readFileSync(new URL("../hotpatch/INFO_PALAM.ERB", import.meta.url), "utf8");
+  indexScript(game, attributes.slice(attributes.indexOf("@HOTPATCH_ATTRIBUTE(")), "<attribute-helper>");
+  indexScript(game, readFileSync(new URL("../hotpatch/ITEM_LIST.ERB", import.meta.url), "utf8"), "<item-patch>");
+  indexScript(game, `@SYSTEM_TITLE
+#DIM recipient
+#DIM page
+ADDCHARA 0
+ADDCHARA 0
+ADDCHARA 0
+MASTER = 1
+TARGET = 2
+CALLNAME:1 = Player <&>
+CALLNAME:2 = Partner
+ITEM:40 = 1
+ITEM:120 = 3
+ITEM:121 = 2
+ITEM:122 = 1
+ITEM:124 = 1
+recipient = MASTER
+CALL QoL_490_ITEMMENU(recipient, page)
+PRINTFORML Selected: {RESULT}, recipient: {recipient}, stock: {ITEM:120}, {ITEM:121}
+WAIT
+@ITEMNAME_TR(ARG)
+#FUNCTIONS
+RETURNF ARG == 120 ? "Heal <&>" # "Food"
+@ITEM_EXPLANATION(ARG)
+#FUNCTIONS
+RETURNF "It's helpful."
+@ITEMTYPE(ARG)
+#FUNCTION
+RETURNF ARG == 121 ? 3 # 1
+@使用可能アイテム(ARG)
+#FUNCTION
+RETURNF ARG == 120 ? 1 # (GROUPMATCH(ARG, 121, 122, 123) ? 2 # 0)
+@ALTNAME_OR_CALLNAME(ARG)
+#FUNCTIONS
+RETURNF CALLNAME:ARG
+@SHIRAHU(ARG)
+#FUNCTION
+RETURNF 1
+@SHOW_MUSHI_CAGE
+PRINTW Bug cage opened`, "<item-picker-fixture>");
+  const html = (snapshot: ReturnType<Runtime["start"]>) => {
+    assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
+    const markup = snapshot.output.flatMap(item => item.type === "html" ? [item.text] : []).join("");
+    assert.equal((markup.match(/<era-open/g) ?? []).length, (markup.match(/<era-close>/g) ?? []).length);
+    return markup;
+  };
+  for (const jit of [false, true]) {
+    const runtime = new Runtime(game, undefined, { jit });
+    let markup = html(runtime.start());
+    assert.match(markup, /era-dialog era-inventory era-item-use/);
+    assert.match(markup, /Player &lt;&amp;&gt;/);
+    assert.match(markup, /3 item types/);
+    assert.match(markup, /value='120' class='era-inventory-item era-inventory-use' title='It&#39;s helpful\.'/);
+    assert.match(markup, /command-number'>\[120\]<\/span><span class='era-inventory-name'>Heal &lt;&amp;&gt;/);
+    assert.match(markup, /title='Quantity'>3</);
+    assert.match(markup, /Use on Partner/);
+    assert.doesNotMatch(markup, /value='123'|value='124'|value='7777'|value='8888'/);
+    assert.throws(() => runtime.input("124"), /displayed button/);
+    markup = html(runtime.input("2001"));
+    assert.match(markup, /era-current'>Heal/);
+    assert.match(markup, /2 item types/);
+    markup = html(runtime.input("9998"));
+    assert.match(markup, /Use on Player &lt;&amp;&gt;/);
+    assert.match(markup, /1 item type<\/span> · Heal/);
+    assert.doesNotMatch(markup, /value='120'/, "self-only items are excluded with a nonzero MASTER");
+    markup = html(runtime.input("2002"));
+    assert.match(markup, /0 item types/);
+    assert.match(markup, /No items in this category/);
+    markup = html(runtime.input("2000"));
+    assert.match(markup, /2 item types/);
+    const automatic = runtime.input("9000");
+    assert.equal(automatic.error, null);
+    assert.doesNotMatch(html(automatic), /era-dialog/);
+    assert.match(automatic.output.flatMap(item => "text" in item ? [item.text] : []).join(""), /switched ON/);
+    markup = html(runtime.input(""));
+    assert.match(markup, /Collector's Gap: ON/);
+    const cage = runtime.input("9001");
+    assert.doesNotMatch(html(cage), /era-dialog/);
+    markup = html(runtime.input(""));
+    assert.match(markup, /2 item types/);
+    const selected = runtime.input("121");
+    assert.doesNotMatch(html(selected), /era-dialog/, "the picker closes before item effects");
+    assert.match(selected.output.flatMap(item => "text" in item ? [item.text] : []).join(""),
+      /Selected: 121, recipient: 2, stock: 3, 2/);
+
+    const cancelled = new Runtime(game, undefined, { jit });
+    html(cancelled.start());
+    const returned = cancelled.input("9999");
+    assert.doesNotMatch(html(returned), /era-dialog/);
+    assert.match(returned.output.flatMap(item => "text" in item ? [item.text] : []).join(""), /Selected: 999/);
+  }
+});
+
+test("item picker passes selection to the game's existing item effects", {
+  skip: !existsSync(GAME_ROOT),
+}, async () => {
+  const game = await loadGame();
+  assert.ok((await applyHotpatches(game)).includes("QoL_490_ITEMMENU"));
+  const stub = emptyGame(game.root);
+  indexScript(stub, `@SYSTEM_TITLE
+ADDCHARA 0
+MASTER = 0
+TARGET = 0
+VARSET ITEM
+ITEM:501 = 3
+MAXBASE:0:体力 = 1000
+MAXBASE:0:気力 = 1000
+BASE:0:体力 = 10
+BASE:0:気力 = 10
+CALL COM490
+PRINTFORML Stock: {ITEM:501}, HP: {BASE:0:体力}, drug: {TCVAR:0:お薬}
+WAIT`, "<item-effect-test>");
+  game.routines.set("SYSTEM_TITLE", stub.routines.get("SYSTEM_TITLE")!);
+  const runtime = new Runtime(game, GAME_INSTRUCTION_LIMIT);
+  const initial = runtime.start();
+  assert.equal(initial.error, null, JSON.stringify(initial.error));
+  assert.equal(initial.input?.kind, "integer");
+  assert.ok(!initial.output.some(item => item.type === "text" && item.text === "Pick an item to use."));
+  assert.ok(initial.input?.buttonValues.includes("501"));
+  const selected = runtime.input("501");
+  assert.equal(selected.error, null, JSON.stringify(selected.error));
+  const output = selected.output.flatMap(item => "text" in item ? [item.text] : []).join("");
+  assert.match(output, /Stock: 2, HP: \d+, drug: 1/);
+  const hp = output.match(/HP: (\d+)/);
+  assert.ok(hp && Number(hp[1]) > 10, "the existing effect restores health");
+  assert.doesNotMatch(output, /era-dialog/, "item effects are not covered by the picker");
+
+  const cooldownStub = emptyGame(game.root);
+  indexScript(cooldownStub, `@SYSTEM_TITLE
+ADDCHARA 0
+MASTER = 0
+TARGET = 0
+VARSET ITEM
+ITEM:121 = 2
+CALL COM490
+PRINTFORML Stock: {ITEM:121}
+WAIT
+@TIME_PROGRESS(ARG)
+#FUNCTION
+RETURNF 0`, "<item-cooldown-test>");
+  game.routines.set("SYSTEM_TITLE", cooldownStub.routines.get("SYSTEM_TITLE")!);
+  game.routines.set("TIME_PROGRESS", cooldownStub.routines.get("TIME_PROGRESS")!);
+  const cooldown = new Runtime(game, GAME_INSTRUCTION_LIMIT);
+  const picker = cooldown.start();
+  assert.equal(picker.error, null, JSON.stringify(picker.error));
+  assert.ok(picker.input?.buttonValues.includes("121"));
+  const warning = cooldown.input("121");
+  assert.equal(warning.error, null, JSON.stringify(warning.error));
+  assert.equal(warning.input?.kind, "wait", "real cooldown warnings still need acknowledgement");
+  assert.match(warning.output.flatMap(item => "text" in item ? [item.text] : []).join(""), /not hungry enough for a snack/);
+  const reopened = cooldown.input("");
+  assert.equal(reopened.error, null, JSON.stringify(reopened.error));
+  assert.equal(reopened.input?.kind, "integer", "acknowledging the warning reopens item selection");
+  const cancelled = cooldown.input("9999");
+  assert.equal(cancelled.error, null, JSON.stringify(cancelled.error));
+  assert.match(cancelled.output.flatMap(item => "text" in item ? [item.text] : []).join(""), /Stock: 2/);
 });
 
 test("inventory dialog supplies a live-filter footer and preserves categories, mods and items", {

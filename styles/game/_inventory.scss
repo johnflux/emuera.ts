@@ -11,6 +11,9 @@
 .era-inventory-grid > .line[hidden], .era-inventory-body > .line[hidden] { display: none; }
 .era-inventory-item { display: flex; align-items: baseline; gap: 12px; padding: 6px 2px; border-bottom: 1px solid #ffffff0a; }
 .era-inventory-item:is(:hover, :focus-visible) { background: #ffffff05; }
+.line button.choice.era-inventory-use { display: flex; width: 100%; min-width: 0; margin: 0; padding: 6px 2px; border: 0; border-bottom: 1px solid #ffffff0a; border-radius: 0; background: transparent; text-align: left; white-space: normal; }
+.line button.choice.era-inventory-use:enabled:is(:hover, :focus-visible) { background: #ffffff05; }
+.era-inventory-use .command-number { color: #6c7780; font-size: .8em; font-variant-numeric: tabular-nums; }
 .era-inventory-name { min-width: 0; color: #b5c5ce; overflow-wrap: anywhere; }
 .era-inventory-quantity { margin-left: auto; color: #8a9ba6; font-variant-numeric: tabular-nums; }
 .era-inventory-empty { padding: 32px 12px; color: #92a7b5; text-align: center; white-space: normal; }

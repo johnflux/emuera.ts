@@ -3,7 +3,6 @@
 .line button.choice:is(.era-button-action, .era-button-unavailable) { padding: 6px 12px; }
 .line button.choice:is(.era-button-sidebar, .era-button-sidebar-wide, .era-button-inventory) { padding: 6px 10px; }
 .line button.choice:is(.era-button-sidebar-wide, .era-button-inventory) { width: 100%; min-width: 0; }
-.line button.choice.era-button-inventory { display: inline-flex; align-items: center; gap: 14px; }
 .line button.choice.era-button-sidebar-wide { flex: 1 1 100%; }
 .line button.choice.era-button-slim { padding: 3px 12px; background: #182027; color: #8fc8ff; }
 .line button.choice.era-button-primary { padding: 9px 22px; border-color: #4bb9b4; border-radius: 6px; background: linear-gradient(135deg, #163d42, #16303a); color: #b6f3e7; }
@@ -11,6 +10,8 @@
 .line button.choice.era-button:focus-visible { outline: 2px solid #7ccce3; outline-offset: 2px; }
 .era-button .interactive-label { text-decoration: none; }
 .era-button .command-number, .era-button-unavailable-mark { margin-left: .75ch; color: #6c7780; font-size: .8em; }
+.era-button-inventory .command-number { margin-left: 0; }
+.era-button-inventory .era-control-arrow { float: right; }
 .line button.choice.era-button-unavailable { opacity: .45; cursor: default; }
 .line button.choice.era-button-list { display: grid; align-items: baseline; gap: 6px 16px; width: 100%; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; text-align: left; white-space: normal; overflow-wrap: anywhere; }
 .screen.is-active .line button.choice.era-button-list:enabled:is(:hover, :focus-visible) { background: transparent; }

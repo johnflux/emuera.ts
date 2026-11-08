@@ -6,6 +6,74 @@ import { runInNewContext } from "node:vm";
 import { emptyGame, indexScript } from "../src/loader.js";
 import { Runtime } from "../src/runtime.js";
 
+test("automatic command waits require surviving nonblank output, not echoes or cleared dialog lines", () => {
+  const cases = [
+    { name: "silent command", command: "RETURN 1", waits: false },
+    { name: "blank lines", command: 'PRINTL\nPRINTL  \t　\nRETURN 1', waits: false },
+    { name: "empty HTML", command: 'HTML_PRINT "<div><span> </span></div>"\nRETURN 1', waits: false },
+    { name: "narration", command: "PRINTL Item used.\nRETURN 1", waits: true },
+    { name: "open text line", command: "PRINT Item used.\nRETURN 1", waits: true },
+    { name: "HTML narration", command: 'HTML_PRINT "<span>Item used.</span>"\nRETURN 1', waits: true },
+    { name: "picture", command: 'HTML_PRINT "<img src=\'item\' width=\'32\' height=\'32\'>"\nRETURN 1', waits: true },
+    { name: "cleared narration", command: "PRINTL Discarded.\nCLEARLINE 1\nPRINTL\nRETURN 1", waits: false },
+    { name: "partially cleared narration", command: "PRINTL Keep this.\nPRINTL Discarded.\nCLEARLINE 1\nRETURN 1", waits: true },
+    { name: "blank line surviving clear", command: "PRINTL\nPRINTL Discarded.\nCLEARLINE 1\nRETURN 1", waits: false },
+    { name: "explicit blank wait", command: "PRINTL\nWAIT\nRETURN 1", waits: true },
+    { name: "end event narrative", command: "RETURN 1", end: "PRINTL Event occurred.", waits: true },
+    { name: "blank end event", command: "RETURN 1", end: "PRINTL", waits: false },
+    { name: "cancelled picker", command: `#DIM DYNAMIC start
+start = LINECOUNT
+HTML_PRINT "<div>Items</div>"
+HTML_PRINT "<button value='9999'>Return</button>"
+BINPUT
+CLEARLINE LINECOUNT - start
+RETURN -1`, picker: true, waits: false },
+    { name: "picker followed by real message", command: `#DIM DYNAMIC start
+start = LINECOUNT
+HTML_PRINT "<div>Items</div>"
+HTML_PRINT "<button value='9999'>Return</button>"
+BINPUT
+CLEARLINE LINECOUNT - start
+PRINTL Item used.
+RETURN 1`, picker: true, waits: true },
+  ];
+  for (const jit of [false, true]) {
+    for (const fixture of cases) {
+      const game = emptyGame();
+      game.tables.set("TRAIN", new Map([[300, ["Items"]]]));
+      indexScript(game, `@SYSTEM_TITLE
+ADDVOIDCHARA
+MASTER = 0
+TARGET = 0
+BEGIN TRAIN
+@SHOW_STATUS
+PRINTL Menu
+@SHOW_USERCOM
+@COM_ABLE300
+RETURN 1
+@COM300
+${fixture.command}
+@SOURCE_CHECK
+@EVENTCOMEND
+${fixture.end ?? ""}`, "<automatic-command-wait>");
+      const runtime = new Runtime(game, undefined, { jit });
+      assert.equal(runtime.start().error, null);
+      let snapshot = runtime.input("0");
+      if (fixture.picker) {
+        assert.equal(snapshot.input?.kind, "integer");
+        snapshot = runtime.input("9999");
+      }
+      assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
+      assert.equal(snapshot.input?.kind, fixture.waits ? "wait" : "integer", `${fixture.name}, jit=${jit}`);
+      if (fixture.waits) {
+        const resumed = runtime.input("");
+        assert.equal(resumed.error, null, JSON.stringify(resumed.error));
+        assert.equal(resumed.input?.kind, "integer", `${fixture.name}: no second acknowledgement`);
+      }
+    }
+  }
+});
+
 test("only the hotpatched eraTW freeze skips the interpreter's fallback command wait", () => {
   for (const jit of [false, true]) {
     for (const [adapter, patch, command, skipsWait] of [

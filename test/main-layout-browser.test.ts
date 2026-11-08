@@ -25,6 +25,92 @@ const browser = [
   process.env.PROGRAMFILES && join(process.env.PROGRAMFILES, "Google/Chrome/Application/chrome.exe"),
 ].find((path): path is string => !!path && existsSync(path));
 
+test("inventory and item-use rows share responsive scrolling, quantities and live filtering", {
+  skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH",
+}, async () => {
+  const [source, patch, attributes, style] = await Promise.all([
+    readFile(new URL("../web/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../hotpatch/ITEM_LIST.ERB", import.meta.url), "utf8"),
+    readFile(new URL("../hotpatch/INFO_PALAM.ERB", import.meta.url), "utf8"),
+    readFile(new URL("../web/generated/style.css", import.meta.url), "utf8"),
+  ]);
+  const filter = source.slice(source.indexOf('let inventoryQuery = "";'), source.indexOf("/**", source.indexOf("function syncInventory(")));
+  const game = emptyGame();
+  indexScript(game, attributes.slice(attributes.indexOf("@HOTPATCH_ATTRIBUTE(")), "<attributes>");
+  indexScript(game, patch.slice(patch.indexOf("@HOTPATCH_INVENTORY_ITEM("), patch.indexOf("@COM490\n")), "<rows>");
+  indexScript(game, `@SYSTEM_TITLE
+FOR LOCAL, 0, 40
+ITEM:LOCAL = LOCAL + 1
+HTML_PRINT HOTPATCH_INVENTORY_ITEM(LOCAL, 1)
+NEXT
+BINPUT
+@ITEMNAME_TR(ARG)
+#FUNCTIONS
+RETURNF @"Energy drink {ARG} with a long item name"
+@ITEM_EXPLANATION(ARG)
+#FUNCTIONS
+RETURNF "Restores energy."`, "<rows-fixture>");
+  const snapshot = new Runtime(game).start();
+  assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
+  const rows = snapshot.output.flatMap(item => item.type === "html" ?
+    [`<div class="line"><span>${item.text.replace("class='era-inventory-item", "class='choice era-inventory-item")}</span></div>`] : []).join("");
+  const html = `<!doctype html><style>${style}</style><body><div class="screen is-active">
+    <div class="era-dialog era-inventory era-item-use" popover>
+      <div class="line"><div class="era-inventory-header"><div class="era-inventory-heading">
+        <span class="era-inventory-title">Items</span><button class="choice era-dialog-close">Close</button></div></div></div>
+      <div class="era-inventory-body"><div class="era-inventory-grid">${rows}</div>
+        <div class="line"><div class="era-inventory-empty">No items in this category.</div></div></div>
+      <div class="line"><div class="era-inventory-footer"><span class="era-inventory-filter"></span>
+        <span class="era-inventory-count"></span><button class="choice era-chip-button">Return</button></div></div>
+    </div></div><script>
+    const hideTooltip = () => {};
+    ${filter}
+    const dialog = document.querySelector(".era-inventory");
+    dialog.showPopover();
+    syncInventory(dialog);
+    const body = dialog.querySelector(".era-inventory-body");
+    const first = dialog.querySelector(".era-inventory-item");
+    let clicked = null;
+    first.addEventListener("click", () => clicked = first.getAttribute("value"));
+    first.click();
+    const bounds = first.getBoundingClientRect(), quantity = first.querySelector(".era-inventory-quantity").getBoundingClientRect();
+    const layout = {scrolls:body.scrollHeight > body.clientHeight,
+      fits:body.scrollWidth <= body.clientWidth + 1 && dialog.getBoundingClientRect().right <= innerWidth,
+      quantityAtRight:Math.abs(bounds.right - quantity.right) <= 3,
+      wholeRow:Math.abs(bounds.width - first.closest(".line").getBoundingClientRect().width) <= 1};
+    const input = dialog.querySelector("input");
+    input.value = " ENERGY DRINK 39 ";
+    input.dispatchEvent(new Event("input", {bubbles:true}));
+    const count = dialog.querySelector(".era-inventory-count").textContent;
+    const matches = [...dialog.querySelectorAll(".era-inventory-item")].filter(item => !item.closest(".line").hidden).length;
+    input.value = "missing";
+    input.dispatchEvent(new Event("input", {bubbles:true}));
+    const empty = dialog.querySelector(".era-inventory-empty");
+    const noMatch = !empty.closest(".line").hidden && empty.textContent === "No items match your filter.";
+    dialog.classList.remove("era-item-use");
+    syncInventory(dialog);
+    const sharedQuery = input.value === "missing";
+    input.value = "";
+    input.dispatchEvent(new Event("input", {bubbles:true}));
+    document.body.textContent = JSON.stringify({...layout, clicked, count, matches, noMatch, sharedQuery,
+      reset:dialog.querySelector(".era-inventory-count").textContent === "40 item types" && empty.closest(".line").hidden});
+    </script>`;
+  const profile = await mkdtemp(join(tmpdir(), "era-inventory-rows-"));
+  try {
+    for (const size of ["1280,900", "390,720"]) {
+      const { stdout } = await execute(browser!, ["--headless", "--disable-gpu", "--no-first-run", `--user-data-dir=${profile}`,
+        `--window-size=${size}`, "--dump-dom", `data:text/html;base64,${Buffer.from(html).toString("base64")}`],
+        { maxBuffer: 8 * 1024 * 1024, timeout: 30000 });
+      const match = stdout.match(/<body[^>]*>([\s\S]*?)<\/body>/);
+      assert.ok(match);
+      assert.deepEqual(JSON.parse(match[1]), {scrolls:true, fits:true, quantityAtRight:true, wholeRow:true,
+        clicked:"0", count:"1 of 40 item types", matches:1, noMatch:true, sharedQuery:true, reset:true}, size);
+    }
+  } finally {
+    await rm(profile, { recursive: true, force: true });
+  }
+});
+
 test("Config submenus adapt native and structured choices without changing their inputs", { skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH" }, async () => {
   const [source, style] = await Promise.all([
     readFile(new URL("../web/app.js", import.meta.url), "utf8"),
@@ -191,13 +277,15 @@ HTML_PRINT HOTPATCH_BUTTON("Config", 809, "", "sidebar-wide")
 HTML_PRINT "<era-close>"
 CALL HOTPATCH_PRINT_COM(352)
 HTML_PRINT HOTPATCH_BUTTON("A&B <test>", -12, "It's <safe>", "action", "custom")
+HTML_PRINT HOTPATCH_BUTTON("Inventory", 805, "", "inventory")
 BINPUT`, "<button-fixture>");
   const snapshot = new Runtime(game).start();
   assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
-  assert.deepEqual(snapshot.input?.buttonValues, ["400", "405", "809", "352", "-12"]);
+  assert.deepEqual(snapshot.input?.buttonValues, ["400", "405", "809", "352", "-12", "805"]);
   const buttons = snapshot.output.flatMap(item => item.type === "html" ? [item.text] : []).join("");
   assert.match(buttons, /A&amp;B &lt;test&gt;/);
   assert.match(buttons, /title='It&#39;s &lt;safe&gt;'/);
+  assert.match(buttons, /Inventory <span class='command-number'>\[805\]/);
   assert.match(buttons, /<button value='352' class='era-button era-button-action [^>]*>Relationship\.\.\.<span class='command-number'>\[352\]<\/span><\/button>/);
   assert.doesNotMatch(buttons, /era-guard-control|print-cell/);
   assert.doesNotMatch(source, /<button value='352'/);
@@ -223,6 +311,8 @@ BINPUT`, "<button-fixture>");
           top: rect.top, left: rect.left, right: rect.right, textAlign: getComputedStyle(button).textAlign,
           font: parseFloat(getComputedStyle(button).fontSize), numberFont: parseFloat(getComputedStyle(number).fontSize),
           numberColor: getComputedStyle(number).color, numberDisplay: getComputedStyle(number).display,
+          display: getComputedStyle(button).display, numberMargin: getComputedStyle(number).marginLeft,
+          numberGap: numberRect.left - labelRect.right,
           numberAfterLabel: numberRect.left >= labelRect.right };
       });
       // dump-dom has no active window; exercise both pseudo-state cascades with equivalent classes.
@@ -251,6 +341,7 @@ BINPUT`, "<button-fixture>");
       const measured = JSON.parse(match[1]) as { results: Array<{
         value: string; text: string; width: number; top: number; left: number; right: number;
         textAlign: string; font: number; numberFont: number; numberColor: string; numberDisplay: string; numberAfterLabel: boolean;
+        display: string; numberMargin: string; numberGap: number;
       }>; highlightColors: Array<{ state: string; labelBefore: string; labelAfter: string; numberAfter: string }> };
       const { results, highlightColors } = measured;
       for (const colors of highlightColors) {
@@ -265,6 +356,10 @@ BINPUT`, "<button-fixture>");
         if (!hidden) assert.equal(button.numberAfterLabel, true, button.text);
       }
       const [move, goOut, config] = results;
+      const inventory = results.find(button => button.value === "805")!;
+      assert.equal(inventory.display, "inline-block", "Inventory uses the same inline layout as other buttons");
+      assert.equal(inventory.numberMargin, "0px", "the literal space supplies the Inventory number gap");
+      if (!hidden) assert.ok(Math.abs(inventory.numberGap) < 1, "the number immediately follows the label's trailing space");
       assert.equal(move.top, goOut.top, "travel buttons stay side by side");
       assert.ok(goOut.left >= move.right, "travel buttons do not overlap");
       assert.ok(config.top > move.top);
@@ -571,8 +666,6 @@ test("repeat button fits the action card corner and displays an X hint", { skip:
     const css = getComputedStyle(button), hint = getComputedStyle(button, "::after");
     const hintContent = hint.content, hintSize = hint.width;
     const normalImage = css.backgroundImage;
-    button.focus();
-    const focusImage = getComputedStyle(button).backgroundImage;
     button.blur();
     button.classList.add("is-pending");
     button.disabled = true;
@@ -583,7 +676,7 @@ test("repeat button fits the action card corner and displays an X hint", { skip:
     document.body.classList.remove("has-controller");
     const offHint = getComputedStyle(button, "::after").content;
     document.body.textContent = JSON.stringify({ right: edge.right - rect.right, top: rect.top - edge.top,
-      width: rect.width, height: rect.height, normalImage, focusImage, pendingImage, selectedImage,
+      width: rect.width, height: rect.height, normalImage, pendingImage, selectedImage,
       radius: css.borderTopRightRadius, hint: hintContent, hintSize, busyHint, offHint });
     </script>`;
   const profile = await mkdtemp(join(tmpdir(), "era-repeat-corner-"));
@@ -595,14 +688,15 @@ test("repeat button fits the action card corner and displays an X hint", { skip:
       const { stdout } = await execute(browser!, args, { maxBuffer: 8 * 1024 * 1024, timeout: 30000 });
       const match = stdout.match(/<body[^>]*>([\s\S]*?)<\/body>/);
       assert.ok(match);
-      const result = JSON.parse(match[1]) as { right: number; top: number; width: number; height: number; normalImage: string; focusImage: string; pendingImage: string; selectedImage: string; radius: string; hint: string; hintSize: string; busyHint: string; offHint: string };
+      const result = JSON.parse(match[1]) as { right: number; top: number; width: number; height: number; normalImage: string; pendingImage: string; selectedImage: string; radius: string; hint: string; hintSize: string; busyHint: string; offHint: string };
       assert.ok(Math.abs(result.right - 1) < 1, `${mode}: right corner ${JSON.stringify(result)}`);
       assert.ok(Math.abs(result.top - 1) < 1, `${mode}: top corner ${JSON.stringify(result)}`);
       assert.equal(result.width, 40, `${mode}: image button width`);
       assert.equal(result.height, 40, `${mode}: image button height`);
       assert.match(result.normalImage, /\/repeat\.webp/);
-      for (const image of [result.focusImage, result.pendingImage, result.selectedImage]) {
-        assert.match(image, /\/repeat-active\.webp/, `${mode}: interactive artwork`);
+      assert.match(style, /\.screen\.is-active \.era-main \.line button\.choice\.era-repeat:enabled:is\(:hover, :focus, :active\)/);
+      for (const image of [result.pendingImage, result.selectedImage]) {
+        assert.match(image, /\/repeat-active\.webp/, `${mode}: interactive artwork ${JSON.stringify(result)}`);
       }
       assert.equal(result.radius, "6px");
       assert.equal(result.hint, '"X"');
@@ -890,7 +984,7 @@ test("sky dialog fits its contents and keeps the panorama visible while narratio
   }
 });
 
-test("stats keep content height while player grows and sidebar scroll chains to the page", { skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH" }, async () => {
+test("stats scroll when constrained while sidebar overflow belongs to the terminal", { skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH" }, async () => {
   const [style, handheld] = await Promise.all([
     readFile(new URL("../web/generated/style.css", import.meta.url), "utf8"),
     readFile(new URL("../web/generated/handheld.css", import.meta.url), "utf8"),
@@ -934,8 +1028,11 @@ test("stats keep content height while player grows and sidebar scroll chains to 
         const sidebarAfterStats = sidebar.scrollTop;
         const configBottomBefore = config.getBoundingClientRect().bottom - sidebar.getBoundingClientRect().top;
         sidebar.scrollTop = sidebar.scrollHeight;
+        const terminal = f.querySelector("#terminal");
+        terminal.scrollTop = terminal.scrollHeight;
         return { name: f.dataset.case, sidebarClient: sidebar.clientHeight, sidebarScroll: sidebar.scrollHeight,
           sidebarBefore: before, sidebarAfterStats, sidebarScrolled: sidebar.scrollTop,
+          sidebarOverflow: getComputedStyle(sidebar).overflowY, terminalScrolled: terminal.scrollTop,
           playerHeight: player.getBoundingClientRect().height, statsFocused, configBottomBefore,
           configBottom: config.getBoundingClientRect().bottom - sidebar.getBoundingClientRect().top,
           statsClient: stats?.clientHeight, statsScroll: stats?.scrollHeight, statsTop: stats?.scrollTop,
@@ -958,12 +1055,19 @@ test("stats keep content height while player grows and sidebar scroll chains to 
       assert.ok(match);
       const results = JSON.parse(match[1]) as Array<{
         name: string; sidebarClient: number; sidebarScroll: number; sidebarBefore: number; sidebarAfterStats: number;
-        sidebarScrolled: number; playerHeight: number; configBottom: number; configBottomBefore: number; statsFocused: boolean;
+        sidebarScrolled: number; sidebarOverflow: string; terminalScrolled: number;
+        playerHeight: number; configBottom: number; configBottomBefore: number; statsFocused: boolean;
         statsClient?: number; statsScroll?: number; statsTop?: number; statsOverflow?: string; leftDisplay: string; scrollChain: string; toggleGap: number;
       }>;
       const wide = results.find(result => result.name === "wide")!;
-      assert.notEqual(wide.statsOverflow, "auto", mode);
-      assert.equal(wide.statsScroll, wide.statsClient, `${mode}: stats fit their contents`);
+      for (const result of results) {
+        assert.equal(result.sidebarOverflow, "visible", `${mode}/${result.name}: sidebar is not a scroll container`);
+        assert.equal(result.sidebarScrolled, 0, `${mode}/${result.name}: sidebar cannot scroll`);
+      }
+      assert.equal(wide.statsOverflow, "auto", mode);
+      assert.ok(wide.statsScroll! > wide.statsClient!, `${mode}: tall stats overflow independently`);
+      assert.ok(wide.statsTop! > 0, `${mode}: stats can scroll`);
+      assert.ok(wide.statsFocused, `${mode}: stats remain keyboard accessible`);
       assert.equal(wide.leftDisplay, "contents");
       assert.equal(wide.scrollChain, "auto");
       assert.equal(wide.sidebarBefore, wide.sidebarAfterStats, `${mode}: scrolling stats does not scroll player`);
@@ -973,9 +1077,8 @@ test("stats keep content height while player grows and sidebar scroll chains to 
       assert.ok(short.playerHeight >= wide.playerHeight, `${mode}: spare space expands player`);
       assert.ok(short.toggleGap > wide.toggleGap, `${mode}: extra player height goes above Auto-TSP`);
       const large = results.find(result => result.name === "large-player")!;
-      assert.ok(large.sidebarScroll > large.sidebarClient, `${mode}: oversized player remains reachable by sidebar scrolling`);
-      assert.ok(large.sidebarScrolled > 0 && large.configBottom <= large.sidebarClient + 1,
-        `${mode}: sidebar scrolling reaches the last player control`);
+      assert.ok(large.sidebarScroll > large.sidebarClient, `${mode}: oversized player overflows the sidebar`);
+      assert.ok(large.terminalScrolled > 0, `${mode}: terminal scrolling reaches oversized player`);
       const noStats = results.find(result => result.name === "no-stats")!;
       assert.ok(noStats.configBottomBefore <= noStats.sidebarClient + 1, `${mode}: player is visible without stats`);
       const stacked = results.find(result => result.name === "stacked")!;

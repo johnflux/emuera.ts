@@ -43,7 +43,7 @@ DO
 					CONTINUE
 			ENDIF
 			nCount ++
-			HTML_PRINT @"<div class='era-inventory-item' title='%HOTPATCH_ATTRIBUTE(HTML_ESCAPE(ITEM_EXPLANATION(nIndex)))%'><span class='era-inventory-name'>%HTML_ESCAPE(ITEMNAME_TR(nIndex))%</span><span class='era-inventory-quantity' title='Quantity'>{ITEM:nIndex}</span></div>"
+			HTML_PRINT HOTPATCH_INVENTORY_ITEM(nIndex)
 		NEXT
 		HTML_PRINT "<era-close>"
 		HTML_PRINT "<div class='era-inventory-empty'>No items in this category.</div>"
@@ -71,5 +71,121 @@ DO
 		nView = 0
 	CASEELSE
 		sError '= "Invalid Input"
+	ENDSELECT
+LOOP 1
+
+@HOTPATCH_INVENTORY_ITEM(nIndex, nUsable = 0)
+#FUNCTIONS
+#DIM DYNAMIC nIndex
+#DIM DYNAMIC nUsable
+#DIMS DYNAMIC sItem
+sItem '= @"<span class='era-inventory-name'>%HTML_ESCAPE(ITEMNAME_TR(nIndex))%</span><span class='era-inventory-quantity' title='Quantity'>{ITEM:nIndex}</span>"
+IF nUsable
+	RETURNF @"<button value='{nIndex}' class='era-inventory-item era-inventory-use' title='%HOTPATCH_ATTRIBUTE(HTML_ESCAPE(ITEM_EXPLANATION(nIndex)))%'><span class='command-number'>[{nIndex}]</span>%sItem%</button>"
+ENDIF
+RETURNF @"<div class='era-inventory-item' title='%HOTPATCH_ATTRIBUTE(HTML_ESCAPE(ITEM_EXPLANATION(nIndex)))%'>%sItem%</div>"
+
+; Omit the legacy text prompt and unreachable picker; keep the game's validation and effects.
+@COM490
+#DIM 対象
+#DIM 使用アイテム
+#DIM DYNAMIC nPage
+VARSET LOCAL
+VARSET LOCALS
+対象 = MASTER
+$LOOP
+CALL QoL_490_ITEMMENU(対象, nPage)
+使用アイテム = RESULT
+SIF 使用アイテム == 999
+	RETURN -1
+IF 使用可能アイテム(使用アイテム) == 0 || ITEM:使用アイテム <= 0
+	GOTO LOOP
+ENDIF
+IF 対象 != MASTER && 使用可能アイテム(使用アイテム) == 1
+	GOTO LOOP
+ENDIF
+IF (ITEMTYPE_FOOD(使用アイテム) || ITEMTYPE_MOD(使用アイテム) == 3) && !TIME_PROGRESS(TCVAR:対象:空腹時刻)
+	PRINTFORMW \@ 対象 == MASTER ? You are # %CALLNAME:対象% is \@ not hungry enough.
+	GOTO LOOP
+ENDIF
+IF (ITEMTYPE_SWEETS(使用アイテム) || ITEMTYPE_MOD(使用アイテム) == 4) && !TIME_PROGRESS(TCVAR:対象:デザート空腹時刻)
+	PRINTFORMW \@ 対象 == MASTER ? You are # %CALLNAME:対象% is \@ not hungry enough for a snack.
+	GOTO LOOP
+ENDIF
+TFLAG:193 = 使用アイテム
+TFLAG:194 = 対象 == MASTER ? MASTER # 1
+CALL QOL_USE_ITEM(使用アイテム, 対象)
+SIF RESULT == -999
+	GOTO LOOP
+
+; Keep COM490's selection/effect contract; replace only its paginated picker.
+@QoL_490_ITEMMENU(対象, nPage)
+#DIM REF 対象
+#DIM REF nPage
+#DIMS CONST sCategoryName = "All", "Heal", "Buff", "Food", "Snack", "Fruit", "Misc"
+#DIM nCategory
+#DIM DYNAMIC nStart
+#DIM DYNAMIC nIndex
+#DIM DYNAMIC nCount
+#DIMS DYNAMIC sTabs
+#DIMS DYNAMIC sHeader
+nStart = LINECOUNT
+nPage = 0
+DO
+	CLEARLINE LINECOUNT - nStart
+	HTML_PRINT "<era-open class='era-dialog era-inventory era-item-use'>"
+	sHeader '= @"<div class='era-inventory-header'><div class='era-inventory-heading'><div><span class='era-inventory-title'>Items</span><span class='era-sub'>%HTML_ESCAPE(ALTNAME_OR_CALLNAME(対象))%</span></div><button value='9999' class='era-dialog-close' title='Close items'>×</button></div>"
+	sTabs '= ""
+	FOR nIndex, 0, VARSIZE("sCategoryName")
+		sTabs += @"<button value='{2000 + nIndex}' class='era-sheet-subpage%(nIndex == nCategory ? " era-current" # "")%'>%sCategoryName:nIndex%</button>"
+	NEXT
+	sHeader += @"<div class='era-sheet-subpages era-inventory-tabs'>%sTabs%</div><div class='era-sub'>Snack and Food items have a cooldown.</div><div class='era-inventory-tools'><button value='9000' class='era-chip-button'>Collector's Gap: %(FLAG:Cスキマ自動仕様 ? "ON" # "OFF")%</button>"
+	SIF ITEM:昆虫採集セット
+		sHeader += "<button value='9001' class='era-chip-button'>Check Bug Cage</button>"
+	IF TARGET && SHIRAHU(TARGET)
+		sHeader += @"<button value='9998' class='era-chip-button'>Use on %HTML_ESCAPE(ALTNAME_OR_CALLNAME(対象 == MASTER ? TARGET # MASTER))%</button>"
+	ENDIF
+	HTML_PRINT sHeader + "</div></div>"
+	HTML_PRINT "<era-open class='era-inventory-body'>"
+	HTML_PRINT "<era-open class='era-inventory-grid'>"
+	nCount = 0
+	FOR nIndex, 0, VARSIZE("ITEM")
+		SIF !ITEM:nIndex || (nCategory && ITEMTYPE(nIndex) != nCategory)
+			CONTINUE
+		IF 対象 != MASTER
+			SIF 使用可能アイテム(nIndex) != 2
+				CONTINUE
+		ELSE
+			SIF !使用可能アイテム(nIndex)
+				CONTINUE
+		ENDIF
+		nCount ++
+		HTML_PRINT HOTPATCH_INVENTORY_ITEM(nIndex, 1)
+	NEXT
+	HTML_PRINT "<era-close>"
+	HTML_PRINT "<div class='era-inventory-empty'>No items in this category.</div>"
+	HTML_PRINT "<era-close>"
+	HTML_PRINT @"<div class='era-inventory-footer'><span class='era-inventory-filter'></span><span><span class='era-inventory-count'>{nCount} item type%(nCount == 1 ? "" # "s")%</span> · %sCategoryName:nCategory%</span><button value='9999' class='era-chip-button'>Return</button></div>"
+	HTML_PRINT "<era-close>"
+	BINPUT
+	CLEARLINE LINECOUNT - nStart
+	SELECTCASE RESULT
+	CASE 9999
+		RETURN 999
+	CASE 9000
+		FLAG:Cスキマ自動仕様 = !FLAG:Cスキマ自動仕様
+		PRINTFORMW Automatic usage has been switched \@ FLAG:Cスキマ自動仕様 ? ON# OFF\@.
+	CASE 9001
+		CALL SHOW_MUSHI_CAGE
+	CASE 9998
+		IF 対象 != MASTER
+			対象 = MASTER
+		ELSEIF TARGET && SHIRAHU(TARGET)
+			対象 = TARGET
+		ENDIF
+	CASE 2000 TO 2006
+		nCategory = RESULT - 2000
+	CASEELSE
+		RETURN RESULT
 	ENDSELECT
 LOOP 1

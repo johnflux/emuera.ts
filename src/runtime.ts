@@ -136,7 +136,43 @@ export interface InputRequest {
   /** AWAIT yields to the host even when SKIPDISP is hiding output. */
   sleep?: boolean;
 }
-type Yield = { output: Output } | { input: InputRequest };
+type Yield = { output: Output } | { input: InputRequest; automatic?: boolean };
+
+/** Only surviving content since the last input needs the fallback command acknowledgement. */
+function hasUnacknowledgedOutput(output: Output[]): boolean {
+  const lines: boolean[] = [];
+  let current = false;
+  for (const item of output) {
+    if (item.type === "clear") {
+      if (item.count > 0) {
+        lines.splice(Math.max(0, lines.length - item.count));
+        current = false;
+      }
+      continue;
+    }
+    if (item.type === "button") {
+      current ||= item.text.trim() !== "";
+      continue;
+    }
+    const content = item.type === "input" ? "" : item.type === "html" ? plainHtml(item.text) : item.text;
+    const graphical = item.type === "html" && /<(?:img|shape|svg|canvas)\b/i.test(item.text);
+    if (item.type === "html") {
+      current ||= content.trim() !== "" || graphical;
+      for (let i = 0; i < (item.breaks ?? 0); i++) {
+        lines.push(current);
+        current = content.trim() !== "" || graphical;
+      }
+    } else {
+      const segments = content.split("\n");
+      for (const [i, segment] of segments.entries()) {
+        if (i > 0) { lines.push(current); current = false; }
+        current ||= segment.trim() !== "";
+      }
+    }
+    if (item.newline) { lines.push(current); current = false; }
+  }
+  return current || lines.some(Boolean);
+}
 /** What characters may do when talking among themselves away from the player (see characterTool). */
 const ASIDE_TOOLS = new Set(["describe_scene", "get_character_info", "find_characters", "change_feelings", "change_mark", "tell", "think"]);
 export interface Snapshot {
@@ -1357,7 +1393,7 @@ export class Runtime {
       if (next !== undefined) { this.setNumber("SELECTCOM", next); continue; }
       if (yield* this.commandEnded()) return true;
       // The eraTW presentation hotpatch replaces the freeze announcement with a nonblocking GUI burst.
-      if (this.waits === waits && !(animatedTime && this.number("SELECTCOM") === 355n)) yield { input: { kind: "wait" } };
+      if (this.waits === waits && !(animatedTime && this.number("SELECTCOM") === 355n)) yield { input: { kind: "wait" }, automatic: true };
       return false;
     }
   }
@@ -1888,6 +1924,7 @@ export class Runtime {
           return this.withDebug({ status: "halted", output, input: null, error: null, title: this.windowTitle(), target: this.currentTarget() });
         }
         if ("input" in next.value) {
+          if (next.value.automatic && !hasUnacknowledgedOutput(output)) continue;
           if (this.skipDisplay && !next.value.input.sleep) {
             if (next.value.input.kind === "wait") continue;
             throw new EraError("Input was requested while SKIPDISP is hiding output; wrap it in NOSKIP...ENDNOSKIP", this.currentSource);

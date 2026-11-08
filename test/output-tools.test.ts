@@ -158,6 +158,7 @@ test("desktop clipboard writes use Electron IPC and reject non-game frames and o
       if (name === "node:url") return {};
       if (name === "./game-paths.cjs") return () => {};
       if (name === "./steam-launch.cjs") return () => false;
+      if (name === "./update-check.cjs") return { compareVersions() {}, getLatestVersion() {} };
       throw new Error("Unexpected import: " + name);
     },
     console: { error() {} }, sender,

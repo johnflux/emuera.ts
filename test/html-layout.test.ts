@@ -1254,6 +1254,7 @@ test("last command is a placeholder, never input data, and defaults and waits ta
     lastOutputLine: () => null,
     terminal: { ...element, querySelectorAll: () => [], querySelector: () => chatHost },
     islandRoot: { querySelectorAll: () => [] },
+    handheld: { enabled: () => false },
     command: field, send: { ...element, disabled: false, textContent: "" },
     document: { querySelector: () => ({ hidden: false }) },
     startButtons: [], restartButton: element, debugButton: { disabled: false },
@@ -1334,7 +1335,7 @@ test("active title fills the terminal below the visible interpreter header", asy
   assert.doesNotMatch(css, /body:has\(\.screen\.is-active \.era-launch\) > header/);
   assert.match(css, /#terminal:has\(\.screen\.is-active \.era-launch\) \{[^}]*container-type: size;/);
   assert.match(css, /\.screen\.is-active \.era-launch \{[^}]*100cqw[^}]*100cqh[^}]*height: 100%;/);
-  assert.match(css, /body:has\(\.screen\.is-active \.era-launch\) #input-form \{ display: none; \}/);
+  assert.match(css, /body\.is-handheld:has\(\.screen\.is-active \.era-launch\) #input-form \{ display: none; \}/);
 });
 
 test("title choices highlight the focused or hovered button without an outline", async () => {
@@ -1461,7 +1462,8 @@ test("title Continue is disabled without a save and enabled when a save is avail
     islandRoot: { querySelectorAll: () => [] }, choiceControl: () => button,
     document: { querySelector: () => ({ hidden: false }) },
     command: {}, send: element, startButtons: [], restartButton: element, debugButton: {},
-    autoAdvance: { update() {}, isPaused: () => false }, mainChatInput: () => false, lastOutputLine: () => null,
+    autoAdvance: { update() {}, isPaused: () => false }, handheld: { enabled: () => false },
+    mainChatInput: () => false, lastOutputLine: () => null,
     busy: false, expiring: false, input: { kind: "integer", buttonValues: ["2", "0", "1"] },
     middaySaveButtons: [], middayLoadButtons: [], midday: null, continueAvailable: false, lastCommand: "",
   };
@@ -1517,7 +1519,8 @@ test("room overlays reserve no layout height and chat follows every responsive m
   assert.match(css, /\.era-main-sidebar > \.era-main-right \{ flex: 1; \}/);
   assert.match(css, /\.era-main-sidebar > \.era-main-left \{ display: contents; \}/);
   assert.match(css, /\.era-main-left > \.era-stats \{ flex: none; max-height: fit-content; \}/);
-  assert.match(css, /\.era-main-sidebar \{[^}]*overscroll-behavior-y: auto;/);
+  assert.match(css, /\.era-main-sidebar \{ min-height: 0; contain: size; \}/);
+  assert.match(css, /\.era-main-sidebar \.era-stats \{ flex: 0 1 auto; min-height: 0; overflow-y: auto; \}/);
   assert.match(css, /\.era-player-management > \.line:has\(\.era-auto-toggles\) \{ margin-top: auto;/);
   assert.match(css, /\.line button\.choice:is\(\.era-button-sidebar, \.era-button-sidebar-wide, \.era-button-inventory\) \{ padding: 6px 10px; \}/);
   assert.match(css, /\.checkbox-control\.era-toggle \{ padding: 3px 7px; gap: 6px;/);

@@ -20,6 +20,7 @@ function choice(value: string, textContent: string, controlText?: string) {
     dataset: { value },
     textContent,
     closest: () => controlText === undefined ? null : { textContent: controlText },
+    matches: () => false,
   };
 }
 
@@ -62,6 +63,7 @@ async function inputHarness() {
     get expiring() { return state.expiring; },
     get input() { return state.input; },
     set queuedSubmit(value: typeof state.queuedSubmit) { state.queuedSubmit = value; },
+    pendingScreen: false,
     settling: () => false,
     Element: class {},
     document: {

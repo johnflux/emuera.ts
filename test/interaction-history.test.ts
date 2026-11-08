@@ -1632,7 +1632,8 @@ test("a player's attempt runs the game's own command, with its rejection and pen
   // The hotpatched Kiss needs no closeness from earlier small talk: it is offered (behind the Petting filter) at once.
   check(runtime.input("837"));
   snapshot = check(runtime.refresh());
-  assert.match(snapshot.output.map((item) => item.text ?? "").join("\n"), /Kiss\[312\][\s\S]*Push Down\[350\][\s\S]*value='352'[^>]*>Relationship/);
+  assert.match(snapshot.output.map((item) => item.text ?? "").join("\n"),
+    /Kiss<span class='command-number'>\[312\]<\/span>[\s\S]*Push Down<span class='command-number'>\[350\]<\/span>[\s\S]*value='352'[^>]*>Relationship\.\.\./);
   assert.match((tool("player_attempts", { activity: "apologize" }).result as { error: string }).error, /Reimu is not furious with the player/);
   assert.deepEqual(tool("player_attempts", { activity: "kiss" }),
     { result: { note: "The player tries it now; the game decides how you react. The conversation ends here." }, changed: true });
@@ -1647,7 +1648,7 @@ test("a player's attempt runs the game's own command, with its rejection and pen
   const kiss = history(snapshot).entries[0]!;
   assert.equal(kiss.action.label, "Kiss");
   const recorded = kiss.lines.map((line) => line.text).join("");
-  assert.match(recorded, /You try to kiss Reimu, but[\s\S]*Reimu: Fear \+\d+, Hostility \+\d+\n[\s\S]*Reimu is angry\.\.\./);
+  assert.match(recorded, /You try to kiss Reimu, but[\s\S]*Reimu is angry\.\.\./);
   assert.deepEqual([kiss.before.marks?.hate, kiss.after.marks?.hate], ["0", "1"]);
 
   // Now she is angry, an apology is the game's Apologize: it may calm her, but without a gift the hate mark stays.

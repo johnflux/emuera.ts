@@ -2,6 +2,16 @@
 
 A TypeScript/Node.js interpreter for Emuera/eramaker ERB, with a browser terminal.
 
+### End-of-command acknowledgement
+
+The browser runtime adds a fallback Continue wait after TRAIN's `EVENTCOMEND`
+only when no input occurred during that event and visible output remains since
+the last input. Blank/whitespace-only lines, input echoes and output removed by
+`CLEARLINE` do not require acknowledgement. Text, HTML content and pictures still
+do. Explicit ERB waits (`WAIT`, `PRINTW`, timed waits and others) are preserved,
+even when they print no text. This is a deliberate browser UX difference from
+Emuera's unconditional fallback wait.
+
 ### TW midday quick saves
 
 The quick/controller menu exposes **Quicksave** at TW's system TRAIN

@@ -18,7 +18,9 @@
 .era-main-last { grid-area: last; color: #888; }
 @container (min-width: 761px) {
   /* The sidebar spans grid rows; its content must not force those rows taller than the screen. */
-  .era-main-sidebar { min-height: 0; overflow-y: auto; overscroll-behavior-y: auto; contain: size; }
+  .era-main-sidebar { min-height: 0; contain: size; }
+  .era-main-sidebar > .era-main-right { flex: 1 0 auto; }
+  .era-main-sidebar .era-stats { flex: 0 1 auto; min-height: 0; overflow-y: auto; }
   .era-main-sidebar .era-stats:focus-visible { outline: 2px solid #7ccce3; outline-offset: -2px; }
   .era-main:not(:has(.era-counters)) {
     grid-template-rows: auto auto 1fr auto;

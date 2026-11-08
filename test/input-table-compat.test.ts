@@ -253,7 +253,7 @@ test("image tooltip UI paints a graphics canvas while missing IDs and ordinary t
     };
     const describe = runInNewContext(`${source.slice(start, end)}\ndescribe`, scope);
     describe({
-      classList: { add() {} }, dataset: {}, matches: () => false,
+      classList: { add() {}, contains: () => true }, dataset: {}, matches: () => false,
       closest: (selector: string) => selector.includes(".screen.is-active") ? {} : null,
       addEventListener(name: string, handler: () => Promise<void>) { handlers.set(name, handler); },
       setAttribute() {},

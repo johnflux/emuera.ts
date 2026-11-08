@@ -53,9 +53,6 @@ nAbleCount = 0
 
 ;コマンド表示 (the usable commands first, so the filters can leave out toggles that would change nothing)
 FOR LOCAL,0,800
-	; Inventory has a dedicated GUI entry on the player card.
-	SIF LOCAL == 490
-		CONTINUE
 	IF LOCAL == 352
 		IF TARGET != MASTER && TARGET >= 0 && TFLAG:100
 			nAble:nAbleCount = LOCAL
@@ -704,7 +701,6 @@ RETURNF @"<button value='{nValue}' class='era-toggle%sClass%%(nOn ? " era-on" # 
 #DIMS DYNAMIC sHtml
 #DIMS DYNAMIC sMoan
 #DIMS DYNAMIC sMoanChecked
-sHtml '= HOTPATCH_BUTTON("Config", 809, "", "sidebar-wide")
 IF TARGET > 0 && TARGET != MASTER && (CFLAG:MASTER:うふふ || CFLAG:TARGET:うふふ || CFLAG:MASTER:イタズラ || CFLAG:TARGET:イタズラ || FLAG:70 || FREE_USE_ACTIVE())
 	sHtml += HOTPATCH_TOGGLE("Automatic Condom", 838, FLAG:自動ゴム)
 	SELECTCASE CFLAG:オート喘ぎ
@@ -724,6 +720,7 @@ IF TARGET > 0 && TARGET != MASTER && (CFLAG:MASTER:うふふ || CFLAG:TARGET:う
 	sHtml += @"<button value='4000' class='era-toggle' role='checkbox' aria-checked='%sMoanChecked%' title='%sMoan%: Cycles this character through No, Yes and Yes (Ahegao). Adds automatic moans during intimate actions when no scripted dialogue is provided; Ahegao enables more expressive variations.'>%sMoan%</button>"
 	sHtml += HOTPATCH_TOGGLE("Standing", -9122, CFLAG:STANDING_TOGGLE, "", "Prefer standing versions of supported intimate positions with this character. When off, use normal positions where the location allows; standing may still be required elsewhere. Does not apply during sleep sessions.")
 ENDIF
+sHtml += HOTPATCH_BUTTON("Config", 809, "", "sidebar-wide")
 HTML_PRINT @"<div class='era-toggles era-settings'>%sHtml%</div>"
 
 @Add_Custom_List_COMS
@@ -786,7 +783,7 @@ SIF !GROUPMATCH(sVariant, "action", "sidebar", "sidebar-wide", "slim", "primary"
 IF GROUPMATCH(sVariant, "action", "sidebar", "sidebar-wide")
 	sSuffix '= @"<span class='command-number'>[{nValue}]</span>"
 ELSEIF sVariant == "inventory"
-	sSuffix '= "<span class='era-control-arrow'>›</span>"
+	sSuffix '= @" <span class='command-number'>[{nValue}]</span><span class='era-control-arrow'>›</span>"
 ELSEIF sVariant == "unavailable"
 	sSuffix '= "<span class='era-button-unavailable-mark'>[...]</span>"
 ENDIF
