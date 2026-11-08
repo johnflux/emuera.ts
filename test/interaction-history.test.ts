@@ -1766,7 +1766,7 @@ test("AI friendship info separates current favor from the one-time bonus history
   check(runtime.input("8"));
   let snapshot = check(runtime.input("2"));
   for (let i = 0; snapshot.input?.kind === "wait" && i < 40; i++) snapshot = check(runtime.input(""));
-  assert.match(snapshot.output.map((item) => item.text ?? "").join("\n"), /class='era-guard-control'><button value='352'>Relationship\.\.\.<\/button>/);
+  assert.match(snapshot.output.map((item) => item.text ?? "").join("\n"), /<button value='352' class='era-button era-button-action [^>]*>Relationship\.\.\.<span class='command-number'>\[352\]<\/span><\/button>/);
   const id = history(snapshot).character.id;
   const tool = (name: string, args: Record<string, unknown> = {}) => runtime.characterTool(id, name, args);
   assert.equal(tool("player_attempts", { activity: "become_friends" }).changed, true);

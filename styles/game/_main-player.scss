@@ -1,7 +1,8 @@
 .era-main .era-player { display: flex; flex-direction: column; }
 .era-player > * { flex-shrink: 0; }
-.era-player > .line:has(.era-player-actions) { margin-top: auto; }
-.era-player-actions { display: flex; margin-top: auto; padding-top: 10px; }
+.era-player-actions { display: flex; padding-top: 10px; }
+.era-player > .era-player-management { flex: 1; display: flex; flex-direction: column; }
+.era-player-management > .line:has(.era-auto-toggles) { margin-top: auto; padding-top: 6px; }
 .era-main .era-player .line button.choice.era-player-control { display: inline-flex; align-items: center; gap: 14px; width: 100%; }
 .era-player-control .interactive-label { text-decoration: none; }
 .era-control-arrow { margin-left: auto; color: #71b8cd; font-size: 1.3em; line-height: .8; }

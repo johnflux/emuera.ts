@@ -260,9 +260,10 @@ test("fallback double-line map glyphs occupy Emuera's single-column cells in HTM
   assert.match(source, /node\.nodeType === Node\.TEXT_NODE\) \{ appendCells\(destination, node\.textContent\); return; \}/);
 });
 
-test("custom action button wrappers participate directly in the action flex row", async () => {
+test("shared action buttons participate directly in the action flex row without tile wrappers", async () => {
   const css = styleSource("style");
-  assert.match(css, /^\.era-actions-group span:has\(> \.era-guard-control\) \{ display: contents; \}/m);
+  assert.match(css, /\.era-actions-group \.output-text:has\(> \.era-button\),/);
+  assert.doesNotMatch(css, /era-guard-control/);
 });
 
 test("sky narration keeps its dialog open across waits and continues through its own button", async () => {
@@ -1511,17 +1512,14 @@ test("room overlays reserve no layout height and chat follows every responsive m
   assert.match(css, /\.era-main:has\(\.era-main-chat\):not\(:has\(\.era-counters\)\) \{ grid-template-rows: auto 1fr auto auto; \}/);
   assert.match(css, /\.era-main:has\(\.era-main-chat\) \{ grid-template-rows: auto 1fr auto auto auto auto; \}/);
   assert.match(css, /\.era-character:has\(\.era-main-chat\) \{ grid-template-rows: auto 1fr; \}/);
-  assert.match(css, /\.era-actions-group span:has\(> \.era-guard-control\) \{ display: contents; \}/);
-  assert.match(css, /\.era-player-management \.era-actions-group :is\(\.print-cell, \.era-guard-control\) \{ display: block; flex: 1 1 100%; \}/);
+  assert.match(css, /\.era-player-management \.era-actions-group \.era-button-sidebar \{ flex: 1 1 100%; min-width: 0; \}/);
   assert.match(css, /button\.choice:is\(\.era-see-more, \.era-info-more\) \{[^}]*border: 0; border-radius: 0;/);
   assert.match(css, /\.era-main-sidebar > \.era-main-right \{ flex: 1; \}/);
-  assert.match(css, /\.era-main-sidebar > \.era-main-left \{ flex: none; \}/);
-  assert.match(css, /\.era-main-left > \.era-stats \{ flex: none; \}/);
-  assert.match(css, /\.era-main-sidebar:has\(\.era-stats\) > \.era-main-left \{ flex: 1 1 0; min-height: 80px; \}/);
-  assert.match(css, /\.era-main-sidebar:has\(\.era-stats\) > \.era-main-right \{ flex: none; \}/);
-  assert.match(css, /\.era-main-sidebar \.era-main-left > \.era-stats \{ flex: 1 1 0; min-height: 0; overflow-y: auto;/);
-  assert.match(css, /\.era-player-actions \{[^}]*margin-top: auto;/);
-  assert.match(css, /\.era-main \.era-player :is\(\.print-cell, \.era-guard-control\),\s*\.era-main \.era-player \.line button\.choice:is\(\.era-player-control, \.era-chip-button\) \{[^}]*padding: 6px 10px;[^}]*border-radius: 4px;/);
+  assert.match(css, /\.era-main-sidebar > \.era-main-left \{ display: contents; \}/);
+  assert.match(css, /\.era-main-left > \.era-stats \{ flex: none; max-height: fit-content; \}/);
+  assert.match(css, /\.era-main-sidebar \{[^}]*overscroll-behavior-y: auto;/);
+  assert.match(css, /\.era-player-management > \.line:has\(\.era-auto-toggles\) \{ margin-top: auto;/);
+  assert.match(css, /\.line button\.choice:is\(\.era-button-sidebar, \.era-button-sidebar-wide, \.era-button-inventory\) \{ padding: 6px 10px; \}/);
   assert.match(css, /\.checkbox-control\.era-toggle \{ padding: 3px 7px; gap: 6px;/);
   assert.match(css, /\.checkbox-control \{[^}]*display: inline-flex; align-items: center;/);
   const patch = await readFile(new URL("../hotpatch/MAIN_SCREEN.ERB", import.meta.url), "utf8");

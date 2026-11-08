@@ -608,6 +608,7 @@ function describe(element, description) {
   element.dataset.tooltip = description;
   if (!element.matches("button, a[href], .checkbox-control")) element.tabIndex = 0;
   async function show() {
+    if (!element.classList.contains("has-tooltip")) return;
     if (busy || !element.closest(".screen.is-active, .cbg-layer, .island-root") || element.matches(".is-stale")) return;
     if (element.closest(".era-occupant-list") && element.querySelector(".sprite")) return;
     hideTooltip();
@@ -2435,6 +2436,7 @@ async function renderSnapshot(snapshot, advanceScreen) {
     continuedScreens = [];
   }
   outputRoot.querySelectorAll("button.choice").forEach(decorateCommandNumbers);
+  for (const submenu of outputRoot.querySelectorAll(".screen.is-active .era-config")) setupConfigSubmenu(submenu);
   markTarget(snapshot.target);
   for (const main of outputRoot.querySelectorAll(".screen.is-active .era-main")) setupMainSidebar(main);
   lastCharacterHistory = snapshot.characterHistory ?? null;
@@ -2715,6 +2717,45 @@ function staleTab(error) {
   setTimeout(() => { void resume(id).then((ok) => { if (ok) message("This run was continued in another tab; caught up with it."); }); });
   return true;
 }
+function setupConfigSubmenu(submenu) {
+  for (const button of submenu.querySelectorAll("button.choice:not(.era-button):not(.era-dialog-close)")) {
+    const structured = button.matches(".era-setup-choice");
+    if (!structured && !button.closest(".era-setup-editor")) continue;
+    if (button.querySelector("input, img, .sprite") || button.getAttribute("role") === "checkbox") continue;
+    const existingName = button.querySelector(".era-setup-choice-name");
+    const existingHelp = button.querySelector(".era-setup-choice-description");
+    const text = button.textContent.trim().replace(/^\[\s*-?\d+\s*\]\s*[-–]?\s*/, "")
+      .replace(/\s*\[\s*(-?\d+)\s*\]$/, (marker, value) => value === button.dataset.value ? "" : marker);
+    const separator = /[：:]\s*/.exec(text);
+    const name = structured ? existingName.textContent : separator ? text.slice(0, separator.index).trimEnd() : text;
+    const state = structured ? button.classList.contains("era-current") ? "Selected" : "" :
+      separator ? text.slice(separator.index + separator[0].length).trim() : "";
+    const setting = document.createElement("span");
+    setting.className = "era-config-setting";
+    const label = document.createElement("span");
+    label.className = "era-config-label";
+    const number = document.createElement("span");
+    number.className = "command-number";
+    number.textContent = `[${button.dataset.value}]`;
+    label.append(number, document.createTextNode(` ${name}`));
+    const answer = document.createElement("span");
+    answer.className = "era-config-state";
+    answer.classList.toggle("era-config-state-off", /^(no|off)$/i.test(state));
+    answer.textContent = state;
+    setting.append(label, answer);
+    const help = document.createElement("span");
+    help.className = "era-config-help";
+    if (existingHelp) help.append(...existingHelp.cloneNode(true).childNodes);
+    else help.textContent = button.dataset.tooltip ?? button.getAttribute("title") ?? "";
+    button.replaceChildren(setting, help);
+    button.classList.add("era-button", "era-button-list");
+    button.classList.remove("has-tooltip", "era-setup-choice");
+    delete button.dataset.tooltip;
+    button.removeAttribute("title");
+    button.removeAttribute("aria-description");
+  }
+}
+
 function setupMainSidebar(main) {
   if (main.querySelector(".era-main-sidebar")) return;
   const sidebar = document.createElement("div");
@@ -2729,7 +2770,7 @@ function setupMainSidebar(main) {
     const row = document.createElement("div");
     row.className = "era-quicksave-row";
     const button = choice("Quicksave", "quicksave");
-    button.classList.add("era-chip-button", "era-quicksave");
+    button.classList.add("era-button", "era-button-sidebar-wide", "era-quicksave");
     row.append(button);
     config.after(row);
   }
@@ -3156,7 +3197,7 @@ function rememberCommand(value, selectedChoice) {
   if (value !== "" && input.kind !== "wait" && input.kind !== "mousekey") {
     const button = selectedChoice ?? [...terminal.querySelectorAll(".screen.is-active .choice")]
       .find((button) => button.dataset.value === value);
-    const labeledControl = button?.closest(".print-cell, .era-guard-control") ?? button;
+    const labeledControl = button?.closest(".print-cell") ?? button;
     let label = labeledControl?.textContent.replace(/\s+/g, " ").split(`[${value}]`).join("").trim() ?? "";
     if (label.startsWith("[") && label.endsWith("]")) label = label.slice(1, -1).trim();
     commandHistory.push({ value, label: label === value ? "" : label });

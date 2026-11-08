@@ -209,7 +209,7 @@ CALL HOTPATCH_PLAYER_SPECIAL
 CALL SHOW_EQUIP_3
 CALL HOTPATCH_PLAYER_GAUGES
 SIF !GETBIT (FLAG:USERCOMフィルタ, 4)
-	HTML_PRINT "<div class='era-player-actions'><button value='805' class='era-player-control era-inventory-button' title='Item list, quantities, categories and search'>Inventory<span class='era-control-arrow'>›</span></button></div>"
+	HTML_PRINT "<div class='era-player-actions'>" + HOTPATCH_BUTTON("Inventory", 805, "Item list, quantities, categories and search", "inventory") + "</div>"
 HTML_PRINT "<era-close>"
 HTML_PRINT "<era-close>"
 

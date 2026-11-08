@@ -9,7 +9,7 @@ export function touchInput() {
 }
 
 export function navigationRect(element) {
-  const control = element.closest(".print-cell, .era-guard-control") ?? element;
+  const control = element.closest(".print-cell") ?? element;
   const rect = control.getBoundingClientRect();
   return { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
 }
@@ -20,7 +20,7 @@ export function decorateCommandNumbers(element) {
   if (!/^-?\d+$/.test(value ?? "")) return;
   const text = element.textContent;
   const markers = [...text.matchAll(/\[\s*(-?\d+)\s*\]/g)].filter((match) => BigInt(match[1]) === BigInt(value));
-  const label = element.closest(".print-cell, .era-guard-control")?.textContent ?? text;
+  const label = element.closest(".print-cell")?.textContent ?? text;
   if (!markers.length || !label.replace(/\[\s*-?\d+\s*\]/g, "").trim()) return;
   if (!text.replace(/\[\s*-?\d+\s*\]/g, "").trim()) {
     element.classList.add("command-number-only");

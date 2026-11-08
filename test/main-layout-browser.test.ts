@@ -10,7 +10,8 @@ import { test } from "node:test";
 import { promisify } from "node:util";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { compactPicture } from "../src/graphics.js";
-import { emptyGame } from "../src/loader.js";
+import { emptyGame, indexScript } from "../src/loader.js";
+import { Runtime } from "../src/runtime.js";
 import { createApp } from "../src/server.js";
 
 const execute = promisify(execFile);
@@ -23,6 +24,256 @@ const browser = [
   "/usr/bin/chromium-browser",
   process.env.PROGRAMFILES && join(process.env.PROGRAMFILES, "Google/Chrome/Application/chrome.exe"),
 ].find((path): path is string => !!path && existsSync(path));
+
+test("Config submenus adapt native and structured choices without changing their inputs", { skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH" }, async () => {
+  const [source, style] = await Promise.all([
+    readFile(new URL("../web/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../web/generated/style.css", import.meta.url), "utf8"),
+  ]);
+  const adapter = source.slice(source.indexOf("function setupConfigSubmenu("), source.indexOf("function setupMainSidebar("));
+  const html = `<!doctype html><meta charset="utf-8"><style>${style}</style><body><div class="screen is-active">
+    <div class="era-config era-setup era-setup-editor" style="width:1300px"><div class="era-setup-body">
+      <div class="line"><span class="print-cell"><button class="choice has-tooltip" data-value="1" data-tooltip="Inline help">[1] - Native setting：No</button></span>
+        <span><button class="choice" data-value="2">[2] Second choice</button></span></div>
+      <div class="line"><button class="choice" data-value="7">[7] OFF button without a state</button></div>
+      <div class="line"><button class="choice" data-value="8">Command [V][  8]</button></div>
+    </div></div>
+    <div class="era-config era-setup"><div class="era-setup-grid">
+      <div class="line"><span><button class="choice era-setup-choice era-current" data-value="4130">
+        <span class="era-setup-choice-name">Normal</span><span class="era-setup-choice-description">Keep <strong>rich help</strong>.</span></button></span></div>
+      <button class="choice era-setup-step" data-value="9900">37</button>
+    </div></div>
+    <div class="era-setup"><button class="choice era-setup-choice" data-value="9">Startup choice</button></div>
+    </div><script>${adapter}
+      const native = document.querySelector("[data-value='1']");
+      let clicked = null;
+      native.addEventListener("click", () => clicked = native.dataset.value);
+      document.querySelectorAll(".era-config").forEach(setupConfigSubmenu);
+      const before = native.innerHTML;
+      document.querySelectorAll(".era-config").forEach(setupConfigSubmenu);
+      native.click();
+      const second = document.querySelector("[data-value='2']");
+      const structured = document.querySelector("[data-value='4130']");
+      document.body.textContent = JSON.stringify({
+        clicked, idempotent:before === native.innerHTML,
+        variant:native.classList.contains("era-button-list"),
+        nativeLabel:native.querySelector(".era-config-label").textContent,
+        state:native.querySelector(".era-config-state").textContent,
+        help:native.querySelector(".era-config-help").textContent,
+        dim:getComputedStyle(native.querySelector(".era-config-label")).opacity,
+        tooltip:native.classList.contains("has-tooltip") || !!native.dataset.tooltip,
+        padding:getComputedStyle(native).padding, border:getComputedStyle(native).borderWidth,
+        rows:second.getBoundingClientRect().top >= native.getBoundingClientRect().bottom,
+        selected:structured.querySelector(".era-config-state").textContent,
+        richHelp:!!structured.querySelector(".era-config-help strong"),
+        specialized:!document.querySelector(".era-setup-step").classList.contains("era-button-list"),
+        startup:!document.querySelector("[data-value='9']").classList.contains("era-button-list"),
+        trailing:document.querySelector("[data-value='8'] .era-config-label").textContent
+      });
+    </script>`;
+  const profile = await mkdtemp(join(tmpdir(), "era-config-submenus-"));
+  try {
+    const { stdout } = await execute(browser!, ["--headless", "--disable-gpu", "--no-first-run", `--user-data-dir=${profile}`,
+      "--window-size=1440,900", "--dump-dom", `data:text/html;base64,${Buffer.from(html).toString("base64")}`],
+      { maxBuffer: 8 * 1024 * 1024, timeout: 30000 });
+    const match = stdout.match(/<body[^>]*>([\s\S]*?)<\/body>/);
+    assert.ok(match);
+    assert.deepEqual(JSON.parse(match[1]), {
+      clicked: "1", idempotent: true, variant: true, nativeLabel: "[1] Native setting", state: "No",
+      help: "Inline help", dim: "0.5", tooltip: false, padding: "0px", border: "0px", rows: true,
+      selected: "Selected", richHelp: true, specialized: true, startup: true, trailing: "[8] Command [V]",
+    });
+  } finally {
+    await rm(profile, { recursive: true, force: true });
+  }
+});
+
+test("config list buttons are borderless single-column rows with right-hand help", { skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH" }, async () => {
+  const [source, attributes, style] = await Promise.all([
+    readFile(new URL("../hotpatch/MAIN_SCREEN_COMMANDS.ERB", import.meta.url), "utf8"),
+    readFile(new URL("../hotpatch/INFO_PALAM.ERB", import.meta.url), "utf8"),
+    readFile(new URL("../web/generated/style.css", import.meta.url), "utf8"),
+  ]);
+  const game = emptyGame();
+  indexScript(game, attributes.slice(attributes.indexOf("@HOTPATCH_ATTRIBUTE(")), "<attributes>");
+  indexScript(game, source.slice(source.indexOf("@HOTPATCH_BUTTON(")), "<buttons>");
+  indexScript(game, `@SYSTEM_TITLE
+HTML_PRINT HOTPATCH_BUTTON("Setting <one>", 1, "It's help", "list", "", "On", "Helpful <text>")
+HTML_PRINT HOTPATCH_BUTTON("Setting two", 2, "", "list", "era-config-hidden", "Off", "More help", 0)
+HTML_PRINT HOTPATCH_BUTTON("Setting three", 3, "", "list", "", "On", "More help")
+HTML_PRINT HOTPATCH_BUTTON("Long answer", 4, "", "list", "", "A considerably longer answer than twenty-three characters", "Help")
+HTML_PRINT HOTPATCH_BUTTON("Disabled setting", 5, "", "list", "", " No ", "Help")
+BINPUT`, "<list-fixture>");
+  const snapshot = new Runtime(game).start();
+  assert.equal(snapshot.error, null);
+  const markup = snapshot.output.flatMap(item => item.type === "html" ?
+    [`<div class="line"><span class="output-text">${item.text.replace("class='era-button", "class='choice era-button")}</span></div>`] : []).join("");
+  assert.match(markup, /<span class='command-number'>\[1\]<\/span> Setting &lt;one&gt;/);
+  assert.match(markup, /Helpful &lt;text&gt;/);
+  assert.match(markup, /aria-disabled='true'/);
+  const html = `<!doctype html><style>${style}</style><body><div class="screen is-active"><div class="era-dialog era-setup era-config" popover>
+    <div class="era-config-grid">${markup}</div></div></div><script>
+    document.querySelector(".era-config").showPopover();
+    const buttons = [...document.querySelectorAll("button")];
+    const first = buttons[0], second = buttons[1], css = getComputedStyle(first);
+    const label = first.querySelector(".era-config-label").getBoundingClientRect();
+    const help = first.querySelector(".era-config-help").getBoundingClientRect();
+    const state = first.querySelector(".era-config-state").getBoundingClientRect();
+    const probe = document.createElement("span");
+    probe.style.cssText = "display:block;width:85ch;grid-column:1";
+    first.append(probe);
+    const minimumWidth = probe.getBoundingClientRect().width;
+    probe.remove();
+    const thirdTop = buttons[2].getBoundingClientRect().top;
+    const hidden = getComputedStyle(second).visibility === "hidden";
+    second.classList.remove("era-config-hidden");
+    const grid = document.querySelector(".era-config-grid");
+    const initialWidth = first.querySelector(".era-config-setting").getBoundingClientRect().width;
+    grid.style.width = "2400px";
+    const grows = first.querySelector(".era-config-setting").getBoundingClientRect().width > initialWidth;
+    grid.style.width = "500px";
+    const narrowHelp = first.querySelector(".era-config-help").getBoundingClientRect();
+    const narrowSetting = first.querySelector(".era-config-setting").getBoundingClientRect();
+    const stacks = narrowHelp.top >= narrowSetting.bottom && first.scrollWidth <= first.clientWidth + 1;
+    grid.style.width = "";
+    document.body.textContent = JSON.stringify({border:css.borderWidth, padding:css.padding, background:css.backgroundColor,
+      sameColumn:first.getBoundingClientRect().left === second.getBoundingClientRect().left,
+      below:second.getBoundingClientRect().top >= first.getBoundingClientRect().bottom,
+      right:help.left > label.right, sameRow:Math.abs(help.top - label.top) < 10,
+      minimumSetting:initialWidth >= minimumWidth - 1,
+      unrestrictedState:getComputedStyle(first.querySelector(".era-config-state")).minWidth === "auto" &&
+        getComputedStyle(first.querySelector(".era-config-state")).maxWidth === "none",
+      grows, stacks,
+      dimmedNo:getComputedStyle(buttons[4].querySelector(".era-config-state")).opacity === "0.5",
+      dimmedLabel:getComputedStyle(buttons[4].querySelector(".era-config-label")).opacity === "0.5",
+      normalHelp:getComputedStyle(buttons[4].querySelector(".era-config-help")).opacity === "1",
+      dimmedOff:getComputedStyle(second.querySelector(".era-config-state")).opacity === "0.5",
+      normalOn:getComputedStyle(first.querySelector(".era-config-state")).opacity === "1",
+      growingState:buttons[3].querySelector(".era-config-state").getBoundingClientRect().width > state.width,
+      helpGap:Math.abs(help.left - state.right - 16) < 1,
+      hidden, stable:buttons[2].getBoundingClientRect().top === thirdTop,
+      fullWidth:document.querySelector(".era-config").getBoundingClientRect().width >= innerWidth - 24});
+    </script>`;
+  const profile = await mkdtemp(join(tmpdir(), "era-config-list-"));
+  try {
+    const { stdout } = await execute(browser!, ["--headless", "--disable-gpu", "--no-first-run", `--user-data-dir=${profile}`,
+      "--window-size=1440,900", "--dump-dom", `data:text/html;base64,${Buffer.from(html).toString("base64")}`],
+      { maxBuffer: 8 * 1024 * 1024, timeout: 30000 });
+    const match = stdout.match(/<body[^>]*>([\s\S]*?)<\/body>/);
+    assert.ok(match);
+    assert.deepEqual(JSON.parse(match[1]), { border: "0px", padding: "0px", background: "rgba(0, 0, 0, 0)",
+      sameColumn: true, below: true, right: true, sameRow: true, minimumSetting: true, unrestrictedState: true,
+      grows: true, stacks: true, growingState: true, dimmedNo: true, dimmedLabel: true, normalHelp: true, dimmedOff: true, normalOn: true,
+      helpGap: true, hidden: true, stable: true, fullWidth: true });
+  } finally {
+    await rm(profile, { recursive: true, force: true });
+  }
+});
+
+test("shared sidebar buttons place muted numbers after labels and hide them consistently", { skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH" }, async () => {
+  const [source, attributes, style, handheld] = await Promise.all([
+    readFile(new URL("../hotpatch/MAIN_SCREEN_COMMANDS.ERB", import.meta.url), "utf8"),
+    readFile(new URL("../hotpatch/INFO_PALAM.ERB", import.meta.url), "utf8"),
+    readFile(new URL("../web/generated/style.css", import.meta.url), "utf8"),
+    readFile(new URL("../web/generated/handheld.css", import.meta.url), "utf8"),
+  ]);
+  const game = emptyGame();
+  indexScript(game, attributes.slice(attributes.indexOf("@HOTPATCH_ATTRIBUTE(")), "<attribute-helper>");
+  indexScript(game, source.slice(source.indexOf("@HOTPATCH_BUTTON(")), "<button-helper>");
+  indexScript(game, source.slice(source.indexOf("@HOTPATCH_PRINT_COM("), source.indexOf("@HOTPATCH_ACTION_KIND(")), "<command-helper>");
+  indexScript(game, `@SYSTEM_TITLE
+HTML_PRINT "<era-open class='era-actions-group'>"
+HTML_PRINT HOTPATCH_BUTTON("Move", 400, "", "sidebar", "era-travel-button")
+HTML_PRINT HOTPATCH_BUTTON("Go Out", 405, "", "sidebar", "era-travel-button")
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-open class='era-settings'>"
+HTML_PRINT HOTPATCH_BUTTON("Config", 809, "", "sidebar-wide")
+HTML_PRINT "<era-close>"
+CALL HOTPATCH_PRINT_COM(352)
+HTML_PRINT HOTPATCH_BUTTON("A&B <test>", -12, "It's <safe>", "action", "custom")
+BINPUT`, "<button-fixture>");
+  const snapshot = new Runtime(game).start();
+  assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
+  assert.deepEqual(snapshot.input?.buttonValues, ["400", "405", "809", "352", "-12"]);
+  const buttons = snapshot.output.flatMap(item => item.type === "html" ? [item.text] : []).join("");
+  assert.match(buttons, /A&amp;B &lt;test&gt;/);
+  assert.match(buttons, /title='It&#39;s &lt;safe&gt;'/);
+  assert.match(buttons, /<button value='352' class='era-button era-button-action [^>]*>Relationship\.\.\.<span class='command-number'>\[352\]<\/span><\/button>/);
+  assert.doesNotMatch(buttons, /era-guard-control|print-cell/);
+  assert.doesNotMatch(source, /<button value='352'/);
+  for (const [label, value] of [["Move", 400], ["Go Out", 405], ["Config", 809]] as const) {
+    assert.match(source, new RegExp(`HOTPATCH_BUTTON\\("${label}", ${value},`));
+    assert.match(buttons, new RegExp(`>${label}<span class='command-number'>\\[${value}\\]</span>`));
+  }
+  const markup = snapshot.output.flatMap(item => {
+    if (item.type !== "html") return [];
+    if (item.text.startsWith("<era-open")) return [item.text.replace("<era-open", "<div")];
+    if (item.text === "<era-close>") return ["</div>"];
+    return [`<div class="line"><span class="output-text">${item.text.replaceAll("class='era-button", "class='choice era-button")}</span></div>`];
+  }).join("");
+  const html = `<!doctype html><meta charset="utf-8"><style>${style}\n${handheld}</style>
+    <body class="MODE"><div class="screen is-active"><div class="era-main"><div class="era-player">
+    <div class="era-player-management" style="width:360px;font-size:20px">${markup}</div>
+    </div></div></div><script>
+      const results = [...document.querySelectorAll(".era-button")].map(button => {
+        const number = button.querySelector(".command-number"), rect = button.getBoundingClientRect();
+        const label = document.createRange(); label.selectNodeContents(button.firstChild);
+        const labelRect = label.getBoundingClientRect(), numberRect = number.getBoundingClientRect();
+        return { value: button.getAttribute("value"), text: button.textContent, width: rect.width,
+          top: rect.top, left: rect.left, right: rect.right, textAlign: getComputedStyle(button).textAlign,
+          font: parseFloat(getComputedStyle(button).fontSize), numberFont: parseFloat(getComputedStyle(number).fontSize),
+          numberColor: getComputedStyle(number).color, numberDisplay: getComputedStyle(number).display,
+          numberAfterLabel: numberRect.left >= labelRect.right };
+      });
+      // dump-dom has no active window; exercise both pseudo-state cascades with equivalent classes.
+      const style = document.querySelector("style");
+      style.textContent = style.textContent.replaceAll(":hover", ".test-hover").replaceAll(":focus-visible", ".test-focus");
+      const highlightColors = ["test-hover", "test-focus"].flatMap(state =>
+        [...document.querySelectorAll(".era-button")].map(button => {
+          const labelBefore = getComputedStyle(button).color;
+          button.classList.add(state);
+          const result = { state, labelBefore, labelAfter: getComputedStyle(button).color,
+            numberAfter: getComputedStyle(button.querySelector(".command-number")).color };
+          button.classList.remove(state);
+          return result;
+        }));
+      document.body.textContent = JSON.stringify({ results, highlightColors });
+    </script>`;
+  const profile = await mkdtemp(join(tmpdir(), "era-numbered-buttons-"));
+  try {
+    for (const [mode, size, hidden] of [["desktop", "1440,1000", false], ["desktop", "1200,700", true], ["is-handheld", "1440,1000", true]] as const) {
+      const args = ["--headless", "--disable-gpu", "--no-first-run", `--user-data-dir=${profile}`, `--window-size=${size}`, "--dump-dom"];
+      if (process.platform === "linux" && process.getuid?.() === 0) args.push("--no-sandbox");
+      args.push(`data:text/html;base64,${Buffer.from(html.replace("MODE", mode)).toString("base64")}`);
+      const { stdout } = await execute(browser!, args, { maxBuffer: 8 * 1024 * 1024, timeout: 30000 });
+      const match = stdout.match(/<body[^>]*>([\s\S]*?)<\/body>/);
+      assert.ok(match);
+      const measured = JSON.parse(match[1]) as { results: Array<{
+        value: string; text: string; width: number; top: number; left: number; right: number;
+        textAlign: string; font: number; numberFont: number; numberColor: string; numberDisplay: string; numberAfterLabel: boolean;
+      }>; highlightColors: Array<{ state: string; labelBefore: string; labelAfter: string; numberAfter: string }> };
+      const { results, highlightColors } = measured;
+      for (const colors of highlightColors) {
+        assert.equal(colors.labelAfter, colors.labelBefore, `${colors.state} preserves the label color`);
+        assert.equal(colors.numberAfter, "rgb(255, 255, 0)", "only the command number turns yellow");
+      }
+      for (const button of results) {
+        assert.equal(button.textAlign, "left");
+        assert.equal(button.numberFont / button.font, .8);
+        assert.equal(button.numberColor, "rgb(108, 119, 128)");
+        assert.equal(button.numberDisplay === "none", hidden, `${mode} ${size}: ${button.text}`);
+        if (!hidden) assert.equal(button.numberAfterLabel, true, button.text);
+      }
+      const [move, goOut, config] = results;
+      assert.equal(move.top, goOut.top, "travel buttons stay side by side");
+      assert.ok(goOut.left >= move.right, "travel buttons do not overlap");
+      assert.ok(config.top > move.top);
+      assert.equal(config.width, 360, "Config retains its full-width click target");
+    }
+  } finally {
+    await rm(profile, { recursive: true, force: true });
+  }
+});
 
 type Measurements = {
   room: number;
@@ -179,9 +430,9 @@ test("compact button sizes share tokens without changing desktop or sprite contr
       <div class="screen is-active" style="font: 12px/1.25 sans-serif">
         <div class="era-actions-group"><div class="line">
           <span class="print-cell" id="tile">Move<button class="choice command-number-only"><span class="command-number">400</span></button></span>
-          <span class="era-guard-control" id="number-guard">Guard<button class="choice command-number-only"><span class="command-number">1</span></button></span>
+          <span class="print-cell" id="number-guard">Guard<button class="choice command-number-only"><span class="command-number">1</span></button></span>
           <span class="print-cell" id="multiline" style="width: 80px">A long action label that wraps across multiple lines<button class="choice command-number-only"><span class="command-number">2</span></button></span>
-          <span class="era-guard-control" id="guard"><button class="choice">Relationship</button></span>
+          <button class="choice era-button era-button-action" id="guard">Relationship<span class="command-number">[352]</span></button>
           <button class="choice" id="choice">Choice</button>
           <button class="choice" id="sprite"><span class="sprite"></span></button>
         </div></div>
@@ -639,7 +890,7 @@ test("sky dialog fits its contents and keeps the panorama visible while narratio
   }
 });
 
-test("stats scroll independently while player controls retain space", { skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH" }, async () => {
+test("stats keep content height while player grows and sidebar scroll chains to the page", { skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH" }, async () => {
   const [style, handheld] = await Promise.all([
     readFile(new URL("../web/generated/style.css", import.meta.url), "utf8"),
     readFile(new URL("../web/generated/handheld.css", import.meta.url), "utf8"),
@@ -657,7 +908,9 @@ test("stats scroll independently while player controls retain space", { skip: br
               `<div class="era-palam-item">Stat ${i + 1}</div>`).join("")}</div></div></div>` : ""}</div>
           <div class="era-main-right"><div class="era-card era-player"><div style="height:${playerHeight}px">Player information</div>
             <div class="line"><button class="choice era-player-control">Inventory</button></div>
-            <div class="line"><button class="choice era-chip-button">Config</button></div>
+            <div class="era-player-management"><div class="era-actions-group"><div class="line"><button class="choice era-button era-button-sidebar">Move</button></div></div>
+              <div class="line"><span class="output-text"><div class="era-auto-toggles"><button class="choice era-toggle">Auto-TSP Movement</button></div></span></div>
+              <div class="era-settings"><div class="line"><button class="choice era-chip-button">Config</button></div></div></div>
           </div></div>
         </div>
       </div></div>
@@ -686,7 +939,11 @@ test("stats scroll independently while player controls retain space", { skip: br
           playerHeight: player.getBoundingClientRect().height, statsFocused, configBottomBefore,
           configBottom: config.getBoundingClientRect().bottom - sidebar.getBoundingClientRect().top,
           statsClient: stats?.clientHeight, statsScroll: stats?.scrollHeight, statsTop: stats?.scrollTop,
-          statsOverflow: stats && getComputedStyle(stats).overflowY };
+          statsOverflow: stats && getComputedStyle(stats).overflowY,
+          leftDisplay: getComputedStyle(f.querySelector(".era-main-left")).display,
+          scrollChain: getComputedStyle(sidebar).overscrollBehaviorY,
+          toggleGap: f.querySelector(".era-auto-toggles").getBoundingClientRect().top -
+            f.querySelector(".era-player-management .era-actions-group").getBoundingClientRect().bottom };
       });
       document.body.textContent = JSON.stringify(results);
     </script>`;
@@ -702,20 +959,19 @@ test("stats scroll independently while player controls retain space", { skip: br
       const results = JSON.parse(match[1]) as Array<{
         name: string; sidebarClient: number; sidebarScroll: number; sidebarBefore: number; sidebarAfterStats: number;
         sidebarScrolled: number; playerHeight: number; configBottom: number; configBottomBefore: number; statsFocused: boolean;
-        statsClient?: number; statsScroll?: number; statsTop?: number; statsOverflow?: string;
+        statsClient?: number; statsScroll?: number; statsTop?: number; statsOverflow?: string; leftDisplay: string; scrollChain: string; toggleGap: number;
       }>;
       const wide = results.find(result => result.name === "wide")!;
-      assert.equal(wide.statsOverflow, "auto", mode);
-      assert.ok(wide.statsScroll! > wide.statsClient!, `${mode}: stats overflow within their own card`);
-      assert.ok(wide.statsTop! > 0, `${mode}: stats reach lower rows`);
-      assert.equal(wide.statsFocused, true, `${mode}: stats can receive keyboard focus`);
+      assert.notEqual(wide.statsOverflow, "auto", mode);
+      assert.equal(wide.statsScroll, wide.statsClient, `${mode}: stats fit their contents`);
+      assert.equal(wide.leftDisplay, "contents");
+      assert.equal(wide.scrollChain, "auto");
       assert.equal(wide.sidebarBefore, wide.sidebarAfterStats, `${mode}: scrolling stats does not scroll player`);
-      assert.ok(wide.configBottomBefore <= wide.sidebarClient + 1, `${mode}: player controls remain visible: ${JSON.stringify(wide)}`);
-      assert.ok(wide.playerHeight < wide.sidebarClient - 80, `${mode}: player does not consume stats space`);
       const short = results.find(result => result.name === "short-stats")!;
       assert.equal(short.statsScroll, short.statsClient, `${mode}: short stats do not overflow`);
-      assert.ok(short.statsClient! > 80, `${mode}: stats fill spare sidebar space`);
-      assert.ok(Math.abs(short.playerHeight - wide.playerHeight) <= 1, `${mode}: spare space does not expand player`);
+      assert.ok(short.statsClient! < wide.statsClient!, `${mode}: short stats take less space`);
+      assert.ok(short.playerHeight >= wide.playerHeight, `${mode}: spare space expands player`);
+      assert.ok(short.toggleGap > wide.toggleGap, `${mode}: extra player height goes above Auto-TSP`);
       const large = results.find(result => result.name === "large-player")!;
       assert.ok(large.sidebarScroll > large.sidebarClient, `${mode}: oversized player remains reachable by sidebar scrolling`);
       assert.ok(large.sidebarScrolled > 0 && large.configBottom <= large.sidebarClient + 1,

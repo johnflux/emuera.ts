@@ -29,9 +29,7 @@
 .is-handheld .era-watch-control .line button.choice.era-timestop-button,
 .is-handheld .era-watch-control .era-timestop-button { font-size: 19px; }
 .is-handheld .era-actions-group > .line > span:has(> .era-actions-title) { flex-basis: auto; }
-.is-handheld .era-actions-group :is(.print-cell, .era-guard-control):has(.command-number-only),
-.is-handheld .era-actions-group .era-guard-control { display: inline-flex; align-items: center; min-height: var(--compact-choice-min-height); box-sizing: border-box; }
-.is-handheld .era-actions-group .line .era-guard-control button.choice { min-height: 0; }
+.is-handheld .era-actions-group .print-cell:has(.command-number-only) { display: inline-flex; align-items: center; min-height: var(--compact-choice-min-height); box-sizing: border-box; }
 .is-handheld .era-predefined-filter { margin-top: 6px; }
 .is-handheld #terminal { padding-left: 12px; }
 .is-handheld .line button.choice:not(:has(.sprite, .subarea-anchor)) { min-height: var(--compact-choice-min-height); }
@@ -70,6 +68,7 @@
   .is-handheld .screen.is-active .era-shop { height: max(540px, calc(100cqh - 8px)); min-height: 0; grid-template-rows: auto auto minmax(0, 1fr) auto; }
   .is-handheld .era-shop > :is(.era-shop-home, .era-shop-menu, .era-shop-system) { min-height: 0; overflow: auto; overscroll-behavior: contain; }
   .is-handheld .era-main > :is(.era-main-center, .era-main-actions, .era-main-sidebar) { min-height: 0; overflow: auto; overscroll-behavior: contain; }
+  .is-handheld .era-main > .era-main-sidebar { overscroll-behavior-y: auto; }
   .is-handheld .era-main-center:has(.era-alone) > .era-character { flex: 1 1 auto; min-height: 0; }
   .is-handheld .era-alone .era-room-stage { flex: 1 1 auto; min-height: 0; overflow: visible; }
   .is-handheld .era-alone .era-room-stage > .era-occupants { flex: 1 1 var(--era-occupant-height); min-height: 120px; }

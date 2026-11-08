@@ -3,9 +3,9 @@
 .era-main-sidebar { grid-area: sidebar; align-self: stretch; display: flex; flex-direction: column; gap: 10px; }
 .era-main-sidebar > :is(.era-main-right, .era-main-left) { display: flex; flex-direction: column; }
 .era-main-sidebar > .era-main-right { flex: 1; }
-.era-main-sidebar > .era-main-left { flex: none; }
+.era-main-sidebar > .era-main-left { display: contents; }
 .era-main-sidebar > .era-main-left:not(:has(.era-stats)) { display: none; }
-.era-main-left > .era-stats { flex: none; }
+.era-main-left > .era-stats { flex: none; max-height: fit-content; }
 /* PRINTed cards sit in a line and a span; letting those wrappers go lets the card itself fill the column. */
 .era-occupant-list > .line:has(.era-occupant), .era-occupant-list > .line > span:has(> .era-occupant),
 .era-occupant-list > .line:has(.era-alone-message), .era-occupant-list > .line > span:has(> .era-alone-message) { display: contents; }
@@ -18,10 +18,7 @@
 .era-main-last { grid-area: last; color: #888; }
 @container (min-width: 761px) {
   /* The sidebar spans grid rows; its content must not force those rows taller than the screen. */
-  .era-main-sidebar { min-height: 0; overflow-y: auto; overscroll-behavior: contain; contain: size; }
-  .era-main-sidebar:has(.era-stats) > .era-main-left { flex: 1 1 0; min-height: 80px; }
-  .era-main-sidebar:has(.era-stats) > .era-main-right { flex: none; }
-  .era-main-sidebar .era-main-left > .era-stats { flex: 1 1 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+  .era-main-sidebar { min-height: 0; overflow-y: auto; overscroll-behavior-y: auto; contain: size; }
   .era-main-sidebar .era-stats:focus-visible { outline: 2px solid #7ccce3; outline-offset: -2px; }
   .era-main:not(:has(.era-counters)) {
     grid-template-rows: auto auto 1fr auto;

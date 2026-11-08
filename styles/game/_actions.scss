@@ -10,48 +10,49 @@
 .era-main-actions > .line { flex-basis: 100%; }
 .era-main-actions > .era-actions-group { flex: 0 1 auto; width: max-content; min-width: 0; max-width: 100%; }
 .era-actions-group > .line { display: contents; }
-.era-actions-group span:has(> .era-guard-control) { display: contents; }
+.era-actions-group .output-text:has(> .era-button),
+.era-settings > .line > .output-text:has(> .era-button) { display: contents; }
 .era-actions-group .output-text.is-empty { display: none; }
 .era-actions-group:not(:has(button.choice)) { display: none; }
 .era-actions-group > .line > span:has(> .era-actions-title) { flex-basis: 100%; }
 .era-actions-title { color: #8a949c; font-size: .85em; text-transform: uppercase; letter-spacing: .06em; }
-.era-actions-group :is(.print-cell, .era-guard-control) { position: relative; white-space: normal; padding: 2px 10px; border: 1px solid #333c44; border-radius: 8px; background: #182027; }
-.era-actions-group :is(.print-cell, .era-guard-control) .choice { vertical-align: middle; }
+.era-actions-group .print-cell { position: relative; white-space: normal; padding: 2px 10px; border: 1px solid #333c44; border-radius: 8px; background: #182027; }
+.era-actions-group .print-cell .choice { vertical-align: middle; }
 .era-actions-group .print-cell .choice { margin-left: .75ch; color: #6c7780 !important; font-size: .8em; }
 .era-actions-group .print-cell .choice::after { content: ""; position: absolute; inset: 0; }
 .era-actions-group .print-cell .interactive-label { text-decoration-line: none; }
-.screen.is-active .era-actions-group :is(.print-cell, .era-guard-control):has(.choice:enabled:is(:hover, :focus-visible)) { border-color: #8ddaff; background: #1e2a33; }
+.screen.is-active .era-actions-group .print-cell:has(.choice:enabled:is(:hover, :focus-visible)) { border-color: #8ddaff; background: #1e2a33; }
 .era-player-management .era-actions-group { margin-top: 0; }
 .era-main .era-actions-group { gap: 7px 9px; margin-top: 10px; }
 .era-main .era-actions-title { color: #7dd8ed; letter-spacing: .08em; }
 .era-main .era-actions-title::before { content: ""; display: inline-block; margin-right: 1ch; border: 4px solid transparent; border-left-color: #65bddb; }
-.era-main .era-actions-group :is(.print-cell, .era-guard-control) { padding: 6px 12px; border-color: #35566d; border-radius: 4px; background: linear-gradient(#102330, #0b1822); }
-.era-main .era-kind-chores .print-cell { border-color: #397756; background: linear-gradient(#102b23, #0a1c17); }
-.era-main .era-kind-petting .print-cell { border-color: #70415b; background: linear-gradient(#2b1d2b, #1d1420); }
-.era-main .era-kind-dialogue .print-cell { border-color: #3c6189; background: linear-gradient(#162b40, #0d1d30); }
-.era-main .era-kind-vaginal .print-cell { border-color: #e9a1c5; background: linear-gradient(#432c3c, #30202c); }
-.era-main .era-kind-anal .print-cell { border-color: #947052; background: linear-gradient(#33291f, #241c16); }
-.era-main .era-kind-sm .print-cell { border-color: #a44f52; background: linear-gradient(#381c21, #251316); }
-.era-main .era-kind-service .print-cell { border-color: #eee18d; background: linear-gradient(#36351f, #252518); }
+.era-main .era-actions-group .print-cell { padding: 6px 12px; border-color: #35566d; border-radius: 4px; background: linear-gradient(#102330, #0b1822); }
+.era-main .era-kind-chores :is(.print-cell, .line button.choice.era-button-action) { border-color: #397756; background: linear-gradient(#102b23, #0a1c17); }
+.era-main .era-kind-petting :is(.print-cell, .line button.choice.era-button-action) { border-color: #70415b; background: linear-gradient(#2b1d2b, #1d1420); }
+.era-main .era-kind-dialogue :is(.print-cell, .line button.choice.era-button-action) { border-color: #3c6189; background: linear-gradient(#162b40, #0d1d30); }
+.era-main .era-kind-vaginal :is(.print-cell, .line button.choice.era-button-action) { border-color: #e9a1c5; background: linear-gradient(#432c3c, #30202c); }
+.era-main .era-kind-anal :is(.print-cell, .line button.choice.era-button-action) { border-color: #947052; background: linear-gradient(#33291f, #241c16); }
+.era-main .era-kind-sm :is(.print-cell, .line button.choice.era-button-action) { border-color: #a44f52; background: linear-gradient(#381c21, #251316); }
+.era-main .era-kind-service :is(.print-cell, .line button.choice.era-button-action) { border-color: #eee18d; background: linear-gradient(#36351f, #252518); }
 .era-main .line button.choice:is(.era-chip-button, .era-star) { border-radius: 4px; padding: 2px 10px; }
 .era-player-management { --era-player-control-gap: 6px; margin-top: var(--era-player-control-gap); }
 .era-main .era-player-management .era-actions-group { gap: var(--era-player-control-gap); margin: 0 0 var(--era-player-control-gap); }
-.era-player-management .era-actions-group :is(.print-cell, .era-guard-control) { display: block; flex: 1 1 100%; }
+.era-player-management .era-actions-group .print-cell { display: block; flex: 1 1 100%; }
 .era-player-management .era-actions-group .print-cell:nth-child(-n+2) { flex-basis: calc(50% - 9px); }
+.era-player-management .era-actions-group .era-button-sidebar { flex: 1 1 100%; min-width: 0; }
+.era-player-management .era-actions-group .era-travel-button { flex-basis: calc(50% - 9px); }
 .era-player-management .era-auto-toggles { gap: var(--era-player-control-gap); margin-top: 0; }
 .era-player-management .era-settings { display: flex; flex-wrap: wrap; gap: var(--era-player-control-gap); margin-top: 0; padding-top: 0; border-top: 0; }
 .era-player-management .era-settings > .line { display: contents; }
 .era-player-management .era-settings .era-quicksave-row { flex-basis: 100%; }
-.era-player-management .era-settings .era-chip-button { min-width: 12ch; text-align: center; }
-.era-main .era-player :is(.print-cell, .era-guard-control),
+.era-player-management .era-settings .era-chip-button { min-width: 12ch; }
+.era-main .era-player .print-cell,
 .era-main .era-player .line button.choice:is(.era-player-control, .era-chip-button) { padding: 6px 10px; border: 1px solid #35566d; border-radius: 4px; background: linear-gradient(#102330, #0b1822); color: #b7d5e2; font: inherit; line-height: 1.25; text-align: left; }
 .era-main .era-player .line button.choice.era-chip-button { flex: 1 1 100%; min-width: 0; width: 100%; }
-.screen.is-active .era-player :is(.print-cell, .era-guard-control):has(.choice:enabled:is(:hover, :focus-visible)),
+.screen.is-active .era-player .print-cell:has(.choice:enabled:is(:hover, :focus-visible)),
 .screen.is-active .era-player .line button.choice:is(.era-player-control, .era-chip-button):enabled:is(:hover, :focus-visible) { border-color: #78bdd6; background: #193744; color: #e2f5ff; }
-.era-player :is(.print-cell, .era-guard-control):has(.choice:focus-visible),
+.era-player .print-cell:has(.choice:focus-visible),
 .era-player .line button.choice:is(.era-player-control, .era-chip-button):focus-visible { outline: 2px solid #7ccce3; outline-offset: 2px; }
-.era-guard-control .interactive-label { text-decoration: none; }
-.era-guard-control .choice::after { content: ""; position: absolute; inset: 0; }
 /* Filter kinds (HOTPATCH_ACTION_KIND): a filter toggle and the actions it shows share a tint. */
 .era-actions-group > .era-kind, .era-kind > .line { display: contents; }
 .era-kind-petting .print-cell { border-color: #6a3456; background: #2a1824; }

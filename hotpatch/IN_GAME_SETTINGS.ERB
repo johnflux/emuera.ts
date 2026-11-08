@@ -1,3 +1,185 @@
+@HOTPATCH_CONFIG_ROW(nValue, sName, sState = "", sHelp = "", nEnabled = 1)
+#FUNCTIONS
+#DIM DYNAMIC nValue
+#DIMS DYNAMIC sName
+#DIMS DYNAMIC sState
+#DIMS DYNAMIC sHelp
+#DIM DYNAMIC nEnabled
+RETURNF HOTPATCH_BUTTON(sName, nValue, "", "list", "", sState, sHelp, nEnabled)
+
+@HOTPATCH_CONFIG_HEADER(sTitle, nEditor = 0)
+#DIMS DYNAMIC sTitle
+#DIM DYNAMIC nEditor
+HTML_PRINT @"<era-open class='era-dialog era-setup era-config%(nEditor ? " era-setup-editor" # "")%'>"
+HTML_PRINT @"<div class='era-inventory-header'><div class='era-inventory-heading'><span class='era-inventory-title'>%HTML_ESCAPE(sTitle)%</span>%(nEditor ? "" # "<button value='999' class='era-dialog-close' aria-label='Close'>×</button>")%</div></div>"
+HTML_PRINT "<era-open class='era-inventory-body era-setup-body'>"
+
+@OPTION(IN_TRAINING = 0)
+#DIM DYNAMIC IN_TRAINING
+#DIM DYNAMIC nStart
+#DIM DYNAMIC nIndex
+#DIM DYNAMIC nAction
+#DIM DYNAMIC nEnabled
+nStart = LINECOUNT
+DO
+	CLEARLINE LINECOUNT - nStart
+	CALL HOTPATCH_CONFIG_HEADER("Config")
+	HTML_PRINT "<div class='era-config-heading'><button value='1467' class='era-config-stars' aria-label='Cheat menu'>★★</button><span>Select An Option</span><button value='1467' class='era-config-stars' aria-label='Cheat menu'>★★</button></div>"
+	HTML_PRINT "<era-open class='era-config-grid'>"
+	FOR nIndex, 0, 91
+		SIF GROUPMATCH(nIndex, 8, 9, 10, 13, 14, 20, 29, 30, 33)
+			CONTINUE
+		CALL OPTION_SETNAME(nIndex)
+		SIF RESULTS:0 == ""
+			CONTINUE
+		nEnabled = RESULT
+		HTML_PRINT HOTPATCH_BUTTON(OPTIONS_TR(RESULTS:0, RESULTS:0), nIndex, "", "list", (nEnabled ? "" # "era-config-hidden"), OPTIONS_TR(RESULTS:1, RESULTS:0), OPTIONS_TR(RESULTS:2, RESULTS:0), nEnabled)
+	NEXT
+	HTML_PRINT "<era-close>"
+	HTML_PRINT "<span class='era-launch-eyebrow'>More settings</span>"
+	HTML_PRINT "<era-open class='era-config-grid'>"
+	HTML_PRINT HOTPATCH_CONFIG_ROW(91, "Automatic moans")
+	HTML_PRINT HOTPATCH_CONFIG_ROW(92, "Filter settings")
+	HTML_PRINT HOTPATCH_CONFIG_ROW(94, "Disable characters")
+	HTML_PRINT HOTPATCH_CONFIG_ROW(95, "Command filters")
+	HTML_PRINT HOTPATCH_CONFIG_ROW(100, "Modded")
+	HTML_PRINT HOTPATCH_CONFIG_ROW(101, "Disable dialogue")
+	HTML_PRINT HOTPATCH_CONFIG_ROW(102, "Disable controversial content")
+	HTML_PRINT HOTPATCH_BUTTON("BAITSA・DASUTO", 200, "", "list", (DAY > 124 && !IN_TRAINING ? "" # "era-config-hidden"), "", "WARNING: Do not read any further", DAY > 124 && !IN_TRAINING)
+	HTML_PRINT "<era-close>"
+	HTML_PRINT "<era-close>"
+	HTML_PRINT "<div class='era-inventory-footer'>" + HOTPATCH_BUTTON("Done", 999, "", "primary") + "</div>"
+	HTML_PRINT "<era-close>"
+	BINPUT
+	nAction = RESULT
+	SIF nAction == 999
+		BREAK
+	IF INRANGE(nAction, 0, 90)
+		SIF GROUPMATCH(nAction, 8, 9, 10, 13, 14, 20, 29, 30, 33)
+			CONTINUE
+		CALL OPTION_SETNAME(nAction)
+		SIF !RESULT
+			CONTINUE
+	ENDIF
+	CLEARLINE LINECOUNT - nStart
+	IF nAction == 100
+		CALL OPTION_MOD
+		CONTINUE
+	ENDIF
+	CALL HOTPATCH_CONFIG_HEADER("Config", 1)
+	SELECTCASE nAction
+	CASE 0 TO 90
+		CALL OPTION_SETTING(nAction)
+	CASE 91
+		CALL OPTION_オート喘ぎ一括設定
+	CASE 92
+		CALL 簡易フィルタ一括設定
+	CASE 94
+		CALL 登場キャラ切り替え
+	CASE 95
+		CALL OPTION_COMMAND_FILTER
+	CASE 101
+		CALL Add_Ban_Dialogue
+	CASE 102
+		CALL HARDCORECONTENT_MENU
+	CASE 1467
+		CALL CHEAT_MENU()
+	CASE 200
+		IF DAY > 124 && !IN_TRAINING
+			PRINTFORML Blow away time and return to the first day?
+			PRINTL [0] Don't let him push the「Switch」——— !!!
+			PRINTL [1] No, I've reached my limit! I'm going to push it! Now!
+			INPUT
+			SIF RESULT == 1
+				CALL 強くてニューゲーム
+		ENDIF
+	ENDSELECT
+	HTML_PRINT "<era-close>"
+	HTML_PRINT "<era-close>"
+LOOP 1
+CLEARLINE LINECOUNT - nStart
+
+; Capture native mod labels and descriptions rather than duplicating their state logic.
+@HOTPATCH_CONFIG_MOD_ROW(nValue)
+#DIM DYNAMIC nValue
+#DIM DYNAMIC nStart
+#DIM DYNAMIC nLines
+#DIM DYNAMIC nIndex
+#DIM DYNAMIC nSeparator
+#DIM DYNAMIC nEnabled
+#DIMS DYNAMIC sText
+#DIMS DYNAMIC sName
+#DIMS DYNAMIC sState
+#DIMS DYNAMIC sHelp
+nStart = LINECOUNT
+TRYCALLFORM CUSTOM_OPTION_{nValue}
+nLines = LINECOUNT - nStart
+SIF !nLines
+	RETURN
+sText '= HTML_TOPLAINTEXT(HTML_GETPRINTEDSTR(nLines - 1))
+FOR nIndex, 1, nLines
+	SIF sHelp != ""
+		sHelp += "\n"
+	sHelp += HTML_TOPLAINTEXT(HTML_GETPRINTEDSTR(nLines - 1 - nIndex))
+NEXT
+CLEARLINE nLines
+nEnabled = STRFIND(sText, "X]") < 0
+nSeparator = STRFIND(sText, "：")
+SIF STRFIND(sText, "] - ") < 0
+	THROW Config option {nValue} has no option label
+IF nSeparator < 0
+	sName '= SUBSTRING(sText, STRFIND(sText, "]") + 4)
+ELSE
+	sName '= SUBSTRING(sText, STRFIND(sText, "]") + 4, nSeparator - STRFIND(sText, "]") - 4)
+	sState '= SUBSTRING(sText, nSeparator + 1)
+ENDIF
+HTML_PRINT HOTPATCH_CONFIG_ROW(nValue, sName, sState, sHelp, nEnabled)
+
+@OPTION_MOD
+#DIM DYNAMIC nStart
+#DIM DYNAMIC nSection
+#DIM DYNAMIC nIndex
+#DIM DYNAMIC nAction
+nStart = LINECOUNT
+DO
+	CLEARLINE LINECOUNT - nStart
+	CALL HOTPATCH_CONFIG_HEADER("Modded")
+	FOR nSection, 0, 3
+		SELECTCASE nSection
+		CASE 0
+			HTML_PRINT "<span class='era-launch-eyebrow'>Major features</span>"
+		CASE 1
+			HTML_PRINT "<span class='era-launch-eyebrow'>Minor features and base game toggles</span>"
+		CASE 2
+			HTML_PRINT "<span class='era-launch-eyebrow'>Sex and character-related</span>"
+		ENDSELECT
+		HTML_PRINT "<era-open class='era-config-grid'>"
+		FOR nIndex, 0, 20
+			CALL HOTPATCH_CONFIG_MOD_ROW(nSection * 100 + nIndex)
+		NEXT
+		HTML_PRINT "<era-close>"
+	NEXT
+	HTML_PRINT "<era-close>"
+	HTML_PRINT "<div class='era-inventory-footer'>" + HOTPATCH_BUTTON("Back", 999, "", "primary") + "</div>"
+	HTML_PRINT "<era-close>"
+	BINPUT
+	nAction = RESULT
+	SIF nAction == 999
+		BREAK
+	SIF !INRANGE(nAction, 0, 219) || nAction % 100 >= 20
+		CONTINUE
+	CLEARLINE LINECOUNT - nStart
+	IF nAction == 4
+		CALL CUSTOM_OPTION_RESULT_4
+	ELSE
+		CALL HOTPATCH_CONFIG_HEADER("Modded", 1)
+		TRYCALLFORM CUSTOM_OPTION_RESULT_{nAction}
+		HTML_PRINT "<era-close>"
+		HTML_PRINT "<era-close>"
+	ENDIF
+LOOP 1
+CLEARLINE LINECOUNT - nStart
+
 ; Reuse startup controls without applying startup-only changes to an existing game.
 @HOTPATCH_WORLD_SETTINGS
 #DIM DYNAMIC nStart
@@ -5,12 +187,10 @@
 nStart = LINECOUNT
 DO
 	CLEARLINE LINECOUNT - nStart
-	HTML_PRINT "<era-open class='era-dialog era-setup'>"
-	HTML_PRINT "<div class='era-inventory-header'><div class='era-inventory-heading'><span class='era-inventory-title'>World Settings</span><button value='999' class='era-dialog-close' title='Close'>×</button></div></div>"
-	HTML_PRINT "<era-open class='era-inventory-body era-setup-body'>"
+	CALL HOTPATCH_CONFIG_HEADER("World Settings")
 	CALL HOTPATCH_SETUP_WORLD_SETTINGS
 	HTML_PRINT "<era-close>"
-	HTML_PRINT "<div class='era-inventory-footer'><button value='999' class='era-launch-primary'>Done</button></div>"
+	HTML_PRINT "<div class='era-inventory-footer'>" + HOTPATCH_BUTTON("Done", 999, "", "primary") + "</div>"
 	HTML_PRINT "<era-close>"
 	INPUT
 	nAction = RESULT
@@ -30,12 +210,10 @@ CLEARLINE LINECOUNT - nStart
 nStart = LINECOUNT
 DO
 	CLEARLINE LINECOUNT - nStart
-	HTML_PRINT "<era-open class='era-dialog era-setup'>"
-	HTML_PRINT "<div class='era-inventory-header'><div class='era-inventory-heading'><span class='era-inventory-title'>Dialogue Settings</span><button value='999' class='era-dialog-close' title='Close'>×</button></div></div>"
-	HTML_PRINT "<era-open class='era-inventory-body era-setup-body'>"
+	CALL HOTPATCH_CONFIG_HEADER("Dialogue Settings")
 	CALL HOTPATCH_SETUP_DIALOGUE
 	HTML_PRINT "<era-close>"
-	HTML_PRINT "<div class='era-inventory-footer'><button value='999' class='era-launch-primary'>Done</button></div>"
+	HTML_PRINT "<div class='era-inventory-footer'>" + HOTPATCH_BUTTON("Done", 999, "", "primary") + "</div>"
 	HTML_PRINT "<era-close>"
 	INPUT
 	nAction = RESULT
@@ -51,9 +229,7 @@ DO
 			CONTINUE
 		nNeedsReset = !GETBIT(RESULT:1, CFLAG:nIndex:口上セレクタ)
 		CLEARLINE LINECOUNT - nStart
-		HTML_PRINT "<era-open class='era-dialog era-setup era-setup-editor'>"
-		HTML_PRINT "<div class='era-inventory-header'><span class='era-inventory-title'>Dialogue Settings</span></div>"
-		HTML_PRINT "<era-open class='era-inventory-body'>"
+		CALL HOTPATCH_CONFIG_HEADER("Dialogue Settings", 1)
 		IF nNeedsReset
 			PRINTFORML Changing this dialogue resets the character's relationships, events, abilities and flags.
 			PRINTBUTTON "Reset and change dialogue", 1
@@ -79,13 +255,11 @@ CLEARLINE LINECOUNT - nStart
 nStart = LINECOUNT
 DO
 	CLEARLINE LINECOUNT - nStart
-	HTML_PRINT "<era-open class='era-dialog era-setup'>"
-	HTML_PRINT "<div class='era-inventory-header'><div class='era-inventory-heading'><span class='era-inventory-title'>Yandere Settings</span><button value='999' class='era-dialog-close' title='Close'>×</button></div></div>"
-	HTML_PRINT "<era-open class='era-inventory-body era-setup-body'>"
+	CALL HOTPATCH_CONFIG_HEADER("Yandere Settings")
 	CALL HOTPATCH_SETUP_YANDERE
-	HTML_PRINT "<button value='32' class='era-chip-button'>More options &amp; help</button>"
+	HTML_PRINT HOTPATCH_CONFIG_ROW(32, "More options & help")
 	HTML_PRINT "<era-close>"
-	HTML_PRINT "<div class='era-inventory-footer'><button value='999' class='era-launch-primary'>Done</button></div>"
+	HTML_PRINT "<div class='era-inventory-footer'>" + HOTPATCH_BUTTON("Done", 999, "", "primary") + "</div>"
 	HTML_PRINT "<era-close>"
 	INPUT
 	nAction = RESULT
@@ -93,9 +267,7 @@ DO
 		BREAK
 	ELSEIF nAction == 31 || nAction == 32
 		CLEARLINE LINECOUNT - nStart
-		HTML_PRINT "<era-open class='era-dialog era-setup era-setup-editor'>"
-		HTML_PRINT "<div class='era-inventory-header'><span class='era-inventory-title'>Yandere Settings</span></div>"
-		HTML_PRINT "<era-open class='era-inventory-body'>"
+		CALL HOTPATCH_CONFIG_HEADER("Yandere Settings", 1)
 		IF nAction == 31
 			CALL YANDERE_SET_MENU
 		ELSE

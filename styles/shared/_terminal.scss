@@ -70,7 +70,9 @@ button, a.game-primary, .line button.choice:is(.era-chip-button, .era-star, .era
   background: var(--button-background, #182027); color: var(--button-color, #c9d4dc); cursor: pointer;
 }
 button[hidden], a.game-primary[hidden], .era-chip-button[hidden], .line button.choice[hidden] { display: none; }
-.screen.is-active button.choice:enabled:hover, .screen.is-active button.choice:enabled:hover *, .screen.is-active button.choice:enabled:focus-visible, .screen.is-active button.choice:enabled:focus-visible * { color: var(--choice-hover-color, var(--selection-color)) !important; }
+.screen.is-active button.choice:not(.era-button:has(.command-number)):enabled:hover, .screen.is-active button.choice:not(.era-button:has(.command-number)):enabled:hover *, .screen.is-active button.choice:not(.era-button:has(.command-number)):enabled:focus-visible, .screen.is-active button.choice:not(.era-button:has(.command-number)):enabled:focus-visible * { color: var(--choice-hover-color, var(--selection-color)) !important; }
+.screen.is-active button.choice.era-button:enabled:is(:hover, :focus-visible) .command-number,
+.screen.is-active button.choice.era-button:enabled:is(:hover, :focus-visible) .command-number * { color: var(--selection-color) !important; }
 .choice .interactive-label { text-decoration: underline; text-decoration-color: slategray; text-decoration-thickness: from-font; text-underline-offset: .15em; }
 .line button.choice:disabled { opacity: .5; }
 .screen.is-active button.choice:disabled { opacity: 1; }

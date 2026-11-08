@@ -293,7 +293,7 @@ DO
 	NEXT
 	HTML_PRINT "<era-close>"
 	HTML_PRINT "<era-close>"
-	HTML_PRINT "<div class='era-relationship-footer'><button value='999' class='era-chip-button'>Close</button></div>"
+	HTML_PRINT "<div class='era-relationship-footer'>" + HOTPATCH_BUTTON("Close", 999, "", "slim") + "</div>"
 	HTML_PRINT "<era-close>"
 	BINPUT
 	sError '= ""

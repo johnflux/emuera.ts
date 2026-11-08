@@ -21,6 +21,81 @@ async function withPatchDir(files: Record<string, string>, body: (dir: string) =
   }
 }
 
+test("plain button variants render one control, escape attributes and reject unknown styles", () => {
+  const source = readFileSync(new URL("../hotpatch/MAIN_SCREEN_COMMANDS.ERB", import.meta.url), "utf8");
+  const attributes = readFileSync(new URL("../hotpatch/INFO_PALAM.ERB", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /era-guard-control/);
+  const game = emptyGame();
+  indexScript(game, attributes.slice(attributes.indexOf("@HOTPATCH_ATTRIBUTE(")), "<attribute-helper>");
+  indexScript(game, source.slice(source.indexOf("@HOTPATCH_BUTTON(")), "<button-helper>");
+  const variants = ["action", "sidebar", "sidebar-wide", "slim", "primary", "inventory", "unavailable"];
+  indexScript(game, `@SYSTEM_TITLE
+${variants.map((variant, i) => `HTML_PRINT HOTPATCH_BUTTON("A&B <label>", ${i}, "It's <safe>", "${variant}")`).join("\n")}
+BINPUT
+@TEST_BAD_VARIANT
+HTML_PRINT HOTPATCH_BUTTON("Bad", 0, "", "invented")`, "<button-test>");
+  for (const jit of [false, true]) {
+    const snapshot = new Runtime(game, undefined, { jit }).start();
+    assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
+    const buttons = snapshot.output.flatMap(item => item.type === "html" ? [item.text] : []);
+    assert.equal(buttons.length, variants.length);
+    for (const [i, markup] of buttons.entries()) {
+      assert.equal((markup.match(/<button\b/g) ?? []).length, 1);
+      assert.match(markup, /^<button[^>]*>A&amp;B &lt;label&gt;/);
+      assert.match(markup, /title='It&#39;s &lt;safe&gt;'/);
+      assert.match(markup, new RegExp(`class='era-button era-button-${variants[i]} '`));
+      assert.equal(markup.includes("command-number"), i < 3);
+      assert.equal(markup.includes("aria-disabled='true'"), variants[i] === "unavailable");
+    }
+    assert.match(buttons[5]!, /era-control-arrow/);
+    assert.match(buttons[6]!, /\[\.\.\.\]/);
+    const bad = new Runtime(game, undefined, { jit }).start("TEST_BAD_VARIANT");
+    assert.ok(bad.error);
+    assert.match(JSON.stringify(bad.error), /Unknown button variant: invented/);
+  }
+});
+
+test("custom commands use shared action buttons and retain availability and highlighted labels", () => {
+  const source = readFileSync(new URL("../hotpatch/MAIN_SCREEN_COMMANDS.ERB", import.meta.url), "utf8");
+  const attributes = readFileSync(new URL("../hotpatch/INFO_PALAM.ERB", import.meta.url), "utf8");
+  const game = emptyGame();
+  game.headers.push(
+    { text: "#DIM ADD_CUSTOM_MAX_COM", file: "<button-header>", line: 1 },
+    { text: "#DIM ADD_CUSTOM_COM = 381", file: "<button-header>", line: 2 },
+    { text: "#DIM C_HEARTPINK = 16751052", file: "<button-header>", line: 3 },
+  );
+  indexScript(game, attributes.slice(attributes.indexOf("@HOTPATCH_ATTRIBUTE(")), "<attribute-helper>");
+  indexScript(game, source.slice(source.indexOf("@Add_Custom_List_COMS\n")), "<custom-button-helpers>");
+  indexScript(game, `@SYSTEM_TITLE
+ADD_CUSTOM_MAX_COM = 2
+CALL Add_Custom_List_COMS
+BINPUT
+@Add_Custom_COM_To_Number(ARG)
+#FUNCTION
+RETURNF 9000 + ARG
+@Add_Custom_COM_Name(ARG)
+#FUNCTIONS
+RETURNF "Play a game"
+@ADD_CUSTOM_COM_ABLE0
+RETURN 1
+@ADD_CUSTOM_COM_ABLE1
+RETURN 1
+@ADD_CUSTOM_COM_ABLE2
+RETURN 0
+@QOL_CUSTOM_SCOM_CHECK(ARG)
+RESULTS = Highlighted action
+RETURN ARG == 1`, "<custom-button-fixture>");
+  for (const jit of [false, true]) {
+    const snapshot = new Runtime(game, undefined, { jit }).start();
+    assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
+    assert.deepEqual(snapshot.input?.buttonValues, ["9000", "9001"]);
+    const output = snapshot.output.flatMap(item => item.type === "html" ? [item.text] : []).join("");
+    assert.match(output, /value='9000' class='era-button era-button-action [^>]*>Play a game<span class='command-number'>\[9000\]/);
+    assert.match(output, /value='9001' class='era-button era-button-action [^>]*><span color='#[0-9A-F]{6}'>Highlighted action<\/span>/);
+    assert.doesNotMatch(output, /9002|print-cell|era-guard-control/);
+  }
+});
+
 test("time transitions skip generic narration and waits without suppressing other effects", async () => {
   const patch = readFileSync(new URL("../hotpatch/TIME_EFFECTS.ERB", import.meta.url), "utf8");
   const root = new URL("../GAMES/anon-tw-anon-tw_eng-modding/ERB/", import.meta.url);
@@ -630,11 +705,11 @@ test("main screen hotpatch opens and closes its panel boxes in balance", {
       "calendar is not a player management control");
     if (index === 1) {
       assert.match(html, /value='999' class='era-timestop-button era-stopped' title='Resume time'>Resume<span class='era-timestop-gauge'>/);
-      assert.doesNotMatch(html, /Resume Time|Time is stopped/);
+      assert.doesNotMatch(html, /Time is stopped/);
     }
     assert.doesNotMatch(html, /<div class='era-clock'><img/);
     assert.equal((html.match(/value='805'/g) ?? []).length, 1, "inventory has exactly one entry point");
-    assert.match(html, /era-player-actions'><button value='805' class='era-player-control era-inventory-button'/, "inventory is on the player card");
+    assert.match(html, /era-player-actions'><button value='805' class='era-button era-button-inventory /, "inventory is on the player card");
     assert.doesNotMatch(html, /value='490'/, "the legacy Items command is replaced by the GUI inventory");
     assert.match(html, /class='era-toggles era-auto-toggles'><button value='995'[^]*<button value='-9200' class='era-toggle[^']*' role='checkbox' aria-checked='(?:true|false)'[^>]*>Pushdown Guard<\/button><\/div>/, "the guard shares the compact checkbox row with Auto-TSP and Auto-Clean");
     assert.doesNotMatch(html, /era-player-toggles|Go &amp; Manage|Auto Items/);

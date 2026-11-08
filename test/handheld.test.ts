@@ -232,14 +232,14 @@ test("hidden number-only action buttons cover their labeled tile without taking 
   const rule = "button.choice.command-number-only { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; margin: 0; padding: 0; border-radius: inherit; }";
   assert.ok(css.includes(`.is-handheld .era-actions-group ${rule}`));
   assert.ok(css.includes(`  .era-actions-group ${rule}`));
-  assert.ok(css.includes(".is-handheld .era-actions-group :is(.print-cell, .era-guard-control):has(.command-number-only),\n.is-handheld .era-actions-group .era-guard-control { display: inline-flex; align-items: center; min-height: var(--compact-choice-min-height); box-sizing: border-box; }"));
-  assert.ok(css.includes(".era-actions-group :is(.print-cell, .era-guard-control):has(.command-number-only) { display: inline-flex; align-items: center; min-height: var(--compact-choice-min-height); box-sizing: border-box; }"));
+  assert.ok(css.includes(".is-handheld .era-actions-group .print-cell:has(.command-number-only) { display: inline-flex; align-items: center; min-height: var(--compact-choice-min-height); box-sizing: border-box; }"));
+  assert.ok(css.includes(".era-actions-group .print-cell:has(.command-number-only) { display: inline-flex; align-items: center; min-height: var(--compact-choice-min-height); box-sizing: border-box; }"));
 });
 
 test("number-only controls use one tile focus outline in desktop and handheld layouts", () => {
   const css = styleSource("handheld");
-  assert.ok(css.includes(".line :is(.print-cell, .era-guard-control) button.choice.command-number-only:focus-visible { outline: none; }"));
-  assert.ok(css.includes(".line :is(.print-cell, .era-guard-control):has(button.choice.command-number-only:focus-visible) { outline: 2px solid #8ddaff; outline-offset: 2px; }"));
+  assert.ok(css.includes(".line .print-cell button.choice.command-number-only:focus-visible { outline: none; }"));
+  assert.ok(css.includes(".line .print-cell:has(button.choice.command-number-only:focus-visible) { outline: 2px solid #8ddaff; outline-offset: 2px; }"));
 });
 
 test("navigation measures the labeled tile rather than its right-aligned numeric button", () => {
@@ -328,10 +328,10 @@ test("text-only pauses and processing preserve an invisible command-row spacer b
 
 test("action tile controls remain vertically centered when their command numbers are hidden", () => {
   const css = styleSource("style");
-  assert.match(css, /\.era-actions-group :is\(\.print-cell, \.era-guard-control\) \.choice \{ vertical-align: middle; \}/);
+  assert.match(css, /\.era-actions-group \.print-cell \.choice \{ vertical-align: middle; \}/);
   const handheld = styleSource("handheld");
-  assert.match(handheld, /\.is-handheld \.era-actions-group \.era-guard-control \{ display: inline-flex; align-items: center; min-height: var\(--compact-choice-min-height\); box-sizing: border-box; \}/);
-  assert.match(handheld, /\.is-handheld \.era-actions-group \.line \.era-guard-control button\.choice \{ min-height: 0; \}/);
+  assert.match(handheld, /\.is-handheld \.era-actions-group \.print-cell:has\(\.command-number-only\) \{ display: inline-flex; align-items: center;/);
+  assert.doesNotMatch(handheld, /era-guard-control/);
 });
 
 test("the empty room prefers the portrait height without taking space needed by actions", () => {

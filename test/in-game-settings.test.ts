@@ -31,6 +31,13 @@ CALL ROOMSETTING_0
 CALL DEFAULT_OWNER_0
 RECOLOREDMAPS = 1
 ANIMATERECOLOREDMAPS = 0
+@TEST_CONFIG
+CALL TEST_SETTINGS_INIT
+FLAG:妊娠スイッチ = 0
+CALL OPTION(1)
+PRINTFORML config={FLAG:妊娠スイッチ},{FLAG:子供の性別},{nGoOutEventLimit}
+INPUT
+QUIT
 @TEST_WORLD_SETTINGS
 CALL TEST_SETTINGS_INIT
 FLAG:1000 = 0
@@ -58,6 +65,70 @@ CALL SET_MAINHOME
 PRINTFORML home={MAIN_MAP},{引っ越し}
 INPUT
 QUIT`, "<settings-test>");
+
+  const config = new Runtime(game, GAME_INSTRUCTION_LIMIT);
+  const configSnapshot = config.start("TEST_CONFIG");
+  const configScreen = markup(configSnapshot);
+  assert.match(configScreen, /era-config[\s\S]*Select An Option/);
+  assert.equal((configScreen.match(/value='1467' class='era-config-stars'/g) ?? []).length, 2);
+  for (const value of [8, 9, 10, 13, 14, 20, 29, 30, 33, 93]) {
+    assert.doesNotMatch(configScreen, new RegExp(`value='${value}'`));
+    assert.ok(!configSnapshot.input?.buttonValues?.includes(String(value)));
+  }
+  assert.match(configScreen, /value='1' class='era-button era-button-list era-config-hidden' aria-disabled='true'/,
+    "pregnancy-dependent settings reserve invisible space");
+  assert.doesNotMatch(configScreen, /title='[^']+'/);
+  assert.match(markup(config.input("1")), /value='1' class='era-button era-button-list era-config-hidden'/,
+    "hidden settings cannot be activated");
+  const enabledScreen = markup(config.input("0"));
+  assert.match(enabledScreen, /value='1' class='era-button era-button-list ' aria-disabled='false'/,
+    "dependent settings appear after toggling pregnancy");
+  assert.equal((configScreen.match(/era-config-label/g) ?? []).length, (enabledScreen.match(/era-config-label/g) ?? []).length,
+    "toggling keeps the same rows");
+  markup(config.input("1"));
+  const moddedScreen = markup(config.input("100"));
+  assert.match(moddedScreen, /Major features[\s\S]*Minor features[\s\S]*Sex and character-related/);
+  assert.doesNotMatch(moddedScreen, /title='[^']+'/);
+  assert.doesNotMatch(moddedScreen, /UI elements|value='3\d\d'/);
+  assert.match(moddedScreen, /era-config-label[^]*Yandere options/);
+  assert.match(moddedScreen, /This can also be set for individual characters/);
+  assert.match(moddedScreen, /This only applies while time is not actively stopped/);
+  assert.match(moddedScreen, /value='1' class='era-button era-button-list ' aria-disabled='true'/);
+  const initialModState = /value='102'[^]*?<span class='era-config-state'>(.*?)<\/span>/.exec(moddedScreen)?.[1];
+  const changedModState = /value='102'[^]*?<span class='era-config-state'>(.*?)<\/span>/.exec(markup(config.input("102")))?.[1];
+  assert.ok(initialModState);
+  assert.ok(changedModState);
+  assert.notEqual(changedModState, initialModState);
+  assert.match(markup(config.input("4")), /Yandere Settings/);
+  assert.match(markup(config.input("999")), /Modded/);
+  assert.match(markup(config.input("999")), /Select An Option/);
+  const cheatSnapshot = config.input("1467");
+  assert.match(markup(cheatSnapshot), /era-setup-editor[\s\S]*Cheat menu/);
+  assert.equal(cheatSnapshot.input?.buttonValues, undefined, "native cheat editors retain numeric input");
+  assert.match(markup(config.input("0")), /enter your desired money level/);
+  assert.match(markup(config.input("123")), /Cheat menu/);
+  assert.match(markup(config.input("99")), /Select An Option/);
+  assert.match(markup(config.input("999")), /config=1,1,1/);
+
+  for (const [value, heading] of [
+    ["91", /None/],
+    ["92", /filters/i],
+    ["94", /Characters that are disabled/],
+    ["95", /Save Filter Set/],
+    ["101", /Characters with disabled dialogue/],
+    ["102", /CONTROVERSIAL CONTENT TOGGLES/],
+  ] as const) {
+    const submenu = new Runtime(game, GAME_INSTRUCTION_LIMIT);
+    markup(submenu.start("TEST_CONFIG"));
+    const screen = markup(submenu.input(value));
+    assert.match(screen, /era-config era-setup-editor/);
+    assert.match(screen, heading, `Config submenu ${value} retains its native choices`);
+  }
+
+  const configButtons = readFileSync(new URL("../hotpatch/MAIN_SCREEN_COMMANDS.ERB", import.meta.url), "utf8");
+  assert.match(configButtons, /HOTPATCH_BUTTON\("Config", 809, "", "sidebar-wide"\)/);
+  assert.match(configButtons, /HTML_PRINT HOTPATCH_BUTTON\("Config", 809\)/);
+  assert.doesNotMatch(configButtons, /PRINTBUTTON_EX\([^,\n]*Config/);
 
   const world = new Runtime(game, GAME_INSTRUCTION_LIMIT);
   assert.match(markup(world.start("TEST_WORLD_SETTINGS")), /Romance Mode[\s\S]*Pregnancy Restrictions/);

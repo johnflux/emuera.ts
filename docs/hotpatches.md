@@ -9,6 +9,74 @@ hotpatch normally only changes presentation. `INTIMACY_COMMANDS.ERB` and
 
 ## GUI input
 
+Plain main-screen commands (including the mod's custom-command list and its
+request-meeting-point and quest label overrides) use
+`HOTPATCH_BUTTON(label, value, title = "", variant = "action", class = "", state = "", help = "", enabled = 1)`
+in `MAIN_SCREEN_COMMANDS.ERB`. Each call produces one complete button, without
+a styled tile wrapper. Labels and attributes are escaped, and unknown variants
+throw an error. Additional classes are for layout or state, not a substitute
+for choosing a variant.
+
+| Variant | Use |
+| --- | --- |
+| `action` | Numbered action tile; also used by Relationship |
+| `sidebar` | Numbered sidebar command; narrower padding |
+| `sidebar-wide` | Full-width sidebar command, including Config and browser Quicksave |
+| `slim` | Small, unnumbered secondary dialog action |
+| `primary` | Unnumbered primary dialog action |
+| `inventory` | Full-width Inventory action with a trailing arrow instead of a number |
+| `unavailable` | Disabled action with the native `[...]` marker |
+| `list` | Borderless, unpadded setting row with a leading command number, label, current state and right-hand help |
+
+Numbered variants derive their trailing `command-number` from the input value;
+keep numbers out of the supplied label. Handheld and compact layouts hide these
+numbers consistently. Action category containers deliberately tint action
+variants but do not add borders, padding or click targets themselves.
+Hover and keyboard focus highlight only the command number in selection yellow;
+the label keeps its normal or game-supplied highlight color.
+
+`era-guard-control` is removed. Native `PRINTC` menus still use the renderer's
+`print-cell` compatibility path; hotpatched main commands no longer need it.
+Remaining footer, tab, grid and card containers group content rather than
+restyling individual buttons. Rich setting rows, selectors, steppers, checkboxes
+and icon controls retain their explicitly named specialized styles.
+
+`IN_GAME_SETTINGS.ERB` replaces Config [809] with a responsive, scrollable
+single-column list dialog showing native setting names, current values and
+right-hand help (below the row on narrow screens). Its row helper delegates to
+the shared `list` button variant. Config uses the full available viewport width;
+help is inline rather than in tooltips. Conditional options remain invisible
+and disabled in their original slots so toggling does not reorder the list.
+Desktop rows combine the label and right-aligned state in one flexible area,
+alongside a separate help column using `minmax(85ch, 1fr) minmax(0, 1fr)`.
+The setting area is at least 85ch and grows when space permits; states have no
+explicit width limits. Help stacks below when the available width cannot fit
+the minimum setting width and gap. Narrow screens also stack labels and states.
+States reading `No` or `Off` and their labels are dimmed to 50% opacity without
+disabling the option; help text remains unchanged.
+Config submenus share this presentation. The browser's `setupConfigSubmenu`
+adapter applies the explicit `list` variant to existing native choices in Config
+editors and structured setup choices in Config dialogs, retaining their button
+values and listeners. It places native tooltip help inline and keeps structured
+descriptions, including emphasis. Selected structured choices show `Selected`.
+Number inputs, steppers, checkboxes and artwork controls remain specialized.
+Native input modes and setting routines are unchanged; startup dialogs are not
+restyled by this adapter.
+The stars around
+**Select An Option** both open the native cheat menu. The Modded page keeps the
+three gameplay sections, omitting UI elements. Base options 8, 9, 10, 13, 14, 20,
+29, 30, 33 and 93 are omitted; their saved values are not changed.
+Native option actions, restrictions, global persistence and secondary editors
+are retained. Modded labels and help are captured from their native display
+routines, then rendered as cards without duplicating setting-state logic.
+The two config pages use `BINPUT`; native secondary editors keep their original
+input mode and expose the command bar for text or numeric entry.
+
+The main sidebar keeps Stats at content height (`max-height: fit-content`);
+its left container uses `display: contents`. Spare height goes to the Player
+card, above Auto-TSP Movement rather than above Inventory. Sidebar scrolling
+chains to the page at its boundaries, including handheld layouts.
+
 Choice-only title/load/save/delete, predefined-character, Inventory, Calendar, character-sheet,
 and relationship dialogs use `BINPUT`. The runtime supplies `buttonValues` and
 rejects values not in the displayed choices; the browser hides the bottom command

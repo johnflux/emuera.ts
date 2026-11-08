@@ -157,7 +157,7 @@ IF TFLAG:100
 	HTML_PRINT @"<div class='era-actions-title'>%(FLAG:70 ? "While time is stopped" # "Right now")%</div>"
 	IF FLAG:70 == 1 && CFLAG:TARGET:344 == 0
 		SIF EQUIP:0 && TARGET && CFLAG:うふふ
-			PRINTC Remove Clothes[820]
+			HTML_PRINT HOTPATCH_BUTTON("Remove Clothes", 820)
 		IF EQUIP:0 && TARGET && EQUIP:TARGET:下半身下着２ != 0 && GET_INT(TARGET, "下半身下着_ずらし可能", EQUIP:TARGET:下半身下着２, "コレクション表示可能") ;addition custom code, only if collectable
 			IF !PANTS_ALREADY_COLLECTED()
 				FONTBOLD
@@ -165,102 +165,102 @@ IF TFLAG:100
 				PRINT  
 			ENDIF
 				SIF !GETBIT (FLAG:USERCOMフィルタ, 60) ;com custom code
-					PRINTC Pilfer Panties[821]
+					HTML_PRINT HOTPATCH_BUTTON("Pilfer Panties", 821)
 				RESETCOLOR
 				FONTREGULAR
 		ENDIF
 		IF (TEQUIP:5 == 0 || EQUIP:TARGET:上半身下着１) && CFLAG:うふふ
 			SIF EQUIP:0 && TARGET && EQUIP:TARGET:上半身下着１ != 0 && (EQUIP:TARGET:着物 != 0 || EQUIP:TARGET:上半身上着２ != 0 || EQUIP:TARGET:ボディースーツ == 3)
-				PRINTC Remove Top & Bottom[822]
+				HTML_PRINT HOTPATCH_BUTTON("Remove Top & Bottom", 822)
 		ENDIF
 		IF TEQUIP:5 == 0 && CFLAG:うふふ
 			SIF EQUIP:0 && TARGET && (EQUIP:TARGET:上半身下着１ || EQUIP:TARGET:上半身下着２ || EQUIP:TARGET:下半身下着１ || EQUIP:TARGET:下半身下着２ || EQUIP:TARGET:レオタード || EQUIP:TARGET:ボディースーツ) && (EQUIP:TARGET:上半身上着１ || EQUIP:TARGET:上半身上着２ || EQUIP:TARGET:ワンピース || EQUIP:TARGET:着物 || EQUIP:TARGET:外衣)
-				PRINTC Strip To Underwear[823]
+				HTML_PRINT HOTPATCH_BUTTON("Strip To Underwear", 823)
 		ENDIF
 		;addition custom code
 		SIF CFLAG:うふふ || CFLAG:MASTER:イタズラ == 2
-			PRINTC Undress[892]
+			HTML_PRINT HOTPATCH_BUTTON("Undress", 892)
 		IF (MEASUREMENTCHECK(CFLAG:TARGET:現在位置) || MEASURE_DEBUG) ;custom code
 			IF CFLAG:TARGET:身体測定 != 2
-				PRINTC Measure Body[824]
+				HTML_PRINT HOTPATCH_BUTTON("Measure Body", 824)
 			ELSE
-				PRINTC Finish Body Measuring[824]
+				HTML_PRINT HOTPATCH_BUTTON("Finish Body Measuring", 824)
 			ENDIF
 		ENDIF
 		SIF TFLAG:パンツ収奪 && !GETBIT (FLAG:USERCOMフィルタ, 61) ;com custom code
-			PRINTC Take Panties[825]
+			HTML_PRINT HOTPATCH_BUTTON("Take Panties", 825)
 		IF TARGET && !CFLAG:Hypno_Orgasm_Denial ;custom code
 			IF TEQUIP:焦らしモード
-				PRINTC End Denial[826]
+				HTML_PRINT HOTPATCH_BUTTON("End Denial", 826)
 			ELSE
-				PRINTC Denial Mode[826]
+				HTML_PRINT HOTPATCH_BUTTON("Denial Mode", 826)
 			ENDIF
 		ENDIF
 		IF CFLAG:うふふ
-			PRINTC Stop Mischief[999]
+			HTML_PRINT HOTPATCH_BUTTON("Stop Mischief", 999)
 		ELSE
-			PRINTC Resume Time[999]
+			HTML_PRINT HOTPATCH_BUTTON("Resume Time", 999)
 		ENDIF
 	ELSEIF FLAG:70 == 1 && CFLAG:TARGET:344 == 1
-			PRINTC Resume Time[999]
+			HTML_PRINT HOTPATCH_BUTTON("Resume Time", 999)
 		IF CFLAG:うふふ
 			SIF EQUIP:0 && TARGET
-				PRINTC Strip Clothes[820]
+				HTML_PRINT HOTPATCH_BUTTON("Strip Clothes", 820)
 			;addition custom code
 			SIF CFLAG:うふふ
-				PRINTC Undress[892]
+				HTML_PRINT HOTPATCH_BUTTON("Undress", 892)
 
 			IF CFLAG:うふふ == 2
 				IF TFLAG:抱きつきモード
-					PRINTC Shake Off[850]
+					HTML_PRINT HOTPATCH_BUTTON("Shake Off", 850)
 				ELSE
-					PRINTC Slip Out[850]
+					HTML_PRINT HOTPATCH_BUTTON("Slip Out", 850)
 				ENDIF
 				IF !CFLAG:Hypno_Orgasm_Denial ;custom code
 					IF TEQUIP:焦らしモード
-						PRINTC End Denial[826]
+						HTML_PRINT HOTPATCH_BUTTON("End Denial", 826)
 					ELSE
-						PRINTC Denial Mode[826]
+						HTML_PRINT HOTPATCH_BUTTON("Denial Mode", 826)
 					ENDIF
 				ENDIF
 			ELSE
-				PRINTC End Session[999]
+				HTML_PRINT HOTPATCH_BUTTON("End Session", 999)
 			ENDIF
 		ENDIF
 	ELSEIF (CFLAG:うふふ && !CFLAG:イタズラ) || FREE_USE_ACTIVE() ;custom code, enable stripping clothes when in Free Use mode
 		SIF EQUIP:0 && TARGET && (!(TFLAG:102 == 3 && TFLAG:抱きつきモード) || FREE_USE_ACTIVE()) ;custom code, enable stripping clothes when in Free Use mode
-			PRINTC Strip Clothes[820]
+			HTML_PRINT HOTPATCH_BUTTON("Strip Clothes", 820)
 			;addition custom code
 			SIF CFLAG:うふふ
-				PRINTC Undress[892]
+				HTML_PRINT HOTPATCH_BUTTON("Undress", 892)
 			IF TARGET && !CFLAG:Hypno_Orgasm_Denial ;custom code
 				IF TEQUIP:焦らしモード
-					PRINTC End Denial[826]
+					HTML_PRINT HOTPATCH_BUTTON("End Denial", 826)
 				ELSE
-					PRINTC Denial Mode[826]
+					HTML_PRINT HOTPATCH_BUTTON("Denial Mode", 826)
 				ENDIF
 			ENDIF
 		IF FLAG:70 == 1 && CFLAG:TARGET:344 == 0
-			PRINTC Resume Time[999]
+			HTML_PRINT HOTPATCH_BUTTON("Resume Time", 999)
 		ELSEIF CFLAG:うふふ == 2
 			IF TFLAG:抱きつきモード
-				PRINTC Shake Off[850]
+				HTML_PRINT HOTPATCH_BUTTON("Shake Off", 850)
 			ELSE
-				PRINTC Slip Out[850]
+				HTML_PRINT HOTPATCH_BUTTON("Slip Out", 850)
 			ENDIF
 		ELSEIF CFLAG:うふふ == 1
-			PRINTC End Session[999]
+			HTML_PRINT HOTPATCH_BUTTON("End Session", 999)
 		ENDIF
 	ENDIF
 
 	IF CFLAG:イタズラ
 		SIF CFLAG:イタズラ < 2 && (EXP:TARGET:睡眠姦経験 > 100 || TCVAR:睡眠薬強度 || TCVAR:睡眠深度 > 2000)
-			PRINTC Unbutton Clothes[830]
+			HTML_PRINT HOTPATCH_BUTTON("Unbutton Clothes", 830)
 		;addition custom code
 		SIF CFLAG:うふふ
-			PRINTC Undress[892]
+			HTML_PRINT HOTPATCH_BUTTON("Undress", 892)
 		IF CFLAG:イタズラ < 2
-			PRINTC Stop Mischief[999]
+			HTML_PRINT HOTPATCH_BUTTON("Stop Mischief", 999)
 			IF EQUIP:0 && TARGET && EQUIP:TARGET:下半身下着２ != 0 && GET_INT(TARGET, "下半身下着_ずらし可能", EQUIP:TARGET:下半身下着２, "コレクション表示可能") ;addition custom code, only if collectable ;bug fix
 				IF !PANTS_ALREADY_COLLECTED()
 					FONTBOLD
@@ -268,27 +268,27 @@ IF TFLAG:100
 					PRINT  
 				ENDIF
 				SIF !GETBIT (FLAG:USERCOMフィルタ, 60) ;com custom code
-					PRINTC Pilfer Panties[821]
+					HTML_PRINT HOTPATCH_BUTTON("Pilfer Panties", 821)
 				RESETCOLOR
 				FONTREGULAR
 			ENDIF
 		ENDIF
 		SIF CFLAG:イタズラ > 1
-		PRINTC Stop Sleep Rape[999]
+		HTML_PRINT HOTPATCH_BUTTON("Stop Sleep Rape", 999)
 	ENDIF
 	IF CFLAG:添い寝中
-		PRINTC Stop Sleeping Together[999]
+		HTML_PRINT HOTPATCH_BUTTON("Stop Sleeping Together", 999)
 	ENDIF
 	IF CHK_DATENOW(CFLAG:MASTER:デート中) && (!FLAG:70 || CFLAG:TARGET:344 == 1) && !CFLAG:MASTER:うふふ && CFLAG:MASTER:現在位置 != OMANEKIBEYA() && TFLAG:妄想中 != 1
 		IF !FLAG:デート相手 && GETBIT(FLAG:瞬間移動, AT_HOME(MASTER)) && QOL_RETURN_HOME_TIME_REQUIRED() * 3 < BASE:MASTER:TSP
 				SETCOLOR 0x5090FF
-			PRINTFORMC Return Home({QOL_RETURN_HOME_TIME_REQUIRED() * 3}TSP)[999]
+			HTML_PRINT HOTPATCH_BUTTON(@"Return Home({QOL_RETURN_HOME_TIME_REQUIRED() * 3}TSP)", 999)
 			RESETCOLOR
 		ELSE
 			SIF QOL_RETURN_HOME_TIME_REQUIRED() < 10
 				SETCOLOR 100, 250, 140
 			;custom code
-			PRINTFORMC \@ FLAG:デート相手 ? Finish Date # Return Home \@({QOL_RETURN_HOME_TIME_REQUIRED()}min)[999]
+			HTML_PRINT HOTPATCH_BUTTON(@"%FLAG:デート相手 ? "Finish Date" # "Return Home"%({QOL_RETURN_HOME_TIME_REQUIRED()}min)", 999)
 			RESETCOLOR
 		ENDIF
 	ENDIF
@@ -310,7 +310,7 @@ ENDIF
 HTML_PRINT "<era-open class='era-actions-group'>"
 [SKIPSTART]
 PRINTPLAIN  == 
-CALL PRINTBUTTON_EX("[Config]",809)
+HTML_PRINT HOTPATCH_BUTTON("Config", 809)
 PRINTPLAIN =
 IF TARGET != MASTER
 	SELECTCASE CFLAG:オート喘ぎ
@@ -344,15 +344,15 @@ ENDIF
 RESULT = 0
 CALL COM_ABLE400
 SIF RESULT
-	PRINTC Move[400]
+	HTML_PRINT HOTPATCH_BUTTON("Move", 400, "", "sidebar", "era-travel-button")
 RESULT = 0
 RESETCOLOR
 CALL COM_ABLE405
 IF RESULT
 	IF CFLAG:TARGET:同行 && TARGET
-		PRINTC Date[405]
+		HTML_PRINT HOTPATCH_BUTTON("Date", 405, "", "sidebar", "era-travel-button")
 	ELSE 
-		PRINTC Go Out[405]
+		HTML_PRINT HOTPATCH_BUTTON("Go Out", 405, "", "sidebar", "era-travel-button")
 	ENDIF
 ENDIF
 RESULT = 0
@@ -365,27 +365,27 @@ ENDIF
 RESULT = 0
 CALL COM_ABLE604
 SIF RESULT
-	PRINTC Explore[604]
+	HTML_PRINT HOTPATCH_BUTTON("Explore", 604, "", "sidebar")
 RESETCOLOR
 SIF FLAG:1005
-	PRINTC Config[810]
+	HTML_PRINT HOTPATCH_BUTTON("Config", 810, "", "sidebar")
 SIF TALENT:MASTER:居場所察知 && (GETBIT(TALENT:MASTER:居場所察知, 1) || !(CFLAG:うふふ || CFLAG:イタズラ || CFLAG:添い寝中)) ;at_home check removed
-	PRINTC Whereabouts Sense[811]
+	HTML_PRINT HOTPATCH_BUTTON("Whereabouts Sense", 811, "", "sidebar")
 SIF TALENT:MASTER:汚部屋察知 && AT_HOME(MASTER) && !(CFLAG:うふふ || CFLAG:イタズラ || CFLAG:添い寝中)
-	PRINTC Cleanliness Sense[812]
+	HTML_PRINT HOTPATCH_BUTTON("Cleanliness Sense", 812, "", "sidebar")
 SIF GETBIT(TALENT:MASTER:劣情察知, 1) && !CFLAG:うふふ && !CFLAG:添い寝中 && !CFLAG:MASTER:イタズラ
-	PRINTC Lust Detector[813]
+	HTML_PRINT HOTPATCH_BUTTON("Lust Detector", 813, "", "sidebar")
 IF FLAG:70 && CFLAG:TARGET:344 == 0 && !CFLAG:TARGET:睡眠 && AT_HOME(MASTER) == 1 && TARGET > 0 && !CFLAG:うふふ && CFLAG:行動 != 5 ;disallow while they're working
 	IF TFLAG:運搬 == 0 || TFLAG:運搬 != TARGET
-		PRINTC Carry[815]
+		HTML_PRINT HOTPATCH_BUTTON("Carry", 815, "", "sidebar")
 	ELSE 
-		PRINTC Put Down[815]
+		HTML_PRINT HOTPATCH_BUTTON("Put Down", 815, "", "sidebar")
 	ENDIF
 ENDIF
 SIF FLAG:70 && TALENT:MASTER:集合 && AT_HOME(MASTER) == 1 && !CFLAG:うふふ
-	PRINTC Gather[817]
+	HTML_PRINT HOTPATCH_BUTTON("Gather", 817, "", "sidebar")
 SIF GATHERING_SPOT(CFLAG:MASTER:現在位置) != 0
-	PRINTC Foraging List[818]
+	HTML_PRINT HOTPATCH_BUTTON("Foraging List", 818, "", "sidebar")
 [SKIPSTART]
 	;Custom code, moved below.
 IF CAN_DATE(TARGET) && !CFLAG:TARGET:神社在住
@@ -398,34 +398,34 @@ ENDIF
 	
 ;custom code
 SIF FISHING_SPOT(CFLAG:MASTER:現在位置) != 0 && ABL:MASTER:教養 >= 3
-	PRINTC Fishing List[890]
+	HTML_PRINT HOTPATCH_BUTTON("Fishing List", 890, "", "sidebar")
 
 ;addition custom code
 IF PLACE_SENTO(CFLAG:MASTER:現在位置) == 9 && CFLAG:64:現在位置 != CFLAG:MASTER:現在位置 && !FIRSTTIME("YuugiBath", 1, 64)
 	SETCOLOR 100, 250, 140
-	PRINTC Call Yuugi[891]
+	HTML_PRINT HOTPATCH_BUTTON("Call Yuugi", 891, "", "sidebar")
 	RESETCOLOR
 ENDIF
 
 ;addition custom code
 SIF TALENT:MASTER:パンティーセンス && !CFLAG:うふふ && !CFLAG:添い寝中 && !CFLAG:MASTER:イタズラ
-	PRINTC Panty Sense[892]
+	HTML_PRINT HOTPATCH_BUTTON("Panty Sense", 892, "", "sidebar")
 
 ;addition custom code, from KR version
 IF CFLAG:MASTER:初期位置 == CFLAG:MASTER:現在位置 || (CFLAG:MASTER:現在位置 == CFLAG:TARGET:初期位置 && (IS_FALLEN(TARGET) || !SHIRAHU(TARGET)))
 	IF !FLAG:自室施錠
-		PRINTC Lock The Door[991]
+		HTML_PRINT HOTPATCH_BUTTON("Lock The Door", 991, "", "sidebar")
 	ELSE
 		SETCOLOR 100, 250, 140
-		PRINTC Unlock The Door[991]
+		HTML_PRINT HOTPATCH_BUTTON("Unlock The Door", 991, "", "sidebar")
 	ENDIF
 	RESETCOLOR
 ENDIF
 	
 SIF CAN_DATE(TARGET)
-	PRINTC Invite On A Date[992]
+	HTML_PRINT HOTPATCH_BUTTON("Invite On A Date", 992, "", "sidebar")
 SIF FLAG:パンツ輸送
-	PRINTC Check Pilfered Panties[994]
+	HTML_PRINT HOTPATCH_BUTTON("Check Pilfered Panties", 994, "", "sidebar")
 sAutoToggles '= ""
 IF !GETBIT(FLAG:USERCOMフィルタ, 13)
 	sAutoToggles += @"<button value='995' class='era-toggle%(GETBIT(FLAG:瞬間移動, AT_HOME(MASTER)) ? " era-on" # "")%' role='checkbox' aria-checked='%(GETBIT(FLAG:瞬間移動, AT_HOME(MASTER)) ? "true" # "false")%' title='Travel with TSP automatically whenever you have enough'>Auto-TSP Movement</button>"
@@ -435,9 +435,6 @@ IF !GETBIT(FLAG:USERCOMフィルタ, 14) & AT_HOME(MASTER) && !CFLAG:うふふ &
 	sAutoToggles += @"<button value='996' class='era-toggle%(GETBIT(FLAG:自動掃除, AT_HOME(MASTER)) ? " era-on" # "")%' role='checkbox' aria-checked='%(GETBIT(FLAG:自動掃除, AT_HOME(MASTER)) ? "true" # "false")%'>Auto-Clean</button>"
 ENDIF
 sAutoToggles += @"<button value='-9200' class='era-toggle%(FLAG:押し倒し ? " era-on" # "")%' role='checkbox' aria-checked='%(FLAG:押し倒し ? "true" # "false")%' title='When on, someone only pushes you down if they are stronger than you (fighting ability and build, with shyness, seduction and forwardness); otherwise they just hug you. When off, anyone in the mood can push you down.'>Pushdown Guard</button>"
-SIF STRLENS(sAutoToggles)
-	HTML_PRINT @"<div class='era-toggles era-auto-toggles'>%sAutoToggles%</div>"
-
 PRINTL
 ;custom, moved to its own line due to length
 IF CAN_DATE(TARGET)
@@ -447,10 +444,12 @@ IF CAN_DATE(TARGET)
 		SETCOLOR 100, 250, 140
 	;ugly but this gets super long otherwise. perhaps move it to its own dedicated line instead?
 	;PRINTFORMC %SUBSTRING(@"Invite To %GET_MAPNAME(MAIN_MAP)%", 0, GETCONFIG("PRINTCの文字数") - (5 + STRLENS(LOCALS)) )%%LOCALS%[990]
-	PRINTFORMC Invite To %GET_MAPNAME(MAIN_MAP)%%LOCALS%[990]
+	HTML_PRINT HOTPATCH_BUTTON(@"Invite To %GET_MAPNAME(MAIN_MAP)%%LOCALS%", 990, "", "sidebar")
 	RESETCOLOR
 ENDIF
 HTML_PRINT "<era-close>"
+SIF STRLENS(sAutoToggles)
+	HTML_PRINT @"<div class='era-toggles era-auto-toggles'>%sAutoToggles%</div>"
 CALL HOTPATCH_SETTINGS
 SIF FLAG:QUICKCHEAT_ENABLED ;qol custom code
 	CALL QOL_PRINT_QUICKCHEATS
@@ -515,7 +514,7 @@ RETURNF 6
 #DIM DYNAMIC nKojo
 #DIMS DYNAMIC COM_NAME
 IF nCom == 352
-	HTML_PRINT "<span class='era-guard-control'><button value='352'>Relationship...</button></span>"
+	HTML_PRINT HOTPATCH_BUTTON("Relationship...", 352)
 	RETURN 0
 ENDIF
 VARSET COM_DISPLAY_COLOR
@@ -526,39 +525,41 @@ IF !GROUPMATCH(COM_NAME, "Null", "")
 	SIF COM_DISPLAY_COLOR
 		SETCOLOR COM_DISPLAY_COLOR
 	IF COM_DISPLAY_BEHAVIOR == -1
-		PRINTFORMC %COM_NAME%[...]
+		HTML_PRINT HOTPATCH_BUTTON(COM_NAME, nCom, "", "unavailable")
 	ELSE
-		PRINTFORMC %COM_NAME%[{nCom,3}]
+		HTML_PRINT HOTPATCH_BUTTON(COM_NAME, nCom)
 	ENDIF
 	RESETCOLOR
 ELSEIF nCom >= 270 && nCom < 300
 	;kojo com
 	CALL KOJO_MESSAGE_SEND("COM", 0, TARGET, nCom - 270)
-	PRINTFORMC %RESULTS%[{nCom,3}]
+	HTML_PRINT HOTPATCH_BUTTON(RESULTS, nCom)
 	nKojo = 1
 ELSEIF nCom == 606 ;addition custom code
+	LOCALS '= ""
 	LOCAL:1 = 0
 	FOR LOCAL:2,0,1000
 		RESULT = 0
 		TRYCALLFORM TSC_ABLE{LOCAL:2}()
 		IF LOCAL:1 > 1
-			LOCALS = %TRAINNAME_TR(606)%[{606,3}]
+			LOCALS '= TRAINNAME_TR(606)
 			BREAK
 		ELSEIF RESULT == 2
 			CALLFORM TSC_NAME{LOCAL:2}
-			LOCALS = %RESULTS%[{606,3}]
+			LOCALS '= RESULTS
 			LOCAL:1 ++
 		ENDIF
 	NEXT
-	PRINTFORMC %LOCALS%
+	SIF LOCALS != ""
+		HTML_PRINT HOTPATCH_BUTTON(LOCALS, nCom)
 ELSEIF nCom == 414 && CFLAG:MASTER:うふふ ;qol custom code
-	PRINTFORMC Meal Break[{nCom,3}]
+	HTML_PRINT HOTPATCH_BUTTON("Meal Break", nCom)
 ;Custom code
 ELSEIF STRLENS(TRAINNAME_TR(nCom))
 	;custom code
 	SIF nCom == 401 ;highlight collection
 		SETCOLOR 100, 250, 140
-	PRINTFORMC %TRAINNAME_TR(nCom)%[{nCom,3}]
+	HTML_PRINT HOTPATCH_BUTTON(TRAINNAME_TR(nCom), nCom)
 	RESETCOLOR
 ENDIF
 RETURN nKojo
@@ -703,7 +704,7 @@ RETURNF @"<button value='{nValue}' class='era-toggle%sClass%%(nOn ? " era-on" # 
 #DIMS DYNAMIC sHtml
 #DIMS DYNAMIC sMoan
 #DIMS DYNAMIC sMoanChecked
-sHtml '= "<button value='809' class='era-chip-button'>Config</button>"
+sHtml '= HOTPATCH_BUTTON("Config", 809, "", "sidebar-wide")
 IF TARGET > 0 && TARGET != MASTER && (CFLAG:MASTER:うふふ || CFLAG:TARGET:うふふ || CFLAG:MASTER:イタズラ || CFLAG:TARGET:イタズラ || FLAG:70 || FREE_USE_ACTIVE())
 	sHtml += HOTPATCH_TOGGLE("Automatic Condom", 838, FLAG:自動ゴム)
 	SELECTCASE CFLAG:オート喘ぎ
@@ -724,3 +725,77 @@ IF TARGET > 0 && TARGET != MASTER && (CFLAG:MASTER:うふふ || CFLAG:TARGET:う
 	sHtml += HOTPATCH_TOGGLE("Standing", -9122, CFLAG:STANDING_TOGGLE, "", "Prefer standing versions of supported intimate positions with this character. When off, use normal positions where the location allows; standing may still be required elsewhere. Does not apply during sleep sessions.")
 ENDIF
 HTML_PRINT @"<div class='era-toggles era-settings'>%sHtml%</div>"
+
+@Add_Custom_List_COMS
+#DIM DYNAMIC HIGHLIGHT_SCOM
+SIF STRCOUNT(SAVESTR:0, @"{ADD_CUSTOM_COM}")
+	RETURN
+FOR LOCAL, 0, ADD_CUSTOM_MAX_COM + 1
+	RESULT = 0
+	TRYCALLFORM ADD_CUSTOM_COM_ABLE{LOCAL}
+	IF RESULT
+		RESULT = 0
+		CALL QOL_CUSTOM_SCOM_CHECK(LOCAL)
+		HIGHLIGHT_SCOM = RESULT
+		IF HIGHLIGHT_SCOM
+			SETCOLOR C_HEARTPINK
+			HTML_PRINT HOTPATCH_BUTTON(RESULTS, Add_Custom_COM_To_Number(LOCAL))
+			RESETCOLOR
+		ELSE
+			TRYCCALLFORM ADD_CUSTOM_COM_PRINT{LOCAL}
+			CATCH
+				HTML_PRINT HOTPATCH_BUTTON(Add_Custom_COM_Name(LOCAL), Add_Custom_COM_To_Number(LOCAL))
+			ENDCATCH
+		ENDIF
+	ENDIF
+NEXT
+
+@ADD_CUSTOM_COM_PRINT7
+SETCOLOR C_GREEN
+HTML_PRINT HOTPATCH_BUTTON(ADD_CUSTOM_TRAINNAME7(), Add_Custom_COM_To_Number(7))
+RESETCOLOR
+
+@ADD_CUSTOM_COM_PRINT94
+FOR LOCAL, 0, MaxQuest
+	SIF QuestList:LOCAL == ""
+		RETURN
+	RESULT = 0
+	TRYCALLFORMF QUEST_%FUNCTION_FORMAT(QuestList:LOCAL)%_COMMAND
+	IF RESULT
+		SETCOLOR RESULT:1
+		HTML_PRINT HOTPATCH_BUTTON(RESULTS, 9094)
+		RESETCOLOR
+		RETURN
+	ENDIF
+NEXT
+
+@HOTPATCH_BUTTON(sLabel, nValue, sTitle = "", sVariant = "action", sClass = "", sState = "", sHelp = "", nEnabled = 1)
+#FUNCTIONS
+#DIMS DYNAMIC sLabel
+#DIM DYNAMIC nValue
+#DIMS DYNAMIC sClass
+#DIMS DYNAMIC sTitle
+#DIMS DYNAMIC sVariant
+#DIMS DYNAMIC sSuffix
+#DIMS DYNAMIC sState
+#DIMS DYNAMIC sHelp
+#DIM DYNAMIC nEnabled
+#DIMS DYNAMIC sStateClass
+SIF !GROUPMATCH(sVariant, "action", "sidebar", "sidebar-wide", "slim", "primary", "inventory", "unavailable", "list")
+	THROW Unknown button variant: %sVariant%
+IF GROUPMATCH(sVariant, "action", "sidebar", "sidebar-wide")
+	sSuffix '= @"<span class='command-number'>[{nValue}]</span>"
+ELSEIF sVariant == "inventory"
+	sSuffix '= "<span class='era-control-arrow'>›</span>"
+ELSEIF sVariant == "unavailable"
+	sSuffix '= "<span class='era-button-unavailable-mark'>[...]</span>"
+ENDIF
+sLabel '= HTML_ESCAPE(sLabel)
+SIF GETCOLOR() != GETDEFCOLOR()
+	sLabel '= @"<span color='#%TOSTR(GETCOLOR(), "X6")%'>%sLabel%</span>"
+IF sVariant == "list"
+	SIF GROUPMATCH(REPLACE(sState, "^\s+|\s+$", ""), "No", "no", "NO", "Off", "off", "OFF")
+		sStateClass '= " era-config-state-off"
+	sLabel '= @"<span class='era-config-setting'><span class='era-config-label'><span class='command-number'>[{nValue}]</span> %sLabel%</span><span class='era-config-state%sStateClass%'>%HTML_ESCAPE(sState)%</span></span><span class='era-config-help'>%HTML_ESCAPE(sHelp)%</span>"
+ENDIF
+RETURNF @"<button value='{nValue}' class='era-button era-button-%sVariant% %HOTPATCH_ATTRIBUTE(HTML_ESCAPE(sClass))%' aria-disabled='%(sVariant == "unavailable" || !nEnabled ? "true" # "false")%' title='%HOTPATCH_ATTRIBUTE(HTML_ESCAPE(sTitle))%'>%sLabel%%sSuffix%</button>"
