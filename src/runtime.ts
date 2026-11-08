@@ -9,7 +9,7 @@ import { parseFormat } from "./format.js";
 import { formNameEnd, parseAssignment, parseCallTarget, parseCaseTests, statementExpression, type Assignment, type CallTarget, type CaseTest } from "./statement-parser.js";
 import { MemoryGlobalStore, MemorySaveStore, StagedStores, type GlobalStore, type SaveStore } from "./storage.js";
 import { randomInt, randomUUID } from "node:crypto";
-import { escapeHtml, type ColoredText, htmlButtons, htmlLineBreaks, htmlLineCount, htmlSpriteNames, htmlTagSplit, htmlWidth, plainHtml } from "./html.js";
+import { escapeHtml, type ColoredText, htmlButtons, htmlContentLines, htmlLineBreaks, htmlLineCount, htmlSpriteNames, htmlTagSplit, htmlWidth, plainHtml } from "./html.js";
 import { formatInteger, stringWidth, toFullWidth, toHalfWidth } from "./strings.js";
 import { DataTables, TABLE_OPERATIONS } from "./data-tables.js";
 import { CONFIG_ITEMS, configSetting } from "./config-items.js";
@@ -154,20 +154,11 @@ function hasUnacknowledgedOutput(output: Output[]): boolean {
       current ||= item.text.trim() !== "";
       continue;
     }
-    const content = item.type === "input" ? "" : item.type === "html" ? plainHtml(item.text) : item.text;
-    const graphical = item.type === "html" && /<(?:img|shape|svg|canvas)\b/i.test(item.text);
-    if (item.type === "html") {
-      current ||= content.trim() !== "" || graphical;
-      for (let i = 0; i < (item.breaks ?? 0); i++) {
-        lines.push(current);
-        current = content.trim() !== "" || graphical;
-      }
-    } else {
-      const segments = content.split("\n");
-      for (const [i, segment] of segments.entries()) {
-        if (i > 0) { lines.push(current); current = false; }
-        current ||= segment.trim() !== "";
-      }
+    const content = item.type === "html" ? htmlContentLines(item.text) :
+      item.text.split("\n").map(segment => item.type !== "input" && segment.trim() !== "");
+    for (const [i, visible] of content.entries()) {
+      if (i > 0) { lines.push(current); current = false; }
+      current ||= visible;
     }
     if (item.newline) { lines.push(current); current = false; }
   }

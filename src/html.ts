@@ -14,6 +14,23 @@ export function plainHtml(value: string): string {
   return visit(parseFragment(value));
 }
 
+/** Visible content per logical print line; <br> does not add a CLEARLINE-counted line. */
+export function htmlContentLines(value: string): boolean[] {
+  const lines = [false];
+  function visit(node: DefaultTreeAdapterMap["node"]): void {
+    if ("value" in node && node.nodeName === "#text") {
+      for (const [i, segment] of node.value.split("\n").entries()) {
+        if (i > 0) lines.push(false);
+        if (segment.trim()) lines[lines.length - 1] = true;
+      }
+    } else if (["img", "shape", "svg", "canvas"].includes(node.nodeName)) {
+      lines[lines.length - 1] = true;
+    } else if ("childNodes" in node) node.childNodes.forEach(visit);
+  }
+  visit(parseFragment(value));
+  return lines;
+}
+
 export interface ColoredText { text: string; color: string }
 export function coloredHtml(value: string, defaultColor: string): ColoredText[] {
   const runs: ColoredText[] = [];

@@ -1337,9 +1337,8 @@ QUIT`, (game) => game.tables.set("TRAIN", new Map([[0, ["Talk"]], [2, ["Hidden"]
   const first = rt.start();
   assert.deepEqual(texts(first).slice(2), ["usercom", "noskip", "＜コマンド連続実行：1/2＞", "kiss"]);
   assert.equal(first.input?.kind, "integer");
-  assert.deepEqual(texts(rt.input("5")), ["5"]);
-  const rest = rt.input("");
-  assert.deepEqual(texts(rest), ["noskip", "＜コマンド連続実行：2/2＞", "コマンドを実行できませんでした", "usercom 2", "end 0"]);
+  const rest = rt.input("5");
+  assert.deepEqual(texts(rest), ["5", "noskip", "＜コマンド連続実行：2/2＞", "コマンドを実行できませんでした", "usercom 2", "end 0"]);
   assert.equal(rest.status, "halted");
 });
 
