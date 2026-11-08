@@ -635,6 +635,7 @@ test("main screen hotpatch opens and closes its panel boxes in balance", {
     assert.doesNotMatch(html, /<div class='era-clock'><img/);
     assert.equal((html.match(/value='805'/g) ?? []).length, 1, "inventory has exactly one entry point");
     assert.match(html, /era-player-actions'><button value='805' class='era-player-control era-inventory-button'/, "inventory is on the player card");
+    assert.doesNotMatch(html, /value='490'/, "the legacy Items command is replaced by the GUI inventory");
     assert.match(html, /class='era-toggles era-auto-toggles'><button value='995'[^]*<button value='-9200' class='era-toggle[^']*' role='checkbox' aria-checked='(?:true|false)'[^>]*>Pushdown Guard<\/button><\/div>/, "the guard shares the compact checkbox row with Auto-TSP and Auto-Clean");
     assert.doesNotMatch(html, /era-player-toggles|Go &amp; Manage|Auto Items/);
   }

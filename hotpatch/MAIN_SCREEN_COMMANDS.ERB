@@ -53,6 +53,9 @@ nAbleCount = 0
 
 ;コマンド表示 (the usable commands first, so the filters can leave out toggles that would change nothing)
 FOR LOCAL,0,800
+	; Inventory has a dedicated GUI entry on the player card.
+	SIF LOCAL == 490
+		CONTINUE
 	IF LOCAL == 352
 		IF TARGET != MASTER && TARGET >= 0 && TFLAG:100
 			nAble:nAbleCount = LOCAL
