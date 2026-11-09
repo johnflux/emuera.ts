@@ -24,7 +24,7 @@
 .era-player-management .era-actions-group .print-cell { display: block; flex: 1 1 100%; }
 .era-player-management .era-actions-group .print-cell:nth-child(-n+2) { flex-basis: calc(50% - 9px); }
 
-.era-player-management .era-auto-toggles { gap: var(--era-player-control-gap); margin-top: 0; }
+.era-player-management .era-auto-toggles { gap: var(--era-player-control-gap); margin-top: 0; margin-bottom: var(--era-player-control-gap); }
 .era-player-management .era-settings { display: flex; flex-wrap: wrap; gap: var(--era-player-control-gap); margin-top: 0; padding-top: 0; border-top: 0; }
 .era-player-management .era-settings > .line { display: contents; }
 .era-player-management .era-settings .era-quicksave-row { flex-basis: 100%; }
@@ -42,5 +42,5 @@
 .era-look { margin-top: 8px; }
 /* The room's chatter (others' talk, the radio, room descriptions) under the place title; gone when there is none. */
 .era-scene { margin: -2px 0 8px; color: #b8c4cc; font-style: italic; }
-.era-scene:not(:has(.line:not(.era-marker))) { display: none; }
+.era-scene:not(:has(.line:not(.era-marker, [hidden]))) { display: none; }
 .era-look .line:has(button.choice[data-value="3003"]) { display: none; }

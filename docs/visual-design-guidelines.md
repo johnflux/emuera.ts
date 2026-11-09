@@ -107,12 +107,25 @@ base hex values.
 App and library button appearance lives in `styles/shared/_chrome-buttons.scss`.
 Add `ui-button` and explicit variant classes when constructing each control;
 containers may arrange buttons but must not supply their colors, typography,
-borders, padding, or interaction states. Reuse the default/primary/quiet/danger
-variants where possible. New variants require a root-button fixture in
+borders, padding, or interaction states. Use one shared 13px sans-serif label
+font and weight, including small/large buttons; size variants change padding
+and hit area, not typography. The only appearance variants are primary, quiet,
+danger, small, large, tab, menu-item, and icon. Library and history tabs both use
+`ui-button--tab`; tab counts use its child span. Menu buttons and navigation
+links both use `ui-button--menu-item`. Saves and sends use primary; cancels and
+closes use quiet; secondary tools use default or quiet with small when needed.
+Do not introduce screen-specific variants such as library, history, settings,
+LLM, or controller buttons. Controller menus use large, and all chrome buttons
+have a minimum 44px touch target on compact coarse-pointer screens. Selected,
+expanded, busy, disabled, focus, and controller-hint states are shared.
+`ui-button--continue` only adds the existing pause-hint animation; it does not
+change button appearance. New variants require a root-button fixture in
 `web/chrome-button-samples.js` (`CHROME_BUTTON_SAMPLES`) so the component catalog
 can demonstrate them without app ancestors, including disabled states.
 `test/chrome-buttons.test.ts` checks selector-state fixture coverage and compares
-normal, focused, and disabled appearances inside and outside app containers.
+normal, focused, and disabled appearances inside and outside app containers,
+including production button class combinations. It also enforces shared label
+typography and tab/link equivalence.
 Place overlays with their containers; do not absolutely position a button
 variant merely to place it in one screen.
 Controller decorations also belong to the control: chrome uses its local

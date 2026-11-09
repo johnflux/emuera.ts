@@ -1,5 +1,4 @@
-/* main has no right padding: the scrollbar takes its place, and the output keeps a 20px margin like the left one. */
-#terminal { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 16px max(6px, calc(20px - var(--scrollbar-width, 0px))) 0 20px; font-size: var(--font-size); line-height: var(--line-height, 1.25); overflow: auto; scrollbar-gutter: stable; container-type: inline-size; }
+#terminal { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 1.5ch 6px 0 1.5ch; font-size: var(--font-size); line-height: var(--line-height, 1.25); overflow: auto; scrollbar-gutter: stable; container-type: inline-size; }
 #terminal::-webkit-scrollbar { height: 0; }
 /* CBGSETG/CBGSETSPRITE pictures: positioned over the terminal's visible box by placeBackground() in app.js. */
 #terminal { position: relative; z-index: 1; }
@@ -18,14 +17,8 @@
 #terminal > * { flex-shrink: 0; min-width: var(--logical-width, 0); }
 #terminal.is-waiting { cursor: pointer; }
 #continue-hint {
-  --button-background: transparent; --button-border: transparent; --button-color: #b0b0b0;
-  --button-hover-background: transparent; --button-hover-border: transparent;
-  flex-shrink: 0; justify-content: flex-start; margin: 0; padding: 4px 20px;
-  font: italic var(--font-size)/1.4 var(--terminal-font);
-  animation: continue-hint-pulse 2.4s ease-in-out infinite;
+  flex-shrink: 0; align-self: flex-start; margin: 0 8px;
 }
-@keyframes continue-hint-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .7; } }
-@media (prefers-reduced-motion: reduce) { #continue-hint { animation: none; } }
 /* Briefly after clicking through to a menu, its choices ignore clicks (see settle() in app.js). */
 #terminal.is-settling button.choice { cursor: default; }
 .screen.is-history { filter: grayscale(1); opacity: .4; pointer-events: none; }
@@ -76,6 +69,8 @@ button[hidden], a.game-primary[hidden], .era-chip-button[hidden], button.choice[
 .screen.is-active button.choice.era-button:enabled:is(:hover, :focus-visible) .command-number * { color: var(--selection-color) !important; }
 .choice .interactive-label { text-decoration: underline; text-decoration-color: slategray; text-decoration-thickness: from-font; text-underline-offset: .15em; }
 button.choice:disabled { opacity: .5; }
+/* Continue waits disable choices without making their output history. */
+#terminal.is-waiting .screen.is-active button.choice:disabled:not([aria-disabled="true"], .is-stale) { opacity: 1; filter: none; }
 /* Choices left over from before a CLEARLINE, once newer ones are printed (only those still sharing a box with new output). */
 .screen.is-active button.choice.is-stale { opacity: .4; filter: grayscale(1); }
 .screen.is-active .is-stale.has-tooltip:hover { background-color: transparent; }

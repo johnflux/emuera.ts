@@ -93,6 +93,74 @@ async function fixture() {
   return { root, ...api };
 }
 
+async function screenFixture() {
+  const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
+  const root = element("");
+  const screen = source.slice(source.indexOf("function screen()"), source.indexOf("function lastOutputLine()"));
+  const lineStart = source.indexOf("function line()");
+  const line = source.slice(lineStart, source.indexOf("/**", lineStart));
+  const retire = source.slice(source.indexOf("function retireScreen("), source.indexOf("// Undo retireScreen"));
+  const render = source.slice(source.indexOf("  const previousScreen = currentScreen;"),
+    source.indexOf('  outputRoot.querySelectorAll("button.choice").forEach(decorateCommandNumbers);'));
+  const api = runInNewContext(`
+    let currentScreen = null, currentLine = null, continuedScreens = [];
+    ${screen}
+    function container() { return screen(); }
+    ${line}
+    ${retire}
+    async function render(snapshot, advanceScreen = false) { ${render} }
+    ({ render });
+  `, {
+    outputRoot: root,
+    document: { createElement: (tag: string) => new Element(tag) },
+    disposeCharacterChats: () => {},
+    hideTooltip: () => {},
+    applyLineStyle: () => {},
+    applyStyle: () => {},
+    ruleTail: /([-─━═=＝～~_])\1{9,}$/u,
+  }) as {
+    render(snapshot: {
+      status: string;
+      input?: { kind: string };
+      output: { type: string; text: string; newline?: boolean; plain?: boolean }[];
+    }, advanceScreen?: boolean | "continue"): Promise<void>;
+  };
+  return { root, ...api };
+}
+
+for (const kind of ["integer", "string"]) {
+  test(`continued dialogue stays bright at a ${kind} prompt until input is submitted`, async () => {
+    const { root, render } = await screenFixture();
+    const text = (text: string) => ({ type: "text", text, newline: true, plain: true });
+    await render({ status: "waiting", input: { kind: "wait" }, output: [text("First page")] });
+    await render({ status: "waiting", input: { kind: "wait" }, output: [text("Second page")] }, "continue");
+    await render({ status: "waiting", input: { kind }, output: [text("Choose")] }, "continue");
+    assert.equal(root.querySelectorAll(".is-history").length, 0);
+    assert.equal(root.querySelectorAll(".is-active").length, 3);
+    await render({ status: "waiting", input: { kind }, output: [] });
+    assert.equal(root.querySelectorAll(".is-history").length, 0, "a refresh without input keeps dialogue bright");
+    await render({ status: "waiting", input: { kind: "wait" },
+      output: [{ type: "input", text: "1", newline: true }, text("Result")] }, true);
+    assert.equal(root.querySelectorAll(".is-history").length, 3);
+    assert.equal(root.querySelectorAll(".is-active").length, 1);
+    assert.equal(root.children[2]!.textContent, "Choose1", "input echo stays with the retired prompt");
+    assert.equal(root.lastElementChild!.textContent, "Result");
+  });
+}
+
+test("continuing an unfinished line or reaching the end does not retire dialogue", async () => {
+  const { root, render } = await screenFixture();
+  await render({ status: "waiting", input: { kind: "wait" },
+    output: [{ type: "text", text: "First", plain: true }] });
+  await render({ status: "waiting", input: { kind: "wait" },
+    output: [{ type: "text", text: " second", newline: true, plain: true }] }, "continue");
+  assert.equal(root.querySelectorAll(".line").length, 1);
+  assert.equal(root.textContent, "First second");
+  await render({ status: "done", output: [{ type: "text", text: "End", newline: true, plain: true }] }, "continue");
+  assert.equal(root.querySelectorAll(".is-history").length, 0);
+  assert.equal(root.querySelectorAll(".is-active").length, 2);
+});
+
 test("retired GUI is detached while narrative and echoed input become plain text", async () => {
   const { root, trimScrollback, restoreHistoryScreen } = await fixture();
   const group = element("screen is-history");

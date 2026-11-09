@@ -130,7 +130,7 @@ button.choice.era-setup-choice { grid-template-columns: 14px minmax(0, 1fr); }
 button.choice:is(.era-title-new, .era-title-load, .era-title-continue) { width: 85%; }
 }
 button.choice.era-timestop-button:enabled:focus-visible { outline: 2px solid #ffe0a2; outline-offset: 4px; }
-button.choice.era-button { display: inline-flex; align-items: center; gap: .45em; box-sizing: border-box; justify-content: flex-start; margin: 0; padding: 6px 12px; border: 1px solid #35566d; border-radius: 4px; background: linear-gradient(#102330, #0b1822); color: #b7d5e2; font-family: var(--terminal-font); line-height: 1.25; text-align: left; white-space: normal; }
+button.choice.era-button { display: inline-flex; align-items: baseline; gap: .2em; box-sizing: border-box; justify-content: flex-start; margin: 0; padding: 4px 9px; border: 1px solid #35566d; border-radius: 4px; background: linear-gradient(#102330, #0b1822); color: #b7d5e2; font-family: var(--terminal-font); line-height: 1.25; text-align: left; white-space: normal; }
 button.choice.era-button-block { width: 100%; flex: 1 1 100%; min-width: 0; }
 button.choice.era-travel-button { flex-basis: calc(50% - 9px); }
 button.choice.era-page-prev.has-controller-hint::before { content: "L1 "; color: #ffe083; }

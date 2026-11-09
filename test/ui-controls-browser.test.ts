@@ -19,6 +19,50 @@ const browser = [
   process.env.PROGRAMFILES && join(process.env.PROGRAMFILES, "Google/Chrome/Application/chrome.exe"),
 ].find((path): path is string => !!path && existsSync(path));
 
+test("Continue waits keep disabled active portraits bright but still dim history and unavailable choices", {
+  skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH",
+}, async () => {
+  const style = await readFile(new URL("../web/generated/style.css", import.meta.url), "utf8");
+  const html = `<!doctype html><style>${style}</style><body>
+    <main id="terminal" class="is-waiting">
+      <div class="screen is-active">
+        <button id="portrait" class="choice" disabled><span class="sprite"><span class="sprite-clip">Portrait</span></span></button>
+        <button id="unavailable" class="choice" disabled aria-disabled="true">Unavailable</button>
+        <button id="stale" class="choice is-stale" disabled>Stale</button>
+      </div>
+      <div id="history" class="screen is-history">History</div>
+    </main><script>
+      const appearance = id => {
+        const css = getComputedStyle(document.getElementById(id));
+        return {opacity: Number(css.opacity), filter: css.filter};
+      };
+      const result = Object.fromEntries(["portrait", "unavailable", "stale", "history"].map(id => [id, appearance(id)]));
+      result.disabled = document.getElementById("portrait").disabled;
+      document.getElementById("terminal").classList.remove("is-waiting");
+      result.afterWait = appearance("portrait");
+      document.body.innerHTML = "<pre id='result'>" + JSON.stringify(result) + "</pre>";
+    </script>`;
+  const profile = await mkdtemp(join(process.cwd(), ".era-wait-appearance-"));
+  try {
+    const fixture = join(profile, "wait.html");
+    await writeFile(fixture, html);
+    const { stdout } = await execute(browser!, ["--headless", "--disable-gpu", "--no-first-run",
+      `--user-data-dir=${profile}`, "--dump-dom", pathToFileURL(fixture).href],
+      { maxBuffer: 8 * 1024 * 1024, timeout: 30000 });
+    const match = stdout.match(/<pre id="result">([\s\S]*?)<\/pre>/);
+    assert.ok(match);
+    const result = JSON.parse(match[1]);
+    assert.deepEqual(result.portrait, { opacity: 1, filter: "none" });
+    assert.equal(result.disabled, true);
+    for (const id of ["unavailable", "stale", "history", "afterWait"]) {
+      assert.ok(result[id].opacity < 1, `${id} stays dimmed`);
+      assert.equal(result[id].filter, "grayscale(1)", `${id} stays desaturated`);
+    }
+  } finally {
+    await rm(profile, { recursive: true, force: true });
+  }
+});
+
 test("item IDs and quantities stay unbroken in wide and compact dialogs and legacy prompts have no controller badge", {
   skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH",
 }, async () => {
@@ -314,7 +358,7 @@ test("compact settings retain font selection without font size or display mode c
     assert.equal(result.resetText, "Reset all");
     assert.equal(result.resetTop, result.closeTop);
     assert.ok(result.resetRight < result.closeLeft);
-    assert.ok(result.resetHeight >= 44);
+    assert.ok(result.resetHeight >= 36);
   } finally {
     await rm(profile, { recursive: true, force: true });
   }
@@ -351,7 +395,7 @@ test("native game checkboxes share clear styling and preserve runtime state on a
   ]);
   const html = `<!doctype html><meta charset="utf-8"><style>${style}\n${responsive}</style>
     <body><section class="screen is-active"><div class="line" id="controls"></div></section>
-    <button class="ui-button ui-button--continue-hint" id="continue-hint" type="button" hidden>Click to continue</button><script>
+    <button class="ui-button ui-button--quiet ui-button--continue" id="continue-hint" type="button" hidden>Click to continue</button><script>
       ${controls.replace(/^export /gm, "")}
       let calls = 0;
       const unchecked = createCheckbox(false, () => calls++);
@@ -441,8 +485,8 @@ test("native game checkboxes share clear styling and preserve runtime state on a
     assert.ok(result.compactHeight > 0, `compact checkbox height: ${result.compactHeight}`);
     assert.equal(result.hiddenHint, "none");
     assert.equal(result.visibleHint.display, "flex");
-    assert.equal(result.visibleHint.color, "rgb(176, 176, 176)");
-    assert.equal(result.visibleHint.fontStyle, "italic");
+    assert.equal(result.visibleHint.color, "rgb(155, 167, 184)");
+    assert.equal(result.visibleHint.fontStyle, "normal");
     assert.equal(result.visibleHint.text, "Click to continue");
     assert.equal(result.visibleHint.animation, "continue-hint-pulse");
     assert.equal(result.visibleHint.duration, "2.4s");

@@ -339,7 +339,7 @@ test("catalog uses production rendering and context-independent buttons at wide 
     assert.deepEqual(result.controllerHints, ["X", "Y", "B"]);
     assert.ok(result.chromeSamples > 10);
     assert.equal(result.chromeVisible, true);
-    assert.ok(result.chromeDisabledCount > 30);
+    assert.equal(result.chromeDisabledCount, result.chromeSamples, "every catalogued app control is disabled");
     assert.deepEqual(result.chromeDisabledFailures, [], "disabled app controls must be inert, muted, and unaffected by hover/focus");
     assert.equal(result.map.returnButton, true);
     assert.equal(result.map.sharedTabs, true);
@@ -424,9 +424,11 @@ RETURNF "危険日"`, "<calendar-browser-fixture>");
             await pause();
             const dialog = doc.querySelector(".era-calendar:popover-open");
             const people = dialog.querySelector(".era-calendar-people");
+            const dayContentStyle = frame.contentWindow.getComputedStyle(dialog.querySelector(".era-calendar-day-content"));
             const buttons = [...people.querySelectorAll("button")];
             const bounds = people.getBoundingClientRect();
             layouts.push({view, width, display:frame.contentWindow.getComputedStyle(people).display,
+              dayPadding:dayContentStyle.padding, dayRowGap:dayContentStyle.rowGap, dayColumnGap:dayContentStyle.columnGap,
               count:buttons.length,
               sameRow:Math.abs(buttons[0].getBoundingClientRect().top - buttons[1].getBoundingClientRect().top) < 1,
               fits:buttons.every(button => button.getBoundingClientRect().right <= bounds.right + 1),
@@ -495,6 +497,9 @@ RETURNF "危険日"`, "<calendar-browser-fixture>");
     for (const layout of result.layouts) {
       assert.ok(layout.count >= 3, "exercise a populated work schedule");
       assert.equal(layout.display, "flex", JSON.stringify(layout));
+      assert.equal(layout.dayPadding, "6px 9px", JSON.stringify(layout));
+      assert.equal(layout.dayRowGap, "2px", JSON.stringify(layout));
+      assert.equal(layout.dayColumnGap, "5px", JSON.stringify(layout));
       assert.equal(layout.sameRow, true, JSON.stringify(layout));
       assert.equal(layout.fits, true, JSON.stringify(layout));
       assert.equal(layout.overflow, false, JSON.stringify(layout));

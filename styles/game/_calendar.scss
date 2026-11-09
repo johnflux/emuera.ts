@@ -34,7 +34,7 @@
 .era-calendar-number { font-size: 1.5em; line-height: 1; font-variant-numeric: tabular-nums; }
 .era-calendar-weekday { font-size: .9em; line-height: 1.1; }
 .era-calendar-today .era-calendar-number { color: #80dfb5; }
-.era-calendar-day-content { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; min-width: 0; padding: 10px 22px; }
+.era-calendar-day-content { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 5px; min-width: 0; padding: 6px 9px; }
 .era-calendar :is(.era-calendar-events, .era-calendar-people) { white-space: normal; overflow-wrap: anywhere; }
 .era-calendar-events, .era-calendar-people { flex: 1 1 280px; min-width: 0; }
 .era-calendar-events { color: #e4ca85; }
@@ -46,7 +46,6 @@
 .era-calendar .era-inventory-footer { justify-content: flex-start; padding: 16px 28px; border-color: transparent; }
 @media (max-width: 600px) {
   .era-calendar .era-inventory-body { padding: 12px; }
-  .era-calendar-day-content { padding: 8px 12px; }
   .era-calendar-events, .era-calendar-people { flex-basis: 100%; }
   .era-calendar-table-heading > span { padding: 8px; font-size: .8em; }
 }

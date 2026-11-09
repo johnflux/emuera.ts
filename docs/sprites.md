@@ -45,6 +45,11 @@ Consequences of this design:
   `GSAVE`/`GLOAD` are unsupported.
 - Each HTML output that shows a runtime sprite carries a full, self-contained
   copy of its picture. Later drawing never changes what was already printed.
+- Room-stage portraits are capped at 216 CSS pixels. The renderer shrinks the
+  clip, image, and offsets proportionally;
+  smaller portraits are not enlarged. Resource and canvas portraits share this
+  cap, including hover and effect layers. Face thumbnails and other game
+  images retain their existing sizing, and saved image settings are unchanged.
 - HTML `<button pos="...">` and `<nonbutton pos="...">` reset the horizontal
   cursor relative to the line's left edge, in hundredths of the configured font
   size. Positions are applied after images load, including backwards moves.

@@ -974,7 +974,10 @@ The room stage stretches to match the Character Info column without reserving
 an additional minimum height; any spare space goes above the bottom-aligned
 lineup.
 Room chatter is absolutely positioned near the top of the scene so it does not
-push the sprites down or intercept clicks.
+push the sprites down or intercept clicks. Blank and diamond-only chatter lines
+are hidden, and the panel disappears when no visible lines remain. Hidden lines
+still count toward `CLEARLINE`; an unfinished line reappears if more text arrives.
+Diamond bullets are separated from their chatter text by a space.
 The details column is at most 400px wide, with a face
 portrait and the existing character facts, meters and clothing; at narrower widths
 it sits under the scene. There is no tab heading; **See more** sits to the right

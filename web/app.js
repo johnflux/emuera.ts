@@ -173,8 +173,7 @@ let expiring = false;
 let queuedSubmit = null;
 let currentLine = null;
 let currentScreen = null;
-// Screens finished by a click-to-continue wait. They stay active (not greyed) while the dialogue continues, and
-// retire together once a step stops at a real input, so a new menu is shown against greyed history.
+// Screens finished by a click-to-continue wait stay bright until the player submits a real input.
 let continuedScreens = [];
 let outputRoot = terminal;
 let pendingImages = [];
@@ -1494,7 +1493,7 @@ async function pictureCopy(picture) {
  * Emuera draws an image from the top of its line (offset by ypos) without changing the line's height; scripts print
  * blank lines to make room. So the holder only takes the image's width and the picture overflows downwards.
  */
-async function image(source, token, suppliedSprite, scale = imageScale(), suppliedHover, responsive = false) {
+async function image(source, token, suppliedSprite, scale = imageScale(), suppliedHover, responsive = false, maxHeight = Infinity) {
   const holder = document.createElement("span");
   holder.className = "sprite";
   const name = source.getAttribute("src");
@@ -1531,10 +1530,11 @@ async function image(source, token, suppliedSprite, scale = imageScale(), suppli
     const signedHeight = sizeAttribute(source.getAttribute("height") || null, metrics.fontSize * scale, scale) || metrics.fontSize * scale;
     const signedWidth = sizeAttribute(source.getAttribute("width") || null, 0, scale) || width / height * Math.abs(signedHeight);
     // Negative sizes flip the picture in place.
-    const targetHeight = Math.abs(signedHeight), targetWidth = Math.abs(signedWidth);
+    const shrink = Math.min(1, maxHeight / Math.abs(signedHeight));
+    const targetHeight = Math.abs(signedHeight) * shrink, targetWidth = Math.abs(signedWidth) * shrink;
     const clip = document.createElement("span");
     clip.className = "sprite-clip";
-    Object.assign(clip.style, { top: `${sizeAttribute(source.getAttribute("ypos"), 0, scale)}px`, width: `${targetWidth}px`, height: `${targetHeight}px` });
+    Object.assign(clip.style, { top: `${sizeAttribute(source.getAttribute("ypos"), 0, scale) * shrink}px`, width: `${targetWidth}px`, height: `${targetHeight}px` });
     if (signedWidth < 0 || signedHeight < 0) clip.style.transform = `scale(${Math.sign(signedWidth)}, ${Math.sign(signedHeight)})`;
     for (const layer of layers.length ? layers : [img]) {
       layer.style.width = `${naturalWidth * targetWidth / width}px`;
@@ -1886,8 +1886,11 @@ async function renderHtml(markup, parent, sprites) {
     if (node.nodeType === Node.TEXT_NODE) { appendCells(destination, node.textContent); return; }
     if (!(node instanceof Element)) return;
     let element;
-    if (node.tagName === "IMG") element = await image(node, token, sprites?.[node.getAttribute("src")], scale, sprites?.[node.getAttribute("srcb")],
-      !!destination.closest(".era-info-head .era-info-face"));
+    if (node.tagName === "IMG") {
+      const maxHeight = destination.closest(".era-room-stage .era-portrait") ? 216 : Infinity;
+      element = await image(node, token, sprites?.[node.getAttribute("src")], scale, sprites?.[node.getAttribute("srcb")],
+        !!destination.closest(".era-info-head .era-info-face"), maxHeight);
+    }
     else if (node.tagName === "SHAPE") {
       const type = node.getAttribute("type")?.toLowerCase();
       const fontSize = Number.parseFloat(getComputedStyle(terminal).fontSize);
@@ -2324,6 +2327,8 @@ async function renderSnapshot(snapshot, advanceScreen) {
       currentScreen = null;
     }
   } else if (advanceScreen) {
+    for (const screen of continuedScreens) if (screen !== currentScreen && screen.parentElement === outputRoot) retireScreen(screen);
+    continuedScreens = [];
     retireScreen();
     currentScreen = null;
     currentLine = null;
@@ -2449,14 +2454,11 @@ async function renderSnapshot(snapshot, advanceScreen) {
       currentLine = null;
     }
   }
-  if (snapshot.status !== "waiting" || snapshot.input?.kind !== "wait") {
-    for (const screen of continuedScreens) if (screen !== currentScreen && screen.parentElement === outputRoot) retireScreen(screen);
-    continuedScreens = [];
-  }
   outputRoot.querySelectorAll("button.choice").forEach(decorateCommandNumbers);
   for (const submenu of outputRoot.querySelectorAll(".screen.is-active .era-config")) setupConfigSubmenu(submenu);
   markTarget(snapshot.target);
   for (const main of outputRoot.querySelectorAll(".screen.is-active .era-main")) setupMainSidebar(main);
+  for (const scene of outputRoot.querySelectorAll(".screen.is-active .era-scene")) syncSceneLines(scene);
   lastCharacterHistory = snapshot.characterHistory ?? null;
   showCharacterHistory(lastCharacterHistory);
   await prepareMapPictures();
@@ -2800,6 +2802,22 @@ function setupMainSidebar(main) {
   main.append(sidebar);
   for (const line of main.querySelectorAll(".era-info-body .era-look > .line:not(.era-marker)"))
     line.title = line.textContent.trim();
+}
+
+function syncSceneLines(scene) {
+  for (const line of scene.querySelectorAll(".line:not(.era-marker)")) {
+    // Keep logical lines for CLEARLINE, including unfinished lines that may receive more text.
+    line.hidden = /^\s*◆?\s*$/u.test(line.textContent)
+      && !line.querySelector("button, a, img, canvas, svg, input, select, textarea, meter, table, .sprite-clip");
+    if (/^\s*◆\S/u.test(line.textContent)) {
+      const text = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
+      for (let node = text.nextNode(); node; node = text.nextNode()) {
+        if (!node.nodeValue.trim()) continue;
+        node.nodeValue = node.nodeValue.replace(/^(\s*◆)/u, "$1 ");
+        break;
+      }
+    }
+  }
 }
 
 function mainChatInput(request, host) {

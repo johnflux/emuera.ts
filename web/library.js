@@ -39,7 +39,7 @@ export function createLibrary({ api, launch, gamesChanged, confirmAction }) {
       copy.append(element("p", "library-eyebrow", "NOT INSTALLED"),
         element("h3", "", "eraToho The World"),
         element("p", "", "One click downloads and installs the English ZIP. No Git required. Third-party game scripts: only install games you trust."));
-      const button = element("button", "game-primary ui-button ui-button--primary ui-button--library-primary ui-button--library-starter", working ? "Please wait..." : "Install TW");
+      const button = element("button", "game-primary ui-button ui-button--primary ui-button--large", working ? "Please wait..." : "Install TW");
       button.disabled = working;
       button.addEventListener("click", () => { void install(tw); });
       starter.append(copy, button);
@@ -65,7 +65,7 @@ export function createLibrary({ api, launch, gamesChanged, confirmAction }) {
       const blurb = element("p", "game-card-blurb", game.blurb);
       const actions = element("div", "game-card-actions");
       const installing = installingGame === game.id;
-      const button = element("button", "game-primary ui-button ui-button--primary ui-button--library-primary", installing
+      const button = element("button", "game-primary ui-button ui-button--primary", installing
         ? game.downloadOnly || game.archive ? "Downloading..." : "Cloning..."
         : selected === 0 ? "Play game" : downloaded.has(game.id) ? "Downloaded" : game.downloadOnly ? "Download source" : game.archive ? "Install ZIP" : game.repository ? "Install with Git" : "Find downloads");
       button.disabled = working || (selected === 1 && downloaded.has(game.id));
@@ -73,7 +73,7 @@ export function createLibrary({ api, launch, gamesChanged, confirmAction }) {
       if (selected === 0) button.addEventListener("click", () => launch(game.id));
       else if (!downloaded.has(game.id) && (game.archive || game.repository)) button.addEventListener("click", () => { void install(game); });
       else if (!game.archive && !game.repository) {
-        const link = element("a", "game-primary ui-button ui-button--primary ui-button--library-primary", "Find downloads");
+        const link = element("a", "game-primary ui-button ui-button--primary", "Find downloads");
         link.href = game.source;
         link.target = "_blank";
         link.rel = "noopener noreferrer";

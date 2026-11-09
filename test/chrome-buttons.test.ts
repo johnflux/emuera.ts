@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -10,6 +10,30 @@ import test from "node:test";
 import { parseFragment } from "parse5";
 // @ts-ignore Browser fixture module is also consumed by the catalog.
 import { chromeButtonSamples } from "../web/chrome-button-samples.js";
+
+const buttonVariants = [
+  "primary", "danger", "quiet", "small", "large", "tab", "menu-item", "icon", "continue",
+].map(name => `ui-button--${name}`);
+const productionSamples = readdirSync("web").filter(name => /\.(?:html|js)$/.test(name) && name !== "chrome-button-samples.js")
+  .flatMap(name => {
+    const source = readFileSync(`web/${name}`, "utf8");
+    const classes = [...new Set([...source.matchAll(/["']([\w -]*\bui-button(?: +[\w-]+)*)["']/g)].map(match => match[1]!))];
+    return classes.map(classes => ({
+      name: `Production / ${name} / ${classes}`,
+      html: `<button class="${classes}" type="button">Example action</button>`,
+    }));
+  });
+
+test("production chrome buttons only compose the shared variants", () => {
+  assert.ok(productionSamples.length > 20);
+  for (const { name, html } of productionSamples) {
+    for (const variant of html.match(/ui-button--[\w-]+/g) ?? []) {
+      assert.ok(buttonVariants.includes(variant), `${name}: screen-specific or unknown ${variant}`);
+    }
+  }
+  const styles = readFileSync("styles/shared/_chrome-buttons.scss", "utf8");
+  assert.deepEqual([...new Set(styles.match(/ui-button--[\w-]+/g))].sort(), [...buttonVariants].sort());
+});
 
 test("every chrome button variant has a self-contained catalog fixture", () => {
   const styles = readFileSync("styles/shared/_chrome-buttons.scss", "utf8");
@@ -30,7 +54,11 @@ test("every chrome button variant has a self-contained catalog fixture", () => {
 test("app and library containers no longer supply button appearance", () => {
   for (const path of ["styles/library.scss", "styles/app/_llm-settings.scss", "styles/game/_main-occupants.scss", "styles/game/_main-history.scss", "styles/app/_diagnostics-settings.scss"]) {
     const styles = readFileSync(path, "utf8");
-    assert.doesNotMatch(styles, /(?:\.library-tabs|\.library-starter|\.llm-config|\.era-llm[\w-]*|\.era-history-tabs)[^{}]*\bbutton[^{}]*\{/);
+    for (const [, selector, declarations] of styles.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      if (/(?:\.library-tabs|\.library-starter|\.llm-config|\.era-llm[\w-]*|\.era-history-tabs)[^{}]*\bbutton/.test(selector!)) {
+        assert.doesNotMatch(declarations!, /(?:--button-[\w-]+|font(?:-[\w-]+)?|color|background(?:-[\w-]+)?|border(?:-[\w-]+)?|padding(?:-[\w-]+)?|outline(?:-[\w-]+)?|box-shadow)\s*:/, `${path}: ${selector}`);
+      }
+    }
     if (path.endsWith("_diagnostics-settings.scss")) assert.doesNotMatch(styles, /\bbutton\b/);
   }
 });
@@ -59,7 +87,7 @@ test("chrome fixtures cover modifier states and keep their appearance without ap
     .ui-button { transition:none; animation:none; }
     .fixture-parent, .fixture-neutral { display:block; width:700px; }
     </style><body><script>
-    const samples = ${JSON.stringify(chromeButtonSamples)};
+    const samples = ${JSON.stringify([...chromeButtonSamples, ...productionSamples])};
     const selectors = ${JSON.stringify(selectors)};
     const properties = ["backgroundImage","backgroundColor","color","borderTopColor","borderTopWidth",
       "borderTopStyle","borderTopLeftRadius","paddingTop","paddingRight","paddingBottom","paddingLeft",
@@ -71,6 +99,8 @@ test("chrome fixtures cover modifier states and keep their appearance without ap
       return result;
     };
     const controls = [], failures = [], uncovered = [];
+    const coarse = matchMedia("(pointer: coarse) and (max-width: 900px)").matches;
+    let typography;
     for (const sample of samples) {
       const neutral = document.createElement("div");
       neutral.className = "fixture-neutral";
@@ -81,12 +111,32 @@ test("chrome fixtures cover modifier states and keep their appearance without ap
       document.body.append(neutral,nested);
       const first = neutral.firstElementChild, second = nested.firstElementChild;
       controls.push(first);
+      const icon = first.querySelector("svg");
+      if (icon) {
+        const buttonBounds = first.getBoundingClientRect(), iconBounds = icon.getBoundingClientRect();
+        for (const [position, size] of [["left", "width"], ["top", "height"]]) {
+          const offset = Math.abs(buttonBounds[position] + buttonBounds[size] / 2 - iconBounds[position] - iconBounds[size] / 2);
+          if (offset > .5) failures.push({name:sample.name,reason:"icon is not centered",position,offset});
+        }
+      }
+      const appearance = snapshot(first);
+      const label = ["fontFamily", "fontSize", "fontWeight", "lineHeight"].map(property => appearance[property]);
+      typography ??= label;
+      if (JSON.stringify(label) !== JSON.stringify(typography)) {
+        failures.push({name:sample.name,reason:"inconsistent label typography",label,typography});
+      }
+      if (appearance.fontSize !== "13px" || appearance.fontWeight !== "550") {
+        failures.push({name:sample.name,reason:"unexpected label size or weight",label});
+      }
+      if (coarse && parseFloat(appearance.minHeight) < 44) {
+        failures.push({name:sample.name,reason:"touch target below 44px",minHeight:appearance.minHeight});
+      }
       for (const state of ["normal","focus","disabled"]) {
         // Disabling the last-focused control can retain native focus until Chrome processes blur.
         first.blur();
         second.blur();
         if (state === "disabled") { first.disabled = true; second.disabled = true; }
-        const focusable = !first.disabled && !first.hidden;
+        const focusable = !first.disabled && first.getClientRects().length > 0;
         if (state === "focus" && focusable) {
           first.focus({preventScroll:true});
           first.setAttribute("data-fixture-focus","");
@@ -120,6 +170,16 @@ test("chrome fixtures cover modifier states and keep their appearance without ap
       }
       if (getComputedStyle(first).position === "absolute") failures.push({name:sample.name,reason:"fixture overlaps catalog"});
     }
+    const compare = (firstName, secondName) => {
+      const first = controls[samples.findIndex(sample => sample.name === firstName)];
+      const second = controls[samples.findIndex(sample => sample.name === secondName)];
+      if (JSON.stringify(snapshot(first)) !== JSON.stringify(snapshot(second))) {
+        failures.push({reason:"equivalent controls differ",firstName,secondName});
+      }
+    };
+    compare("Default", "Navigation link");
+    compare("Menu item", "Menu navigation link");
+    compare("Selected tab", "Pressed tab");
     const splitSelectors = value => {
       let depth = 0, start = 0;
       const parts = [];
@@ -143,21 +203,25 @@ test("chrome fixtures cover modifier states and keep their appearance without ap
         if (!controls.some(control => control.matches(alternative) || control.querySelector(alternative))) uncovered.push(alternative);
       }
     }
-    document.body.innerHTML = "<pre id='result'>" + JSON.stringify({failures,uncovered}) + "</pre>";
+    document.body.innerHTML = "<pre id='result'>" + JSON.stringify({failures,uncovered,coarse}) + "</pre>";
     </script>`;
   const profile = await mkdtemp(join(process.cwd(), ".era-chrome-fixtures-"));
   try {
     const page = join(profile, "fixtures.html");
     await writeFile(page, html);
-    const args = ["--headless", "--disable-gpu", "--no-first-run", `--user-data-dir=${profile}`,
-      "--window-size=1200,900", "--dump-dom", pathToFileURL(page).href];
-    if (process.platform === "linux") args.unshift("--no-sandbox");
-    const { stdout } = await promisify(execFile)(browser!, args, { maxBuffer: 4 * 1024 * 1024, timeout: 30000 });
-    const match = stdout.match(/<pre id="result">([^]*?)<\/pre>/);
-    assert.ok(match, stdout.slice(-4000));
-    const result = JSON.parse(match[1]!.replace(/&quot;/g, '"').replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">"));
-    assert.deepEqual(result.uncovered, [], "CSS modifier states missing fixtures");
-    assert.deepEqual(result.failures, [], "Chrome appearance depends on ancestors");
+    for (const coarse of [false, true]) {
+      const args = ["--headless", "--disable-gpu", "--no-first-run", `--user-data-dir=${profile}`,
+        coarse ? "--window-size=640,800" : "--window-size=1200,900", "--dump-dom", pathToFileURL(page).href];
+      if (coarse) args.unshift("--blink-settings=primaryPointerType=2,availablePointerTypes=2,primaryHoverType=0,availableHoverTypes=0");
+      if (process.platform === "linux") args.unshift("--no-sandbox");
+      const { stdout } = await promisify(execFile)(browser!, args, { maxBuffer: 4 * 1024 * 1024, timeout: 30000 });
+      const match = stdout.match(/<pre id="result">([^]*?)<\/pre>/);
+      assert.ok(match, stdout.slice(-4000));
+      const result = JSON.parse(match[1]!.replace(/&quot;/g, '"').replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">"));
+      assert.equal(result.coarse, coarse, "Browser did not use the requested pointer/viewport");
+      assert.deepEqual(result.uncovered, [], "CSS modifier states missing fixtures");
+      assert.deepEqual(result.failures, [], "Chrome appearance, typography, or touch targets differ");
+    }
   } finally {
     await rm(profile, { recursive: true, force: true });
   }

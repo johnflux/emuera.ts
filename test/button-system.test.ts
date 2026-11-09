@@ -4,6 +4,11 @@ import { test } from "node:test";
 import { GAME_BUTTON_SAMPLES } from "../src/button-samples.js";
 import { styleSource } from "./style-source.js";
 
+test("shared game buttons use baseline alignment and compact spacing", () => {
+  const css = styleSource("style");
+  assert.match(css, /button\.choice\.era-button \{[^}]*align-items: baseline;[^}]*gap: \.2em;[^}]*padding: 4px 9px;/);
+});
+
 test("every explicit game button style has a catalog fixture", async () => {
   const css = await readFile(new URL("../styles/game/_button-variants.scss", import.meta.url), "utf8");
   const helper = await readFile(new URL("../src/component-demo.ts", import.meta.url), "utf8");

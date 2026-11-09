@@ -1080,9 +1080,12 @@ PRINTC/PRINTLC, or PRINTSINGLE.
 These suffix rules and the distinction between W and N follow the
 [PRINT reference](https://evilmask.gitlab.io/emuera.em.doc/Reference/PRINT.html);
 the portable print fixture was also run unchanged under native Emuera.
-Output continued past a click-to-continue wait stays bright: a run of dialogue
-greys out together only once the game stops at a real input (a menu or prompt),
-so new choices are shown against greyed history.
+Output continued past a click-to-continue wait stays bright, including when the
+game reaches a menu or prompt. The dialogue and prompt grey out together only
+after the player submits an integer or string, not when they continue a wait.
+Choice buttons (including portrait images) are temporarily disabled during
+Continue waits without fading or desaturating them. Explicitly unavailable and
+stale choices retain their disabled styling.
 Settings → Playback leaves **Auto-advance text** off by default. When enabled, it
 uses a 0.5-second delay. The preference is saved in this browser. It submits Continue only for an untimed,
 non-blocking click-to-continue wait, never a command choice or text input. It pauses
@@ -1162,7 +1165,8 @@ global writes made while running ahead are staged (`StagedStores` in
 drop them. Timed and blocking waits (`TWAIT`, `TINPUT`) are not run ahead.
 Clock functions read while running ahead see the earlier time, and text laid
 out ahead uses the columns from the previous request.
-Each accepted input retires its output screen. Retired screens become lightweight,
+Each accepted integer or string input retires its output screen and preceding
+click-to-continue dialogue. Retired screens become lightweight,
 dimmed text: dialogue/narration outside layout panels and echoed input are kept;
 menus, artwork, status panels and other controls are omitted. Scrollback retains
 at most 500 logical output lines (hidden GUI/marker lines count toward the budget

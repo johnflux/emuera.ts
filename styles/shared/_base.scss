@@ -146,7 +146,7 @@ input { font: inherit; color: inherit; }
 .is-control-navigation:focus { outline: 2px solid #8ddaff; outline-offset: 2px; }
 .is-control-editing:focus { outline: 2px solid #69c9b5; outline-offset: 2px; }
 .checkbox-control {
-  --checkbox-accent: #8ddaff;
+  --checkbox-accent: #0072a8;
   display: inline-flex; align-items: center; gap: 8px; min-width: 0; padding: 6px 10px;
   border: 1px solid #39434c; border-radius: 5px; background: #101820; color: #c9d4dc;
   font: inherit; line-height: 1.4; white-space: normal; vertical-align: middle; cursor: pointer;
@@ -174,5 +174,5 @@ input { font: inherit; color: inherit; }
 .confirm p { margin: 0 0 16px; line-height: 1.45; color: #bbb; }
 .confirm-actions { display: flex; justify-content: flex-end; gap: 8px; }
 #status.error { color: #ff9d9d; }
-main { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 0 0 16px 0; color: var(--terminal-foreground); background: var(--terminal-background); }
+main { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 0 0 1ch 0; color: var(--terminal-foreground); background: var(--terminal-background); }
 #terminal, #input-form { font-family: var(--terminal-font); }

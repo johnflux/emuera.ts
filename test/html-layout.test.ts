@@ -6,6 +6,60 @@ import { runInNewContext } from "node:vm";
 import { parseFragment, type DefaultTreeAdapterMap } from "parse5";
 import { createCanvas, loadImage } from "@napi-rs/canvas";
 
+test("room portrait images cap canvas and hover layers proportionally without enlarging smaller images", async () => {
+  const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
+  const sizes = source.slice(source.indexOf("function sizeAttribute("), source.indexOf("async function loadImage("));
+  const images = source.slice(source.indexOf("async function image("), source.indexOf("let areaManifest;"));
+  const pendingImages: Promise<void>[] = [];
+  const image = runInNewContext(`${sizes}\n${images}\nimage`, {
+    metrics: { fontSize: 16 }, generation: 0, runGame: "tw", pendingImages,
+    imageScale: () => 1, animate() {},
+    document: { createElement: (tag: string) => new Element(tag.toUpperCase()) },
+    pictureCopy: async () => Object.assign(new Element("CANVAS"), { style: { width: "512px" }, height: 512 }),
+  });
+  const sprite = { picture: {}, x: 32, y: 16, width: 256, height: 512 };
+  for (const [height, cap, expected] of [[512, 216, 216], [150, 216, 150], [512, Infinity, 512]]) {
+    const node = new Element("IMG", new Map([
+      ["src", "portrait"], ["srcb", "hover"], ["height", `${height}px`], ["ypos", "-20px"],
+    ]));
+    const holder = await image(node, 0, sprite, 1, sprite, false, cap);
+    await Promise.all(pendingImages);
+    assert.notEqual(holder.className, "missing", holder.textContent);
+    assert.equal(holder.style.width, `${expected! / 2}px`);
+    assert.equal(holder.children.length, 2);
+    for (const clip of holder.children) {
+      assert.equal(clip.style.height, `${expected}px`);
+      assert.equal(clip.style.width, `${expected! / 2}px`);
+      assert.equal(clip.style.top, `${-20 * expected! / height!}px`);
+      const canvas = clip.children[0]!;
+      assert.equal(canvas.style.height, `${expected}px`);
+      assert.equal(canvas.style.width, `${expected}px`);
+      assert.equal(canvas.style.left, `${-32 * expected! / 512}px`);
+    }
+  }
+});
+
+test("detached room portraits use the fixed 216px cap", async () => {
+  const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
+  const html = source.slice(source.indexOf("async function renderHtml("), source.indexOf("// A browser's page translator"));
+  const terminal = new Element("DIV"), room = new Element("DIV"), parent = new Element("DIV");
+  room.closest = () => room;
+  parent.closest = selector => selector === ".era-room-stage .era-portrait" ? room : null;
+  let cap: number | undefined;
+  const render = runInNewContext(`${html}\nrenderHtml`, {
+    terminal, generation: 0, Element, Node: { TEXT_NODE: 3 },
+    DOMParser: class { parseFromString(markup: string) { return { head: { children: [] }, body: parsed(parseFragment(markup)) }; } },
+    image: async (_node: Element, _token: number, _sprite: unknown, _scale: unknown, _hover: unknown, _responsive: boolean, maxHeight: number) => {
+      cap = maxHeight;
+      return new Element("SPAN");
+    },
+    applyClasses() {}, decorateLabel() {},
+  });
+  await render("<img src='portrait' height='512px'>", parent);
+  assert.equal(cap, 216);
+  assert.equal(parent.children.length, 1, "portrait survives detached rendering");
+});
+
 test("HTML renderer supports semantic headings and code while keeping executable tags disallowed", async () => {
   const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
   const declaration = source.match(/^const allowedTags = .+;$/m)![0];
@@ -311,6 +365,7 @@ test("calendar popup presents seven day rows with a shared day and schedule head
   assert.match(css, /\.era-calendar-month-grid \{ display: grid; grid-template-columns: repeat\(7, minmax\(0, 1fr\)\);/);
   assert.match(css, /\.era-calendar \.era-inventory-body \{ flex: 0 1 auto;/);
   assert.match(css, /\.era-calendar-table-heading, \.era-calendar-week > \.era-calendar-day \{ display: grid; grid-template-columns: var\(--calendar-day-width\) minmax\(0, 1fr\);/);
+  assert.match(css, /\.era-calendar-day-content \{ display: flex; flex-wrap: wrap; align-items: center; gap: 2px 5px; min-width: 0; padding: 6px 9px; \}/);
   assert.match(css, /\.era-calendar-events, \.era-calendar-people \{ flex: 1 1 280px; min-width: 0; \}/);
   assert.match(css, /\.era-calendar-events, \.era-calendar-people \{ flex-basis: 100%; \}/);
   assert.match(css, /\.era-inventory-body \{ flex: 1; min-height: 0; overflow: auto;/);
@@ -1236,7 +1291,7 @@ test("LLM configuration keeps provider controls in a responsive scrollable dialo
   assert.match(css, /\.llm-config-fields input[^}]*min-width: 0;/);
   assert.match(css, /\.llm-config :is\(input, select, textarea\):focus-visible \{ outline: 2px solid #69c9b5;/);
   const buttonStyles = await readFile(new URL("../styles/shared/_chrome-buttons.scss", import.meta.url), "utf8");
-  assert.match(buttonStyles, /\.ui-button--llm:enabled:not\(\[aria-disabled="true"\]\):focus-visible \{ outline: 2px solid #69c9b5;/);
+  assert.match(buttonStyles, /\.ui-button:not\(:disabled\):not\(\[aria-disabled="true"\]\):focus-visible \{[^}]*outline: var\(--ui-focus-ring, 2px solid #8ddaff\);/);
 });
 
 test("action headers reserve filter-row height without preventing wrapping", async () => {
@@ -1510,7 +1565,7 @@ test("room overlays reserve no layout height and chat follows every responsive m
   assert.match(css, /\.era-history-body \{[^}]*padding: 0;/);
   assert.match(css, /\.era-history-more-overlay \{ position: sticky; top: 0; height: 0;/);
   const chromeButtons = await readFile(new URL("../styles/shared/_chrome-buttons.scss", import.meta.url), "utf8");
-  assert.doesNotMatch(chromeButtons, /\.ui-button--history-more \{[^}]*position: absolute;/);
+  assert.doesNotMatch(chromeButtons, /\.ui-button(?:--[\w-]+)? \{[^}]*position: absolute;/);
   assert.match(css, /\.era-history-more-overlay \{[^}]*display: flex;[^}]*justify-content: flex-end;/);
   assert.match(css, /\.era-main-chat > \.era-history-pane \{[^}]*contain: size; overflow: auto;/);
   assert.match(css, /\.era-main-actions \{ display: flex; flex-wrap: wrap;/);
@@ -1528,9 +1583,10 @@ test("room overlays reserve no layout height and chat follows every responsive m
   assert.match(css, /\.era-main-sidebar \{ min-height: 0; contain: size; \}/);
   assert.match(css, /\.era-main-sidebar \.era-stats \{ flex: 0 1 auto; min-height: 0; overflow-y: auto; \}/);
   assert.match(css, /\.era-player-management > \.line:has\(\.era-auto-toggles\) \{ margin-top: auto;/);
-  assert.match(css, /button\.choice\.era-button \{[^}]*padding: 6px 12px;/);
+  assert.match(css, /button\.choice\.era-button \{[^}]*padding: 4px 9px;/);
   assert.match(css, /\.checkbox-control\.era-toggle \{ padding: 3px 7px; gap: 6px;/);
   assert.match(css, /\.checkbox-control \{[^}]*display: inline-flex; align-items: center;/);
+  assert.match(css, /\.checkbox-control \{[^}]*--checkbox-accent: #0072a8;/);
   const patch = await readFile(new URL("../hotpatch/MAIN_SCREEN.ERB", import.meta.url), "utf8");
   assert.doesNotMatch(patch, /era-interaction-history/);
   assert.doesNotMatch(patch, /era-info-tabs|era-info-title/);
@@ -2740,7 +2796,10 @@ class Element {
   append(child: Element) { child.parent = this; this.children.push(child); }
   addEventListener() {}
   matches() { return false; }
-  closest(): Element { return this.parent ? this.parent.closest() : this; }
+  closest(selector?: string): Element | null {
+    if (selector === ".era-room-stage .era-portrait") return null;
+    return this.parent ? this.parent.closest(selector) : this;
+  }
   querySelector() { return null; }
   querySelectorAll(selector: string): Element[] {
     return this.children.flatMap((child) => [

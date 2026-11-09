@@ -32,6 +32,76 @@ const browser = [
   process.env.PROGRAMFILES && join(process.env.PROGRAMFILES, "Google/Chrome/Application/chrome.exe"),
 ].find((path): path is string => !!path && existsSync(path));
 
+test("scene chatter hides empty diamond lines without dropping logical output or non-text content", {
+  skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH",
+}, async () => {
+  const [source, style] = await Promise.all([
+    readFile(new URL("../web/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../web/generated/style.css", import.meta.url), "utf8"),
+  ]);
+  const helper = source.slice(source.indexOf("function syncSceneLines("), source.indexOf("function mainChatInput("));
+  assert.match(source, /for \(const scene of outputRoot\.querySelectorAll\("\.screen\.is-active \.era-scene"\)\) syncSceneLines\(scene\);/);
+  const html = `<!doctype html><meta charset="utf-8"><style>${style}</style><body>
+    <div class="screen is-active"><div class="era-room-stage">
+      <div class="era-box era-scene" data-closed="closed">
+        <div class="line era-marker"></div>
+        <div class="line"><span class="output-text">◆</span><span class="output-text is-empty"></span></div>
+        <div class="line"><span> ◆ </span><span>   </span></div>
+        <div class="line"><span> </span></div>
+        <div class="line"><span>◆</span><span>You hear the radio crackling...</span></div>
+        <div class="line"><span>◆</span><button class="choice"></button></div>
+        <div class="line"><span>◆</span><canvas width="1" height="1"></canvas></div>
+        <div class="line era-marker era-close-line"></div>
+      </div>
+      <div class="era-box era-scene" id="empty">
+        <div class="line era-marker"></div><div class="line"><span>◆</span></div>
+        <div class="line era-marker era-close-line"></div>
+      </div>
+    </div><div class="line" id="outside"><span>◆</span></div></div><script>
+      ${helper}
+      document.querySelectorAll(".era-scene").forEach(syncSceneLines);
+      const scene = document.querySelector(".era-scene");
+      const lines = [...scene.querySelectorAll(".line")];
+      const hidden = lines.map(line => getComputedStyle(line).display === "none");
+      const retained = lines.length === 8 && scene.dataset.closed === "closed";
+      const emptyHidden = getComputedStyle(document.querySelector("#empty")).display === "none";
+      const outsideVisible = getComputedStyle(document.querySelector("#outside")).display !== "none";
+      lines[1].append(document.createTextNode("Later text"));
+      syncSceneLines(scene);
+      const resumed = !lines[1].hidden && getComputedStyle(lines[1]).display !== "none";
+      const spaced = lines[4].textContent === "◆ You hear the radio crackling..."
+        && lines[1].textContent === "◆ Later text";
+      const inline = document.createElement("div");
+      inline.className = "line";
+      inline.innerHTML = "<span>◆Inline text</span>";
+      scene.append(inline);
+      const alreadySpaced = document.createElement("div");
+      alreadySpaced.className = "line";
+      alreadySpaced.textContent = "◆ Already spaced";
+      scene.append(alreadySpaced);
+      syncSceneLines(scene);
+      syncSceneLines(scene);
+      const spacingStable = inline.textContent === "◆ Inline text"
+        && alreadySpaced.textContent === "◆ Already spaced"
+        && lines[4].textContent === "◆ You hear the radio crackling...";
+      document.body.textContent = JSON.stringify({hidden, retained, emptyHidden, outsideVisible, resumed, spaced, spacingStable});
+    </script>`;
+  const profile = await mkdtemp(join(process.cwd(), ".era-scene-lines-"));
+  try {
+    const { stdout } = await execute(browser!, ["--headless", "--disable-gpu", "--no-first-run",
+      `--user-data-dir=${profile}`, "--dump-dom", `data:text/html;base64,${Buffer.from(html).toString("base64")}`],
+      { maxBuffer: 8 * 1024 * 1024, timeout: 30000 });
+    const match = stdout.match(/<body[^>]*>([\s\S]*?)<\/body>/);
+    assert.ok(match);
+    assert.deepEqual(JSON.parse(match[1]), {
+      hidden: [true, true, true, true, false, false, false, true],
+      retained: true, emptyHidden: true, outsideVisible: true, resumed: true, spaced: true, spacingStable: true,
+    });
+  } finally {
+    await rm(profile, { recursive: true, force: true });
+  }
+});
+
 test("inventory and item-use rows share responsive scrolling, quantities and live filtering", {
   skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH",
 }, async () => {
