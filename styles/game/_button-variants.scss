@@ -137,11 +137,11 @@ button.choice.era-button-tone-anal { --action-tone: #33291f; }
 button.choice.era-button-tone-sm { --action-tone: #381c21; }
 button.choice.era-button-tone-service { --action-tone: #36351f; }
 .era-button .interactive-label { text-decoration: none; }
-.era-button .command-number { margin-left: .75ch; color: #6c7780; font-size: .8rem; }
+.era-button .command-number { margin-left: .75ch; font-size: .8rem; }
 .era-button-suffix { margin-left: auto; }
 button.choice.era-button-list { display: grid; align-items: baseline; gap: 6px 16px; width: 100%; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; text-align: left; white-space: normal; overflow-wrap: anywhere; }
 button.choice.era-button-list:enabled:is(:hover, :focus-visible) { background: transparent; }
-.era-button-list .command-number { order: -1; margin-left: 0; margin-right: .5ch; }
+.era-button-list .command-number { order: -1; min-width: 5ch; margin-left: 0; margin-right: 1ch; text-align: right; }
 .era-button-list .era-config-label { display: inline-flex; align-items: baseline; }
 .era-chip-button, .era-star, .era-cycle-toggle { --button-padding: 1px 9px; --button-border: #39434c; --button-radius: 4px; --button-background: #182027; --button-color: #c9d4dc; }
 button.choice.era-warn { border-color: #d88; color: #ffbcbc; }

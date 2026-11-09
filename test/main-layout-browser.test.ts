@@ -251,6 +251,7 @@ INPUT`, "<config-editor-fixture>");
           paddedNumber: button(0).querySelector(".command-number").textContent === "[  0]"
             && frame.contentWindow.getComputedStyle(button(0).querySelector(".command-number")).whiteSpace === "pre",
           nativeTextAlign: frame.contentWindow.getComputedStyle(button(10)).textAlign,
+          numberOpacity: frame.contentWindow.getComputedStyle(button(0).querySelector(".command-number")).opacity,
           rows: [0, 4].every(start => [1, 2, 3].every(offset =>
             Math.abs(rect(start).top - rect(start + offset).top) < 1
             && rect(start + offset).left > rect(start + offset - 1).left)),
@@ -262,6 +263,10 @@ INPUT`, "<config-editor-fixture>");
           fullWidth: Math.abs(rect(11).width - button(11).closest(".line").getBoundingClientRect().width) < 1,
           help: button(11).querySelector(".era-config-help").textContent
         };
+        const coloredOutput = button(0).closest(".output-text");
+        coloredOutput.style.setProperty("--output-color", "#ffff00");
+        result.coloredNumberOpacity = frame.contentWindow.getComputedStyle(button(0).querySelector(".command-number")).opacity;
+        coloredOutput.style.removeProperty("--output-color");
         button(2).click();
         await until(() => !doc.body.classList.contains("is-busy") && doc.querySelector("#terminal").textContent.includes("Chosen 2"));
         result.clicked = true;
@@ -293,7 +298,8 @@ INPUT`, "<config-editor-fixture>");
     const match = stdout.match(/<pre id="result">([^<]+)<\/pre>/);
     assert.ok(match, stdout.slice(0, 2000));
     assert.deepEqual(JSON.parse(match[1]!.replaceAll("&quot;", '"').replaceAll("&amp;", "&")), {
-      paddedNumber: true, nativeTextAlign: "left", rows: true, newline: true, printButtonsInline: true, native: true,
+      paddedNumber: true, nativeTextAlign: "left", numberOpacity: "0.65", coloredNumberOpacity: "1",
+      rows: true, newline: true, printButtonsInline: true, native: true,
       singleLabel: "[10] Single native choice: No", explicitList: true, fullWidth: true, help: "Inline help", clicked: true,
       editorInDialog: true, returnedInDialog: true, preservesSpaces: true, returnedRows: true,
     });
@@ -317,7 +323,7 @@ test("config list buttons are borderless single-column rows with right-hand help
   indexScript(game, `@SYSTEM_TITLE
 HTML_PRINT HOTPATCH_BUTTON("Setting <one>", 1, "It's help", "list", "", "On", "Helpful <text>")
 HTML_PRINT HOTPATCH_BUTTON("Setting two", 2, "", "list", "era-config-hidden", "Off", "More help", 0)
-HTML_PRINT HOTPATCH_BUTTON("Setting three", 3, "", "list", "", "On", "More help")
+HTML_PRINT HOTPATCH_BUTTON("Setting three", 123, "", "list", "", "On", "More help")
 HTML_PRINT HOTPATCH_BUTTON("Long answer", 4, "", "list", "", "A considerably longer answer than twenty-three characters", "Help")
 HTML_PRINT HOTPATCH_BUTTON("Disabled setting", 5, "", "list", "", " No ", "Help")
 BINPUT`, "<list-fixture>");
@@ -343,6 +349,18 @@ BINPUT`, "<list-fixture>");
     first.append(probe);
     const minimumWidth = probe.getBoundingClientRect().width;
     probe.remove();
+    const number = first.querySelector(".command-number");
+    const numberProbe = document.createElement("span");
+    numberProbe.style.cssText = "display:inline-block;width:5ch";
+    number.append(numberProbe);
+    const fiveCh = numberProbe.getBoundingClientRect().width;
+    numberProbe.remove();
+    const labelText = document.createRange();
+    labelText.selectNode(first.querySelector(".era-config-label").firstChild);
+    const numberAligned = Math.abs(number.getBoundingClientRect().width - fiveCh) < 1
+      && Math.abs(buttons[2].querySelector(".command-number").getBoundingClientRect().width - fiveCh) < 1
+      && getComputedStyle(number).textAlign === "right";
+    const numberGap = Math.abs(labelText.getBoundingClientRect().left - number.getBoundingClientRect().right - fiveCh / 5) < 1;
     const thirdTop = buttons[2].getBoundingClientRect().top;
     const hidden = getComputedStyle(second).visibility === "hidden";
     second.classList.remove("era-config-hidden");
@@ -362,7 +380,7 @@ BINPUT`, "<list-fixture>");
       minimumSetting:initialWidth >= minimumWidth - 1,
       unrestrictedState:getComputedStyle(first.querySelector(".era-config-state")).minWidth === "auto" &&
         getComputedStyle(first.querySelector(".era-config-state")).maxWidth === "none",
-      grows, stacks,
+      grows, stacks, numberAligned, numberGap,
       dimmedNo:getComputedStyle(buttons[4].querySelector(".era-config-state")).opacity === "0.5",
       dimmedLabel:getComputedStyle(buttons[4].querySelector(".era-config-label")).opacity === "0.5",
       normalHelp:getComputedStyle(buttons[4].querySelector(".era-config-help")).opacity === "1",
@@ -382,7 +400,7 @@ BINPUT`, "<list-fixture>");
     assert.ok(match);
     assert.deepEqual(JSON.parse(match[1]), { border: "0px", padding: "0px", background: "rgba(0, 0, 0, 0)",
       sameColumn: true, below: true, right: true, sameRow: true, minimumSetting: true, unrestrictedState: true,
-      grows: true, stacks: true, growingState: true, dimmedNo: true, dimmedLabel: true, normalHelp: true, dimmedOff: true, normalOn: true,
+      grows: true, stacks: true, numberAligned: true, numberGap: true, growingState: true, dimmedNo: true, dimmedLabel: true, normalHelp: true, dimmedOff: true, normalOn: true,
       helpGap: true, hidden: true, stable: true, fullWidth: true });
   } finally {
     await rm(profile, { recursive: true, force: true });
@@ -484,7 +502,7 @@ BINPUT`, "<button-fixture>");
       for (const button of results) {
         assert.equal(button.textAlign, "left");
         assert.equal(button.numberFont / button.font, .8);
-        assert.equal(button.numberColor, "rgb(108, 119, 128)");
+        assert.equal(button.numberColor, "rgb(183, 213, 226)");
         assert.equal(button.numberDisplay === "none", hidden, `${mode} ${size}: ${button.text}`);
         if (!hidden) assert.equal(button.numberAfterLabel, true, button.text);
       }
