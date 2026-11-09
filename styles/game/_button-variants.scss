@@ -194,7 +194,7 @@ button.choice.era-map-current-room { z-index: 1; outline: 2px solid #b8f5b0; out
 button.choice.era-map-room.is-linked { background: #3a3414; z-index: 1; }
 button.choice.era-move-dest.era-travel-danger, .era-travel-danger .era-travel-time { color: #e07070; }
 .era-command-tile { position: relative; white-space: normal; padding: 6px 12px; border: 1px solid #35566d; border-radius: 4px; background: linear-gradient(#102330, #0b1822); font: 400 1rem/1.25 var(--terminal-font); }
-.era-command-tile .choice { vertical-align: middle; margin-left: .75ch; color: #6c7780 !important; font-size: .8rem; }
+.era-command-tile .choice { vertical-align: middle; color: #6c7780 !important; font-size: .8rem; }
 .era-command-tile .choice::after { content: ""; position: absolute; inset: 0; }
 .era-command-tile .interactive-label { text-decoration-line: none; }
 .era-command-tile:has(.choice:enabled:is(:hover, :focus-visible)) { border-color: #78bdd6; background: #193744; }

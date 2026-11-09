@@ -6,7 +6,7 @@ const HEADER = Buffer.from([0x89, 0x45, 0x52, 0x41, 13, 10, 26, 10]);
 const ZIP_HEADER = Buffer.from([0x89, 0x45, 0x52, 0x41, 0x5a, 0x49, 0x50, 10]);
 const MAX_BYTES = 256 * 1024 * 1024;
 
-export interface SaveLayout { name: string; string: boolean; dimensions: number[]; character: boolean }
+export interface SaveLayout { name: string; string: boolean; dimensions: number[]; character: boolean; userDefined?: boolean }
 export interface SavedContainers {
   maps: Record<string, [string, string][]>;
   xmls: Record<string, string>;
@@ -221,9 +221,15 @@ export function writeNativeSave(record: NativeSave, metadata: SaveMetadata): Buf
   writer.string(record.text);
   if (record.type !== 1) {
     writer.int64(BigInt(record.characters.length));
+    const builtin = metadata.layout.filter((item) => item.character && !item.userDefined);
+    const declared = metadata.layout.filter((item) => item.character && item.userDefined);
     for (const character of record.characters) {
-      for (const layout of metadata.layout.filter((item) => item.character))
-        writer.variable(layout, character[layout.name] ?? {});
+      for (const layout of builtin) writer.variable(layout, character[layout.name] ?? {});
+      // Emuera reads character variables before this separator by built-in code and crashes on #DIM CHARADATA names.
+      if (declared.length) {
+        writer.byte(0xfd);
+        for (const layout of declared) writer.variable(layout, character[layout.name] ?? {});
+      }
       writer.byte(0xfe);
     }
   }

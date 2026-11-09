@@ -223,7 +223,14 @@ INPUT
 CALL EDIT_CHARACTER
 GOTO REPRINT
 @EDIT_CHARACTER
-PRINTFORML Chosen {RESULT}
+LOCAL:1 = RESULT
+GCREATE 1, 720, 720
+SPRITECREATE "debug-portrait", 1, 0, 0, 720, 720
+HTML_PRINT "<img src='debug-portrait' width='180px' height='180px'>"
+FOR LOCAL, 0, 12
+  PRINTL
+NEXT
+PRINTFORML Chosen {LOCAL:1}
 PRINT [99] Back
 INPUT`, "<config-editor-fixture>");
   const app = createApp([{ id: "fixture", title: "Config choices", game }], true);
@@ -272,6 +279,18 @@ INPUT`, "<config-editor-fixture>");
         result.clicked = true;
         const back = await until(() => doc.querySelector(".screen.is-active button[data-value='99']:enabled"));
         result.editorInDialog = !!back.closest(".era-config");
+        const portrait = doc.querySelector(".screen.is-active .sprite-clip");
+        const runtime = await fetch("/api/runtime").then(response => response.json());
+        const scale = parseFloat(frame.contentWindow.getComputedStyle(doc.querySelector("#terminal")).lineHeight)
+          / runtime.metrics.lineHeight;
+        const portraitRect = portrait.getBoundingClientRect();
+        result.requestedImageSize = Math.abs(portraitRect.width - 180 * scale) < 1
+          && Math.abs(portraitRect.height - 180 * scale) < 1;
+        const caption = [...doc.querySelectorAll(".screen.is-active .line")].find(line => line.textContent.includes("Chosen 2"));
+        result.portraitAboveText = !!portrait && caption.getBoundingClientRect().top >= portrait.getBoundingClientRect().bottom;
+        result.blankLinesVisible = [...doc.querySelectorAll(".era-config .line")]
+          .filter(line => line.querySelector(":scope > .is-empty:only-child"))
+          .every(line => line.getBoundingClientRect().height > 0);
         back.click();
         await until(() => !doc.body.classList.contains("is-busy")
           && doc.querySelector(".screen.is-active button[data-value='0']:enabled"));
@@ -302,6 +321,7 @@ INPUT`, "<config-editor-fixture>");
       rows: true, newline: true, printButtonsInline: true, native: true,
       singleLabel: "[10] Single native choice: No", explicitList: true, fullWidth: true, help: "Inline help", clicked: true,
       editorInDialog: true, returnedInDialog: true, preservesSpaces: true, returnedRows: true,
+      portraitAboveText: true, blankLinesVisible: true, requestedImageSize: true,
     });
   } finally {
     server.closeAllConnections();
@@ -695,7 +715,7 @@ test("compact button sizes share tokens without changing desktop or sprite contr
         const initial = snapshot();
         const number = document.querySelector("#tile button");
         const numberStyle = getComputedStyle(number), tile = document.getElementById("tile").getBoundingClientRect(), button = number.getBoundingClientRect();
-        const overlay = { position: numberStyle.position, covers: ["top", "right", "bottom", "left"].every(edge => Math.abs(tile[edge] - button[edge]) <= 1.1), numberDisplay: getComputedStyle(number.firstElementChild).display };
+        const overlay = { position: numberStyle.position, marginLeft: numberStyle.marginLeft, covers: ["top", "right", "bottom", "left"].every(edge => Math.abs(tile[edge] - button[edge]) <= 1.1), numberDisplay: getComputedStyle(number.firstElementChild).display };
         document.documentElement.style.setProperty("--compact-choice-min-height", "48px");
         document.documentElement.style.setProperty("--compact-relationship-button-height", "64px");
         const updated = snapshot();
@@ -707,7 +727,7 @@ test("compact button sizes share tokens without changing desktop or sprite contr
         document.body.textContent = JSON.stringify({ initial, updated, overlay, focus });
       </script>`;
   type Item = { minHeight: string; height: number; display: string; position: string };
-  type Result = { initial: Record<string, Item>; updated: Record<string, Item>; overlay: { position: string; covers: boolean; numberDisplay: string }; focus: { control: string; tile: string } };
+  type Result = { initial: Record<string, Item>; updated: Record<string, Item>; overlay: { position: string; marginLeft: string; covers: boolean; numberDisplay: string }; focus: { control: string; tile: string } };
   const profile = await mkdtemp(join(process.cwd(), ".era-buttons-"));
   try {
     for (const [mode, size] of [["desktop", "1440,1000"], ["compact", "1200,700"]] as const) {
@@ -727,6 +747,7 @@ test("compact button sizes share tokens without changing desktop or sprite contr
         if (compact) assert.equal(updated[id].height, 48, `${mode}: ${id} follows the shared size`);
       }
       assert.equal(overlay.position, compact ? "absolute" : "static", `${mode}: number button position`);
+      assert.equal(overlay.marginLeft, "0px", `${mode}: command button has no internal left offset`);
       assert.equal(overlay.numberDisplay, "inline", `${mode}: viewport alone does not hide command numbers`);
       if (compact) assert.ok(overlay.covers, `${mode}: number button covers its tile`);
       assert.ok(updated.multiline.height > 48, `${mode}: long labels can grow beyond the minimum height`);

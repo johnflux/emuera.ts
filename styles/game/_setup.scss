@@ -21,7 +21,6 @@
 .era-config-help { grid-column: 2; color: #99adba; font-size: .8em; white-space: pre-line; }
 .era-config-help:empty, .era-config-state:empty { display: none; }
 .era-config .era-setup-body, .era-config .era-setup-grid { container-type: inline-size; }
-.era-config.era-setup-editor .line:has(> .is-empty):not(:has(> :not(.is-empty))) { display: none; }
 @container (max-width: calc(85ch + 16px)) {
 
   .era-config-help { grid-column: 1 / -1; }

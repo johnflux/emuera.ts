@@ -436,7 +436,7 @@ export class Variables {
   saveLayout(context: EvaluationContext, global = false): SaveLayout[] {
     return (global ? this.globalNames() : this.savedNames(context)).filter((name) => this.has(name)).map((name) => {
       const variable = this.resolve(name, context);
-      return { name, string: variable.string, character: !!variable.character,
+      return { name, string: variable.string, character: !!variable.character, userDefined: this.declarations.has(name),
         dimensions: [...(variable.character ? variable.dimensions.slice(1) : variable.dimensions)] };
     });
   }

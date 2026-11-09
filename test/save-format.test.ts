@@ -116,6 +116,22 @@ test("round-trips sparse 1D/2D/3D arrays, integer encodings, UTF-16 strings and 
   }
 });
 
+test("character blocks put #DIM CHARADATA variables after Emuera's user-defined separator", () => {
+  const layout: SaveLayout[] = [
+    { name: "PANTS_TEMP", string: false, dimensions: [35], character: true, userDefined: true },
+    { name: "CFLAG", string: false, dimensions: [1000], character: true },
+  ];
+  const characters = [{ CFLAG: { "5": "9" }, PANTS_TEMP: { "2": "4" } }];
+  const record: NativeSave = { type: 0, code: "1", gameVersion: "2", text: "memo",
+    data: { characters: 1, variables: {} }, characters, containers: { maps: {}, xmls: {}, dts: {} } };
+  const bytes = writeNativeSave(record, { ...METADATA, layout });
+  const name = (value: string) => Buffer.concat([Buffer.from([value.length * 2]), Buffer.from(value, "utf16le")]);
+  const cflag = bytes.indexOf(name("CFLAG")), pants = bytes.indexOf(name("PANTS_TEMP"));
+  assert.ok(cflag > 0 && cflag < pants);
+  assert.deepEqual([...bytes.subarray(pants - 2, pants)], [0xfd, 0x01]);
+  assert.deepEqual(JSON.parse(JSON.stringify(readNativeSave(bytes).characters)), characters);
+});
+
 test("rejects truncation, invalid dimensions, malformed runs, unsupported formats and trailing data", () => {
   for (let length = 0; length < FIXTURE.length; length++)
     assert.throws(() => readNativeSave(FIXTURE.subarray(0, length)), undefined, `length ${length}`);

@@ -111,6 +111,8 @@ Native input modes and setting routines are unchanged.
 Open dialogs retain their layout context while native submenus wait for input
 and return via `CLEARLINE`; only a closing marker ends that context. Native
 printed lines preserve padding spaces so character columns remain aligned.
+Blank lines also remain visible: native graphics helpers use them to reserve
+vertical space for portraits before printing subsequent controls.
 The stars around
 **Select An Option** both open the native cheat menu. The Modded page keeps the
 three gameplay sections, omitting UI elements. Base options 8, 9, 10, 13, 14, 20,
