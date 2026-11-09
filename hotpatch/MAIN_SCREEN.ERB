@@ -370,11 +370,14 @@ IF TARGET > 0
 ENDIF
 ; COM_ABLE428 allows reaching her cage from the home living room and veranda.
 IF CHARANUM > 71 && !bShinmyoumaruShown && FLAG:なりきり != 71 && CFLAG:71:現在位置 == 54 && GROUPMATCH(CFLAG:MASTER:現在位置, 9, 10) && AT_HOME(MASTER)
-	CALL HOTPATCH_FACE(71)
+	CALL HOTPATCH_FACE(71, 100, CFLAG:71:睡眠 ? "睡眠" # "通常")
 	sState '= "In her cage · Miracle Mallet only"
-	SIF CFLAG:71:睡眠
+	sClass '= ""
+	IF CFLAG:71:睡眠
 		sState += " · Asleep"
-	sItems += @"<span class='era-occupant era-occupant-caged'><span class='era-face'>%RESULTS%</span><span class='era-occupant-text'>"
+		sClass += " era-asleep"
+	ENDIF
+	sItems += @"<span class='era-occupant era-occupant-caged%sClass%'><span class='era-face'>%RESULTS%</span><span class='era-occupant-text'>"
 	sItems += @"<span class='era-occupant-name'>%HTML_ESCAPE(CALLNAME:71)%</span><span class='era-occupant-state'>%sState%</span></span></span>"
 	nCount++
 ENDIF
@@ -386,17 +389,18 @@ HTML_PRINT "<era-close>"
 HTML_PRINT "<era-close>"
 
 ; The character's face picture as an <img> in RESULTS (empty if the game has none), as LOAD_FACE_IMAGE gets it.
-@HOTPATCH_FACE(nChara, nSize = 44)
+@HOTPATCH_FACE(nChara, nSize = 44, sExpression = "通常")
 #DIM DYNAMIC nChara
 #DIM DYNAMIC nSize
+#DIMS DYNAMIC sExpression
 IF TALENT:nChara:行きずり && !GCREATED(CFLAG:nChara:モブ子素材CFLAG開始位置)
 	CALL モブ子生成(nChara, 0)
 	CALL モブ子生成(nChara, 1)
 ENDIF
 RESULT = 0
-CALL GET_BASE_RESOURCE(nChara, "顔絵", "服", "通常")
+CALL GET_BASE_RESOURCE(nChara, "顔絵", "服", sExpression)
 SIF !RESULT || RESULT > 1
-	RESULTS = %GET_BASESTYLE(nChara, "顔絵")%_服_通常_{NO:nChara}
+	RESULTS = %GET_BASESTYLE(nChara, "顔絵")%_服_%sExpression%_{NO:nChara}
 IF SPRITECREATED(RESULTS)
 	RESULTS '= @"<img src='%RESULTS%' height='{nSize}px'>"
 ELSE

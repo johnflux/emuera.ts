@@ -629,11 +629,15 @@ WAIT`, "<cage-test>");
     assert.match(text, /Image settings: 3, 1, 10/, "rendering each portrait restores the image settings");
     assert.match(text, new RegExp(`Mallet available: ${Number(scenario.able)}`), scenario.name);
     if (scenario.caged) {
-      assert.match(markup, /<span class='era-occupant era-occupant-caged'>/);
+      assert.match(markup, /<span class='era-occupant era-occupant-caged(?: era-asleep)?'>/);
       assert.match(markup, /In her cage · Miracle Mallet only/);
       assert.doesNotMatch(markup, /<button[^>]*era-occupant-caged|value='1071'|Nobody else is here/);
       assert.equal((markup.match(/era-occupant-name'>Shinmyoumaru</g) ?? []).length, 1, scenario.name);
-      if (scenario.name === "asleep") assert.match(markup, /Miracle Mallet only · Asleep/);
+      if (scenario.name === "asleep") {
+        assert.match(markup, /Miracle Mallet only · Asleep/);
+        assert.match(markup, /era-occupant-caged era-asleep/);
+        assert.match(markup, /<img[^>]*height='100px'/);
+      }
     }
     if (scenario.normal) {
       assert.equal((markup.match(/era-occupant-name'>Shinmyoumaru</g) ?? []).length, 1, scenario.name);

@@ -7,7 +7,7 @@
 .era-occupant.era-request .era-occupant-state { color: #7f7; }
 .era-occupant.era-asleep .era-face { filter: brightness(.6) saturate(.5); }
 .era-occupant.era-occupant-caged { background: transparent; cursor: default; }
-.era-occupant-caged .era-face { border-radius: 6px; filter: saturate(.4); }
+.era-occupant-caged .era-face { width: 100px; height: 100px; border-radius: 6px; filter: saturate(.4); }
 .era-occupant-caged .era-occupant-name { color: #aab8c4; }
 .era-face { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 44px; height: 44px; overflow: hidden; border-radius: 50%; background: #222; }
 .era-face-letter { color: #aaa; font-weight: bold; font-size: 1.3em; }

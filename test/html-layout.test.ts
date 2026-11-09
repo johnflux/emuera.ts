@@ -1551,6 +1551,7 @@ test("room overlays reserve no layout height and chat follows every responsive m
   assert.match(css, /\.era-room-stage \.era-occupant-list \{[^}]*flex: none;[^}]*height: var\(--era-occupant-height\);/);
   assert.match(css, /\.era-room-stage \.era-occupant-list:has\(\.era-portrait\) \{ height: auto; \}/);
   assert.match(css, /\.era-room-stage \.era-occupant-caged > \.era-occupant-text \{ position: static; \}/);
+  assert.match(css, /\.era-occupant-caged \.era-face \{ width: 100px; height: 100px;/);
   assert.doesNotMatch(css, /\.era-room-stage \{[^}]*min-height:/);
   assert.doesNotMatch(css, /era-history-preview|era-info-with-preview/);
   assert.match(css, /\.era-room-stage > \.era-occupants \{[^}]*margin-top: auto;/);
