@@ -1,9 +1,33 @@
+@use "chrome-buttons";
+
 @font-face { font-family: "BIZ UD Gothic"; src: url("/fonts/BIZUDGothic-Regular.ttf") format("truetype"); font-weight: 400; font-style: normal; font-display: block; }
 @property --era-freeze { syntax: "<number>"; inherits: true; initial-value: 0; }
 #terminal { transition: --era-freeze 900ms ease-in-out; }
 #terminal.is-time-restoring { transition: none; }
 @media (prefers-reduced-motion: reduce) { #terminal { transition: none; } }
 :root { color-scheme: dark; --font-size: 16px; --terminal-font: "BIZ UD Gothic", "MS Gothic", "ＭＳ ゴシック", monospace; --terminal-foreground: #c0c0c0; --terminal-background: #000; --selection-color: #ff0; }
+:root {
+  --ui-font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --ui-color-canvas: #10141b;
+  --ui-color-surface: #181e28;
+  --ui-color-surface-raised: #202a35;
+  --ui-color-text: #e9edf4;
+  --ui-color-muted: #9ba7b8;
+  --ui-color-border: #ffffff1c;
+  --ui-color-accent: #98c8bc;
+  --ui-color-accent-strong: #b5d5c5;
+  --ui-color-danger: #ffb7a9;
+  --ui-radius-control: 6px;
+  --ui-radius-panel: 12px;
+  --ui-space-1: 4px;
+  --ui-space-2: 8px;
+  --ui-space-3: 12px;
+  --ui-space-4: 16px;
+  --ui-space-5: 24px;
+  --ui-space-6: 32px;
+  --ui-space-7: 48px;
+  --ui-focus-ring: 2px solid #8ddaff;
+}
 * { box-sizing: border-box; }
 html, body, #terminal, #game-tooltip, #compatibility, #debug-log, .library, .era-sheet-body, .era-occupant-list, .era-move-map { overscroll-behavior-x: none; }
 html, body { overscroll-behavior-y: none; }
@@ -63,18 +87,64 @@ header::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px
 @media (prefers-reduced-motion: reduce) { .is-busy-visible header::after { animation: none; background-size: 100% 100%; } header::after, .activity { transition: none !important; } .activity::before, .screen.is-active .choice.is-pending { animation: none; } }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 small { color: #aaa; font-size: 12px; }
-button, input { font: inherit; color: inherit; }
-/* UI button foundation. Game-text choices opt out; chrome controls opt back in below. */
-button {
-  --button-background: #101010; --button-border: #555; --button-color: currentColor;
-  --button-hover-background: #242424; --button-hover-border: #aaa;
-  --button-radius: 6px; --button-padding: 5px 10px; --button-gap: .45em;
+input { font: inherit; color: inherit; }
+.ui-workbench-page :is(a:not(.ui-button), input, select, textarea):focus-visible {
+  outline: var(--ui-focus-ring);
+  outline-offset: 3px;
 }
-@media (hover: hover) { button:hover:enabled { background: var(--button-hover-background); border-color: var(--button-hover-border); } }
-button:focus-visible { background: var(--button-hover-background); border-color: var(--button-hover-border); }
+.ui-panel {
+  border: 1px solid var(--ui-color-border);
+  border-radius: var(--ui-radius-panel);
+  background: var(--ui-color-surface);
+  color: var(--ui-color-text);
+  box-shadow: 0 12px 30px #0005;
+}
+.ui-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ui-space-3);
+  padding: var(--ui-space-4);
+  border-bottom: 1px solid var(--ui-color-border);
+}
+.ui-panel__body { padding: var(--ui-space-4); }
+.ui-card {
+  overflow: hidden;
+  border: 1px solid var(--ui-color-border);
+  border-radius: var(--ui-radius-panel);
+  background: var(--ui-color-surface);
+  color: var(--ui-color-text);
+}
+.ui-field {
+  display: grid;
+  gap: var(--ui-space-1);
+  color: var(--ui-color-muted);
+  font: 13px/1.4 var(--ui-font-family);
+}
+.ui-field input, .ui-field select, .ui-field textarea {
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid #43515f;
+  border-radius: var(--ui-radius-control);
+  background: #101820;
+  color: var(--ui-color-text);
+  font: inherit;
+}
+.ui-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 3px 8px;
+  border: 1px solid var(--ui-color-border);
+  border-radius: 999px;
+  background: #ffffff0a;
+  color: var(--ui-color-muted);
+  font: 11px/1.2 var(--ui-font-family);
+}
+.ui-badge--success { border-color: #79b89b66; color: #a7d9bb; }
+.ui-badge--error { border-color: #d0787866; color: var(--ui-color-danger); }
 .is-control-navigation:focus { outline: 2px solid #8ddaff; outline-offset: 2px; }
 .is-control-editing:focus { outline: 2px solid #69c9b5; outline-offset: 2px; }
-button:disabled { color: #666; cursor: default; }
 .checkbox-control {
   --checkbox-accent: #8ddaff;
   display: inline-flex; align-items: center; gap: 8px; min-width: 0; padding: 6px 10px;
@@ -90,20 +160,12 @@ button:disabled { color: #666; cursor: default; }
 .checkbox-control[hidden] { display: none; }
 .checkbox-control.choice.is-stale { opacity: .4; filter: grayscale(1); }
 .checkbox-control .interactive-label { text-decoration: none; }
-button[aria-pressed="true"]:not(.era-star) { border-color: #8ddaff; background: #204052; color: #fff; box-shadow: inset 0 0 0 1px #8ddaff55; }
 .menu { position: relative; flex-shrink: 0; order: 2; }
-.menu-toggle { width: 30px; height: 28px; padding: 0; border-color: #3a3a3a; border-radius: 6px; font-size: 16px; line-height: 1; }
-.menu-toggle[aria-expanded="true"] { background: #24313a; border-color: #8ddaff; color: #fff; }
 .menu-panel { position: fixed; top: var(--menu-top, 40px); right: 8px; width: min(300px, calc(100vw - 16px)); max-height: calc(100dvh - var(--menu-top, 40px) - 8px); overflow-y: auto; display: flex; flex-direction: column; gap: 2px; padding: 6px; border: 1px solid #3a3a3a; border-radius: 8px; background: #121212; box-shadow: 0 8px 24px #000c; font-size: 13px; overscroll-behavior: contain; }
 .menu-panel > * { flex-shrink: 0; }
 .menu-panel[hidden] { display: none; }
 .menu-heading { margin: 6px 8px 2px; color: #777; font-size: 10px; text-transform: uppercase; letter-spacing: .08em; }
 .menu-heading:first-child { margin-top: 2px; }
-.menu-panel button { --button-background: transparent; --button-hover-background: #24313a; --button-radius: 5px; --button-padding: 6px 10px 6px 26px; position: relative; justify-content: flex-start; text-align: left; border: 0; }
-.menu-panel a { display: block; padding: 6px 10px 6px 26px; border-radius: 5px; color: inherit; text-decoration: none; }
-.menu-panel a:hover { background: #24313a; }
-.menu-panel a:focus-visible { outline: 2px solid #8ddaff; outline-offset: -2px; }
-.menu-panel button[aria-pressed="true"]::before, .menu-panel button[aria-expanded="true"]::before { content: "●"; position: absolute; left: 10px; color: #8ddaff; font-size: 9px; line-height: 19px; }
 .menu-font { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 4px; padding: 8px 10px 4px; border-top: 1px solid #2a2a2a; color: #bbb; font-size: 12px; white-space: nowrap; }
 .menu-font input { width: 110px; accent-color: #8ddaff; }
 .confirm { max-width: min(420px, calc(100vw - 32px)); padding: 18px 20px 16px; border: 1px solid #3a3a3a; border-radius: 10px; background: #121212; color: #ddd; box-shadow: 0 12px 40px #000e; font-size: 14px; }
@@ -111,8 +173,6 @@ button[aria-pressed="true"]:not(.era-star) { border-color: #8ddaff; background: 
 .confirm h2 { margin: 0 0 8px; font-size: 16px; color: #fff; }
 .confirm p { margin: 0 0 16px; line-height: 1.45; color: #bbb; }
 .confirm-actions { display: flex; justify-content: flex-end; gap: 8px; }
-.confirm-actions button { --button-padding: 6px 14px; }
-.confirm-actions .danger { --button-background: #3a1616; --button-border: #a04a4a; --button-color: #fff; --button-hover-background: #522020; --button-hover-border: #e07070; }
 #status.error { color: #ff9d9d; }
 main { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 0 0 16px 0; color: var(--terminal-foreground); background: var(--terminal-background); }
 #terminal, #input-form { font-family: var(--terminal-font); }

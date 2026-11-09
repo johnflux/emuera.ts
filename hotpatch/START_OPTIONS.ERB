@@ -61,8 +61,8 @@ ENDIF
 HTML_PRINT "<era-open class='era-setup-player-info'>"
 sState '= ""
 SIF FLAG:なりきり
-	sState '= "<button value='12' class='era-player-preset'>Custom Character</button>"
-HTML_PRINT @"<div class='era-setup-player-names'><span class='era-setup-name-field'>%HTML_ESCAPE(NAME:MASTER)%</span><span>Nickname:</span><span class='era-setup-nickname-field'>%HTML_ESCAPE(CALLNAME:MASTER)%</span><button value='11' class='era-player-preset'>Choose a predefined character</button>%sState%</div>"
+	sState '= "<button value='12' class='era-chip-button'>Custom Character</button>"
+HTML_PRINT @"<div class='era-setup-player-names'><span class='era-setup-name-field'>%HTML_ESCAPE(NAME:MASTER)%</span><span>Nickname:</span><span class='era-setup-nickname-field'>%HTML_ESCAPE(CALLNAME:MASTER)%</span><button value='11' class='era-chip-button'>Choose a predefined character</button>%sState%</div>"
 sState '= ""
 FOR nIndex, 0, 200
 	SIF !HOTPATCH_SETUP_IS_RACE(nIndex) || !TALENT:MASTER:nIndex

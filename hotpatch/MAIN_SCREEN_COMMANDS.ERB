@@ -341,15 +341,15 @@ ENDIF
 RESULT = 0
 CALL COM_ABLE400
 SIF RESULT
-	HTML_PRINT HOTPATCH_BUTTON("Move", 400, "", "sidebar", "era-travel-button")
+	HTML_PRINT HOTPATCH_BUTTON("Move", 400, "", "block", "era-travel-button")
 RESULT = 0
 RESETCOLOR
 CALL COM_ABLE405
 IF RESULT
 	IF CFLAG:TARGET:同行 && TARGET
-		HTML_PRINT HOTPATCH_BUTTON("Date", 405, "", "sidebar", "era-travel-button")
+		HTML_PRINT HOTPATCH_BUTTON("Date", 405, "", "block", "era-travel-button")
 	ELSE 
-		HTML_PRINT HOTPATCH_BUTTON("Go Out", 405, "", "sidebar", "era-travel-button")
+		HTML_PRINT HOTPATCH_BUTTON("Go Out", 405, "", "block", "era-travel-button")
 	ENDIF
 ENDIF
 RESULT = 0
@@ -362,27 +362,27 @@ ENDIF
 RESULT = 0
 CALL COM_ABLE604
 SIF RESULT
-	HTML_PRINT HOTPATCH_BUTTON("Explore", 604, "", "sidebar")
+	HTML_PRINT HOTPATCH_BUTTON("Explore", 604, "", "block")
 RESETCOLOR
 SIF FLAG:1005
-	HTML_PRINT HOTPATCH_BUTTON("Config", 810, "", "sidebar")
+	HTML_PRINT HOTPATCH_BUTTON("Config", 810, "", "block")
 SIF TALENT:MASTER:居場所察知 && (GETBIT(TALENT:MASTER:居場所察知, 1) || !(CFLAG:うふふ || CFLAG:イタズラ || CFLAG:添い寝中)) ;at_home check removed
-	HTML_PRINT HOTPATCH_BUTTON("Whereabouts Sense", 811, "", "sidebar")
+	HTML_PRINT HOTPATCH_BUTTON("Whereabouts Sense", 811, "", "block")
 SIF TALENT:MASTER:汚部屋察知 && AT_HOME(MASTER) && !(CFLAG:うふふ || CFLAG:イタズラ || CFLAG:添い寝中)
-	HTML_PRINT HOTPATCH_BUTTON("Cleanliness Sense", 812, "", "sidebar")
+	HTML_PRINT HOTPATCH_BUTTON("Cleanliness Sense", 812, "", "block")
 SIF GETBIT(TALENT:MASTER:劣情察知, 1) && !CFLAG:うふふ && !CFLAG:添い寝中 && !CFLAG:MASTER:イタズラ
-	HTML_PRINT HOTPATCH_BUTTON("Lust Detector", 813, "", "sidebar")
+	HTML_PRINT HOTPATCH_BUTTON("Lust Detector", 813, "", "block")
 IF FLAG:70 && CFLAG:TARGET:344 == 0 && !CFLAG:TARGET:睡眠 && AT_HOME(MASTER) == 1 && TARGET > 0 && !CFLAG:うふふ && CFLAG:行動 != 5 ;disallow while they're working
 	IF TFLAG:運搬 == 0 || TFLAG:運搬 != TARGET
-		HTML_PRINT HOTPATCH_BUTTON("Carry", 815, "", "sidebar")
+		HTML_PRINT HOTPATCH_BUTTON("Carry", 815, "", "block")
 	ELSE 
-		HTML_PRINT HOTPATCH_BUTTON("Put Down", 815, "", "sidebar")
+		HTML_PRINT HOTPATCH_BUTTON("Put Down", 815, "", "block")
 	ENDIF
 ENDIF
 SIF FLAG:70 && TALENT:MASTER:集合 && AT_HOME(MASTER) == 1 && !CFLAG:うふふ
-	HTML_PRINT HOTPATCH_BUTTON("Gather", 817, "", "sidebar")
+	HTML_PRINT HOTPATCH_BUTTON("Gather", 817, "", "block")
 SIF GATHERING_SPOT(CFLAG:MASTER:現在位置) != 0
-	HTML_PRINT HOTPATCH_BUTTON("Foraging List", 818, "", "sidebar")
+	HTML_PRINT HOTPATCH_BUTTON("Foraging List", 818, "", "block")
 [SKIPSTART]
 	;Custom code, moved below.
 IF CAN_DATE(TARGET) && !CFLAG:TARGET:神社在住
@@ -395,34 +395,34 @@ ENDIF
 	
 ;custom code
 SIF FISHING_SPOT(CFLAG:MASTER:現在位置) != 0 && ABL:MASTER:教養 >= 3
-	HTML_PRINT HOTPATCH_BUTTON("Fishing List", 890, "", "sidebar")
+	HTML_PRINT HOTPATCH_BUTTON("Fishing List", 890, "", "block")
 
 ;addition custom code
 IF PLACE_SENTO(CFLAG:MASTER:現在位置) == 9 && CFLAG:64:現在位置 != CFLAG:MASTER:現在位置 && !FIRSTTIME("YuugiBath", 1, 64)
 	SETCOLOR 100, 250, 140
-	HTML_PRINT HOTPATCH_BUTTON("Call Yuugi", 891, "", "sidebar")
+	HTML_PRINT HOTPATCH_BUTTON("Call Yuugi", 891, "", "block")
 	RESETCOLOR
 ENDIF
 
 ;addition custom code
 SIF TALENT:MASTER:パンティーセンス && !CFLAG:うふふ && !CFLAG:添い寝中 && !CFLAG:MASTER:イタズラ
-	HTML_PRINT HOTPATCH_BUTTON("Panty Sense", 892, "", "sidebar")
+	HTML_PRINT HOTPATCH_BUTTON("Panty Sense", 892, "", "block")
 
 ;addition custom code, from KR version
 IF CFLAG:MASTER:初期位置 == CFLAG:MASTER:現在位置 || (CFLAG:MASTER:現在位置 == CFLAG:TARGET:初期位置 && (IS_FALLEN(TARGET) || !SHIRAHU(TARGET)))
 	IF !FLAG:自室施錠
-		HTML_PRINT HOTPATCH_BUTTON("Lock The Door", 991, "", "sidebar")
+		HTML_PRINT HOTPATCH_BUTTON("Lock The Door", 991, "", "block")
 	ELSE
 		SETCOLOR 100, 250, 140
-		HTML_PRINT HOTPATCH_BUTTON("Unlock The Door", 991, "", "sidebar")
+		HTML_PRINT HOTPATCH_BUTTON("Unlock The Door", 991, "", "block")
 	ENDIF
 	RESETCOLOR
 ENDIF
 	
 SIF CAN_DATE(TARGET)
-	HTML_PRINT HOTPATCH_BUTTON("Invite On A Date", 992, "", "sidebar")
+	HTML_PRINT HOTPATCH_BUTTON("Invite On A Date", 992, "", "block")
 SIF FLAG:パンツ輸送
-	HTML_PRINT HOTPATCH_BUTTON("Check Pilfered Panties", 994, "", "sidebar")
+	HTML_PRINT HOTPATCH_BUTTON("Check Pilfered Panties", 994, "", "block")
 sAutoToggles '= ""
 IF !GETBIT(FLAG:USERCOMフィルタ, 13)
 	sAutoToggles += @"<button value='995' class='era-toggle%(GETBIT(FLAG:瞬間移動, AT_HOME(MASTER)) ? " era-on" # "")%' role='checkbox' aria-checked='%(GETBIT(FLAG:瞬間移動, AT_HOME(MASTER)) ? "true" # "false")%' title='Travel with TSP automatically whenever you have enough'>Auto-TSP Movement</button>"
@@ -441,7 +441,7 @@ IF CAN_DATE(TARGET)
 		SETCOLOR 100, 250, 140
 	;ugly but this gets super long otherwise. perhaps move it to its own dedicated line instead?
 	;PRINTFORMC %SUBSTRING(@"Invite To %GET_MAPNAME(MAIN_MAP)%", 0, GETCONFIG("PRINTCの文字数") - (5 + STRLENS(LOCALS)) )%%LOCALS%[990]
-	HTML_PRINT HOTPATCH_BUTTON(@"Invite To %GET_MAPNAME(MAIN_MAP)%%LOCALS%", 990, "", "sidebar")
+	HTML_PRINT HOTPATCH_BUTTON(@"Invite To %GET_MAPNAME(MAIN_MAP)%%LOCALS%", 990, "", "block")
 	RESETCOLOR
 ENDIF
 HTML_PRINT "<era-close>"
@@ -510,10 +510,12 @@ RETURNF 6
 #DIM DYNAMIC nCom
 #DIM DYNAMIC nKojo
 #DIMS DYNAMIC COM_NAME
+#DIMS DYNAMIC sButtonClass
 IF nCom == 352
 	HTML_PRINT HOTPATCH_BUTTON("Relationship...", 352)
 	RETURN 0
 ENDIF
+sButtonClass '= "era-button-tone-" + HOTPATCH_ACTION_KIND(nCom)
 VARSET COM_DISPLAY_COLOR
 VARSET COM_DISPLAY_BEHAVIOR
 CALL COM_DISPLAY_TR(nCom) ;Custom code, control alternative command names.
@@ -522,15 +524,15 @@ IF !GROUPMATCH(COM_NAME, "Null", "")
 	SIF COM_DISPLAY_COLOR
 		SETCOLOR COM_DISPLAY_COLOR
 	IF COM_DISPLAY_BEHAVIOR == -1
-		HTML_PRINT HOTPATCH_BUTTON(COM_NAME, nCom, "", "unavailable")
+		HTML_PRINT HOTPATCH_BUTTON(COM_NAME, nCom, "", "default", sButtonClass, "", "", 0)
 	ELSE
-		HTML_PRINT HOTPATCH_BUTTON(COM_NAME, nCom)
+		HTML_PRINT HOTPATCH_BUTTON(COM_NAME, nCom, "", "default", sButtonClass)
 	ENDIF
 	RESETCOLOR
 ELSEIF nCom >= 270 && nCom < 300
 	;kojo com
 	CALL KOJO_MESSAGE_SEND("COM", 0, TARGET, nCom - 270)
-	HTML_PRINT HOTPATCH_BUTTON(RESULTS, nCom)
+	HTML_PRINT HOTPATCH_BUTTON(RESULTS, nCom, "", "default", sButtonClass)
 	nKojo = 1
 ELSEIF nCom == 606 ;addition custom code
 	LOCALS '= ""
@@ -548,15 +550,15 @@ ELSEIF nCom == 606 ;addition custom code
 		ENDIF
 	NEXT
 	SIF LOCALS != ""
-		HTML_PRINT HOTPATCH_BUTTON(LOCALS, nCom)
+		HTML_PRINT HOTPATCH_BUTTON(LOCALS, nCom, "", "default", sButtonClass)
 ELSEIF nCom == 414 && CFLAG:MASTER:うふふ ;qol custom code
-	HTML_PRINT HOTPATCH_BUTTON("Meal Break", nCom)
+	HTML_PRINT HOTPATCH_BUTTON("Meal Break", nCom, "", "default", sButtonClass)
 ;Custom code
 ELSEIF STRLENS(TRAINNAME_TR(nCom))
 	;custom code
 	SIF nCom == 401 ;highlight collection
 		SETCOLOR 100, 250, 140
-	HTML_PRINT HOTPATCH_BUTTON(TRAINNAME_TR(nCom), nCom)
+	HTML_PRINT HOTPATCH_BUTTON(TRAINNAME_TR(nCom), nCom, "", "default", sButtonClass)
 	RESETCOLOR
 ENDIF
 RETURN nKojo
@@ -720,7 +722,7 @@ IF TARGET > 0 && TARGET != MASTER && (CFLAG:MASTER:うふふ || CFLAG:TARGET:う
 	sHtml += @"<button value='4000' class='era-toggle' role='checkbox' aria-checked='%sMoanChecked%' title='%sMoan%: Cycles this character through No, Yes and Yes (Ahegao). Adds automatic moans during intimate actions when no scripted dialogue is provided; Ahegao enables more expressive variations.'>%sMoan%</button>"
 	sHtml += HOTPATCH_TOGGLE("Standing", -9122, CFLAG:STANDING_TOGGLE, "", "Prefer standing versions of supported intimate positions with this character. When off, use normal positions where the location allows; standing may still be required elsewhere. Does not apply during sleep sessions.")
 ENDIF
-sHtml += HOTPATCH_BUTTON("Config", 809, "", "sidebar-wide")
+sHtml += HOTPATCH_BUTTON("Config", 809, "", "block")
 HTML_PRINT @"<div class='era-toggles era-settings'>%sHtml%</div>"
 
 @Add_Custom_List_COMS
@@ -766,7 +768,7 @@ FOR LOCAL, 0, MaxQuest
 	ENDIF
 NEXT
 
-@HOTPATCH_BUTTON(sLabel, nValue, sTitle = "", sVariant = "action", sClass = "", sState = "", sHelp = "", nEnabled = 1)
+@HOTPATCH_BUTTON(sLabel, nValue, sTitle = "", sVariant = "default", sClass = "", sState = "", sHelp = "", nEnabled = 1, sSuffix = "")
 #FUNCTIONS
 #DIMS DYNAMIC sLabel
 #DIM DYNAMIC nValue
@@ -778,21 +780,14 @@ NEXT
 #DIMS DYNAMIC sHelp
 #DIM DYNAMIC nEnabled
 #DIMS DYNAMIC sStateClass
-SIF !GROUPMATCH(sVariant, "action", "sidebar", "sidebar-wide", "slim", "primary", "inventory", "unavailable", "list")
+SIF !GROUPMATCH(sVariant, "default", "block", "primary", "list")
 	THROW Unknown button variant: %sVariant%
-IF GROUPMATCH(sVariant, "action", "sidebar", "sidebar-wide")
-	sSuffix '= @"<span class='command-number'>[{nValue}]</span>"
-ELSEIF sVariant == "inventory"
-	sSuffix '= @" <span class='command-number'>[{nValue}]</span><span class='era-control-arrow'>›</span>"
-ELSEIF sVariant == "unavailable"
-	sSuffix '= "<span class='era-button-unavailable-mark'>[...]</span>"
-ENDIF
 sLabel '= HTML_ESCAPE(sLabel)
 SIF GETCOLOR() != GETDEFCOLOR()
 	sLabel '= @"<span color='#%TOSTR(GETCOLOR(), "X6")%'>%sLabel%</span>"
 IF sVariant == "list"
 	SIF GROUPMATCH(REPLACE(sState, "^\s+|\s+$", ""), "No", "no", "NO", "Off", "off", "OFF")
 		sStateClass '= " era-config-state-off"
-	sLabel '= @"<span class='era-config-setting'><span class='era-config-label'><span class='command-number'>[{nValue}]</span> %sLabel%</span><span class='era-config-state%sStateClass%'>%HTML_ESCAPE(sState)%</span></span><span class='era-config-help'>%HTML_ESCAPE(sHelp)%</span>"
+	sLabel '= @"<span class='era-config-setting'><span class='era-config-label'>%sLabel%</span><span class='era-config-state%sStateClass%'>%HTML_ESCAPE(sState)%</span></span><span class='era-config-help'>%HTML_ESCAPE(sHelp)%</span>"
 ENDIF
-RETURNF @"<button value='{nValue}' class='era-button era-button-%sVariant% %HOTPATCH_ATTRIBUTE(HTML_ESCAPE(sClass))%' aria-disabled='%(sVariant == "unavailable" || !nEnabled ? "true" # "false")%' title='%HOTPATCH_ATTRIBUTE(HTML_ESCAPE(sTitle))%'>%sLabel%%sSuffix%</button>"
+RETURNF @"<button value='{nValue}' class='era-button%(sVariant == "default" ? "" # " era-button-" + sVariant)% %HOTPATCH_ATTRIBUTE(HTML_ESCAPE(sClass))%' data-command-number='{nValue}' data-suffix='%HOTPATCH_ATTRIBUTE(HTML_ESCAPE(sSuffix))%' aria-disabled='%(!nEnabled ? "true" # "false")%' title='%HOTPATCH_ATTRIBUTE(HTML_ESCAPE(sTitle))%'>%sLabel%</button>"

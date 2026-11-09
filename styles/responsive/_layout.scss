@@ -1,0 +1,33 @@
+@media (min-width: 1000px) and (max-width: 1280px) and (max-height: 800px) {
+  .screen.is-active .era-main { height: max(540px, calc(100cqh - 8px)); min-height: 0; grid-template-rows: auto minmax(0, max-content) minmax(min-content, 1fr) auto auto; }
+  .screen.is-active .era-main:not(:has(.era-counters)) { grid-template-rows: auto minmax(0, max-content) minmax(min-content, 1fr) auto; }
+  .screen.is-active .era-shop { height: max(540px, calc(100cqh - 8px)); min-height: 0; grid-template-rows: auto auto minmax(0, 1fr) auto; }
+  .era-shop > :is(.era-shop-home, .era-shop-menu, .era-shop-system) { min-height: 0; overflow: auto; overscroll-behavior: contain; }
+  .era-main > :is(.era-main-center, .era-main-actions) { min-height: 0; overflow: auto; overscroll-behavior: contain; }
+  .era-main-center:has(.era-alone) > .era-character { flex: 1 1 auto; min-height: 0; }
+  .era-alone .era-room-stage { flex: 1 1 auto; min-height: 0; overflow: visible; }
+  .era-alone .era-room-stage > .era-occupants { flex: 1 1 var(--era-occupant-height); min-height: 120px; }
+  .era-room-stage .era-occupant-list:has(.era-alone-message) { flex: 1 1 auto; }
+}
+@media (max-width: 1280px) and (max-height: 800px) {
+  .era-character:has(.era-main-chat) { grid-template-rows: auto; }
+}
+@media (max-width: 600px) {
+  .era-relationship-options { grid-template-columns: 1fr; }
+  #settings .settings-actions { grid-template-columns: minmax(0, 1fr); }
+  .art-demo #art-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .era-sheet-bars { grid-template-columns: minmax(0, 1fr); }
+}
+@media (any-pointer: coarse) {
+  .has-tooltip .interactive-label { text-decoration-line: none; }
+}
+@media (max-height: 800px) {
+  body:not(.is-home) :is(.era-main, .era-shop) .era-main-header:has(.era-area-art) > .era-watch-control { top: -20px; }
+  body:not(.is-home) :is(.era-main, .era-shop) .era-main-header:has(.era-area-art) > .era-watch-control { right: 0; }
+  body:not(.is-home) > header { height: 0; padding: 0; border: 0; }
+  body:not(.is-home) > header > :not(.menu) { display: none; }
+  body:not(.is-home) > header .menu { position: fixed; top: 8px; right: 8px; }
+  body:not(.is-home) .era-move-header { padding-right: 52px; }
+  body:not(.is-home) #time-effect { top: 0; }
+  body:not(.is-home) > header > #status.error { display: block; position: fixed; top: 8px; bottom: auto; left: 8px; right: 56px; padding: 8px; background: #281616; white-space: normal; }
+}

@@ -11,7 +11,7 @@ hotpatch normally only changes presentation. `INTIMACY_COMMANDS.ERB` and
 
 Plain main-screen commands (including the mod's custom-command list and its
 request-meeting-point and quest label overrides) use
-`HOTPATCH_BUTTON(label, value, title = "", variant = "action", class = "", state = "", help = "", enabled = 1)`
+`HOTPATCH_BUTTON(label, value, title = "", variant = "default", class = "", state = "", help = "", enabled = 1, suffix = "")`
 in `MAIN_SCREEN_COMMANDS.ERB`. Each call produces one complete button, without
 a styled tile wrapper. Labels and attributes are escaped, and unknown variants
 throw an error. Additional classes are for layout or state, not a substitute
@@ -19,19 +19,25 @@ for choosing a variant.
 
 | Variant | Use |
 | --- | --- |
-| `action` | Numbered action tile; also used by Relationship |
-| `sidebar` | Numbered sidebar command; narrower padding |
-| `sidebar-wide` | Full-width sidebar command, including Config and browser Quicksave |
-| `slim` | Small, unnumbered secondary dialog action |
-| `primary` | Unnumbered primary dialog action |
-| `inventory` | Full-width Inventory action with an inline, space-separated command number and a right-aligned arrow |
-| `unavailable` | Disabled action with the native `[...]` marker |
+| `default` | Standard `.era-button`, shared by actions, sidebar commands, and secondary dialog actions |
+| `block` | Standard appearance with full-width flex layout, including Inventory, Config, and browser Quicksave |
+| `primary` | Primary dialog action; also used by the setup launch control |
 | `list` | Borderless, unpadded setting row with a leading command number, label, current state and right-hand help |
 
-Numbered variants derive their trailing `command-number` from the input value;
-keep numbers out of the supplied label. Handheld and compact layouts hide these
-numbers consistently. Action category containers deliberately tint action
-variants but do not add borders, padding or click targets themselves.
+The helper emits `data-command-number` from the input value and optional
+`data-suffix` (Inventory supplies its arrow this way); keep these out of the
+label. The frontend creates one `aria-hidden` number span and an optional suffix
+span. List and inventory rows put the number first using flex order. Other
+buttons put it after the label. Spans allow controller hints to keep using
+`::after` without competing with command-number presentation.
+Controller hints use `data-controller-hint` and CSS `attr()` content.
+Legacy games retain bracket-number parsing for compatibility.
+
+Disabled is a state, not a variant: pass `enabled = 0`. The renderer preserves
+this as both `aria-disabled` and native `disabled`, so unavailable controls
+cannot activate and remain muted without hover/focus decoration.
+Controller hints hide command numbers consistently at every viewport size. Action buttons declare their
+own category-tone classes; containers only arrange them.
 Hover and keyboard focus highlight only the command number in selection yellow;
 the label keeps its normal or game-supplied highlight color.
 
@@ -39,7 +45,10 @@ the label keeps its normal or game-supplied highlight color.
 `print-cell` compatibility path; hotpatched main commands no longer need it.
 Remaining footer, tab, grid and card containers group content rather than
 restyling individual buttons. Rich setting rows, selectors, steppers, checkboxes
-and icon controls retain their explicitly named specialized styles.
+and icon controls retain their explicitly named specialized styles. Both
+See more actions share `.era-text-button`; setup presets use ordinary chips.
+Map tabs use the same `.era-sheet-page` and `.era-current` appearance as sheet
+tabs. Their map-specific classes remain only for navigation and map linking.
 
 `IN_GAME_SETTINGS.ERB` replaces Config [809] with a responsive, scrollable
 single-column list dialog showing native setting names, current values and
@@ -76,7 +85,7 @@ The main sidebar keeps Stats at content height (`max-height: fit-content`);
 its left container uses `display: contents`. Spare height goes to the Player
 card, above Auto-TSP Movement rather than above Inventory. On wide layouts Stats
 shrinks and scrolls when space is limited. The sidebar itself never scrolls;
-wheel input outside Stats scrolls the terminal, including handheld layouts.
+wheel input outside Stats scrolls the terminal, including compact layouts.
 
 Choice-only title/load/save/delete, predefined-character, Inventory, Calendar, character-sheet,
 and relationship dialogs use `BINPUT`. The runtime supplies `buttonValues` and
@@ -85,9 +94,15 @@ bar for these requests and focuses a visible control instead.
 
 The save picker uses 10 manual slots per page plus autosave, keeping all 200 manual
 slots accessible. `GLOBAL:999` retains its native 20-slot page meaning; the picker
-maps it to two smaller pages. Save overwrite and delete require confirmation.
+uses `GLOBAL:998` (the last selected slot) to choose the correct smaller page,
+falling back to the native page when the last slot is autosave or out of range.
+Save overwrite and delete require confirmation.
 Title-side loading cannot switch to save/delete modes. Paging controls carry
 `era-page-prev`/`era-page-next` classes for focus restoration and L1/R1 shortcuts.
+
+Inventory and Items use a wide, viewport-limited dialog with responsive columns.
+Item names may wrap; command IDs and quantities stay on one line without
+shrinking. Command numbers on other game buttons follow the same no-wrap rule.
 
 New-game setup keeps `INPUT` because its inline name and number fields submit
 values that are not button choices. Its bottom command bar is hidden only while
@@ -626,7 +641,7 @@ selection, without the generic pending pulse, until the dialog opens. On pointer
 hover, keyboard or controller focus, and activation, the other button's artwork
 fades to 70% opacity and scales to 95%; both remain unchanged when neither is
 highlighted or selected. The artwork glow indicates focus without an outline,
-including in handheld layout. The title initially has no focused button; arrow
+including in compact layouts. The title initially has no focused button; arrow
 keys or a controller can focus one.
 The artwork fills a borderless, black title screen below the interpreter header, with version information at the
 top-right and New Game / Load Game stacked underneath; the redundant text title
@@ -896,7 +911,7 @@ for every multi-character list, including short lists with individual tabs.
 | `SLEEP_MENU.ERB` | `@SHOW_SHOP`, `@USERSHOP` | The menu shown while you sleep, before waking, as panels in the main screen's style (`era-shop` layout): the header (sky, area landmark, a clock showing the waking time, the date, "Waking at" with Change [2400] and Calendar [3333] chips, and a large **Wake Up** [100] button); your card (funds, Sta/Ene/Vig/TSP meters, "Fainted"); a Home card (home and area, where you are sleeping if elsewhere, Home Settings [102] and Change Home [120]); "Records & Collections" and "System" cards with the menu grouped (You, Collections; Settings, Guides, Game); the tip at the bottom. Farm Settings [151] reuses the new-game farming controls in a dialog; Apply commits the selections and Cancel leaves the contract unchanged. Existing debt transfers to a new landlord and prevents quitting; changing only difficulty preserves farm progress and debt. World Settings [1701] and Dialogue Settings [1702] open the shared in-game controls described below. Command numbers, the 4-hour minimum sleep check and the greying while fainted are the original's. USERSHOP clears the screen for Wake Up [100] and delegates other native commands to the original. The DRAWLINE rules and spacing lines are dropped. |
 | `IN_GAME_SETTINGS.ERB` | `@CUSTOM_OPTION_RESULT_4` | Yandere options reuse the new-game controls, including character potential and direct percentage entry. More options & help retains the original menu. World Settings reuses the romance and pregnancy controls without changing version-migration flags. Dialogue Settings uses the character update's compatibility check and update routine; if a character reset is required, it warns and offers cancellation before the native confirmation. These settings apply as selected. |
 | `MOVE_HOME.ERB` | `HOTPATCH_MOVE_HOME` (called by `@SET_MAINHOME`) | Reuses the new-game region choices within the native move-home screen. Map preview, restrictions, cancellation, room selection and move-in effects remain native; a regression test checks the copied flow against the bundled original. |
-| `MOVE_MAP.ERB` | `@COM400`, `@DRAW_COLOREDMAP`, `@DRAW_MAP`, `@PRINT_DESTINATION` | The Move screen fills the available game viewport: the map's pages are tabs joined to it (replacing the Change Map arrows; switching a tab, or the map colours, replaces the screen instead of adding another copy to the history), and the map is centred in a scrollable card with its detection colour key. The sidebar fills the remaining height beside the map, with one scroll area for Nearby, More on this map, senses and tasks rather than separate height caps on each list. Narrow layouts stack the cards and give the places panel three fifths of the body height; the wide handheld layout keeps it to the right. The list is for the current page only, and the existing destination buttons are grouped by whether `CAN_MOVE` currently allows walking there. Nearby is hidden when empty; More on this map is sorted alphabetically by room name. "You are here", "Return to your room" and the region-exit room appear as numbered rows at the top, with their notes underneath the room names. The current-room row is hidden when that room is not drawn on the selected page. The region exit keeps its native room-selection value and is not duplicated in the lists. Number badges use two text columns plus padding and mirror the map's actual room ink, including nested people/dirt colors; with the dirt-sense ability, cleanliness dots appear with a legend for the dirt levels. Nearby and More places stay one per line. The senses toggles (Y map colours, Z, X) and move tasks remain below. The map renderers wrap their rows in an `era-map-art` box keyed by map (see *Map pictures* below) and take an extra `BARE` argument that drops the "== page ==" heading; their other callers (moving home, going out, the region map) keep the heading and also get pictures. Fallback double-line box glyphs retain Emuera's single-column widths in both plain text and HTML maps. Pointing at (or focusing) a room's number on the map, its name on the map, a place in the sidebar or a top row highlights every other one for that room; the current-place row has a persistent highlight. COM400's movement logic is unchanged; the DRAWLINE rules and the [C] display-mode button are dropped. |
+| `MOVE_MAP.ERB` | `@COM400`, `@DRAW_COLOREDMAP`, `@DRAW_MAP`, `@PRINT_DESTINATION` | The Move screen fills the available game viewport: the map's pages are tabs joined to it (replacing the Change Map arrows; switching a tab, or the map colours, replaces the screen instead of adding another copy to the history), and the map is centred in a scrollable card with its detection colour key. The sidebar fills the remaining height beside the map, with one scroll area for Nearby, More on this map, senses and tasks rather than separate height caps on each list. Narrow layouts stack the cards and give the places panel three fifths of the body height; wide layouts keep it to the right. The list is for the current page only, and the existing destination buttons are grouped by whether `CAN_MOVE` currently allows walking there. Nearby is hidden when empty; More on this map is sorted alphabetically by room name. "You are here", "Return to your room" and the region-exit room appear as numbered rows at the top, with their notes underneath the room names. The current-room row is hidden when that room is not drawn on the selected page. The region exit keeps its native room-selection value and is not duplicated in the lists. Number badges use two text columns plus padding and mirror the map's actual room ink, including nested people/dirt colors; with the dirt-sense ability, cleanliness dots appear with a legend for the dirt levels. Nearby and More places stay one per line. The senses toggles (Y map colours, Z, X) and move tasks remain below. The map renderers wrap their rows in an `era-map-art` box keyed by map (see *Map pictures* below) and take an extra `BARE` argument that drops the "== page ==" heading; their other callers (moving home, going out, the region map) keep the heading and also get pictures. Fallback double-line box glyphs retain Emuera's single-column widths in both plain text and HTML maps. Pointing at (or focusing) a room's number on the map, its name on the map, a place in the sidebar or a top row highlights every other one for that room; the current-place row has a persistent highlight. COM400's movement logic is unchanged; the DRAWLINE rules and the [C] display-mode button are dropped. |
 | `GO_OUT_MAP.ERB` | `@OTHERREGIONS`, `@COM604` | The Go Out region map and the Explore (Stroll) area map in the same card layout as the Move screen. Region map: the Gensokyo map in a fixed-size card, and beside it "You are here", "Travel to" buttons for every other area with the travel time (minutes, or TSP when travelling in stopped time; dangerous routes in red with a tooltip), and the Time Stop / TSP Movement / Dangerous Paths travel options as compact checkboxes (only when travelling alone). Stroll: the area's map, "Walk to" buttons for its spots with their walking time (green when faster, blue when slower than usual, with a note explaining why) and the special warp marked ✧. The two screens are tabs of each other (the area's name and "Gensokyo"), with a Back chip; switching tabs, toggling an option, cancelling the "Use TSP?" question, or returning after a refused move replaces the screen instead of adding another copy to the history. The logic is the original's; the DRAWLINEFORM rules and the bracketed lists are dropped. Pictures come from the `field` and `odekake-<n>` map keys. |
 
 Move maps keep a compact room-color legend in the map card's top right. Blue means
@@ -906,7 +921,7 @@ the default ink for spotless rooms. Green marks your current room. ASCII maps
 automatically fit the card's available width and height, reserving space for the
 legend and recalculating after resize or switching from picture to text. They grow
 up to the configured game font size and stop shrinking at 8px, with scrolling for
-smaller cards. The wide handheld fallback font is 13px. Hidden current-room and
+smaller cards. Hidden current-room and
 section headings collapse their entire output line, including alignment wrappers.
 Opening layout markers accept quoted `class`, `role` and `aria-*` attributes in
 any order, with HTML entities decoded as usual. Accessibility attributes are

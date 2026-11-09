@@ -450,8 +450,8 @@ CALL MAP_VIEWING(MAIN_MAP)
 HTML_PRINT "<era-open class='era-layout era-move'>"
 sHtml '= ""
 FOR LOCAL, 1, MAP_PAGES + 1
-	LOCALS '= LOCAL == TFLAG:マップ切り替え ? " era-move-current" # ""
-	sHtml += @"<button value='MAP{LOCAL}' class='era-move-tab%LOCALS%'>%HTML_ESCAPE(MAPNAME:LOCAL)%</button>"
+	LOCALS '= LOCAL == TFLAG:マップ切り替え ? " era-move-current era-current" # ""
+	sHtml += @"<button value='MAP{LOCAL}' class='era-sheet-page era-move-tab%LOCALS%'>%HTML_ESCAPE(MAPNAME:LOCAL)%</button>"
 NEXT
 HTML_PRINT @"<div class='era-move-header'><div class='era-move-tabs'>%sHtml%</div><button value='{BACK}' class='era-chip-button era-move-back' title='Stay here'>Back</button></div>"
 

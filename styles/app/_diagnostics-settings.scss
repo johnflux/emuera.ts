@@ -8,33 +8,14 @@
 .debug-header { display: flex; align-items: center; justify-content: space-between; padding: 4px 8px; border-bottom: 1px solid #333; }
 .debug-header h2 { margin: 0; font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: .08em; }
 .debug-header-actions { display: flex; gap: 6px; }
-.debug-header button { font-size: 11px; padding: 2px 8px; }
 #debug-log { flex: 1; min-height: 3em; margin: 0; padding: 6px 8px; overflow: auto; white-space: pre-wrap; }
 #settings { width: min(720px, calc(100vw - 32px)); max-width: none; max-height: calc(100dvh - 32px); overflow: auto; border: 1px solid #294656; border-radius: 9px; padding: 18px 20px 20px; margin: auto; font-size: 13px; color: #dce8ed; background: radial-gradient(ellipse at 100% 0, #16364366, transparent 55%), #09131b; box-shadow: 0 12px 36px #0008; font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace; }
 .dialog-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .settings-heading-actions { display: flex; align-items: center; gap: 8px; }
-.settings-heading-actions button { min-height: 44px; padding: 8px 14px; font-size: 14px; }
 .settings-actions { display: flex; flex-direction: column; gap: 8px; }
-.settings-actions button { justify-content: flex-start; text-align: left; }
 .controller-menu { width: min(360px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto; }
 .controller-menu-actions { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
-.controller-menu-actions button { min-height: 48px; font-size: 20px; text-align: center; border-radius: 6px; }
-.has-controller .screen.is-active button.era-timestop-button:enabled:not(.is-stale)::after,
-.has-controller .screen.is-active button.era-repeat:not(.is-stale)::after,
-.has-controller .screen.is-active button.era-move-back:enabled:not(.is-stale)::after,
-.has-controller :is(dialog[open], .screen.is-active .era-dialog:popover-open) :is(button:enabled, a[href]):focus:not([data-controller-hint]):not(.era-dialog-close)::after,
-.has-controller :is(dialog[open], .screen.is-active .era-dialog:popover-open) :is(button[data-controller-hint]:enabled, button.era-dialog-close:enabled)::after {
-  content: "A"; display: inline-grid; place-items: center; flex: 0 0 auto; align-self: center;
-  box-sizing: border-box; width: 1.4em; height: 1.4em; margin: 0; border: 1px solid #8ed7a7; border-radius: 50%;
-  color: #a4efbb; font: bold 12px/1 system-ui, sans-serif; pointer-events: none;
-}
-.has-controller .screen.is-active button.era-timestop-button:enabled:not(.is-stale)::after { content: "Y"; position: absolute; top: -.4em; right: -.4em; border-color: #e8c85b; background: #171923; color: #ffe083; }
-.has-controller .screen.is-active button.era-repeat:not(.is-stale)::after { content: "X"; position: absolute; top: 2px; right: 2px; border-color: #7ebcff; background: #101923; color: #a6d4ff; }
-.has-controller .screen.is-active button.era-move-back:enabled:not(.is-stale)::after { content: "B"; border-color: #e89a96; color: #ffb8b2; }
-.has-controller :is(dialog[open], .screen.is-active .era-dialog:popover-open) :is(button:enabled, a[href], input[type="checkbox"]:enabled, input[type="radio"]:enabled):focus { outline: 2px solid #8ddaff; outline-offset: 2px; }
-.has-controller :is(dialog[open], .screen.is-active .era-dialog:popover-open) :is(button:enabled, a[href]):focus:not([data-controller-hint]):not(.era-dialog-close) { position: relative; }
-.has-controller :is(dialog[open], .screen.is-active .era-dialog:popover-open) :is(button[data-controller-hint="B"]:enabled, button.era-dialog-close:enabled)::after { content: "B"; border-color: #e89a96; color: #ffb8b2; }
-.has-controller :is(dialog[open], .screen.is-active .era-dialog:popover-open) :is(button:enabled, a[href]):focus:not([data-controller-hint]):not(.era-dialog-close)::after { position: absolute; top: -.5em; right: -.5em; margin: 0; background: #101923; }
+.has-controller :is(dialog[open], .screen.is-active .era-dialog:popover-open) :is(input[type="checkbox"]:enabled, input[type="radio"]:enabled):focus { outline: 2px solid #8ddaff; outline-offset: 2px; }
 #demo-tools { flex-shrink: 0; padding: 8px 56px 8px 12px; }
 #demo-tools[hidden] { display: none; }
 #settings h2 { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; color: #e9f5f7; font-size: 17px; letter-spacing: .03em; }
@@ -52,7 +33,6 @@
 #settings-form input[type="text"] { width: 100%; min-width: 0; padding: 7px 9px; border: 1px solid #36515e; border-radius: 4px; background: #08131a; color: #e0edf3; }
 #settings-form input[type="color"] { width: 42px; height: 32px; padding: 3px; border: 1px solid #36515e; border-radius: 5px; background: #08131a; cursor: pointer; }
 #settings-form input:focus-visible:not(.is-control-navigation) { outline: 2px solid #69c9b5; outline-offset: 2px; }
-#settings-reset { --button-background: #142c38; --button-border: #365a6c; --button-color: #9bd5ed; --button-hover-background: #183a43; --button-hover-border: #69c9b5; }
 #input-form { order: 1; flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding: 0 10px; font-size: var(--font-size); line-height: var(--line-height, 1.25); }
 #input-form[hidden] { display: none; }
 body.is-busy main:not(:has(.screen.is-active :is(.era-main, .era-shop, .era-dialog, .era-launch))) > #input-form[hidden],
@@ -62,5 +42,4 @@ main:has(> #terminal.is-waiting):not(:has(.screen.is-active :is(.era-main, .era-
 .command-hint-overlay { position: absolute; inset: 0; display: flex; align-items: center; overflow: hidden; white-space: pre; pointer-events: none; user-select: none; }
 #command-hint-prefix { visibility: hidden; flex-shrink: 0; }
 #command-hint { color: #777; overflow: hidden; text-overflow: ellipsis; }
-#submit { font-size: 12px; padding: 2px 8px; }
 @media (max-width: 600px) { header, #terminal, #input-form { padding-left: 10px; padding-right: 10px; } #compatibility, #debug-output, #settings { margin-left: 10px; margin-right: 10px; } #settings { width: calc(100% - 20px); padding: 15px; } #settings-form { grid-template-columns: minmax(0, 1fr); } #settings-form label:has(input[type="text"]) { grid-column: auto; } #settings-reset { grid-column: auto; } .mode { display: none; } }

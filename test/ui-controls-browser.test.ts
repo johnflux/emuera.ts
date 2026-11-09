@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "node:test";
 import { promisify } from "node:util";
 import { runInNewContext } from "node:vm";
+import { pathToFileURL } from "node:url";
 
 const execute = promisify(execFile);
 const browser = [
@@ -19,12 +19,157 @@ const browser = [
   process.env.PROGRAMFILES && join(process.env.PROGRAMFILES, "Google/Chrome/Application/chrome.exe"),
 ].find((path): path is string => !!path && existsSync(path));
 
+test("item IDs and quantities stay unbroken in wide and compact dialogs and legacy prompts have no controller badge", {
+  skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH",
+}, async () => {
+  const [style, controls, controller] = await Promise.all([
+    readFile(new URL("../web/generated/style.css", import.meta.url), "utf8"),
+    readFile(new URL("../web/controls.js", import.meta.url), "utf8"),
+    readFile(new URL("../web/controller-menu.js", import.meta.url), "utf8"),
+  ]);
+  const html = `<!doctype html><style>${style}</style><body>
+    <input id="controller-hints-toggle" type="checkbox"><span id="controller-hints-label"></span>
+    <dialog id="controller-menu"><div class="controller-menu-actions">
+      <button>Restart</button><button>Library</button><button>Settings</button><button>Exit</button>
+    </div><button id="controller-menu-close">Close</button></dialog>
+    <main id="terminal"><div class="screen is-active">
+      <button id="legacy" class="choice">[Yes]</button>
+      <button id="gui" class="choice era-chip-button">Yes</button>
+      <button id="other" class="choice" style="display:flex;width:60px;white-space:normal;overflow-wrap:anywhere">
+        <span class="command-number">[12345]</span><span>Long button label</span>
+      </button>
+      <div popover="manual" class="era-dialog era-inventory"><div class="era-inventory-body">
+        <div class="era-inventory-grid">${Array.from({ length: 8 }, (_, index) => `
+          <div class="line"><button class="choice era-inventory-item era-inventory-use">
+            <span class="era-inventory-name">Heavy Load [Le Deluge] Purification Drug</span>
+            <span class="era-inventory-quantity">${index % 2 ? "999" : "73"}</span>
+            <span class="command-number">[103${index}]</span>
+          </button></div>`).join("")}</div></div></div>
+    </div></main><script>
+      ${controls.replace(/^export /gm, "")}
+      ${controller.replace(/^import .+;\n/gm, "").replace(/^export /gm, "")}
+      window.requestAnimationFrame = () => 0;
+      setupControllerMenu({restart() {}, library() {}, settings() {}, exit() {},
+        canRestart: () => true, canExit: true, onError: error => { throw error; }});
+      setPreviewControllerHints(true);
+      const legacy = document.getElementById("legacy"), gui = document.getElementById("gui");
+      legacy.focus();
+      const legacyBadge = getComputedStyle(legacy, "::after").content;
+      const legacyFocus = legacy.classList.contains("controller-focus");
+      gui.focus();
+      const guiHint = gui.classList.contains("has-controller-hint") && gui.classList.contains("controller-focus");
+      setPreviewControllerHints(false);
+      const dialog = document.querySelector(".era-inventory");
+      dialog.showPopover();
+      const result = { legacyBadge, legacyFocus, guiHint, layouts: [] };
+      for (const width of [null, "360px"]) {
+        if (width) dialog.style.width = width;
+        const rows = [...dialog.querySelectorAll(".era-inventory-use")];
+        result.layouts.push({width:dialog.getBoundingClientRect().width,
+          rows:rows.map(row => {
+            const name = row.querySelector(".era-inventory-name");
+            return {wraps:name.getBoundingClientRect().height > parseFloat(getComputedStyle(name).lineHeight) + 1,
+              fits:row.scrollWidth <= row.clientWidth + 1,
+              numbers:[...row.querySelectorAll(".command-number, .era-inventory-quantity")].map(number => {
+                const range = document.createRange();
+                range.selectNodeContents(number);
+                return {lines:range.getClientRects().length, flexShrink:getComputedStyle(number).flexShrink};
+              })};
+          })});
+      }
+      const range = document.createRange();
+      range.selectNodeContents(document.querySelector("#other .command-number"));
+      result.otherLines = range.getClientRects().length;
+      document.body.innerHTML = "<pre id='result'>" + JSON.stringify(result) + "</pre>";
+    </script>`;
+  const profile = await mkdtemp(join(process.cwd(), ".era-inventory-layout-"));
+  try {
+    const fixture = join(profile, "items.html");
+    await writeFile(fixture, html);
+    const args = ["--headless", "--disable-gpu", "--no-first-run", `--user-data-dir=${profile}`,
+      "--window-size=1600,1000", "--dump-dom", pathToFileURL(fixture).href];
+    if (process.platform === "linux") args.unshift("--no-sandbox");
+    const { stdout } = await execute(browser!, args, { maxBuffer: 4 * 1024 * 1024, timeout: 20000 });
+    const match = stdout.match(/<pre id="result">([^]*?)<\/pre>/);
+    assert.ok(match?.[1], stdout.slice(-4000));
+    const result = JSON.parse(match[1]);
+    assert.equal(result.legacyBadge, "none");
+    assert.equal(result.legacyFocus, false);
+    assert.equal(result.guiHint, true);
+    assert.equal(result.otherLines, 1);
+    assert.ok(result.layouts[0].width >= 1400, "wide dialog uses the increased width");
+    for (const layout of result.layouts) {
+      assert.ok(layout.rows.some((row: { wraps: boolean }) => row.wraps), "long item names still wrap");
+      for (const row of layout.rows) {
+        assert.equal(row.fits, true);
+        for (const number of row.numbers) {
+          assert.equal(number.lines, 1, "IDs and quantities occupy exactly one line");
+          assert.equal(number.flexShrink, "0");
+        }
+      }
+    }
+  } finally {
+    await rm(profile, { recursive: true, force: true });
+  }
+});
+
+test("controller hint checkbox keeps native checkmark in sync after each three-state click", {
+  skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH",
+}, async () => {
+  const [controls, controller] = await Promise.all([
+    readFile(new URL("../web/controls.js", import.meta.url), "utf8"),
+    readFile(new URL("../web/controller-menu.js", import.meta.url), "utf8"),
+  ]);
+  const html = `<!doctype html><meta charset="utf-8"><body>
+    <label><input id="controller-hints-toggle" type="checkbox"><span id="controller-hints-label"></span></label>
+    <dialog id="controller-menu"><div class="controller-menu-actions">
+      <button>Restart</button><button>Library</button><button>Settings</button><button>Exit</button>
+    </div><button id="controller-menu-close">Close</button></dialog>
+    <pre id="result"></pre><script>
+    ${controls.replace(/^export /gm, "")}
+    ${controller.replace(/^import .+;\n/gm, "").replace(/^export /gm, "")}
+    localStorage.removeItem("era-typescript.controller-hints");
+    localStorage.removeItem("era-typescript.force-controller");
+    window.requestAnimationFrame = () => 0;
+    setupControllerMenu({restart() {}, library() {}, settings() {}, exit() {},
+      canRestart: () => true, canExit: true, onError: error => { throw error; }});
+    const input = document.getElementById("controller-hints-toggle");
+    const states = [];
+    function snapshot() {
+      states.push({checked:input.checked, mixed:input.indeterminate,
+        active:input.dataset.active, label:document.getElementById("controller-hints-label").textContent,
+        saved:localStorage.getItem("era-typescript.controller-hints")});
+    }
+    snapshot();
+    for (let i = 0; i < 6; i++) { input.click(); snapshot(); }
+    document.getElementById("result").textContent = JSON.stringify(states);
+    </script>`;
+  const profile = await mkdtemp(join(process.cwd(), ".era-checkbox-cycle-"));
+  try {
+    const page = join(profile, "checkbox.html");
+    await writeFile(page, html);
+    const args = ["--headless", "--disable-gpu", "--no-first-run", `--user-data-dir=${profile}`,
+      "--dump-dom", pathToFileURL(page).href];
+    if (process.platform === "linux") args.unshift("--no-sandbox");
+    const { stdout } = await execute(browser!, args, { maxBuffer: 2 * 1024 * 1024, timeout: 20000 });
+    const match = stdout.match(/<pre id="result">([^]*?)<\/pre>/);
+    assert.ok(match?.[1], stdout.slice(-4000));
+    const states = JSON.parse(match[1]);
+    const auto = {checked:false, mixed:true, active:"false", label:"Controller hints: Auto (Off)", saved:"auto"};
+    const on = {checked:true, mixed:false, active:"true", label:"Controller hints: On", saved:"on"};
+    const off = {checked:false, mixed:false, active:"false", label:"Controller hints: Off", saved:"off"};
+    assert.deepEqual(states, [{...auto, saved:null}, on, off, auto, on, off, auto]);
+  } finally {
+    await rm(profile, { recursive: true, force: true });
+  }
+});
+
 test("shared dialog inputs separate navigation and editing for keyboard, controller and pointer", {
   skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH",
 }, async () => {
   const [controls, navigation, style] = await Promise.all([
     readFile(new URL("../web/controls.js", import.meta.url), "utf8"),
-    readFile(new URL("../web/handheld.js", import.meta.url), "utf8"),
+    readFile(new URL("../web/navigation.js", import.meta.url), "utf8"),
     readFile(new URL("../web/generated/style.css", import.meta.url), "utf8"),
   ]);
   const html = `<!doctype html><style>${style}
@@ -96,7 +241,7 @@ test("shared dialog inputs separate navigation and editing for keyboard, control
         firstBackOpen, closed:!fixture.open
       }) + "</pre>";
     </script>`;
-  const profile = await mkdtemp(join(tmpdir(), "era-control-navigation-"));
+  const profile = await mkdtemp(join(process.cwd(), ".era-control-navigation-"));
   try {
     const args = ["--headless", "--disable-gpu", "--no-first-run", `--user-data-dir=${profile}`,
       "--window-size=1200,700", "--dump-dom", `data:text/html;base64,${Buffer.from(html).toString("base64")}`];
@@ -121,31 +266,30 @@ test("shared dialog inputs separate navigation and editing for keyboard, control
   }
 });
 
-test("Steam Deck settings fit without scrolling with font controls on one row", {
+test("compact settings retain font selection without font size or display mode controls", {
   skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH",
 }, async () => {
-  const [index, style, handheld] = await Promise.all([
+  const [index, style, responsive] = await Promise.all([
     readFile(new URL("../web/index.html", import.meta.url), "utf8"),
     readFile(new URL("../web/generated/style.css", import.meta.url), "utf8"),
-    readFile(new URL("../web/generated/handheld.css", import.meta.url), "utf8"),
+    readFile(new URL("../web/generated/responsive.css", import.meta.url), "utf8"),
   ]);
   const dialog = index.slice(index.indexOf('<dialog id="settings"'), index.indexOf('<dialog id="art-demo"'));
-  const html = `<!doctype html><meta charset="utf-8"><style>${style}\n${handheld}</style>
-    <body class="is-handheld">${dialog}<script>
+  const html = `<!doctype html><meta charset="utf-8"><style>${style}\n${responsive}</style>
+    <body>${dialog}<script>
       const settings = document.getElementById("settings");
       settings.showModal();
       const name = settings.querySelector("input[name=font]").closest("label").getBoundingClientRect();
-      const size = settings.querySelector("#font-size").closest("label").getBoundingClientRect();
       const reset = settings.querySelector("#settings-reset").getBoundingClientRect();
       const close = settings.querySelector("#settings-close").getBoundingClientRect();
-      const result = { nameTop: name.top, sizeTop: size.top, nameRight: name.right, sizeLeft: size.left,
+      const result = { fontVisible: name.width > 0, obsoleteControls: !!settings.querySelector("#font-size, #handheld-toggle"),
         scroll: settings.scrollHeight, client: settings.clientHeight, viewport: innerHeight,
         resetTop: reset.top, closeTop: close.top, resetRight: reset.right, closeLeft: close.left,
         resetHeight: reset.height, resetText: settings.querySelector("#settings-reset").textContent,
         headerReset: settings.querySelector(".dialog-heading").contains(settings.querySelector("#settings-reset")) };
       document.body.innerHTML = "<pre id='result'>" + JSON.stringify(result) + "</pre>";
     </script>`;
-  const profile = await mkdtemp(join(tmpdir(), "era-settings-"));
+  const profile = await mkdtemp(join(process.cwd(), ".era-settings-"));
   try {
     const args = ["--headless", "--disable-gpu", "--no-first-run", `--user-data-dir=${profile}`,
       "--window-size=1280,800", "--dump-dom", `data:text/html;base64,${Buffer.from(html).toString("base64")}`];
@@ -163,8 +307,8 @@ test("Steam Deck settings fit without scrolling with font controls on one row", 
       result = await measure();
     }
     assert.equal(result.viewport, 800);
-    assert.equal(result.nameTop, result.sizeTop);
-    assert.ok(result.nameRight < result.sizeLeft);
+    assert.equal(result.fontVisible, true);
+    assert.equal(result.obsoleteControls, false);
     assert.ok(result.scroll <= result.client, JSON.stringify(result));
     assert.equal(result.headerReset, true);
     assert.equal(result.resetText, "Reset all");
@@ -200,14 +344,14 @@ test("reviving a checkbox restores only its native input as a tab stop", async (
 test("native game checkboxes share clear styling and preserve runtime state on activation", {
   skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH",
 }, async () => {
-  const [controls, style, handheld] = await Promise.all([
+  const [controls, style, responsive] = await Promise.all([
     readFile(new URL("../web/controls.js", import.meta.url), "utf8"),
     readFile(new URL("../web/generated/style.css", import.meta.url), "utf8"),
-    readFile(new URL("../web/generated/handheld.css", import.meta.url), "utf8"),
+    readFile(new URL("../web/generated/responsive.css", import.meta.url), "utf8"),
   ]);
-  const html = `<!doctype html><meta charset="utf-8"><style>${style}\n${handheld}</style>
+  const html = `<!doctype html><meta charset="utf-8"><style>${style}\n${responsive}</style>
     <body><section class="screen is-active"><div class="line" id="controls"></div></section>
-    <button id="continue-hint" type="button" hidden>Click to continue</button><script>
+    <button class="ui-button ui-button--continue-hint" id="continue-hint" type="button" hidden>Click to continue</button><script>
       ${controls.replace(/^export /gm, "")}
       let calls = 0;
       const unchecked = createCheckbox(false, () => calls++);
@@ -246,8 +390,7 @@ test("native game checkboxes share clear styling and preserve runtime state on a
       const disabledCalls = calls;
       const clone = checked.cloneNode(true);
       const clonedState = choiceControl(clone).checked;
-      document.body.classList.add("is-handheld");
-      const handheldHeight = appearance(checked).height;
+      const compactHeight = appearance(checked).height;
       const hint = document.getElementById("continue-hint");
       const hiddenHint = getComputedStyle(hint).display;
       hint.hidden = false;
@@ -259,16 +402,16 @@ test("native game checkboxes share clear styling and preserve runtime state on a
         for (const child of rule.cssRules) hoverRules.push(child.selectorText);
       }
       document.body.innerHTML = "<pre id='result'>" + JSON.stringify({
-        off, on, activated, states, disabledCalls, clonedState, handheldHeight,
+        off, on, activated, states, disabledCalls, clonedState, compactHeight,
         hiddenHint, visibleHint,
         mixedBefore, mixedAfter,
         autoOff, autoOn, cycleOff,
         hoverGuards: { checkbox: hoverRules.includes(".checkbox-control:has(> input:enabled):hover"),
-          button: hoverRules.includes("button:hover:enabled") },
+          button: hoverRules.some(selector => selector?.includes(".ui-button") && selector.includes(":hover")) },
         nestedButtons: checked.querySelectorAll("button").length
       }) + "</pre>";
     </script>`;
-  const profile = await mkdtemp(join(tmpdir(), "era-checkboxes-"));
+  const profile = await mkdtemp(join(process.cwd(), ".era-checkboxes-"));
   try {
     const args = ["--headless", "--disable-gpu", "--no-first-run", `--user-data-dir=${profile}`,
       "--window-size=1200,700", "--dump-dom", `data:text/html;base64,${Buffer.from(html).toString("base64")}`];
@@ -295,7 +438,7 @@ test("native game checkboxes share clear styling and preserve runtime state on a
     assert.equal(result.nestedButtons, 0);
     assert.equal(result.mixedBefore, true);
     assert.equal(result.mixedAfter, true, "a rejected cycle keeps the indeterminate state");
-    assert.ok(result.handheldHeight >= 40, `handheld height: ${result.handheldHeight}`);
+    assert.ok(result.compactHeight > 0, `compact checkbox height: ${result.compactHeight}`);
     assert.equal(result.hiddenHint, "none");
     assert.equal(result.visibleHint.display, "flex");
     assert.equal(result.visibleHint.color, "rgb(176, 176, 176)");

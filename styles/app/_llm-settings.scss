@@ -16,13 +16,10 @@
 .llm-config-fields > label:not(.llm-config-check) { color: #b9cbd2; font-size: 12px; }
 .llm-config-fields input:not([type="checkbox"]), .llm-config-fields select, .llm-config-fields textarea { box-sizing: border-box; width: 100%; min-width: 0; padding: 8px 9px; border: 1px solid #36515e; border-radius: 5px; background: #08131a; color: #e0edf3; font: inherit; }
 .llm-config-fields textarea { resize: vertical; min-height: 5em; }
-.llm-config :is(input, select, textarea, button):focus-visible { outline: 2px solid #69c9b5; outline-offset: 2px; }
+.llm-config :is(input, select, textarea):focus-visible { outline: 2px solid #69c9b5; outline-offset: 2px; }
 .llm-config-row { display: flex; flex-wrap: wrap; min-width: 0; gap: 8px; align-items: center; }
 .llm-config-row input { flex: 1 1 10em; }
 .llm-config-row input[type="number"] { flex: 1 1 6em; max-width: 8em; }
-.llm-config button { --button-padding: 8px 12px; --button-border: #365a60; --button-radius: 5px; --button-background: #142c38; --button-color: #b8e4d9; --button-hover-border: #69c9b5; --button-hover-background: #183a43; font-size: 12px; }
-.llm-config button:hover:enabled { color: #e1f7ef; }
-.llm-config-row button { flex-shrink: 0; white-space: nowrap; }
 .confirm p.llm-config-hint { grid-column: 2; margin: -3px 0 2px; color: #99b5c1; font-size: 12px; overflow-wrap: anywhere; }
 .llm-config-check { --checkbox-accent: #69c9b5; grid-column: 1 / -1; align-items: flex-start; padding: 10px 12px; font-size: 12px; line-height: 1.6; }
 .llm-config-check input { margin-top: 3px; }
@@ -32,8 +29,6 @@
 .llm-config-status:empty { display: none; }
 .confirm p.llm-config-status-help { margin: 6px 0 0; color: #99b5c1; font-size: 11px; }
 .llm-config-actions { flex-shrink: 0; padding: 14px 22px; border-top: 1px solid #294650; background: #0b1921; }
-.llm-config-actions button[value="save"] { border-color: #69c9b5; background: #69c9b5; color: #071c19; font-weight: 600; }
-.llm-config-actions button[value="save"]:hover:enabled { background: #91e1cb; color: #071c19; }
 @media (max-width: 600px) {
   .llm-config { width: calc(100vw - 20px); max-height: calc(100dvh - 20px); }
   .llm-config-body { padding: 16px; }

@@ -50,5 +50,3 @@
   opacity: .14; pointer-events: none; }
 .era-sub { margin-left: 1.75ch; color: #888; font-weight: normal; font-size: .85em; }
 .era-funds { margin-left: auto; color: #ffd866; font-weight: normal; font-variant-numeric: tabular-nums; cursor: help; }
-.era-main .line button.choice:is(.era-see-more, .era-info-more) { align-self: center; padding: 0 2px; border: 0; border-radius: 0; background: transparent; color: #8fc8ff; font-size: .8em; font-weight: normal; white-space: nowrap; }
-.era-main .line button.choice:is(.era-see-more, .era-info-more):enabled:is(:hover, :focus-visible) { background: transparent; color: #d7eff8; text-decoration: underline; }

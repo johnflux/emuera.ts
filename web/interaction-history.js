@@ -1,5 +1,6 @@
 import { activeLlm, buildMessages, converse, debugLog, handedOver, loadLlmConfig, parseReply, PROVIDERS, systemPrompt, TOOLS, toolsFor } from "./llm.js";
 import { speechQuotes } from "./translate.js";
+import { syncChromeControllerHints } from "./controller-menu.js";
 
 let expanded = true;
 const inlineChats = new WeakMap();
@@ -243,6 +244,7 @@ export function renderCharacterHistory(parent, history, { loadAll, embedded = fa
     const element = document.createElement(tag);
     element.textContent = content;
     if (className) element.className = className;
+    if (tag === "button") syncChromeControllerHints(element);
     container.append(element);
     return element;
   };
@@ -255,7 +257,7 @@ export function renderCharacterHistory(parent, history, { loadAll, embedded = fa
   }
   if (loadAll) {
     const overlay = text("div", "", panel, "era-history-more-overlay");
-    const open = text("button", "more...", overlay, "era-history-more");
+    const open = text("button", "more...", overlay, "era-history-more ui-button ui-button--history ui-button--history-more");
     open.type = "button";
     open.setAttribute("aria-label", "View all interaction history");
     open.addEventListener("click", async () => {
@@ -265,7 +267,7 @@ export function renderCharacterHistory(parent, history, { loadAll, embedded = fa
       const header = text("div", "", dialog, "era-history-toolbar");
       text("h2", `${history.character.name}'s interaction history`, header);
       const tabs = text("div", "", header, "era-history-tabs");
-      const close = text("button", "Close", header);
+      const close = text("button", "Close", header, "ui-button ui-button--history ui-button--dialog-close");
       close.type = "button";
       close.setAttribute("data-controller-hint", "B");
       const pane = text("div", "", dialog, "era-history-pane");
@@ -328,6 +330,7 @@ export function renderCharacterHistory(parent, history, { loadAll, embedded = fa
 function element(tag, className, content) {
   const node = document.createElement(tag);
   if (className) node.className = className;
+  if (tag === "button") syncChromeControllerHints(node);
   if (content !== undefined) node.textContent = content;
   return node;
 }
@@ -389,9 +392,9 @@ function voiceEditor(chat, character) {
   const description = field("Description", 4, "Identity, traits and background from the game, followed by the character's introduction.");
   const examples = field("Example lines", 8, "One per line. Sent with every message so the model matches how the character talks.");
   const intimate = field("Example lines in intimate scenes", 6, "One per line. Used instead of the lines above during an intimate scene.");
-  const save = element("button", "", "Save");
-  const revert = element("button", "", "Revert to generated");
-  const download = element("button", "", "Download PNG card");
+  const save = element("button", "ui-button ui-button--history", "Save");
+  const revert = element("button", "ui-button ui-button--history", "Revert to generated");
+  const download = element("button", "ui-button ui-button--history", "Download PNG card");
   for (const button of [save, revert, download]) button.type = "button";
   const status = element("span", "era-history-note");
   const actions = element("div", "era-llm-voice-actions");
@@ -475,9 +478,9 @@ function memoryEditor(chat, character, loadAll) {
   const textarea = element("textarea");
   textarea.rows = 8;
   wrapper.append(element("span", "", "What she remembers of the player"), textarea);
-  const save = element("button", "", "Save");
-  const write = element("button", "", "Write now");
-  const clear = element("button", "", "Clear");
+  const save = element("button", "ui-button ui-button--history", "Save");
+  const write = element("button", "ui-button ui-button--history", "Write now");
+  const clear = element("button", "ui-button ui-button--history", "Clear");
   for (const button of [save, write, clear]) button.type = "button";
   const status = element("span", "era-history-note");
   const actions = element("div", "era-llm-voice-actions");
@@ -575,14 +578,14 @@ function setupChat({ dialog, tabs, pane, content, history, loadAll, chat, cleanu
     textarea.placeholder = `Say something to ${character.name}, or *do something*… (Enter to send, Shift+Enter for a new line)`;
     textarea.setAttribute("aria-label", `Message to ${character.name}`);
   }
-  const send = element("button", "", "Send");
+  const send = element("button", "ui-button ui-button--history", "Send");
   send.type = "submit";
-  const stop = element("button", "", "Cancel");
+  const stop = element("button", "ui-button ui-button--history", "Cancel");
   stop.type = "button";
   stop.hidden = true;
   const actions = element("div", "era-llm-composer-actions");
   const state = element("span", "era-llm-state");
-  const configure = element("button", "era-llm-configure", "LLM settings…");
+  const configure = element("button", "era-llm-configure ui-button ui-button--history ui-button--history-configure", "LLM settings…");
   configure.type = "button";
   actions.append(state, configure);
   const row = element("div", "era-llm-composer-row");
@@ -605,9 +608,9 @@ function setupChat({ dialog, tabs, pane, content, history, loadAll, chat, cleanu
   if (memory) debugPane.append(memory.section);
   debugPane.append(debugLogPane);
   if (!inline) dialog.append(debugPane);
-  const historyTab = element("button", "era-info-tab", "History & chat");
-  const cardTab = element("button", "era-info-tab", "Character card");
-  const debugTab = element("button", "era-info-tab", "LLM debug");
+  const historyTab = element("button", "era-info-tab ui-button ui-button--history ui-button--history-tab", "History & chat");
+  const cardTab = element("button", "era-info-tab ui-button ui-button--history ui-button--history-tab", "Character card");
+  const debugTab = element("button", "era-info-tab ui-button ui-button--history ui-button--history-tab", "LLM debug");
   for (const tab of [historyTab, cardTab, debugTab]) tab.type = "button";
   if (!inline) {
     tabs.append(historyTab);
@@ -660,7 +663,7 @@ function setupChat({ dialog, tabs, pane, content, history, loadAll, chat, cleanu
     if (!newest || entry.action.id !== "chat" || (line.character !== null && line.character !== history.player?.id) || line.thought || pending) return undefined;
     const tools = element("span", "era-llm-message-tools");
     for (const [label, resend] of [["Edit", false], ["Retry", true]]) {
-      const button = element("button", "", label);
+      const button = element("button", "ui-button ui-button--history ui-button--history-tool", label);
       button.type = "button";
       button.title = `${resend ? "Send this message again" : "Edit this message"}: it and everything after it are removed from the history. Game changes the removed replies made stay.`;
       const prefix = `${history.player?.name ?? "Player"}: `;

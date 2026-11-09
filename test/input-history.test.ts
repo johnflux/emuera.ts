@@ -41,7 +41,6 @@ async function inputHarness() {
   };
   const state = {
     touch: false,
-    handheld: false,
     busy: false, expiring: false,
     input: { kind: "string", singleCharacter: false, blocking: false },
     queuedSubmit: null as { value: string; choice?: string } | null,
@@ -56,6 +55,7 @@ async function inputHarness() {
     source.slice(start, end), "\nsubmit;",
   ].join("\n"), {
     touchInput: () => state.touch,
+    componentSample: null,
     command,
     sent,
     terminal: { querySelectorAll: () => choices },
@@ -67,7 +67,7 @@ async function inputHarness() {
     settling: () => false,
     Element: class {},
     document: {
-      body: { classList: { contains: (name: string) => name === "is-handheld" && state.handheld } },
+      body: { classList: { contains: () => false } },
       querySelector: (selector: string) => selector === "#command-hint" ? hint : selector === "#command-hint-prefix" ? hintPrefix
         : { addEventListener(type: string, handler: (event: InputEvent) => void) { handlers.set(`form:${type}`, handler); } },
       addEventListener(type: string, handler: (event: InputEvent) => void) { handlers.set(`document:${type}`, handler); },
@@ -124,19 +124,6 @@ test("touchscreen input does not recall command history", async () => {
   assert.equal(key("ArrowUp").defaultPrevented, false);
   assert.equal(command.value, "draft");
   state.touch = false;
-  key("ArrowUp");
-  assert.equal(command.value, "400");
-});
-test("handheld input does not recall command history without touch support", async () => {
-  const { state, command, send, key } = await inputHarness();
-  send("400");
-  state.handheld = true;
-  command.value = "draft";
-  for (const arrow of ["ArrowUp", "ArrowDown"]) {
-    assert.equal(key(arrow).defaultPrevented, false);
-    assert.equal(command.value, "draft");
-  }
-  state.handheld = false;
   key("ArrowUp");
   assert.equal(command.value, "400");
 });

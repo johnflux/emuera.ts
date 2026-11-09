@@ -7,16 +7,16 @@ import { once } from "node:events";
 import { createApp } from "../src/server.js";
 
 const source = readFileSync(new URL("../web/controls.js", import.meta.url), "utf8").replace(/^export /gm, "")
-  + "\n" + readFileSync(new URL("../web/handheld.js", import.meta.url), "utf8").replace(/^import .+;\n/gm, "").replace(/^export /gm, "");
+  + "\n" + readFileSync(new URL("../web/navigation.js", import.meta.url), "utf8").replace(/^import .+;\n/gm, "").replace(/^export /gm, "");
 
-test("server serves handheld module and stylesheet with their correct content types", async () => {
+test("server serves navigation module and responsive stylesheet with their correct content types", async () => {
   const app = createApp([]);
   app.listen(0, "127.0.0.1");
   await once(app, "listening");
   try {
     const address = app.address();
     assert.ok(address && typeof address !== "string");
-    for (const [asset, contentType] of [["handheld.js", "javascript"], ["handheld.css", "text/css"]]) {
+    for (const [asset, contentType] of [["navigation.js", "javascript"], ["responsive.css", "text/css"]]) {
       const response = await fetch(`http://127.0.0.1:${address.port}/${asset}`);
       assert.equal(response.status, 200);
       assert.ok(response.headers.get("content-type")?.includes(contentType!));
@@ -28,60 +28,8 @@ test("server serves handheld module and stylesheet with their correct content ty
   }
 });
 
-test("handheld layout defaults on for Deck or touch and preserves explicit preferences", () => {
-  for (const { deck, saved, expected, coarse = false, touchPoints = 0 } of [
-    { deck: false, saved: null, expected: false },
-    { deck: true, saved: null, expected: true },
-    { deck: true, saved: "0", expected: false },
-    { deck: false, saved: "1", expected: true },
-    { deck: false, saved: null, coarse: true, expected: true },
-    { deck: false, saved: null, touchPoints: 5, expected: true },
-    { deck: false, saved: "0", coarse: true, touchPoints: 5, expected: false },
-    { deck: true, saved: "0", coarse: true, expected: false },
-  ]) {
-    let click = () => {};
-    let stored = saved;
-    let applied = false;
-    let checked = false;
-    let changes = 0;
-    const setup = runInNewContext(`${source}\nsetupHandheld`, {
-      eraDesktop: { handheld: deck },
-      navigator: { maxTouchPoints: touchPoints },
-      matchMedia: (query: string) => {
-        assert.equal(query, "(any-pointer: coarse)");
-        return { matches: coarse };
-      },
-      localStorage: {
-        getItem: () => stored,
-        setItem(key: string, value: string) {
-          assert.equal(key, "era-typescript.handheld");
-          stored = value;
-        },
-        removeItem: () => { stored = null; },
-      },
-      document: {
-        body: { classList: { toggle: (_name: string, value: boolean) => { applied = value; } } },
-        querySelector: () => ({
-          set checked(value: boolean) { checked = value; },
-          addEventListener: (_name: string, handler: () => void) => { click = handler; },
-        }),
-      },
-    });
-    const layout = setup(() => { changes++; });
-    assert.equal(layout.enabled(), expected);
-    assert.equal(applied, expected);
-    assert.equal(checked, expected);
-    click();
-    assert.equal(layout.enabled(), !expected);
-    assert.equal(applied, !expected);
-    assert.equal(stored, expected ? "0" : "1");
-    assert.equal(changes, 1);
-    layout.reset();
-    assert.equal(stored, null);
-    assert.equal(layout.enabled(), deck || coarse || touchPoints > 0);
-    assert.equal(checked, layout.enabled());
-    assert.equal(changes, 2);
-  }
+test("navigation is independent of display preferences", () => {
+  assert.doesNotMatch(source, /setupHandheld|is-handheld|eraDesktop|localStorage/);
 });
 
 test("directional navigation follows rows and columns and stops at the edge", () => {
@@ -227,19 +175,41 @@ test("number decoration preserves numeric-only controls and wraps only the butto
   }
 });
 
-test("hidden number-only action buttons cover their labeled tile without taking layout space", () => {
-  const css = styleSource("handheld");
-  const rule = "button.choice.command-number-only { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; margin: 0; padding: 0; border-radius: inherit; }";
-  assert.ok(css.includes(`.is-handheld .era-actions-group ${rule}`));
-  assert.ok(css.includes(`  .era-actions-group ${rule}`));
-  assert.ok(css.includes(".is-handheld .era-actions-group .print-cell:has(.command-number-only) { display: inline-flex; align-items: center; min-height: var(--compact-choice-min-height); box-sizing: border-box; }"));
-  assert.ok(css.includes(".era-actions-group .print-cell:has(.command-number-only) { display: inline-flex; align-items: center; min-height: var(--compact-choice-min-height); box-sizing: border-box; }"));
+test("metadata creates one accessible decoration per number and nonempty suffix", () => {
+  for (const suffix of ["", "›"]) {
+    const children: { className: string; textContent: string; attributes: Record<string, string> }[] = [];
+    const decorate = runInNewContext(`${source}\ndecorateCommandNumbers`, {
+      document: {
+        createElement: () => ({
+          className: "", textContent: "", attributes: {} as Record<string, string>,
+          setAttribute(name: string, value: string) { this.attributes[name] = value; },
+        }),
+      },
+    });
+    const element = {
+      dataset: { value: "805", commandNumber: "805", suffix },
+      matches: () => true,
+      querySelector: (selector: string) => children.find(child => `.${child.className}` === selector),
+      append: (child: typeof children[number]) => children.push(child),
+    };
+    decorate(element);
+    decorate(element);
+    assert.deepEqual(children.map(child => [child.className, child.textContent, child.attributes["aria-hidden"]]),
+      [["command-number", "[805]", "true"], ...(suffix ? [["era-button-suffix", suffix, "true"]] : [])]);
+    assert.equal(element.dataset.value, "805");
+  }
 });
 
-test("number-only controls use one tile focus outline in desktop and handheld layouts", () => {
-  const css = styleSource("handheld");
-  assert.ok(css.includes(".line .print-cell button.choice.command-number-only:focus-visible { outline: none; }"));
-  assert.ok(css.includes(".line .print-cell:has(button.choice.command-number-only:focus-visible) { outline: 2px solid #8ddaff; outline-offset: 2px; }"));
+test("hidden number-only action buttons cover their labeled tile without taking layout space", () => {
+  const css = styleSource("style");
+  assert.ok(css.includes(".era-command-tile .command-number-only { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; margin: 0; padding: 0; border-radius: inherit; }"));
+  assert.ok(css.includes(".era-command-tile:has(.command-number-only) { display: inline-flex; align-items: center; min-height: var(--compact-choice-min-height); box-sizing: border-box; }"));
+});
+
+test("number-only controls use one tile focus outline in all layouts", () => {
+  const css = styleSource("style");
+  assert.ok(css.includes(".era-command-tile .choice:focus-visible { outline: none; }"));
+  assert.ok(css.includes(".era-command-tile:has(.choice:enabled:is(:focus-visible, .controller-focus)) { outline: 2px solid #7ccce3; outline-offset: 2px; }"));
 });
 
 test("navigation measures the labeled tile rather than its right-aligned numeric button", () => {
@@ -258,29 +228,17 @@ test("navigation measures the labeled tile rather than its right-aligned numeric
   ], 0, "ArrowDown"), 1);
 });
 
-test("command numbers hide on handheld, at 1280 by 800 or smaller, or with touch input", () => {
-  const css = styleSource("handheld");
-  assert.match(css, /\.is-handheld \.command-number \{ display: none; \}/);
-  assert.match(css, /@media \(max-width: 1280px\) and \(max-height: 800px\), \(any-pointer: coarse\) \{\s*\.command-number \{ display: none; \}/);
+test("controller hints hide command numbers independently of viewport size", () => {
+  assert.match(styleSource("style"), /button\.choice\.has-controller-hint \.command-number \{ display: none; \}/);
+  assert.doesNotMatch(styleSource("responsive"), /\.command-number \{ display: none; \}/);
 });
 
-test("tooltip underlines hide in handheld and touch layouts without removing choice underlines", () => {
-  const css = styleSource("handheld");
-  assert.match(css, /\.is-handheld \.has-tooltip \.interactive-label \{ text-decoration-line: none; \}/);
+test("tooltip underlines hide on touch devices without removing choice underlines", () => {
+  const css = styleSource("responsive");
   assert.match(css, /@media \(any-pointer: coarse\) \{\s*\.has-tooltip \.interactive-label \{ text-decoration-line: none; \}/);
   const desktop = styleSource("style");
   assert.match(desktop, /\.has-tooltip \.interactive-label \{[^}]*text-decoration-style: dashed;/);
   assert.match(desktop, /\.choice \.interactive-label \{ text-decoration: underline;/);
-});
-
-test("UI chrome shares centered button layout and controller badge geometry", () => {
-  const css = styleSource("style");
-  assert.match(css, /--button-color: currentColor;/);
-  assert.match(css, /button, a\.game-primary, \.line button\.choice:is\(\.era-chip-button, \.era-star, \.era-dialog-close, \.era-cycle-toggle\), \.era-chip-button \{[^}]*display: inline-flex; align-items: center; justify-content: center; gap: var\(--button-gap/);
-  assert.match(css, /\.line button\.choice \{ display: inline-block;/);
-  assert.match(css, /button\[hidden\][^{]*\.line button\.choice\[hidden\] \{ display: none; \}/);
-  assert.match(css, /\.era-move-back:enabled:not\(\.is-stale\)::after,\s*\.has-controller[^}]*button\.era-dialog-close:enabled\)::after \{[^}]*flex: 0 0 auto; align-self: center;[^}]*width: 1\.4em; height: 1\.4em; margin: 0;/);
-  assert.doesNotMatch(styleSource("handheld"), /era-move-back.*::after/);
 });
 
 test("launch version leaves room for the burger menu", () => {
@@ -289,81 +247,57 @@ test("launch version leaves room for the burger menu", () => {
 });
 
 test("compact-height gameplay positions the artwork watch at minus 20 pixels", () => {
-  const css = styleSource("handheld");
+  const css = styleSource("responsive");
   assert.match(css, /@media \(max-height: 800px\) \{\s*body:not\(\.is-home\) :is\(\.era-main, \.era-shop\) \.era-main-header:has\(\.era-area-art\) > \.era-watch-control \{ top: -20px; \}/);
   assert.match(css, /\.era-watch-control \{ right: 0; \}/);
 });
 
 test("compact home screens bound their height and scroll long cards instead of the whole screen", () => {
-  const css = styleSource("handheld");
-  assert.match(css, /\.is-handheld \.screen\.is-active \.era-shop \{ height: max\(540px, calc\(100cqh - 8px\)\); min-height: 0;/);
+  const css = styleSource("responsive");
+  assert.match(css, /\.screen\.is-active \.era-shop \{ height: max\(540px, calc\(100cqh - 8px\)\); min-height: 0;/);
   assert.match(css, /\.era-shop > :is\(\.era-shop-home, \.era-shop-menu, \.era-shop-system\) \{ min-height: 0; overflow: auto;/);
   const app = readFileSync(new URL("../web/app.js", import.meta.url), "utf8");
   assert.match(app, /terminal\.scrollLeft = fresh \|\| steps\.some\(\(\{ advanceScreen \}\) => advanceScreen\)[\s\S]*\.screen\.is-active \.era-layout/);
 });
 
 test("compact gameplay errors appear at the top without covering the menu button", () => {
-  const css = styleSource("handheld");
+  const css = styleSource("responsive");
   assert.match(css, /body:not\(\.is-home\) > header > #status\.error \{[^}]*position: fixed; top: 8px; bottom: auto; left: 8px; right: 56px;/);
 });
 
-test("handheld command input stays compact without bottom panel padding", () => {
-  const css = styleSource("handheld");
-  assert.match(css, /\.is-handheld main \{ padding: 0; \}/);
-  assert.match(css, /\.is-handheld #input-form :is\(input, button\) \{ min-height: 0; \}/);
-});
-
 test("main and game-output focus do not outline the whole content panel", () => {
-  const css = styleSource("handheld");
+  const css = styleSource("responsive");
   assert.ok(css.includes(":is(main, #terminal):focus { outline: none; }"));
-  assert.match(css, /:is\(button, a\[href\], input, select, textarea\):focus-visible \{\s*outline: 2px solid #8ddaff;/);
-});
-
-test("text-only pauses and processing preserve an invisible command-row spacer but GUI screens collapse it", () => {
-  const css = styleSource("style");
-  assert.ok(css.includes("body.is-busy main:not(:has(.screen.is-active :is(.era-main, .era-shop, .era-dialog, .era-launch))) > #input-form[hidden],\n"));
-  assert.ok(css.includes("main:has(> #terminal.is-waiting):not(:has(.screen.is-active :is(.era-main, .era-shop, .era-dialog, .era-launch))) > #input-form[hidden] { display: flex; visibility: hidden; }"));
-  assert.match(css, /#input-form\[hidden\] \{ display: none; \}/);
+  assert.match(css, /:is\(button, a\[href\], input, select, textarea\):not\(:disabled\):not\(\[aria-disabled="true"\]\):focus-visible \{\s*outline: 2px solid #8ddaff;/);
 });
 
 test("action tile controls remain vertically centered when their command numbers are hidden", () => {
   const css = styleSource("style");
-  assert.match(css, /\.era-actions-group \.print-cell \.choice \{ vertical-align: middle; \}/);
-  const handheld = styleSource("handheld");
-  assert.match(handheld, /\.is-handheld \.era-actions-group \.print-cell:has\(\.command-number-only\) \{ display: inline-flex; align-items: center;/);
-  assert.doesNotMatch(handheld, /era-guard-control/);
-});
-
-test("the empty room prefers the portrait height without taking space needed by actions", () => {
-  const css = styleSource("handheld");
-  assert.match(css, /\.is-handheld \.era-room-stage \.era-occupant-list:has\(\.era-alone-message\) \{ height: var\(--era-occupant-height\); min-height: 120px; max-height: var\(--era-occupant-height\); \}/);
-  assert.match(css, /\.is-handheld \.screen\.is-active \.era-main \{[^}]*grid-template-rows: auto minmax\(0, max-content\) minmax\(min-content, 1fr\) auto auto; \}/);
-  assert.match(css, /\.is-handheld \.screen\.is-active \.era-main:not\(:has\(\.era-counters\)\) \{ grid-template-rows: auto minmax\(0, max-content\) minmax\(min-content, 1fr\) auto; \}/);
-  assert.match(css, /\.is-handheld \.era-alone \.era-room-stage \{ flex: 1 1 auto; min-height: 0; overflow: visible; \}/);
-  assert.match(css, /\.is-handheld \.era-room-stage \.era-occupant-list:has\(\.era-alone-message\) \{ flex: 1 1 auto; \}/);
+  assert.match(css, /\.era-command-tile \.choice \{ vertical-align: middle;/);
+  assert.match(css, /\.era-command-tile:has\(\.command-number-only\) \{ display: inline-flex; align-items: center;/);
+  const responsive = styleSource("responsive");
+  assert.doesNotMatch(responsive, /era-guard-control/);
 });
 
 test("compact gameplay hides interaction history, shrinks watch text, and keeps action headings inline", () => {
-  const css = styleSource("handheld");
-  assert.match(css, /\.is-handheld \.era-main-chat \{ display: none; \}/);
-  assert.match(css, /\.is-handheld \.era-watch-control \.era-timestop-button \{ font-size: 19px; \}/);
-  assert.match(css, /\.is-handheld \.era-actions-group > \.line > span:has\(> \.era-actions-title\) \{ flex-basis: auto; \}/);
+  const css = styleSource("responsive");
   const compact = css.slice(css.indexOf("@media (max-width: 1280px) and (max-height: 800px) {"));
   assert.match(compact, /\.era-main-chat \{ display: none; \}/);
-  assert.match(compact, /\.era-watch-control \.era-timestop-button \{ font-size: 19px; \}/);
+  assert.match(styleSource("style"), /button\.choice\.era-timestop-button, \.era-timestop-button \{ font-size: 19px; \}/);
   assert.match(compact, /\.era-actions-group > \.line > span:has\(> \.era-actions-title\) \{ flex-basis: auto; \}/);
 });
 
 test("compact save pickers remove outer gutters and relationship actions use equal-height flat buttons", () => {
-  const css = styleSource("handheld");
+  const css = styleSource("responsive");
   assert.ok(css.includes('body:not(.is-home) #terminal:has(.screen.is-active :is(.era-main, .era-shop, .era-dialog)) { padding: 0; scrollbar-gutter: auto; }'));
-  assert.match(css, /\.is-handheld \.era-relationship \.line \.era-relationship-select \{ height: var\(--compact-relationship-button-height\); min-height: var\(--compact-relationship-button-height\);[^}]*background: #493040;/);
-  assert.match(css, /\.era-relationship \.line \.era-relationship-select:is\(:disabled, span\) \{ background: #23232b;/);
-  assert.ok(css.includes('.has-controller .screen.is-active .era-relationship:popover-open .line button.choice.era-relationship-select:focus { filter: none; outline: 2px solid #8ddaff; outline-offset: 2px; }'));
+  const buttons = styleSource("style");
+  assert.match(buttons, /button\.choice\.era-relationship-select \{ height: var\(--compact-relationship-button-height\); min-height: var\(--compact-relationship-button-height\);[^}]*background: var\(--relationship-button-background\);/);
+  assert.match(buttons, /button\.choice\.era-relationship-select:is\(:disabled, \[aria-disabled="true"\]\) \{ background: #23232b;/);
+  assert.ok(buttons.includes('button.choice.era-relationship-select:enabled:focus-visible { outline: 2px solid #8ddaff; outline-offset: 2px; }'));
 });
 
 test("compact main and wake-up screens retain their horizontal gutters", () => {
-  const css = styleSource("handheld");
+  const css = styleSource("responsive");
   const reset = css.indexOf("body:not(.is-home) #terminal:has(.screen.is-active :is(.era-main, .era-shop, .era-dialog))");
   const gutter = "body:not(.is-home) #terminal:has(.screen.is-active :is(.era-main, .era-shop)) { padding-inline: 12px; }";
   assert.ok(css.indexOf(gutter) > reset, "main/wake-up gutters must override the compact dialog padding reset");
@@ -375,83 +309,27 @@ test("render decorates command numbers after buttons have their surrounding labe
 });
 
 test("compact room uses content height instead of reserving hidden chat space", () => {
-  const css = styleSource("handheld");
-  assert.match(css, /\.is-handheld \.screen\.is-active \.era-main \{[^}]*grid-template-rows: auto minmax\(0, max-content\) minmax\(min-content, 1fr\) auto auto;/);
-  assert.match(css, /\.is-handheld \.era-character:has\(\.era-main-chat\) \{ grid-template-rows: auto; \}/);
+  const css = styleSource("responsive");
+  assert.match(css, /\.screen\.is-active \.era-main \{[^}]*grid-template-rows: auto minmax\(0, max-content\) minmax\(min-content, 1fr\) auto auto;/);
+  assert.match(css, /\.era-character:has\(\.era-main-chat\) \{ grid-template-rows: auto; \}/);
 });
 
 test("room occupant names are white with a dark outline and summary portraits fit their frame", () => {
   const css = styleSource("style");
   assert.match(css, /\.era-room-stage \.era-occupant \.era-occupant-text \.era-occupant-name \{ color: #fff; \}/);
-  assert.match(css, /\.era-room-stage \.era-occupant-text, \.era-room-stage \.era-occupant-label \{ text-shadow: -1px -1px 0 #000,/);
+  assert.match(css, /\.era-occupant-text, \.era-occupant-label \{ text-shadow: -1px -1px 0 #000,/);
   const app = readFileSync(new URL("../web/app.js", import.meta.url), "utf8");
   assert.match(app, /await image\(node,[\s\S]*?!!destination\.closest\("\.era-info-head \.era-info-face"\)\)/);
 });
 
-test("command bar only hides in handheld mode and preserves free text and amount prompts", () => {
+test("command bar no longer has configurable display mode visibility", () => {
   const app = readFileSync(new URL("../web/app.js", import.meta.url), "utf8");
-  const start = app.indexOf("  const inlineSetup =");
-  const end = app.indexOf("  command.placeholder =", start);
-  assert.ok(start > 0 && end > start);
-  for (const { input, setup, main = false, llm = false, expected } of [
-    { input: null, setup: false, expected: true },
-    { input: { kind: "integer", buttonValues: ["0", "1"] }, setup: false, expected: true },
-    { input: { kind: "string", buttonValues: ["MAP1", "Back"] }, setup: false, expected: true },
-    { input: { kind: "integer" }, setup: true, expected: true },
-    { input: { kind: "integer" }, setup: false, expected: false },
-    { input: { kind: "string" }, setup: true, expected: false },
-    { input: { kind: "wait" }, setup: true, expected: true },
-    { input: { kind: "mousekey" }, setup: false, expected: true },
-    { input: { kind: "integer" }, setup: false, main: true, expected: true },
-    { input: { kind: "integer" }, setup: false, main: true, llm: true, expected: true },
-    { input: { kind: "string" }, setup: false, main: true, expected: false },
-    { input: { kind: "wait" }, setup: false, main: true, expected: true },
-  ]) {
-    const form = { hidden: false };
-    for (const enabled of [true, false, true]) {
-      runInNewContext(app.slice(start, end), {
-        handheld: { enabled: () => enabled },
-        input,
-        activeLlm: () => llm ? {} : null,
-        terminal: { querySelector: (selector: string) => {
-          assert.equal(selector, ".screen.is-active .era-main, .screen.is-active .era-shop");
-          return main ? {} : null;
-        } },
-        lastOutputLine: () => ({ closest: (selector: string) => {
-          if (selector === ".screen.is-active .era-setup:not(.era-setup-editor)") return setup ? {} : null;
-          assert.fail(`Unexpected selector: ${selector}`);
-        } }),
-        document: { querySelector: () => form },
-      });
-      assert.equal(form.hidden, enabled && expected, JSON.stringify({ input, setup, main, enabled }));
-    }
-  }
-});
-
-test("handheld changes immediately refresh display settings and command visibility", () => {
-  const app = readFileSync(new URL("../web/app.js", import.meta.url), "utf8");
-  const start = app.indexOf("const handheld = setupHandheld(");
-  const end = app.indexOf("const keyboardNavigation =", start);
-  assert.ok(start > 0 && end > start);
-  let onChange = () => {};
-  const refreshed: string[] = [];
-  runInNewContext(app.slice(start, end), {
-    setupHandheld: (callback: () => void) => { onChange = callback; },
-    applySettings: () => { refreshed.push("settings"); },
-    updateControls: () => { refreshed.push("controls"); },
-  });
-  onChange();
-  assert.deepEqual(refreshed, ["settings", "controls"]);
-});
-
-test("title screen only hides the command bar in handheld mode", () => {
-  const css = styleSource("style");
-  assert.match(css, /body\.is-handheld:has\(\.screen\.is-active \.era-launch\) #input-form \{ display: none; \}/);
-  assert.doesNotMatch(css, /body:has\(\.screen\.is-active \.era-launch\) #input-form \{ display: none; \}/);
+  assert.doesNotMatch(app, /setupHandheld|is-handheld|#font-size|#handheld-toggle/);
+  assert.doesNotMatch(app, /querySelector\("#input-form"\)\.hidden/);
 });
 
 test("small screens hide LLM configuration and the opener blocks all entry points", () => {
-  const css = styleSource("handheld");
+  const css = styleSource("responsive");
   assert.match(css, /@media \(max-width: 1280px\) and \(max-height: 800px\) \{\s*#llm-toggle, \.era-llm-configure \{ display: none; \}/);
   const app = readFileSync(new URL("../web/app.js", import.meta.url), "utf8");
   const wiring = app.slice(app.indexOf("const llmConfig ="), app.indexOf("function showLlmState"));
@@ -496,7 +374,7 @@ function navigationHarness() {
     getBoundingClientRect(): { left: number; top: number; width: number; height: number };
   };
   const handlers = new Map<string, (event: ReturnType<typeof event>) => void>();
-  const state = { activeElement: null as Control | null, allowed: true, home: false, modal: false, closed: false, touch: false, handheld: false,
+  const state = { activeElement: null as Control | null, allowed: true, home: false, modal: false, closed: false, touch: false,
     nestedClosed: false, title: false };
   function control(left: number, top: number, editable = false): Control {
     const classes = new Set<string>();
@@ -534,7 +412,7 @@ function navigationHarness() {
   const menu = { hidden: true };
   const document = {
     get activeElement() { return state.activeElement; },
-    body: { classList: { contains: (name: string) => name === "is-handheld" ? state.handheld : state.home } },
+    body: { classList: { contains: () => state.home } },
     querySelector(selector: string) {
       if (selector === "dialog[open]") return state.modal ? {
         ...root, close: () => { state.closed = true; state.modal = false; },
@@ -678,9 +556,9 @@ test("touch command input uses Up for focus navigation rather than history, whil
   assert.equal(key("ArrowLeft", command).defaultPrevented, false);
 });
 
-test("handheld command input navigates on Up and Down even without a touch pointer", () => {
+test("touch command input returns to the command field on Down", () => {
   const { state, command, items, key } = navigationHarness();
-  state.handheld = true;
+  state.touch = true;
   command.focus();
   assert.equal(key("ArrowUp", command).defaultPrevented, true);
   assert.equal(state.activeElement, items[2]);

@@ -110,9 +110,13 @@ test("static resources revalidate, versioned art stays fresh and APIs remain unc
       assert.ok(address && typeof address !== "string");
       const base = `http://127.0.0.1:${address.port}`;
       try {
-        for (const route of ["/", "/app.js", "/output-tools.js", "/cache.js", "/style.css", "/fonts/BIZUDGothic-Regular.ttf", "/resources/pixel.png"]) {
+        const routes = ["/", "/app.js", "/output-tools.js", "/cache.js", "/style.css", "/fonts/BIZUDGothic-Regular.ttf", "/resources/pixel.png"];
+        if (development) routes.push("/components", "/components.js");
+        for (const route of routes) {
           const first = await fetch(base + route);
           assert.equal(first.status, 200, route);
+          if (route === "/") assert.ok(first.headers.get("content-security-policy")?.includes(
+            `frame-ancestors ${development ? "'self'" : "'none'"}`));
           assert.equal(first.headers.get("cache-control"), "private, no-cache");
           const body = await first.arrayBuffer();
           assert.ok(body.byteLength > 0);
@@ -129,6 +133,14 @@ test("static resources revalidate, versioned art stays fresh and APIs remain unc
           });
           assert.equal(precedence.status, 200, "ETag takes precedence over date validation");
           await precedence.arrayBuffer();
+        }
+        if (!development) assert.equal((await fetch(base + "/components")).status, 404, "component workbench is development-only");
+        for (const component of development ? ["unknown"] : ["buttons", "main"]) {
+          const denied = await fetch(base + "/api/start", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ mode: "demo", component }),
+          });
+          assert.equal(denied.status, 400, "preview parameters cannot bypass development gating");
         }
         const info = await stat(file);
         const version = Math.round(info.mtimeMs);

@@ -1,6 +1,5 @@
 import { EDITABLE_CONTROL, activateNavigationControl, navigateControl, resetControlNavigation } from "./controls.js";
 
-const HANDHELD_KEY = "era-typescript.handheld";
 const EDITABLE = EDITABLE_CONTROL;
 const CONTROLS = "button:enabled, a[href], input:enabled, select:enabled, textarea:enabled";
 
@@ -15,6 +14,20 @@ export function navigationRect(element) {
 }
 
 export function decorateCommandNumbers(element) {
+  if (element.matches("button.choice") && element.dataset.commandNumber !== undefined && !element.querySelector(".command-number")) {
+    const number = document.createElement("span");
+    number.className = "command-number";
+    number.setAttribute("aria-hidden", "true");
+    number.textContent = `[${element.dataset.commandNumber}]`;
+    (element.querySelector(".era-config-label") ?? element).append(number);
+  }
+  if (element.matches("button.choice[data-suffix]") && element.dataset.suffix && !element.querySelector(".era-button-suffix")) {
+    const suffix = document.createElement("span");
+    suffix.className = "era-button-suffix";
+    suffix.setAttribute("aria-hidden", "true");
+    suffix.textContent = element.dataset.suffix;
+    element.append(suffix);
+  }
   if (!element.matches("button.choice") || element.querySelector(".command-number")) return;
   const value = element.dataset.value;
   if (!/^-?\d+$/.test(value ?? "")) return;
@@ -46,34 +59,6 @@ export function decorateCommandNumbers(element) {
     number.append(range.extractContents());
     range.insertNode(number);
   }
-}
-
-export function setupHandheld(onChange) {
-  const toggle = document.querySelector("#handheld-toggle");
-  const saved = localStorage.getItem(HANDHELD_KEY);
-  const defaultEnabled = () => globalThis.eraDesktop?.handheld === true || touchInput()
-    || (globalThis.navigator?.maxTouchPoints ?? 0) > 0;
-  let enabled = saved === null ? defaultEnabled() : saved === "1";
-  function apply() {
-    document.body.classList.toggle("is-handheld", enabled);
-    toggle.checked = enabled;
-  }
-  apply();
-  toggle.addEventListener("click", () => {
-    enabled = !enabled;
-    localStorage.setItem(HANDHELD_KEY, enabled ? "1" : "0");
-    apply();
-    onChange();
-  });
-  return {
-    enabled: () => enabled,
-    reset() {
-      localStorage.removeItem(HANDHELD_KEY);
-      enabled = defaultEnabled();
-      apply();
-      onChange();
-    },
-  };
 }
 
 export function directionalTarget(rects, current, key) {
@@ -200,7 +185,7 @@ export function setupKeyboardNavigation({ terminal, command, canNavigate }) {
       event.preventDefault();
       return;
     }
-    const touchCommand = target === command && (touchInput() || document.body.classList.contains("is-handheld"))
+    const touchCommand = target === command && touchInput()
       && (event.key === "ArrowUp" || event.key === "ArrowDown");
     if (!["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key)
       || target.closest(EDITABLE) && !editable?.classList.contains("is-control-navigation") && !touchCommand

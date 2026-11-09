@@ -6,7 +6,7 @@
   <title>Emuera.ts</title>
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/library.css">
-  <link rel="stylesheet" href="/handheld.css">
+  <link rel="stylesheet" href="/responsive.css">
   <link rel="stylesheet" href="/art-demo.css">
   <script type="module" src="/app.js"></script>
 </head>
@@ -17,20 +17,21 @@
     <span id="time-state" class="time-state" role="status" hidden>Time frozen</span>
     <span id="activity" class="activity" hidden></span>
     <p id="status" role="status">Select a game.</p>
-    <button id="library-toggle" class="library-toggle" hidden>Game library</button>
+    <button id="library-toggle" class="library-toggle ui-button ui-button--quiet ui-button--library-toggle" hidden>Game library</button>
     <div class="menu">
-      <button id="menu-toggle" class="menu-toggle" aria-haspopup="true" aria-expanded="false" aria-controls="menu-panel" title="Menu">
+      <button id="menu-toggle" class="menu-toggle ui-button ui-button--quiet ui-button--menu-toggle" aria-haspopup="true" aria-expanded="false" aria-controls="menu-panel" title="Menu">
         <span aria-hidden="true">☰</span><span class="visually-hidden">Menu</span>
       </button>
       <nav id="menu-panel" class="menu-panel" aria-label="Game and interpreter menu" hidden>
         <p class="menu-heading">Run</p>
-        <button id="game" aria-pressed="true">eraToho The World</button>
+        <button id="game" class="ui-button ui-button--menu-item" aria-pressed="true">eraToho The World</button>
         <p class="menu-heading">Tools</p>
-        <button id="restart" aria-haspopup="dialog">Restart game…</button>
-        <button id="demo" aria-pressed="false">Conformance demo</button>
-        <button id="report" aria-expanded="false" aria-controls="compatibility">Compatibility report</button>
-        <button id="settings-toggle" aria-haspopup="dialog" aria-controls="settings">Settings…</button>
-        <button id="menu-library">Game library</button>
+        <button id="restart" class="ui-button ui-button--menu-item" aria-haspopup="dialog">Restart game…</button>
+        <button id="demo" class="ui-button ui-button--menu-item" aria-pressed="false">Conformance demo</button>
+        <button id="report" class="ui-button ui-button--menu-item" aria-expanded="false" aria-controls="compatibility">Compatibility report</button>
+        <button id="settings-toggle" class="ui-button ui-button--menu-item" aria-haspopup="dialog" aria-controls="settings">Settings…</button>
+        <button id="menu-library" class="ui-button ui-button--menu-item">Game library</button>
+        <a id="components-link" class="ui-button ui-button--menu-link" href="/components" hidden>UI components</a>
       </nav>
     </div>
   </header>
@@ -38,10 +39,10 @@
     <br/>
     <div class="library-toolbar">
       <div class="library-tabs" role="tablist" aria-label="Game library">
-        <button id="installed-tab" role="tab" aria-selected="true" aria-controls="game-grid" tabindex="0">Installed <span id="installed-count">0</span></button>
-        <button id="catalog-tab" role="tab" aria-selected="false" aria-controls="game-grid" tabindex="-1">Not installed <span id="catalog-count">0</span></button>
+        <button id="installed-tab" class="ui-button ui-button--tab ui-button--library-tab" role="tab" aria-selected="true" aria-controls="game-grid" tabindex="0">Installed <span id="installed-count">0</span></button>
+        <button id="catalog-tab" class="ui-button ui-button--tab ui-button--library-tab" role="tab" aria-selected="false" aria-controls="game-grid" tabindex="-1">Not installed <span id="catalog-count">0</span></button>
       </div>
-      <button id="library-refresh" class="library-refresh">Refresh library</button>
+      <button id="library-refresh" class="library-refresh ui-button ui-button--quiet ui-button--library-refresh">Refresh library</button>
     </div>
     <p id="library-message" class="library-message" role="status">Loading games...</p>
     <div id="library-progress" class="library-progress" role="status" aria-live="polite" hidden>
@@ -57,7 +58,7 @@
     </footer>
   </section>
   <main>
-    <div id="demo-tools" hidden><button id="art-demo-toggle" type="button" aria-haspopup="dialog">Artwork demo</button></div>
+    <div id="demo-tools" hidden><button id="art-demo-toggle" class="ui-button" type="button" aria-haspopup="dialog">Artwork demo</button></div>
     <div id="time-effect" class="time-effect" aria-hidden="true" hidden>
       <div class="time-shockwave"></div>
       <div class="time-burst">
@@ -80,13 +81,13 @@
       <div class="line">Select a game from the library to start.</div>
       </div>
     </section>
-    <button id="continue-hint" type="button" hidden>Click to continue</button>
+    <button id="continue-hint" class="ui-button ui-button--quiet ui-button--continue" type="button" hidden>Click to continue</button>
     <form id="input-form" autocomplete="off" hidden>
       <div class="command-field">
         <input id="command" aria-label="Game input" aria-describedby="command-hint" disabled spellcheck="false">
         <div class="command-hint-overlay" aria-hidden="true"><span id="command-hint-prefix"></span><span id="command-hint"></span></div>
       </div>
-      <button id="submit" disabled>Send</button>
+      <button id="submit" class="ui-button ui-button--primary ui-button--small" disabled>Send</button>
     </form>
     <aside id="compatibility" hidden aria-label="Compatibility report"></aside>
     <aside id="local-translation" hidden aria-labelledby="local-translation-heading" translate="no">
@@ -95,32 +96,31 @@
       <pre id="local-translation-text"></pre>
     </aside>
     <aside id="debug-output" hidden aria-labelledby="debug-heading">
-      <div class="debug-header"><h2 id="debug-heading">Debug output</h2><div class="debug-header-actions"><button type="button" id="debug-clear">Clear</button><button type="button" id="debug-minimize" aria-expanded="true" aria-controls="debug-log">Minimize</button></div></div>
+      <div class="debug-header"><h2 id="debug-heading">Debug output</h2><div class="debug-header-actions"><button class="ui-button ui-button--small" type="button" id="debug-clear">Clear</button><button class="ui-button ui-button--small" type="button" id="debug-minimize" aria-expanded="true" aria-controls="debug-log">Minimize</button></div></div>
       <pre id="debug-log" tabindex="0"></pre>
     </aside>
   </main>
-    <dialog id="controller-menu" class="confirm controller-menu" aria-labelledby="controller-menu-heading">
-      <div class="dialog-heading"><h2 id="controller-menu-heading">Menu</h2><button id="controller-menu-close" type="button" aria-label="Close menu" data-controller-hint="B">Close</button></div>
+    <dialog id="controller-menu" class="confirm controller-menu ui-panel" aria-labelledby="controller-menu-heading">
+      <div class="dialog-heading"><h2 id="controller-menu-heading">Menu</h2><button id="controller-menu-close" class="ui-button ui-button--quiet ui-button--dialog-close" type="button" aria-label="Close menu" data-controller-hint="B">Close</button></div>
       <div class="controller-menu-actions">
-        <button id="controller-restart" type="button">Restart</button>
-        <button id="controller-library" type="button">Library</button>
-        <button id="controller-settings" type="button">Settings</button>
-        <button id="controller-exit" type="button">Exit</button>
-        <button id="controller-midday-save" type="button" hidden>Quicksave</button>
-        <button id="controller-midday-load" type="button" hidden>Quickload</button>
+        <button id="controller-restart" class="ui-button ui-button--controller" type="button">Restart</button>
+        <button id="controller-library" class="ui-button ui-button--controller" type="button">Library</button>
+        <button id="controller-settings" class="ui-button ui-button--controller" type="button">Settings</button>
+        <button id="controller-exit" class="ui-button ui-button--danger ui-button--controller" type="button">Exit</button>
+        <button id="controller-midday-save" class="ui-button ui-button--primary ui-button--controller" type="button" hidden>Quicksave</button>
+        <button id="controller-midday-load" class="ui-button ui-button--controller" type="button" hidden>Quickload</button>
       </div>
     </dialog>
-    <dialog id="settings" class="confirm settings-dialog" aria-labelledby="settings-heading">
+    <dialog id="settings" class="confirm settings-dialog ui-panel" aria-labelledby="settings-heading">
       <div class="dialog-heading">
       <h2 id="settings-heading">Settings</h2>
       <div class="settings-heading-actions">
-      <button id="settings-reset" type="button">Reset all</button>
-      <button id="settings-close" type="button" aria-label="Close settings" data-controller-hint="B">Close</button>
+      <button id="settings-reset" class="ui-button ui-button--quiet ui-button--small ui-button--settings-heading ui-button--settings-reset" type="button">Reset all</button>
+      <button id="settings-close" class="ui-button ui-button--quiet ui-button--settings-heading ui-button--dialog-close" type="button" aria-label="Close settings" data-controller-hint="B">Close</button>
       </div>
       </div>
       <h3>Display</h3>
       <div class="settings-actions">
-        <label class="checkbox-control"><input id="handheld-toggle" type="checkbox"><span>Handheld layout</span></label>
         <label class="checkbox-control" title="Cycle Auto, On, and Off. Auto detects a gamepad or Steam Deck; this only changes hints, not controller input."><input id="controller-hints-toggle" type="checkbox"><span id="controller-hints-label">Controller hints: Auto</span></label>
       </div>
       <p>Uses the game's <code>emuera.config</code> settings unless changed here. Changes are saved only in this browser.</p>
@@ -130,7 +130,6 @@
         <label>Selected text color <input name="selection" type="color"></label>
         <div class="settings-font-row">
           <label>Font name <input name="font" type="text" maxlength="100" spellcheck="false"></label>
-          <label>Font size <input id="font-size" type="range" min="12" max="24" value="16"></label>
         </div>
       </form>
       <h3>Playback</h3>
@@ -140,19 +139,19 @@
       <h3>Characters &amp; translation</h3>
       <div class="settings-actions">
         <label class="checkbox-control"><input id="character-history-toggle" type="checkbox"><span>Character Interaction History</span></label>
-        <button id="llm-toggle" aria-haspopup="dialog" title="Choose the language model that lets characters reply in Interaction History">LLM… <span id="llm-state" class="menu-state"></span></button>
+        <button id="llm-toggle" class="ui-button ui-button--settings-action" aria-haspopup="dialog" title="Choose the language model that lets characters reply in Interaction History">LLM… <span id="llm-state" class="menu-state"></span></button>
         <label class="checkbox-control" title="Translate the game's Japanese text on this device as it is printed"><input id="translate-toggle" type="checkbox"><span>Translate Japanese <span id="translate-state" class="menu-state"></span></span></label>
         <label class="checkbox-control"><input id="clipboard-toggle" type="checkbox"><span>Auto-copy game text</span></label>
         <label class="checkbox-control"><input id="local-translate-toggle" type="checkbox"><span>Local-model translation</span></label>
-        <button id="local-translate-configure" aria-haspopup="dialog">Translation model…</button>
+        <button id="local-translate-configure" class="ui-button ui-button--settings-action" aria-haspopup="dialog">Translation model…</button>
       </div>
       <h3>Interpreter</h3>
       <div class="settings-actions">
         <label class="checkbox-control" title="Emuera's debug mode: restarts the run with [IF_DEBUG] code loaded, DEBUGPRINT output shown and ASSERT checked"><input id="debug-toggle" type="checkbox"><span>Debug mode</span></label>
       </div>
     </dialog>
-    <dialog id="art-demo" class="confirm art-demo" aria-labelledby="art-demo-heading">
-      <div class="dialog-heading"><h2 id="art-demo-heading">Artwork demo</h2><button id="art-demo-close" type="button" data-controller-hint="B">Close</button></div>
+    <dialog id="art-demo" class="confirm art-demo ui-panel" aria-labelledby="art-demo-heading">
+      <div class="dialog-heading"><h2 id="art-demo-heading">Artwork demo</h2><button id="art-demo-close" class="ui-button ui-button--quiet ui-button--dialog-close" type="button" data-controller-hint="B">Close</button></div>
       <form id="art-controls">
         <label>Location
           <select id="location" name="location">
@@ -174,21 +173,21 @@
         </label>
       </form>
       <p id="art-status" role="status" aria-live="polite">Loading artwork...</p>
-      <button id="retry" type="button" hidden>Retry loading artwork</button>
+      <button id="retry" class="ui-button" type="button" hidden>Retry loading artwork</button>
       <div id="art-preview" aria-label="Header artwork preview"></div>
     </dialog>
   <div id="game-tooltip" role="tooltip" popover="manual" hidden></div>
-  <dialog id="confirm" class="confirm" aria-labelledby="confirm-title" aria-describedby="confirm-text">
+  <dialog id="confirm" class="confirm ui-panel" aria-labelledby="confirm-title" aria-describedby="confirm-text">
     <form method="dialog">
       <h2 id="confirm-title"></h2>
       <p id="confirm-text"></p>
       <div class="confirm-actions">
-        <button value="cancel" autofocus data-controller-hint="B">Cancel</button>
-        <button value="ok" id="confirm-ok" class="danger"></button>
+        <button class="ui-button ui-button--quiet" value="cancel" autofocus data-controller-hint="B">Cancel</button>
+        <button value="ok" id="confirm-ok" class="ui-button ui-button--danger"></button>
       </div>
     </form>
   </dialog>
-  <dialog id="translation-config" class="confirm llm-config" aria-labelledby="translation-config-title">
+  <dialog id="translation-config" class="confirm llm-config ui-panel" aria-labelledby="translation-config-title">
     <form method="dialog">
       <div class="llm-config-body">
         <h2 id="translation-config-title">Translation model</h2>
@@ -197,17 +196,17 @@
           <label for="translation-endpoint">API base URL</label>
           <input id="translation-endpoint" name="endpoint" type="url" required spellcheck="false">
           <label for="translation-model">Model</label>
-          <span class="llm-config-row"><input id="translation-model" name="model" list="translation-models" required spellcheck="false"><button id="translation-load-models" type="button">Load models</button></span>
+          <span class="llm-config-row"><input id="translation-model" name="model" list="translation-models" required spellcheck="false"><button id="translation-load-models" class="ui-button ui-button--small ui-button--llm" type="button">Load models</button></span>
           <datalist id="translation-models"></datalist>
           <label for="translation-language">Translate into</label>
           <input id="translation-language" name="language" required>
         </div>
         <p id="translation-config-status" role="status"></p>
       </div>
-      <div class="confirm-actions"><button value="cancel" formnovalidate data-controller-hint="B">Cancel</button><button value="save">Save</button></div>
+      <div class="confirm-actions"><button class="ui-button ui-button--quiet ui-button--llm" value="cancel" formnovalidate data-controller-hint="B">Cancel</button><button class="ui-button ui-button--primary ui-button--llm" value="save">Save</button></div>
     </form>
   </dialog>
-  <dialog id="llm-config" class="confirm llm-config" aria-labelledby="llm-config-title" aria-describedby="llm-config-description">
+  <dialog id="llm-config" class="confirm llm-config ui-panel" aria-labelledby="llm-config-title" aria-describedby="llm-config-description">
     <form method="dialog">
       <div class="llm-config-body">
         <header class="llm-config-header">
@@ -226,12 +225,12 @@
               <option value="local">Local (OpenAI-compatible)</option>
             </select>
             <label for="llm-endpoint">API base URL</label>
-            <span class="llm-config-row"><input id="llm-endpoint" name="endpoint" type="url" required spellcheck="false" aria-describedby="llm-config-hint"><button type="button" class="llm-reset-endpoint">Default</button></span>
+            <span class="llm-config-row"><input id="llm-endpoint" name="endpoint" type="url" required spellcheck="false" aria-describedby="llm-config-hint"><button class="ui-button ui-button--small ui-button--llm llm-reset-endpoint" type="button">Default</button></span>
             <p id="llm-config-hint" class="llm-config-hint" aria-live="polite"></p>
             <label for="llm-key">API key</label>
             <input id="llm-key" name="apiKey" type="password" autocomplete="off" spellcheck="false" aria-describedby="llm-config-hint">
             <label for="llm-model">Model</label>
-            <span class="llm-config-row"><input id="llm-model" name="model" list="llm-models" required spellcheck="false" aria-describedby="llm-model-help"><button type="button" class="llm-load-models">Load models</button></span>
+            <span class="llm-config-row"><input id="llm-model" name="model" list="llm-models" required spellcheck="false" aria-describedby="llm-model-help"><button class="ui-button ui-button--small ui-button--llm llm-load-models" type="button">Load models</button></span>
             <datalist id="llm-models"></datalist>
             <p id="llm-model-help" class="llm-config-hint">Enter a model ID or load the provider's model list. Loading models does not verify chat or tool support.</p>
           </div>
@@ -264,8 +263,8 @@
         </fieldset>
       </div>
       <div class="confirm-actions llm-config-actions">
-        <button value="cancel" formnovalidate data-controller-hint="B">Cancel</button>
-        <button value="save">Save</button>
+        <button class="ui-button ui-button--quiet ui-button--llm" value="cancel" formnovalidate data-controller-hint="B">Cancel</button>
+        <button class="ui-button ui-button--primary ui-button--llm ui-button--llm-save" value="save">Save</button>
       </div>
     </form>
   </dialog>

@@ -9,11 +9,7 @@
 .era-calendar-month-heading .era-sub { display: block; margin: 3px 0 0; font-size: .75em; }
 .era-calendar-month-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; white-space: normal; }
 .era-calendar-dow { padding: 4px 0 8px; color: #a4c5d0; text-align: center; font-size: .75em; }
-.era-calendar .line button.choice.era-calendar-month-date { position: relative; display: flex; justify-content: center; align-items: center; min-width: 0; min-height: 42px; margin: 0; padding: 6px 2px; border: 1px solid #385360; border-radius: 3px; background: linear-gradient(145deg, #23343f, #15222c); color: #e0e8eb; font-variant-numeric: tabular-nums; }
-.era-calendar .line button.choice.era-calendar-in-week { background: #24424b; border-color: #547b83; }
-.era-calendar .line button.choice.era-calendar-month-today { color: #99e4bc; box-shadow: inset 0 -3px #79cba2; }
-.era-calendar .line button.choice.era-calendar-selected { border-color: #e4c57c; background: linear-gradient(135deg, #615237, #2c302c); color: #fff3cc; box-shadow: 0 0 8px #e4c57c44, inset 0 0 0 1px #e4c57c; }
-.screen.is-active .era-calendar .line button.choice.era-calendar-month-date:enabled:is(:hover, :focus-visible) { border-color: #f0d99c; background: #3d4d49; }
+
 .era-calendar-event-dot { display: inline-block; flex: none; width: 5px; height: 5px; border-radius: 50%; background: #f09b7d; }
 .era-calendar-month-date .era-calendar-event-dot { position: absolute; bottom: 4px; right: 4px; }
 .era-calendar-tribute-dot { display: inline-block; flex: none; width: 6px; height: 6px; background: #e4c57c; transform: rotate(45deg); }
@@ -42,7 +38,7 @@
 .era-calendar :is(.era-calendar-events, .era-calendar-people) { white-space: normal; overflow-wrap: anywhere; }
 .era-calendar-events { color: #e4ca85; }
 .era-calendar-people:not(:has(button)) { display: none; }
-.era-calendar-people .line button.choice { padding: 3px 8px; margin: 2px 0; border: 1px solid #35566d; border-radius: 5px; background: #172d3a; color: #c8e6f4; }
+
 .era-calendar .era-inventory-footer { justify-content: flex-start; padding: 16px 28px; border-color: transparent; }
 @media (max-width: 600px) {
   .era-calendar .era-inventory-body { padding: 12px; }

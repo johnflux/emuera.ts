@@ -14,6 +14,16 @@ import { coloredHtml, plainHtml } from "../src/html.js";
 import { demoGame } from "../src/demo.js";
 import { proxyLlm } from "../src/llm.js";
 import { FileVoiceStore, type EditableVoice } from "../src/character-voice.js";
+import type { Interaction } from "../src/interaction-history.js";
+
+function archive(saves: MemorySaveStore | FileSaveStore): {
+  version: number;
+  events: Record<string, { version: number; event: Interaction }>;
+  checkpoints: Record<string, { digest: string }>;
+} {
+  const raw = saves.read("era-history.json");
+  return raw === null ? { version: 1, events: {}, checkpoints: {} } : JSON.parse(String(raw));
+}
 
 function fixture(enabled = true) {
   const game = emptyGame();
@@ -733,10 +743,10 @@ RETURN 1`, "colors.ERB");
     ]);
     runtime.input("0");
     assert.deepEqual(history(runtime.input("1")).entries, result.entries);
-    const eventFile = saves.list().find((name) => name.startsWith("era-history-event-"))!;
-    const legacy = JSON.parse(String(saves.read(eventFile)));
+    const data = archive(saves);
+    const legacy = Object.values(data.events)[0]!;
     for (const line of legacy.event.lines) delete line.runs;
-    saves.write(eventFile, JSON.stringify(legacy));
+    saves.write("era-history.json", JSON.stringify(data));
     const old = history(runtime.input("1"));
     assert.equal(old.entries[0]!.lines[0]!.text, line.text, "older plain-text history still loads");
     assert.equal(old.entries[0]!.lines[0]!.runs, undefined);
@@ -806,7 +816,8 @@ RETURN 1`, "colors.ERB");
     const untracked = history(runtime.input("400"));
     assert.equal(untracked.entries.length, 4);
     assert.ok(untracked.entries.every((entry) => !JSON.stringify(entry).includes("Menu and status")));
-    assert.equal(saves.list().filter((file) => file.startsWith("era-history-event-")).length, 4);
+    assert.equal(Object.keys(archive(saves).events).length, 4);
+    assert.deepEqual(saves.list(), ["era-history.json"]);
   });
 
   test(`native saves checkpoint history; reloading branches without future memories (JIT ${jit})`, () => {
@@ -829,8 +840,8 @@ RETURN 1`, "colors.ERB");
     assert.equal(history(restarted.input("1")).character.id, original.participants[1]!.id);
     assert.equal(readNativeSave(saves.read("save00.sav") as Buffer).type, 0);
     check(restarted.input("10"));
-    assert.equal(saves.read("era-history-save00.sav.json"), null);
-    assert.ok(saves.read("era-history-save01.sav.json"), "deleting one slot does not delete another checkpoint");
+    assert.equal(archive(saves).checkpoints["save00.sav"], undefined);
+    assert.ok(archive(saves).checkpoints["save01.sav"], "deleting one slot does not delete another checkpoint");
   });
 }
 
@@ -920,15 +931,17 @@ test("old and externally replaced saves never attach mismatched history", () => 
   runtime.start();
   runtime.input("300");
   runtime.input("0");
-  saves.remove("era-history-save00.sav.json");
+  const data = archive(saves);
+  delete data.checkpoints["save00.sav"];
+  saves.write("era-history.json", JSON.stringify(data));
   const old = history(runtime.input("1"));
   assert.equal(old.entries.length, 0);
   assert.match(old.notice, /predates/);
   runtime.input("300");
   runtime.input("0");
-  const checkpoint = JSON.parse(String(saves.read("era-history-save00.sav.json")));
-  checkpoint.digest = "replaced";
-  saves.write("era-history-save00.sav.json", JSON.stringify(checkpoint));
+  const replacedData = archive(saves);
+  replacedData.checkpoints["save00.sav"]!.digest = "replaced";
+  saves.write("era-history.json", JSON.stringify(replacedData));
   const replaced = history(runtime.input("1"));
   assert.equal(replaced.entries.length, 0);
   assert.match(replaced.notice, /replaced outside/);
@@ -964,7 +977,56 @@ test("history and instance identities survive reopening the file store", async (
     const restarted = new Runtime(fixture(), undefined, { saves: new FileSaveStore(dir) });
     restarted.start();
     assert.deepEqual(history(restarted.input("1")), original);
+    assert.deepEqual(saves.list().sort(), ["era-history.json", "save00.sav"]);
   } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test("old history sidecars are deleted without importing them or removing native saves", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "era-history-cleanup-"));
+  try {
+    const saves = new FileSaveStore(dir);
+    const runtime = new Runtime(fixture(), undefined, { saves });
+    runtime.start();
+    runtime.input("0");
+    const bytes = saves.read("save00.sav");
+    saves.remove("era-history.json");
+    const obsolete = [
+      "era-history-event-fd612d28-aab1-4772-a096-401aa493d669.json",
+      "era-history-save00.sav.json",
+      "ERA-HISTORY-SAVE99.SAV.JSON",
+      "era-history-midday.erasuspend.json",
+    ];
+    for (const name of obsolete) saves.write(name, "{broken");
+    saves.write("unrelated.json", "keep");
+    saves.write("era-history-event-not-an-id.json", "keep");
+    const restarted = new Runtime(fixture(), undefined, { saves: new FileSaveStore(dir) });
+    restarted.start();
+    for (const name of obsolete) assert.equal(saves.read(name), null);
+    assert.deepEqual(saves.read("save00.sav"), bytes);
+    assert.equal(saves.read("unrelated.json"), "keep");
+    assert.equal(saves.read("era-history-event-not-an-id.json"), "keep");
+    const restored = history(restarted.input("1"));
+    assert.equal(restored.entries.length, 0);
+    assert.match(restored.notice, /predates/);
+    check(restarted.input("300"));
+    assert.equal(Object.keys(archive(saves).events).length, 1);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test("prefetch leaves the existing archive unchanged until continuation", () => {
+  const saves = new MemorySaveStore();
+  const runtime = new Runtime(fixture(), undefined, { saves });
+  runtime.start();
+  check(runtime.input("300"));
+  check(runtime.input("0"));
+  const before = saves.read("era-history.json");
+  check(runtime.input("303"));
+  assert.equal(runtime.prefetch(), true);
+  assert.equal(saves.read("era-history.json"), before);
+  check(runtime.input(""));
+  assert.equal(Object.keys(archive(saves).events).length, 2);
+  assert.ok(archive(saves).checkpoints["save00.sav"]);
+  assert.equal(history(runtime.input("1")).entries.length, 1);
 });
 
 test("recent history is bounded while original events remain available", () => {
@@ -977,7 +1039,8 @@ test("recent history is bounded while original events remain available", () => {
   const all = runtime.fullCharacterHistory(result);
   assert.equal(all.entries.length, 25);
   assert.deepEqual(all.entries.slice(0, 20), result.entries);
-  assert.equal(saves.list().filter((file) => file.startsWith("era-history-event-")).length, 25);
+  assert.equal(Object.keys(archive(saves).events).length, 25);
+  assert.deepEqual(saves.list().sort(), ["era-history.json", "save00.sav"]);
   runtime.input("300");
   assert.equal(runtime.fullCharacterHistory(result).entries.length, 25, "full history is anchored to the displayed timeline");
 });
@@ -1008,9 +1071,24 @@ test("corrupt history checkpoints are reported rather than silently treated as e
   const runtime = new Runtime(fixture(), undefined, { saves });
   runtime.start();
   runtime.input("0");
-  saves.write("era-history-save00.sav.json", "{broken");
+  saves.write("era-history.json", "{broken");
   const result = runtime.input("1");
   assert.match(result.error!.message, /Invalid interaction history JSON/);
+});
+
+test("invalid archive and checkpoint records are reported explicitly", () => {
+  for (const data of [
+    { version: 2, events: {}, checkpoints: {} },
+    { version: 1, events: [], checkpoints: {} },
+    { version: 1, events: {}, checkpoints: { "save00.sav": {} } },
+  ]) {
+    const saves = new MemorySaveStore();
+    const runtime = new Runtime(fixture(), undefined, { saves });
+    runtime.start();
+    check(runtime.input("0"));
+    saves.write("era-history.json", JSON.stringify(data));
+    assert.match(runtime.input("1").error!.message, /Invalid interaction history (archive|checkpoint)/);
+  }
 });
 
 test("HTTP delivery and resume expose the selected character history and serve the panel module", async () => {
@@ -1633,7 +1711,7 @@ test("a player's attempt runs the game's own command, with its rejection and pen
   check(runtime.input("837"));
   snapshot = check(runtime.refresh());
   assert.match(snapshot.output.map((item) => item.text ?? "").join("\n"),
-    /Kiss<span class='command-number'>\[312\]<\/span>[\s\S]*Push Down<span class='command-number'>\[350\]<\/span>[\s\S]*value='352'[^>]*>Relationship\.\.\./);
+    /data-command-number='312'[^>]*>Kiss<\/button>[\s\S]*data-command-number='350'[^>]*>Push Down<\/button>[\s\S]*value='352'[^>]*>Relationship\.\.\./);
   assert.match((tool("player_attempts", { activity: "apologize" }).result as { error: string }).error, /Reimu is not furious with the player/);
   assert.deepEqual(tool("player_attempts", { activity: "kiss" }),
     { result: { note: "The player tries it now; the game decides how you react. The conversation ends here." }, changed: true });
@@ -1767,7 +1845,7 @@ test("AI friendship info separates current favor from the one-time bonus history
   check(runtime.input("8"));
   let snapshot = check(runtime.input("2"));
   for (let i = 0; snapshot.input?.kind === "wait" && i < 40; i++) snapshot = check(runtime.input(""));
-  assert.match(snapshot.output.map((item) => item.text ?? "").join("\n"), /<button value='352' class='era-button era-button-action [^>]*>Relationship\.\.\.<span class='command-number'>\[352\]<\/span><\/button>/);
+  assert.match(snapshot.output.map((item) => item.text ?? "").join("\n"), /<button value='352' class='era-button [^>]*data-command-number='352'[^>]*>Relationship\.\.\.<\/button>/);
   const id = history(snapshot).character.id;
   const tool = (name: string, args: Record<string, unknown> = {}) => runtime.characterTool(id, name, args);
   assert.equal(tool("player_attempts", { activity: "become_friends" }).changed, true);
@@ -2002,7 +2080,7 @@ INPUT`, "real-penetration-state.ERB");
     assert.match(result.entries[0]!.lines[0]!.text, /discomfort inside her bottom/);
     assert.match(result.entries[0]!.lines[0]!.text, /soreness inside her mouth/);
     assert.doesNotMatch(result.entries[0]!.lines[0]!.text, /vagina|semen|time.stop/i);
-    assert.equal(saves.list().filter((file) => file.startsWith("era-history-event-")).length, 2);
+    assert.equal(Object.keys(archive(saves).events).length, 2);
   }
 });
 
@@ -2084,15 +2162,15 @@ CFLAG:1:睡眠 = 0`, "history-test-setup.ERB");
   assert.ok(!snapshot.output.some((item) => item.type === "html" && item.text.includes("era-interaction-history")));
   assert.ok(snapshot.characterHistory);
   assert.match(snapshot.characterHistory.notice, /predates/);
-  assert.equal(saves.list().filter((file) => file.startsWith("era-history-event-")).length, 0);
+  assert.equal(Object.keys(archive(saves).events).length, 0);
   while (snapshot.input?.kind === "wait") snapshot = check(runtime.input(""));
   snapshot = check(runtime.input("300"));
   for (let i = 0; i < 50 && snapshot.input?.kind === "wait"; i++) snapshot = check(runtime.input(""));
   assert.equal(snapshot.input?.kind, "integer");
-  const events = saves.list().filter((file) => file.startsWith("era-history-event-"));
+  const events = Object.values(archive(saves).events);
   assert.equal(events.length, 1, "actual eraTW command dispatch persists the conversation");
-  assert.equal(JSON.parse(String(saves.read(events[0]!))).event.action.id, 300);
-  const event = JSON.parse(String(saves.read(events[0]!))).event;
+  assert.equal(events[0]!.event.action.id, 300);
+  const event = events[0]!.event;
   assert.ok(event.lines.some((line: { text: string }) => line.text.trim()), "actual eraTW post-command dialogue is captured");
 });
 

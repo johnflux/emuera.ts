@@ -26,7 +26,7 @@ It contains normal `Variables.exportSave` game data, declared SAVE containers
 already includes temporary built-ins such as TFLAG, TCVAR, TEQUIP and PALAM;
 midday loading skips TRAIN's reset of these arrays. It does not capture
 declarations, routine statics, random sequence, graphics or renderer history.
-Earlier immutable interaction events remain in the game's existing history files.
+Earlier immutable interaction events remain in the game's `era-history.json` archive.
 Native `.sav` files and layouts are not changed.
 
 After recording a delivered snapshot at a safe TRAIN prompt, the server uses the
@@ -348,6 +348,65 @@ npm start
 
 Open **http://127.0.0.1:3003**. Set `PORT` to choose another port.
 
+During development, open **http://127.0.0.1:3003/components** (also linked from
+the app menu) for the **UI Components** workbench. **App buttons** shows the
+library, settings, menu, dialog, and history controls. **Button variants** shows
+the production `HOTPATCH_BUTTON` ERB helper variants plus the game's explicit
+button variants and states. Game previews require a local eraTW installation
+with the GUI hotpatches. Main-screen, empty-room,
+time-stop, sleep, inventory, character-sheet, calendar, map, and relationship examples
+run the real game through the existing demo setup. The main screen includes the
+actual cards, meters, category-tinted actions, chips, toggles, and sidebar controls.
+Relationship preview controls exercise the existing relationship demo states.
+The Map / Places preview includes the real movement screen and its location,
+return, exit, nearby, and other-room controls. Places buttons are left-aligned;
+the sidebar sizes to its content (up to 40% of the wide layout), leaving the
+remaining space for the map. Narrow layouts still stack the two panels.
+The map fixture prepares a known room and random seed so incidental game events
+do not change the preview between visits; ordinary gameplay is unaffected.
+
+Every preview embeds the same `web/index.html`, `web/app.js`, and compiled
+Sass as gameplay, including the game's monospace font, colors, and saved display
+preferences. Desktop, Steam Deck-sized, and narrow views are available.
+The preview API is development-only and uses memory-only saves, globals, and
+voices; it does not replace the tab's saved gameplay session or run automatic
+LLM reactions/output forwarding. Navigating away releases its server session.
+
+Game button appearance lives in `styles/game/_button-variants.scss`; app button
+appearance lives in `styles/shared/_chrome-buttons.scss`. Apply explicit variant
+classes to each control. Parents may arrange controls, but must not change their
+typography, padding, borders, colors, alignment, or interaction styling.
+Add game button fixtures to `src/button-samples.ts` and app button fixtures to
+`web/chrome-button-samples.js`. Add full-screen fixtures in `src/component-demo.ts`,
+calling production ERB routines or using an actual game scene. Change production
+markup in `hotpatch/` or the app's producer, never in the workbench stylesheet.
+`styles/app/_components.scss` styles only the catalog shell and embedded-app
+visibility. The catalog currently covers the listed eraTW surfaces, not every
+screen in every supported game; new production components still need explicit
+catalog coverage. App/library chrome remains a separate sans-serif visual system;
+game controls retain the terminal's monospace font. Both are catalogued.
+Map tabs reuse the sheet-page appearance; map-specific classes are navigation
+hooks, not separate styles. Relationship demo state controls reuse pressed chips.
+Action hover/focus colors derive from each button's category tone.
+The button catalog shows Continue's available appearance independently of save
+availability; actual title screens still require a save. Compatibility examples
+cover unpatched games' PRINTC renderer path, not additional hotpatch variants.
+Examples show their actual class hierarchy without repeated state labels.
+A sticky control bar switches all examples to Disabled or Controller hints,
+without duplicating controls. Controller hints hide command numbers in gameplay
+and previews alike; viewport size alone no longer hides them. Preview toggles
+do not change saved gameplay preferences. The shared game
+helper has four variants: standard (`default`), full-width (`block`), `primary`,
+and `list`. Action and sidebar padding are identical; Inventory adds metadata
+for its trailing arrow rather than defining another button style.
+Command numbers and suffixes are frontend decorations derived from
+`data-command-number` and `data-suffix`, not nested backend label markup.
+Coverage guards require fixtures for explicit variants, and browser tests compare
+their appearance inside and outside representative parent panels. Browser tests
+also exercise every catalogued disabled control, checking native inertness,
+muted appearance, and unchanged hover/focus styling. The route is
+unavailable in production builds.
+
 Fresh visits open the **game library**, with **Installed** and **Not installed**
 tabs, short game descriptions, and a Play button for each local game. The library
 also works with an empty `GAMES/` folder: TW, K, and Rance are catalog entries,
@@ -420,7 +479,7 @@ the generated CSS triggers the usual browser reload. `npm run build` and
 `styles/style.scss` defines the cascade order. Its partials separate shared
 terminal and application styles from `styles/game/` screen and game UI styles.
 The existing global class names remain available to game output. Responsive
-overrides live in `styles/handheld/`, ordered by `styles/handheld.scss`;
+overrides live in `styles/responsive/`, ordered by `styles/responsive.scss`;
 library and art-demo styles have their own entry points. Keep rule order intact
 when moving styles: game markup and renderer rules share the global cascade.
 
@@ -535,10 +594,11 @@ add `debug: true` for debug mode, whose snapshots carry `debug` text and
 `/resources/`, others' from `/games/<id>/resources/`.
 
 The interface uses the game's configured colors and font, scrollback, keyboard
-input, clickable choices, and a font-size slider in the menu. **Settings** edits the text,
+input and clickable choices. Use browser zoom to change the interface size.
+**Settings** edits the text,
 background and selected-text colors and the font name. Defaults come from the
 game's `emuera.config` (`文字色`, `背景色`, `選択中文字色`, `フォント名`); only
-your overrides (and the font size) are stored in this browser's localStorage,
+your font-name and color overrides are stored in this browser's localStorage,
 so each browser or user keeps its own preferences. Overrides are sent to the
 runtime with every request, so `GETDEFCOLOR`, `GETDEFBGCOLOR`, `GETFONT`,
 `RESETCOLOR` and `PRINTD` follow them. Color changes apply immediately; the
@@ -889,7 +949,7 @@ Per-event text and inputs are limited to 16,000 characters, with an explicit
 truncation indicator. The panel shows the most recent 20 interactions for that
 character, oldest first with the newest at the bottom. Stat changes use compact
 deltas such as `Favor+3` and `Trust-1`, without repeating the timestamp.
-Older event files are retained.
+Older events are retained in the same archive.
 The panel hides blank lines and hyphen-only dividers and shows the room and
 participants separated by a center dot, without scene labels. Stored text remains unchanged.
 Stock room-arrival and tea-serving intro lines are hidden in the panel, but
@@ -901,23 +961,28 @@ indices or shared CSV character numbers, follow character sorting, swapping and
 deletion. Copies and imported character exports get new identities and do not
 inherit the original's history.
 
-App-owned `era-history-event-<uuid>.json` files in the configured save directory
-store immutable events once, with links to their predecessors and per-character
-indexes. Each `era-history-saveNN.sav.json` checkpoint records the saved history
-heads, roster identities, and SHA-256 of the native save. Native save bytes and
+One app-owned `era-history.json` file in the configured save directory stores all
+events and save checkpoints for the game. Events retain links to their predecessors
+and per-character indexes; checkpoints record the saved history heads, roster
+identities, and SHA-256 of the native save. The archive is atomically rewritten
+when an event or checkpoint changes, including edits to an open conversation.
+On initialization, the eraTW adapter deletes the old per-event and native-save
+checkpoint JSON sidecars without importing them. Previously recorded history is
+discarded; native saves remain usable and start with empty history.
+Native save bytes and
 formats are unchanged. Loading a checkpoint restores only that timeline; subsequent
 interactions branch from it, never from an abandoned future. Prefetched writes
 use the existing staged stores and persist only when the player continues.
 Only completed interactions are checkpointed.
 
-Back up the history files along with native saves to retain history across
+Back up `era-history.json` along with native saves to retain history across
 machines or installations. Old saves without a checkpoint start with empty
 history. If a native save is replaced by another engine, a mismatching checkpoint
 is not attached. The snapshot retains the reason as metadata; the panel's empty
 state simply says *No interaction yet*.
 Corrupt metadata and I/O errors are reported explicitly. Deleting a save removes
 its checkpoint, not immutable events that another slot or branch may reference.
-Unsaved/abandoned branches may therefore leave unreferenced event files; automatic
+Unsaved/abandoned branches may therefore leave unreferenced events in the archive; automatic
 garbage collection and cross-engine history synchronization are not implemented.
 
 Typing anywhere in the game page goes to the input line while the interpreter
@@ -1017,8 +1082,8 @@ the portable print fixture was also run unchanged under native Emuera.
 Output continued past a click-to-continue wait stays bright: a run of dialogue
 greys out together only once the game stops at a real input (a menu or prompt),
 so new choices are shown against greyed history.
-Settings → Playback enables **Auto-advance text** by default, with a 0.5-second delay. The
-preference is saved in this browser. It submits Continue only for an untimed,
+Settings → Playback leaves **Auto-advance text** off by default. When enabled, it
+uses a 0.5-second delay. The preference is saved in this browser. It submits Continue only for an untimed,
 non-blocking click-to-continue wait, never a command choice or text input. It pauses
 while the page is hidden or an app menu/dialog or active game dialog is open,
 including "Gaze at the sky". Game dialogs require manual continuation; automatic
@@ -1047,13 +1112,17 @@ hints and Auto-moan use three-state checkboxes (empty, checked, indeterminate da
 with the mode name visible and their existing cycle order unchanged. Debug mode
 is in Settings under Interpreter. Controller hints highlights its row only when
 hints are actually enabled: Auto (Off) keeps the dash without the active tint.
+Game controller badges are limited to styled GUI controls and links; plain-text
+game prompts retain normal keyboard focus without controller badges.
+The controller-hint cycle does not cancel native checkbox clicks: cancelling
+would roll back the checkmark after the mode and label have already updated.
 Run/view/tab actions and the Stalk star remain
 buttons.
-Font name and font size share one row in Settings so the dialog fits the Steam
-Deck's 1280 x 800 viewport without scrolling; narrow screens stack the controls.
+Font selection remains independent of size. Browser zoom scales the interface;
+responsive Settings layouts fit compact viewports without a separate device mode.
 The large **Reset all** button beside Close restores the main Settings controls:
-game-default font and colors, default font size, device-default handheld layout,
-Auto controller hints, auto-continue, platform-default character history and
+game-default font and colors,
+Auto controller hints, auto-continue off, platform-default character history and
 built-in translation, clipboard/local-model translation off, and debug mode off.
 Translation-model endpoint, model and language, and LLM configuration are
 preserved. Resetting an active debug run asks for confirmation before restarting;
@@ -1064,7 +1133,7 @@ editing first, then dismisses the dialog on a second press. Single-line fields
 also leave editing on Enter; textareas retain multiline Enter. Ordinary Tab focus
 and the game command field keep native editing. Controller D-pad presses adjust
 an activated range input and emit its normal input/change events. These behaviors
-are shared by `web/controls.js` and `web/handheld.js`, not Settings-specific.
+are shared by `web/controls.js` and `web/navigation.js`, not Settings-specific.
 Shared button and checkbox hover styling is limited to `(hover: hover)` devices
 to avoid sticky touch hover; keyboard focus and checked-state styling remain.
 
@@ -1154,7 +1223,7 @@ measured terminal column count rather than a fixed 80-character width. Custom
 separators repeat whole patterns using half/fullwidth character widths.
 Scrollbar space is reserved so scrolling does not shrink the measured width.
 The browser sends an updated column count with each input, so newly generated
-output follows window/font-size changes; existing scrollback is not regenerated.
+output follows window/zoom changes; existing scrollback is not regenerated.
 
 Terminal presentation can be customized in `styles/shared/_base.scss` and
 `styles/shared/_terminal.scss`: use
@@ -1735,7 +1804,7 @@ declarations and the expression evaluator. No single routine dominates.
   the browser. Textbox and tooltip settings survive session resume.
 - Resource CSV sprite rectangles and local PNG/WebP/JPEG/GIF/BMP serving.
   Named `<img src='SPRITENAME'>` images are cropped from sprite sheets.
-  Basic HTML paragraphs, breaks, emphasis, fonts (color only), numeric choices,
+  Basic HTML paragraphs, breaks, emphasis, code labels, fonts (color only), numeric choices,
   nonbuttons and HTTP(S) links are rebuilt as allowlisted DOM nodes.
   Hotpatches may also use `<div>`, `<meter>`, `era-*` classes and
   `<era-open>`/`<era-close>` box markers, which are not Emuera features (see [hotpatches.md](hotpatches.md)).
@@ -1873,7 +1942,7 @@ variable-size rules, audio APIs, arbitrary HTML/CSS, exact Windows animation tim
 or exact Emuera layout/line-measurement semantics. `MAXWIDTH()` uses terminal
 columns measured at browser run start, never fewer than the configured window
 width (default 120 in direct/API runs); restart
-the run after resizing or changing font size. Some game layouts assume Emuera's
+the run after resizing or changing browser zoom. Some game layouts assume Emuera's
 fixed window width (for example the Palam list's items per row), so a wider browser
 can wrap them early. `STRLENS`/`SUBSTRING` count CP932 bytes. Regex helpers use
 JavaScript regex syntax plus .NET inline options (`(?i)`, `(?m)`, `(?s)`), not

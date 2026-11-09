@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { test } from "node:test";
-import { applyHotpatches, GAME_ROOT, indexScript, loadGame } from "../src/loader.js";
+import { applyHotpatches, emptyGame, GAME_ROOT, indexScript, loadGame } from "../src/loader.js";
 import { GAME_INSTRUCTION_LIMIT, Runtime, type Snapshot } from "../src/runtime.js";
-import { MemorySaveStore } from "../src/storage.js";
+import { MemoryGlobalStore, MemorySaveStore } from "../src/storage.js";
 import { patchTitleImage } from "../src/render-patches.js";
 
 function markup(snapshot: Snapshot): string {
@@ -20,6 +20,36 @@ function settle(runtime: Runtime, snapshot: Snapshot): Snapshot {
   }
   return snapshot;
 }
+
+test("save dialogs restore the exact ten-slot page without changing native global meanings", () => {
+  const picker = readFileSync(new URL("../hotpatch/START.ERB", import.meta.url), "utf8")
+    .split("@LOAD_SAVE(ARG, ARG:1 = 0)")[1];
+  assert.ok(picker);
+  for (const mode of [0, 1, 2]) {
+    for (const slot of [0, 9, 10, 19, 20, 99, 100, 109, 110, 113, 119, 120, 199, 300, -1, 200]) {
+      const nativePage = slot >= 0 && slot < 200 ? Math.floor(slot / 20) : 5;
+      const page = slot >= 0 && slot < 200 ? Math.floor(slot / 10) : nativePage * 2;
+      const game = emptyGame();
+      indexScript(game, `@SYSTEM_TITLE
+GLOBAL:998 = ${slot}
+GLOBAL:999 = ${nativePage}
+SAVEGLOBAL
+CALL LOAD_SAVE(${mode})
+PRINTFORML last={GLOBAL:998};page={GLOBAL:999}
+QUIT
+@LOAD_SAVE(ARG, ARG:1 = 0)${picker}`, "SAVE_PICKER.ERB");
+      const runtime = new Runtime(game, 50_000, { store: new MemoryGlobalStore(), saves: new MemorySaveStore() });
+      const html = markup(runtime.start());
+      assert.match(html, new RegExp(`Page ${page + 1} / 20`), `mode ${mode}, slot ${slot}`);
+      assert.match(html, new RegExp(`Slot ${page * 10}</span>`));
+      assert.match(html, new RegExp(`Slot ${page * 10 + 9}</span>`));
+      const cancelled = runtime.input("999");
+      assert.equal(cancelled.error, null, JSON.stringify(cancelled.error));
+      assert.match(cancelled.output.map(item => "text" in item ? item.text : "").join("\n"),
+        new RegExp(`last=${slot};page=${nativePage}`), "cancel preserves native globals");
+    }
+  }
+});
 
 test("eraTW launch dialogs accept defaults, configure optionally and cancel safely", {
   skip: !existsSync(GAME_ROOT),
@@ -60,7 +90,7 @@ QUIT`, "TEST_BODY_BULK_FEEDBACK.ERB");
   const runtime = new Runtime(game, GAME_INSTRUCTION_LIMIT, { columns: 180, saves });
   const title = runtime.start();
   assert.deepEqual(title.input?.buttonValues, ["2", "0", "1"]);
-  assert.match(markup(title), /era-launch-continue' aria-disabled='true'>Continue/);
+  assert.match(markup(title), /era-title-continue' aria-disabled='true'>Continue/);
   assert.match(markup(title), /era-launch-version/);
   assert.doesNotMatch(markup(title), /era-launch-title|eraThe World AnonTW/);
   assert.match(markup(title), /era-launch-art/);
@@ -447,6 +477,16 @@ QUIT`, "TEST_SAVE_PICKER.ERB");
   assert.match(markup(settle(deleting, deleting.input("0"))), /Delete save/);
   assert.equal(saves.read("save09.sav"), null, "confirmed deletion removes only the selected slot");
   assert.ok(saves.read("save00.sav"), "other slots are preserved");
+
+  const oddPageStore = new MemoryGlobalStore();
+  const oddPageSaving = new Runtime(game, GAME_INSTRUCTION_LIMIT, { columns: 180, saves, store: oddPageStore });
+  let oddPagePicker = oddPageSaving.start("TEST_SAVE_PICKER");
+  for (let page = 0; page < 11; page++) oddPagePicker = oddPageSaving.input("1002");
+  assert.match(markup(oddPagePicker), /Page 12 \/ 20/);
+  assert.equal(settle(oddPageSaving, oddPageSaving.input("113")).error, null);
+  assert.ok(saves.read("save113.sav"));
+  const reopened = new Runtime(game, GAME_INSTRUCTION_LIMIT, { columns: 180, saves, store: oddPageStore });
+  assert.match(markup(reopened.start("TEST_SAVE_PICKER")), /Page 12 \/ 20/);
 
   const configured = new Runtime(game, GAME_INSTRUCTION_LIMIT, { columns: 180 });
   configured.start();

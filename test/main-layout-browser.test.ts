@@ -4,7 +4,6 @@ import { once } from "node:events";
 import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { promisify } from "node:util";
@@ -15,6 +14,14 @@ import { Runtime } from "../src/runtime.js";
 import { createApp } from "../src/server.js";
 
 const execute = promisify(execFile);
+const navigationSource = await readFile(new URL("../web/navigation.js", import.meta.url), "utf8");
+const commandDecoration = navigationSource.slice(navigationSource.indexOf("export function decorateCommandNumbers("),
+  navigationSource.indexOf("export function directionalTarget(")).replace(/^export /gm, "");
+const decorateButtons = `${commandDecoration}
+  document.querySelectorAll("button.choice").forEach(button => {
+    button.dataset.value ??= button.getAttribute("value");
+    decorateCommandNumbers(button);
+  });`;
 const browser = [
   process.env.CHROME_PATH,
   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
@@ -63,6 +70,7 @@ RETURNF "Restores energy."`, "<rows-fixture>");
       <div class="line"><div class="era-inventory-footer"><span class="era-inventory-filter"></span>
         <span class="era-inventory-count"></span><button class="choice era-chip-button">Return</button></div></div>
     </div></div><script>
+    ${decorateButtons}
     const hideTooltip = () => {};
     ${filter}
     const dialog = document.querySelector(".era-inventory");
@@ -95,7 +103,7 @@ RETURNF "Restores energy."`, "<rows-fixture>");
     document.body.textContent = JSON.stringify({...layout, clicked, count, matches, noMatch, sharedQuery,
       reset:dialog.querySelector(".era-inventory-count").textContent === "40 item types" && empty.closest(".line").hidden});
     </script>`;
-  const profile = await mkdtemp(join(tmpdir(), "era-inventory-rows-"));
+  const profile = await mkdtemp(join(process.cwd(), ".era-inventory-rows-"));
   try {
     for (const size of ["1280,900", "390,720"]) {
       const { stdout } = await execute(browser!, ["--headless", "--disable-gpu", "--no-first-run", `--user-data-dir=${profile}`,
@@ -130,7 +138,7 @@ test("Config submenus adapt native and structured choices without changing their
       <button class="choice era-setup-step" data-value="9900">37</button>
     </div></div>
     <div class="era-setup"><button class="choice era-setup-choice" data-value="9">Startup choice</button></div>
-    </div><script>${adapter}
+    </div><script>${commandDecoration}${adapter}
       const native = document.querySelector("[data-value='1']");
       let clicked = null;
       native.addEventListener("click", () => clicked = native.dataset.value);
@@ -157,7 +165,7 @@ test("Config submenus adapt native and structured choices without changing their
         trailing:document.querySelector("[data-value='8'] .era-config-label").textContent
       });
     </script>`;
-  const profile = await mkdtemp(join(tmpdir(), "era-config-submenus-"));
+  const profile = await mkdtemp(join(process.cwd(), ".era-config-submenus-"));
   try {
     const { stdout } = await execute(browser!, ["--headless", "--disable-gpu", "--no-first-run", `--user-data-dir=${profile}`,
       "--window-size=1440,900", "--dump-dom", `data:text/html;base64,${Buffer.from(html).toString("base64")}`],
@@ -165,9 +173,9 @@ test("Config submenus adapt native and structured choices without changing their
     const match = stdout.match(/<body[^>]*>([\s\S]*?)<\/body>/);
     assert.ok(match);
     assert.deepEqual(JSON.parse(match[1]), {
-      clicked: "1", idempotent: true, variant: true, nativeLabel: "[1] Native setting", state: "No",
+      clicked: "1", idempotent: true, variant: true, nativeLabel: "Native setting[1]", state: "No",
       help: "Inline help", dim: "0.5", tooltip: false, padding: "0px", border: "0px", rows: true,
-      selected: "Selected", richHelp: true, specialized: true, startup: true, trailing: "[8] Command [V]",
+      selected: "Selected", richHelp: true, specialized: true, startup: true, trailing: "Command [V][8]",
     });
   } finally {
     await rm(profile, { recursive: true, force: true });
@@ -194,11 +202,13 @@ BINPUT`, "<list-fixture>");
   assert.equal(snapshot.error, null);
   const markup = snapshot.output.flatMap(item => item.type === "html" ?
     [`<div class="line"><span class="output-text">${item.text.replace("class='era-button", "class='choice era-button")}</span></div>`] : []).join("");
-  assert.match(markup, /<span class='command-number'>\[1\]<\/span> Setting &lt;one&gt;/);
+  assert.match(markup, /data-command-number='1'/);
+  assert.match(markup, /era-config-label'>Setting &lt;one&gt;/);
+  assert.doesNotMatch(markup, /class='command-number'/);
   assert.match(markup, /Helpful &lt;text&gt;/);
   assert.match(markup, /aria-disabled='true'/);
   const html = `<!doctype html><style>${style}</style><body><div class="screen is-active"><div class="era-dialog era-setup era-config" popover>
-    <div class="era-config-grid">${markup}</div></div></div><script>
+    <div class="era-config-grid">${markup}</div></div></div><script>${decorateButtons}
     document.querySelector(".era-config").showPopover();
     const buttons = [...document.querySelectorAll("button")];
     const first = buttons[0], second = buttons[1], css = getComputedStyle(first);
@@ -240,7 +250,7 @@ BINPUT`, "<list-fixture>");
       hidden, stable:buttons[2].getBoundingClientRect().top === thirdTop,
       fullWidth:document.querySelector(".era-config").getBoundingClientRect().width >= innerWidth - 24});
     </script>`;
-  const profile = await mkdtemp(join(tmpdir(), "era-config-list-"));
+  const profile = await mkdtemp(join(process.cwd(), ".era-config-list-"));
   try {
     const { stdout } = await execute(browser!, ["--headless", "--disable-gpu", "--no-first-run", `--user-data-dir=${profile}`,
       "--window-size=1440,900", "--dump-dom", `data:text/html;base64,${Buffer.from(html).toString("base64")}`],
@@ -257,11 +267,11 @@ BINPUT`, "<list-fixture>");
 });
 
 test("shared sidebar buttons place muted numbers after labels and hide them consistently", { skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH" }, async () => {
-  const [source, attributes, style, handheld] = await Promise.all([
+  const [source, attributes, style, responsive] = await Promise.all([
     readFile(new URL("../hotpatch/MAIN_SCREEN_COMMANDS.ERB", import.meta.url), "utf8"),
     readFile(new URL("../hotpatch/INFO_PALAM.ERB", import.meta.url), "utf8"),
     readFile(new URL("../web/generated/style.css", import.meta.url), "utf8"),
-    readFile(new URL("../web/generated/handheld.css", import.meta.url), "utf8"),
+    readFile(new URL("../web/generated/responsive.css", import.meta.url), "utf8"),
   ]);
   const game = emptyGame();
   indexScript(game, attributes.slice(attributes.indexOf("@HOTPATCH_ATTRIBUTE(")), "<attribute-helper>");
@@ -269,15 +279,15 @@ test("shared sidebar buttons place muted numbers after labels and hide them cons
   indexScript(game, source.slice(source.indexOf("@HOTPATCH_PRINT_COM("), source.indexOf("@HOTPATCH_ACTION_KIND(")), "<command-helper>");
   indexScript(game, `@SYSTEM_TITLE
 HTML_PRINT "<era-open class='era-actions-group'>"
-HTML_PRINT HOTPATCH_BUTTON("Move", 400, "", "sidebar", "era-travel-button")
-HTML_PRINT HOTPATCH_BUTTON("Go Out", 405, "", "sidebar", "era-travel-button")
+HTML_PRINT HOTPATCH_BUTTON("Move", 400, "", "block", "era-travel-button")
+HTML_PRINT HOTPATCH_BUTTON("Go Out", 405, "", "block", "era-travel-button")
 HTML_PRINT "<era-close>"
 HTML_PRINT "<era-open class='era-settings'>"
-HTML_PRINT HOTPATCH_BUTTON("Config", 809, "", "sidebar-wide")
+HTML_PRINT HOTPATCH_BUTTON("Config", 809, "", "block")
 HTML_PRINT "<era-close>"
 CALL HOTPATCH_PRINT_COM(352)
-HTML_PRINT HOTPATCH_BUTTON("A&B <test>", -12, "It's <safe>", "action", "custom")
-HTML_PRINT HOTPATCH_BUTTON("Inventory", 805, "", "inventory")
+HTML_PRINT HOTPATCH_BUTTON("A&B <test>", -12, "It's <safe>", "default", "custom")
+HTML_PRINT HOTPATCH_BUTTON("Inventory", 805, "", "block", "", "", "", 1, "›")
 BINPUT`, "<button-fixture>");
   const snapshot = new Runtime(game).start();
   assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
@@ -285,13 +295,13 @@ BINPUT`, "<button-fixture>");
   const buttons = snapshot.output.flatMap(item => item.type === "html" ? [item.text] : []).join("");
   assert.match(buttons, /A&amp;B &lt;test&gt;/);
   assert.match(buttons, /title='It&#39;s &lt;safe&gt;'/);
-  assert.match(buttons, /Inventory <span class='command-number'>\[805\]/);
-  assert.match(buttons, /<button value='352' class='era-button era-button-action [^>]*>Relationship\.\.\.<span class='command-number'>\[352\]<\/span><\/button>/);
+  assert.match(buttons, /data-command-number='805' data-suffix='›'/);
+  assert.match(buttons, /<button value='352' class='era-button [^>]*data-command-number='352'[^>]*>Relationship\.\.\.<\/button>/);
   assert.doesNotMatch(buttons, /era-guard-control|print-cell/);
   assert.doesNotMatch(source, /<button value='352'/);
   for (const [label, value] of [["Move", 400], ["Go Out", 405], ["Config", 809]] as const) {
     assert.match(source, new RegExp(`HOTPATCH_BUTTON\\("${label}", ${value},`));
-    assert.match(buttons, new RegExp(`>${label}<span class='command-number'>\\[${value}\\]</span>`));
+    assert.match(buttons, new RegExp(`data-command-number='${value}'[^>]*>${label}</button>`));
   }
   const markup = snapshot.output.flatMap(item => {
     if (item.type !== "html") return [];
@@ -299,10 +309,10 @@ BINPUT`, "<button-fixture>");
     if (item.text === "<era-close>") return ["</div>"];
     return [`<div class="line"><span class="output-text">${item.text.replaceAll("class='era-button", "class='choice era-button")}</span></div>`];
   }).join("");
-  const html = `<!doctype html><meta charset="utf-8"><style>${style}\n${handheld}</style>
+  const html = `<!doctype html><meta charset="utf-8"><style>${style}\n${responsive}</style>
     <body class="MODE"><div class="screen is-active"><div class="era-main"><div class="era-player">
     <div class="era-player-management" style="width:360px;font-size:20px">${markup}</div>
-    </div></div></div><script>
+    </div></div></div><script>${decorateButtons}
       const results = [...document.querySelectorAll(".era-button")].map(button => {
         const number = button.querySelector(".command-number"), rect = button.getBoundingClientRect();
         const label = document.createRange(); label.selectNodeContents(button.firstChild);
@@ -329,9 +339,9 @@ BINPUT`, "<button-fixture>");
         }));
       document.body.textContent = JSON.stringify({ results, highlightColors });
     </script>`;
-  const profile = await mkdtemp(join(tmpdir(), "era-numbered-buttons-"));
+  const profile = await mkdtemp(join(process.cwd(), ".era-numbered-buttons-"));
   try {
-    for (const [mode, size, hidden] of [["desktop", "1440,1000", false], ["desktop", "1200,700", true], ["is-handheld", "1440,1000", true]] as const) {
+    for (const [mode, size, hidden] of [["desktop", "1440,1000", false], ["compact", "1200,700", false]] as const) {
       const args = ["--headless", "--disable-gpu", "--no-first-run", `--user-data-dir=${profile}`, `--window-size=${size}`, "--dump-dom"];
       if (process.platform === "linux" && process.getuid?.() === 0) args.push("--no-sandbox");
       args.push(`data:text/html;base64,${Buffer.from(html.replace("MODE", mode)).toString("base64")}`);
@@ -357,9 +367,9 @@ BINPUT`, "<button-fixture>");
       }
       const [move, goOut, config] = results;
       const inventory = results.find(button => button.value === "805")!;
-      assert.equal(inventory.display, "inline-block", "Inventory uses the same inline layout as other buttons");
-      assert.equal(inventory.numberMargin, "0px", "the literal space supplies the Inventory number gap");
-      if (!hidden) assert.ok(Math.abs(inventory.numberGap) < 1, "the number immediately follows the label's trailing space");
+      assert.equal(inventory.display, "inline-flex", "Inventory uses the same layout as other standard buttons");
+      assert.equal(inventory.numberMargin, results[0]!.numberMargin, "Inventory shares standard command-number spacing");
+      if (!hidden) assert.ok(inventory.numberGap > 0, "the number is separated from the label");
       assert.equal(move.top, goOut.top, "travel buttons stay side by side");
       assert.ok(goOut.left >= move.right, "travel buttons do not overlap");
       assert.ok(config.top > move.top);
@@ -396,7 +406,7 @@ test("browser renders compacted runtime graphics under the server content securi
   await once(app, "listening");
   const address = app.address();
   assert.ok(address && typeof address !== "string");
-  const profile = await mkdtemp(join(tmpdir(), "era-graphics-csp-"));
+  const profile = await mkdtemp(join(process.cwd(), ".era-graphics-csp-"));
   let fixture: ReturnType<typeof createServer> | undefined;
   try {
     const policy = (await fetch(`http://127.0.0.1:${address.port}/`)).headers.get("content-security-policy");
@@ -447,10 +457,10 @@ test("browser renders compacted runtime graphics under the server content securi
   }
 });
 
-test("clock plaque labels fit at desktop and handheld font sizes", { skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH" }, async () => {
-  const [style, handheld] = await Promise.all([
+test("clock plaque labels fit at desktop and compact viewport sizes", { skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH" }, async () => {
+  const [style, responsive] = await Promise.all([
     readFile(new URL("../web/generated/style.css", import.meta.url), "utf8"),
-    readFile(new URL("../web/generated/handheld.css", import.meta.url), "utf8"),
+    readFile(new URL("../web/generated/responsive.css", import.meta.url), "utf8"),
   ]);
   const font = pathToFileURL(fileURLToPath(new URL("../web/fonts/BIZUDGothic-Regular.ttf", import.meta.url))).href;
   const states = [
@@ -470,7 +480,7 @@ test("clock plaque labels fit at desktop and handheld font sizes", { skip: brows
         </div>
       </div></div>
     </div>`))).join("");
-  const html = `<!doctype html><meta charset="utf-8"><style>${style}\n${handheld}
+  const html = `<!doctype html><meta charset="utf-8"><style>${style}\n${responsive}
     @font-face { font-family: "BIZ UD Gothic"; src: url("${font}"); }
     .fixture { width: 1000px; font-family: "BIZ UD Gothic", monospace; line-height: 1.25; }
     </style><body class="MODE"><div class="screen is-active">${fixtures}</div><script>
@@ -488,9 +498,9 @@ test("clock plaque labels fit at desktop and handheld font sizes", { skip: brows
         document.body.textContent = JSON.stringify(results);
       });
     </script>`;
-  const profile = await mkdtemp(join(tmpdir(), "era-clock-layout-"));
+  const profile = await mkdtemp(join(process.cwd(), ".era-clock-layout-"));
   try {
-    for (const [mode, size] of [["desktop", "1440,1000"], ["compact", "1200,700"], ["is-handheld", "1440,1000"]] as const) {
+    for (const [mode, size] of [["desktop", "1440,1000"], ["compact", "1200,700"]] as const) {
       const fixture = join(profile, `${mode}.html`);
       await writeFile(fixture, html.replace("MODE", mode));
       const args = ["--headless", "--disable-gpu", "--no-first-run", "--allow-file-access-from-files",
@@ -505,8 +515,7 @@ test("clock plaque labels fit at desktop and handheld font sizes", { skip: brows
         if (mode === "desktop") assert.equal(result.fits, true, `${mode} ${result.name}: content fits plaque: ${JSON.stringify(result)}`);
         if (mode === "desktop" && /-(time-stop|resume)$/.test(result.name))
           assert.ok(result.labelGaugeGap !== null && result.labelGaugeGap <= 8, `${mode} ${result.name}: label sits close to gauge: ${JSON.stringify(result)}`);
-        if (mode !== "desktop" && /-(time-stop|resume)$/.test(result.name))
-          assert.ok(parseFloat(result.gap) > 0, `${mode} ${result.name}: existing spacing remains unchanged`);
+        assert.equal(result.gap, "0px", `${mode} ${result.name}: shared clock spacing`);
         if (mode !== "desktop") assert.equal(result.font, "19px", `${mode} ${result.name}: font remains unchanged`);
       }
     }
@@ -516,18 +525,18 @@ test("clock plaque labels fit at desktop and handheld font sizes", { skip: brows
 });
 
 test("compact button sizes share tokens without changing desktop or sprite controls", { skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH" }, async () => {
-  const [style, handheld] = await Promise.all([
+  const [style, responsive] = await Promise.all([
     readFile(new URL("../web/generated/style.css", import.meta.url), "utf8"),
-    readFile(new URL("../web/generated/handheld.css", import.meta.url), "utf8"),
+    readFile(new URL("../web/generated/responsive.css", import.meta.url), "utf8"),
   ]);
-  const html = `<!doctype html><meta charset="utf-8"><style>${style}\n${handheld}</style>
+  const html = `<!doctype html><meta charset="utf-8"><style>${style}\n${responsive}</style>
     <body class="MODE">
       <div class="screen is-active" style="font: 12px/1.25 sans-serif">
         <div class="era-actions-group"><div class="line">
-          <span class="print-cell" id="tile">Move<button class="choice command-number-only"><span class="command-number">400</span></button></span>
-          <span class="print-cell" id="number-guard">Guard<button class="choice command-number-only"><span class="command-number">1</span></button></span>
-          <span class="print-cell" id="multiline" style="width: 80px">A long action label that wraps across multiple lines<button class="choice command-number-only"><span class="command-number">2</span></button></span>
-          <button class="choice era-button era-button-action" id="guard">Relationship<span class="command-number">[352]</span></button>
+          <span class="print-cell era-command-tile" id="tile">Move<button class="choice command-number-only"><span class="command-number">400</span></button></span>
+          <span class="print-cell era-command-tile" id="number-guard">Guard<button class="choice command-number-only"><span class="command-number">1</span></button></span>
+          <span class="print-cell era-command-tile" id="multiline" style="width: 80px">A long action label that wraps across multiple lines<button class="choice command-number-only"><span class="command-number">2</span></button></span>
+          <button class="choice era-button era-button" id="guard">Relationship<span class="command-number">[352]</span></button>
           <button class="choice" id="choice">Choice</button>
           <button class="choice" id="sprite"><span class="sprite"></span></button>
         </div></div>
@@ -547,22 +556,29 @@ test("compact button sizes share tokens without changing desktop or sprite contr
         const numberStyle = getComputedStyle(number), tile = document.getElementById("tile").getBoundingClientRect(), button = number.getBoundingClientRect();
         const overlay = { position: numberStyle.position, covers: ["top", "right", "bottom", "left"].every(edge => Math.abs(tile[edge] - button[edge]) <= 1.1), numberDisplay: getComputedStyle(number.firstElementChild).display };
         document.documentElement.style.setProperty("--compact-choice-min-height", "48px");
-        document.documentElement.style.setProperty("--handheld-chrome-min-height", "52px");
         document.documentElement.style.setProperty("--compact-relationship-button-height", "64px");
-        document.body.textContent = JSON.stringify({ initial, updated: snapshot(), overlay });
+        const updated = snapshot();
+        number.classList.add("has-controller-hint", "controller-focus");
+        number.dataset.controllerHint = "A";
+        number.focus();
+        const focus = { control: getComputedStyle(number).outlineStyle,
+          tile: getComputedStyle(document.getElementById("tile")).outlineStyle };
+        document.body.textContent = JSON.stringify({ initial, updated, overlay, focus });
       </script>`;
   type Item = { minHeight: string; height: number; display: string; position: string };
-  type Result = { initial: Record<string, Item>; updated: Record<string, Item>; overlay: { position: string; covers: boolean; numberDisplay: string } };
-  const profile = await mkdtemp(join(tmpdir(), "era-buttons-"));
+  type Result = { initial: Record<string, Item>; updated: Record<string, Item>; overlay: { position: string; covers: boolean; numberDisplay: string }; focus: { control: string; tile: string } };
+  const profile = await mkdtemp(join(process.cwd(), ".era-buttons-"));
   try {
-    for (const [mode, size] of [["desktop", "1440,1000"], ["compact", "1200,700"], ["is-handheld", "1440,1000"]] as const) {
+    for (const [mode, size] of [["desktop", "1440,1000"], ["compact", "1200,700"]] as const) {
       const args = ["--headless", "--disable-gpu", "--no-first-run", `--user-data-dir=${profile}`, `--window-size=${size}`, "--dump-dom"];
       if (process.platform === "linux" && process.getuid?.() === 0) args.push("--no-sandbox");
       args.push(`data:text/html;base64,${Buffer.from(html.replace("MODE", mode)).toString("base64")}`);
       const { stdout } = await execute(browser!, args, { maxBuffer: 8 * 1024 * 1024, timeout: 30000 });
       const match = stdout.match(/<body[^>]*>([\s\S]*?)<\/body>/);
       assert.ok(match, `${mode}: browser returned button measurements`);
-      const { initial, updated, overlay } = JSON.parse(match[1]) as Result;
+      const { initial, updated, overlay, focus } = JSON.parse(match[1]) as Result;
+      assert.equal(focus.control, "none", `${mode}: controller focus does not add a second tile outline`);
+      assert.equal(focus.tile, "solid", `${mode}: the complete action tile retains its focus outline`);
       const compact = mode !== "desktop";
       for (const id of ["tile", "number-guard"]) {
         assert.equal(initial[id].minHeight, compact ? "36px" : "auto", `${mode}: ${id} initial minimum`);
@@ -570,25 +586,17 @@ test("compact button sizes share tokens without changing desktop or sprite contr
         if (compact) assert.equal(updated[id].height, 48, `${mode}: ${id} follows the shared size`);
       }
       assert.equal(overlay.position, compact ? "absolute" : "static", `${mode}: number button position`);
-      assert.equal(overlay.numberDisplay, compact ? "none" : "inline", `${mode}: command number visibility`);
+      assert.equal(overlay.numberDisplay, "inline", `${mode}: viewport alone does not hide command numbers`);
       if (compact) assert.ok(overlay.covers, `${mode}: number button covers its tile`);
       assert.ok(updated.multiline.height > 48, `${mode}: long labels can grow beyond the minimum height`);
-      assert.equal(initial.guard.minHeight, mode === "is-handheld" ? "36px" : "auto");
-      assert.equal(updated.guard.minHeight, mode === "is-handheld" ? "48px" : "auto");
-      assert.equal(initial.choice.minHeight, mode === "is-handheld" ? "36px" : "auto");
-      assert.equal(updated.choice.minHeight, mode === "is-handheld" ? "48px" : "auto");
+      assert.equal(updated.guard.minHeight, initial.guard.minHeight);
+      assert.equal(updated.choice.minHeight, initial.choice.minHeight);
       assert.equal(updated.sprite.minHeight, initial.sprite.minHeight);
-      assert.equal(initial.save.minHeight, compact ? "36px" : "23px");
-      assert.equal(updated.save.minHeight, compact ? "48px" : "23px");
+      assert.equal(initial.save.minHeight, compact ? "36px" : "28px");
+      assert.equal(updated.save.minHeight, compact ? "48px" : "28px");
       if (compact) {
         assert.equal(initial.relationship.height, 56);
         assert.equal(updated.relationship.height, 64);
-      }
-      if (mode === "is-handheld") {
-        for (const id of ["settings", "dialog"]) {
-          assert.equal(initial[id].minHeight, "44px");
-          assert.equal(updated[id].minHeight, "52px");
-        }
       }
     }
   } finally {
@@ -597,17 +605,17 @@ test("compact button sizes share tokens without changing desktop or sprite contr
 });
 
 test("room names have no pressed-button box while other pressed controls keep it", { skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH" }, async () => {
-  const [style, handheld] = await Promise.all([
+  const [style, responsive] = await Promise.all([
     readFile(new URL("../web/generated/style.css", import.meta.url), "utf8"),
-    readFile(new URL("../web/generated/handheld.css", import.meta.url), "utf8"),
+    readFile(new URL("../web/generated/responsive.css", import.meta.url), "utf8"),
   ]);
-  const html = `<!doctype html><style>${style}\n${handheld}</style><body class="MODE">
+  const html = `<!doctype html><style>${style}\n${responsive}</style><body class="MODE">
     <div class="screen is-active">
       <div class="era-room-stage"><div class="era-occupant"><div class="line">
         <button class="choice era-occupant-label" aria-pressed="true"><span class="era-occupant-text"><span class="era-occupant-name">Kana</span><span class="era-occupant-state">Favor 6 <span class="era-feel era-feel-friend">Friend</span></span></span></button>
         <button class="choice era-occupant-label" aria-pressed="false"><span class="era-occupant-text"><span class="era-occupant-name">Reimu</span><span class="era-occupant-state">Favor 0</span></span></button>
       </div></div></div>
-      <button id="control" aria-pressed="true">Other control</button>
+      <button id="control" class="ui-button" aria-pressed="true">Other control</button>
     </div><script>
       const names = [...document.querySelectorAll(".era-occupant-label")].map(button => {
         const style = getComputedStyle(button);
@@ -617,9 +625,9 @@ test("room names have no pressed-button box while other pressed controls keep it
         .map(element => getComputedStyle(element).textShadow);
       document.body.textContent = JSON.stringify({ names, shadows, control: getComputedStyle(document.querySelector("#control")).boxShadow });
     </script>`;
-  const profile = await mkdtemp(join(tmpdir(), "era-room-labels-"));
+  const profile = await mkdtemp(join(process.cwd(), ".era-room-labels-"));
   try {
-    for (const mode of ["desktop", "is-handheld"]) {
+    for (const mode of ["desktop"]) {
       const args = ["--headless", "--disable-gpu", "--no-first-run", `--user-data-dir=${profile}`, "--dump-dom"];
       if (process.platform === "linux" && process.getuid?.() === 0) args.push("--no-sandbox");
       args.push(`data:text/html;base64,${Buffer.from(html.replace("MODE", mode)).toString("base64")}`);
@@ -649,17 +657,17 @@ test("room names have no pressed-button box while other pressed controls keep it
 });
 
 test("repeat button fits the action card corner and displays an X hint", { skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH" }, async () => {
-  const [style, handheld] = await Promise.all([
+  const [style, responsive] = await Promise.all([
     readFile(new URL("../web/generated/style.css", import.meta.url), "utf8"),
-    readFile(new URL("../web/generated/handheld.css", import.meta.url), "utf8"),
+    readFile(new URL("../web/generated/responsive.css", import.meta.url), "utf8"),
   ]);
-  const html = `<!doctype html><meta charset="utf-8"><style>${style}\n${handheld}
+  const html = `<!doctype html><meta charset="utf-8"><style>${style}\n${responsive}
     .fixture { width: 900px; margin: 20px; }
     </style><body class="MODE has-controller"><div class="screen is-active"><div class="era-main fixture">
     <div class="era-card era-main-actions"><div class="line"><div class="era-card-title era-actions-header">
     <span>Interact with Kana</span><span class="era-toggles"><label class="checkbox-control era-toggle">Petting</label>
     <label class="checkbox-control era-toggle">Housekeeping</label>
-    <button class="choice era-repeat" aria-label="Repeat last action"></button></span>
+    <button class="choice era-repeat has-controller-hint" data-controller-hint="X" aria-label="Repeat last action"></button></span>
     </div></div></div></div></div><script>
     const button = document.querySelector(".era-repeat"), card = button.closest(".era-card");
     const rect = button.getBoundingClientRect(), edge = card.getBoundingClientRect();
@@ -674,14 +682,15 @@ test("repeat button fits the action card corner and displays an X hint", { skip:
     const selectedImage = getComputedStyle(button).backgroundImage;
     const busyHint = getComputedStyle(button, "::after").content;
     document.body.classList.remove("has-controller");
+    button.classList.remove("has-controller-hint");
     const offHint = getComputedStyle(button, "::after").content;
     document.body.textContent = JSON.stringify({ right: edge.right - rect.right, top: rect.top - edge.top,
       width: rect.width, height: rect.height, normalImage, pendingImage, selectedImage,
       radius: css.borderTopRightRadius, hint: hintContent, hintSize, busyHint, offHint });
     </script>`;
-  const profile = await mkdtemp(join(tmpdir(), "era-repeat-corner-"));
+  const profile = await mkdtemp(join(process.cwd(), ".era-repeat-corner-"));
   try {
-    for (const mode of ["desktop", "is-handheld"]) {
+    for (const mode of ["desktop"]) {
       const args = ["--headless", "--disable-gpu", "--no-first-run", `--user-data-dir=${profile}`, "--window-size=1440,1000", "--dump-dom"];
       if (process.platform === "linux" && process.getuid?.() === 0) args.push("--no-sandbox");
       args.push(`data:text/html;base64,${Buffer.from(html.replace("MODE", mode)).toString("base64")}`);
@@ -694,7 +703,7 @@ test("repeat button fits the action card corner and displays an X hint", { skip:
       assert.equal(result.width, 40, `${mode}: image button width`);
       assert.equal(result.height, 40, `${mode}: image button height`);
       assert.match(result.normalImage, /\/repeat\.webp/);
-      assert.match(style, /\.screen\.is-active \.era-main \.line button\.choice\.era-repeat:enabled:is\(:hover, :focus, :active\)/);
+      assert.match(style, /button\.choice\.era-repeat:enabled:is\(:hover, :focus, :active\)/);
       for (const image of [result.pendingImage, result.selectedImage]) {
         assert.match(image, /\/repeat-active\.webp/, `${mode}: interactive artwork ${JSON.stringify(result)}`);
       }
@@ -710,9 +719,9 @@ test("repeat button fits the action card corner and displays an X hint", { skip:
 });
 
 test("room height follows rendered portraits without clipping", { skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH" }, async () => {
-  const [style, handheld] = await Promise.all([
+  const [style, responsive] = await Promise.all([
     readFile(new URL("../web/generated/style.css", import.meta.url), "utf8"),
-    readFile(new URL("../web/generated/handheld.css", import.meta.url), "utf8"),
+    readFile(new URL("../web/generated/responsive.css", import.meta.url), "utf8"),
   ]);
   const portrait = (size: number) => `<div class="era-occupant"><div class="era-portrait"><div class="line"><span><button class="choice"><span class="sprite" style="width:${size}px"><span class="sprite-clip" style="width:${size}px;height:${size}px"><canvas width="512" height="512" style="width:${size}px;height:${size}px"></canvas></span></span></button></span></div></div></div>`;
   const fixtures = [[150], [283.5], [150, 360], []].map(sizes => `
@@ -721,7 +730,7 @@ test("room height follows rendered portraits without clipping", { skip: browser 
         ${sizes.length ? sizes.map(portrait).join("") : '<div class="era-alone-message">Nobody here</div>'}
       </div></div></div>
     </div>`).join("");
-  const html = `<!doctype html><meta charset="utf-8"><style>${style}\n${handheld}</style><body class="MODE">
+  const html = `<!doctype html><meta charset="utf-8"><style>${style}\n${responsive}</style><body class="MODE">
     <div class="screen is-active">${fixtures}</div><script>
       const results = [...document.querySelectorAll(".fixture")].map(f => {
         const list = f.querySelector(".era-occupant-list").getBoundingClientRect();
@@ -731,9 +740,9 @@ test("room height follows rendered portraits without clipping", { skip: browser 
       });
       document.body.textContent = JSON.stringify(results);
     </script>`;
-  const profile = await mkdtemp(join(tmpdir(), "era-portrait-layout-"));
+  const profile = await mkdtemp(join(process.cwd(), ".era-portrait-layout-"));
   try {
-    for (const mode of ["desktop", "is-handheld"]) {
+    for (const mode of ["desktop"]) {
       const args = ["--headless", "--disable-gpu", "--no-first-run", `--user-data-dir=${profile}`, "--window-size=1440,1000", "--dump-dom"];
       if (process.platform === "linux" && process.getuid?.() === 0) args.push("--no-sandbox");
       args.push(`data:text/html;base64,${Buffer.from(html.replace("MODE", mode)).toString("base64")}`);
@@ -753,9 +762,9 @@ test("room height follows rendered portraits without clipping", { skip: browser 
 });
 
 test("history takes remaining height after actions at each layout width", { skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH" }, async () => {
-  const [style, handheld] = await Promise.all([
+  const [style, responsive] = await Promise.all([
     readFile(new URL("../web/generated/style.css", import.meta.url), "utf8"),
-    readFile(new URL("../web/generated/handheld.css", import.meta.url), "utf8"),
+    readFile(new URL("../web/generated/responsive.css", import.meta.url), "utf8"),
   ]);
   const fixtures = [700, 900, 1180].flatMap(width => [false, true].map(counters => `
     <div class="fixture" data-case="${width}-${counters}">
@@ -775,7 +784,7 @@ test("history takes remaining height after actions at each layout width", { skip
         </div></div>
       </div>
     </div>`)).join("");
-  const html = `<!doctype html><meta charset="utf-8"><style>${style}\n${handheld}</style><body>${fixtures}<script>
+  const html = `<!doctype html><meta charset="utf-8"><style>${style}\n${responsive}</style><body>${fixtures}<script>
     const results = [...document.querySelectorAll(".fixture")].map(fixture => {
       const pane = fixture.querySelector(".era-history-pane"), actions = fixture.querySelector(".era-main-actions");
       const terminal = fixture.querySelector("#terminal"), line = actions.firstElementChild;
@@ -789,7 +798,7 @@ test("history takes remaining height after actions at each layout width", { skip
     });
     document.body.textContent = JSON.stringify(results);
   </script>`;
-  const profile = await mkdtemp(join(tmpdir(), "era-history-priority-"));
+  const profile = await mkdtemp(join(process.cwd(), ".era-history-priority-"));
   try {
     const args = ["--headless", "--disable-gpu", "--no-first-run", `--user-data-dir=${profile}`, "--window-size=1440,1000", "--dump-dom"];
     if (process.platform === "linux" && process.getuid?.() === 0) args.push("--no-sandbox");
@@ -812,12 +821,12 @@ test("history takes remaining height after actions at each layout width", { skip
 });
 
 test("main screen distributes space and spaces player controls consistently", { skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH" }, async () => {
-  const [style, handheld] = await Promise.all([
+  const [style, responsive] = await Promise.all([
     readFile(new URL("../web/generated/style.css", import.meta.url), "utf8"),
-    readFile(new URL("../web/generated/handheld.css", import.meta.url), "utf8"),
+    readFile(new URL("../web/generated/responsive.css", import.meta.url), "utf8"),
   ]);
   const room = (occupied: boolean, history: boolean, crowded: boolean, counters: boolean) => `
-    <div id="terminal" style="width: 1180px; height: ${crowded ? 600 : 720}px; font-size: 20px; line-height: 1.25">
+    <div id="terminal" style="width: 1180px; height: ${crowded ? 600 : 720}px; font-size: 16px; line-height: 1.25">
       <div class="screen is-active"><div class="era-main">
         <div class="era-main-header" style="height: 130px">Header</div>
         <div class="era-main-center"><div class="era-card era-character${occupied ? "" : " era-alone"}">
@@ -835,11 +844,11 @@ test("main screen distributes space and spaces player controls consistently", { 
         </div>
         <div class="era-main-sidebar"><div class="era-main-right"><div class="era-card era-player">
           <div class="line">Player</div>
-          <div class="line"><div class="era-player-actions"><button class="choice era-player-control">Inventory</button></div></div>
+          <div class="line"><div class="era-player-actions"><button class="choice era-button era-button-block">Inventory</button></div></div>
           <div class="era-player-management"><div class="era-actions-group">
-            <div class="line"><span class="print-cell">Move<button class="choice command-number-only">400</button></span><span class="print-cell">Go Out<button class="choice command-number-only">405</button></span><span class="print-cell">Lock The Door<button class="choice command-number-only">991</button></span></div>
-            <div class="line"><span><div class="era-toggles era-auto-toggles"><button class="choice era-toggle">Auto-TSP Movement</button><button class="choice era-toggle">Auto-Clean</button><button class="choice era-toggle">Pushdown Guard</button></div></span></div>
-          </div><div class="era-settings"><div class="line"><button class="choice era-chip-button">Config</button></div></div></div>
+            <div class="line"><button class="choice era-button era-button-block era-travel-button">Move</button><button class="choice era-button era-button-block era-travel-button">Go Out</button><button class="choice era-button era-button-block">Lock The Door</button></div>
+            <div class="line"><span><div class="era-toggles era-auto-toggles"><label class="checkbox-control era-toggle"><input type="checkbox">Auto-TSP Movement</label><label class="checkbox-control era-toggle"><input type="checkbox">Auto-Clean</label><label class="checkbox-control era-toggle"><input type="checkbox">Pushdown Guard</label></div></span></div>
+          </div><div class="era-settings"><div class="line"><button class="choice era-button era-button-block">Config</button></div></div></div>
         </div></div></div>
         ${counters ? '<div class="era-card era-counters" style="height:35px">Counters</div>' : ""}
       </div></div>
@@ -848,17 +857,17 @@ test("main screen distributes space and spaces player controls consistently", { 
     [false, true].flatMap(crowded => [false, true].map(counters => ({ occupied, history, crowded, counters })))));
   const markup = cases.map(({ occupied, history, crowded, counters }) =>
     `<div class="fixture">${room(occupied, history, crowded, counters)}</div>`).join("");
-  const html = `<!doctype html><meta charset="utf-8"><style>${style}\n${handheld}</style>
+  const html = `<!doctype html><meta charset="utf-8"><style>${style}\n${responsive}</style>
     <body class="MODE">${markup}
     <script>
       const results = [...document.querySelectorAll(".fixture")].map(fixture => {
         const get = selector => fixture.querySelector(selector);
         const rect = selector => get(selector).getBoundingClientRect();
         const actions = get(".era-main-actions"), center = get(".era-main-center");
-        const inventory = rect(".era-player-control");
-        const tiles = [...fixture.querySelectorAll(".era-player-management .print-cell")].map(e => e.getBoundingClientRect());
+        const inventory = rect(".era-button-block");
+        const tiles = [...fixture.querySelectorAll(".era-player-management .era-button-block")].map(e => e.getBoundingClientRect());
         const toggles = [...fixture.querySelectorAll(".era-auto-toggles .era-toggle")].map(e => e.getBoundingClientRect());
-        const config = rect(".era-chip-button");
+        const config = rect(".era-settings .era-button-block");
         const result = {
           room: rect(".era-occupant-list").height, roomVisible: center.clientHeight, roomScroll: center.scrollHeight,
           actions: actions.getBoundingClientRect().height, actionsClient: actions.clientHeight, actionsScroll: actions.scrollHeight,
@@ -890,9 +899,9 @@ test("main screen distributes space and spaces player controls consistently", { 
 
       document.body.textContent = JSON.stringify(results);
     </script>`;
-  const profile = await mkdtemp(join(tmpdir(), "era-layout-"));
+  const profile = await mkdtemp(join(process.cwd(), ".era-layout-"));
   try {
-    for (const [mode, size] of [["desktop", "1440,900"], ["is-handheld", "1200,700"]] as const) {
+    for (const [mode, size] of [["desktop", "1440,900"], ["compact", "1200,700"]] as const) {
       const args = ["--headless", "--disable-gpu", "--no-first-run", `--user-data-dir=${profile}`, `--window-size=${size}`, "--dump-dom"];
       if (process.platform === "linux" && process.getuid?.() === 0) args.push("--no-sandbox");
       args.push(`data:text/html;base64,${Buffer.from(html.replace("MODE", mode)).toString("base64")}`);
@@ -907,7 +916,7 @@ test("main screen distributes space and spaces player controls consistently", { 
         assert.ok(result.actionsScroll <= result.actionsClient + 1, `${label}: actions should fit without scrolling`);
         if (result.roomScroll > result.roomVisible + 1)
           assert.ok(result.actionsSpare <= 20, `${label}: room scrolls despite ${result.actionsSpare}px unused under actions`);
-        assert.equal(result.historyDisplay === "none", mode === "is-handheld" && history, `${label}: history visibility`);
+        assert.equal(result.historyDisplay === "none", mode === "compact" && history, `${label}: history visibility`);
         if (history && mode === "desktop") {
           assert.ok(result.historyPaneHeight >= 3 * result.historyLineHeight - 0.1, `${label}: history fits three lines`);
           assert.ok(result.actionsSpare <= 20, `${label}: actions don't take unused space from history: ${JSON.stringify(result)}`);
@@ -922,7 +931,7 @@ test("main screen distributes space and spaces player controls consistently", { 
         }
         if (!crowded)
           assert.ok(Math.abs(result.room - 216) < 1, `${label}: room should reach portrait height: ${JSON.stringify(result)}`);
-        if (mode === "is-handheld" && crowded) {
+        if (mode === "compact" && crowded) {
           if (occupied)
             assert.ok(result.roomScroll > result.roomVisible, `${label}: occupied room should scroll rather than crush actions`);
           else
@@ -938,11 +947,11 @@ test("main screen distributes space and spaces player controls consistently", { 
 });
 
 test("sky dialog fits its contents and keeps the panorama visible while narration scrolls", { skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH" }, async () => {
-  const [style, handheld] = await Promise.all([
+  const [style, responsive] = await Promise.all([
     readFile(new URL("../web/generated/style.css", import.meta.url), "utf8"),
-    readFile(new URL("../web/generated/handheld.css", import.meta.url), "utf8"),
+    readFile(new URL("../web/generated/responsive.css", import.meta.url), "utf8"),
   ]);
-  const html = `<!doctype html><meta charset="utf-8"><style>${style}\n${handheld}</style><body>
+  const html = `<!doctype html><meta charset="utf-8"><style>${style}\n${responsive}</style><body>
     <div class="screen is-active"><div class="era-box era-dialog era-sky-dialog" popover="manual">
       <div class="line"><div class="era-inventory-header"><div class="era-inventory-heading">
         <span class="era-inventory-title">Gaze at the sky</span><button class="choice era-dialog-close era-wait-continue">Continue</button>
@@ -963,7 +972,7 @@ test("sky dialog fits its contents and keeps the panorama visible while narratio
         scrollable: narration.scrollHeight > narration.clientHeight };
       document.body.textContent = JSON.stringify(result);
     </script>`;
-  const profile = await mkdtemp(join(tmpdir(), "era-sky-layout-"));
+  const profile = await mkdtemp(join(process.cwd(), ".era-sky-layout-"));
   try {
     const args = ["--headless", "--disable-gpu", "--no-first-run", `--user-data-dir=${profile}`, "--window-size=1200,700", "--dump-dom"];
     if (process.platform === "linux" && process.getuid?.() === 0) args.push("--no-sandbox");
@@ -985,9 +994,9 @@ test("sky dialog fits its contents and keeps the panorama visible while narratio
 });
 
 test("stats scroll when constrained while sidebar overflow belongs to the terminal", { skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH" }, async () => {
-  const [style, handheld] = await Promise.all([
+  const [style, responsive] = await Promise.all([
     readFile(new URL("../web/generated/style.css", import.meta.url), "utf8"),
-    readFile(new URL("../web/generated/handheld.css", import.meta.url), "utf8"),
+    readFile(new URL("../web/generated/responsive.css", import.meta.url), "utf8"),
   ]);
   const fixture = (name: string, width: number, stats: boolean, playerHeight: number) => `
     <div class="fixture" data-case="${name}"><div id="terminal" style="width:${width}px;height:650px;font-size:20px;line-height:1.25">
@@ -1001,8 +1010,8 @@ test("stats scroll when constrained while sidebar overflow belongs to the termin
             <div class="line"><div class="era-palam-grid">${Array.from({ length: name === "short-stats" ? 2 : 28 }, (_, i) =>
               `<div class="era-palam-item">Stat ${i + 1}</div>`).join("")}</div></div></div>` : ""}</div>
           <div class="era-main-right"><div class="era-card era-player"><div style="height:${playerHeight}px">Player information</div>
-            <div class="line"><button class="choice era-player-control">Inventory</button></div>
-            <div class="era-player-management"><div class="era-actions-group"><div class="line"><button class="choice era-button era-button-sidebar">Move</button></div></div>
+            <div class="line"><button class="choice era-button-block">Inventory</button></div>
+            <div class="era-player-management"><div class="era-actions-group"><div class="line"><button class="choice era-button era-button-block">Move</button></div></div>
               <div class="line"><span class="output-text"><div class="era-auto-toggles"><button class="choice era-toggle">Auto-TSP Movement</button></div></span></div>
               <div class="era-settings"><div class="line"><button class="choice era-chip-button">Config</button></div></div></div>
           </div></div>
@@ -1016,7 +1025,7 @@ test("stats scroll when constrained while sidebar overflow belongs to the termin
     { name: "no-stats", width: 1180, stats: false, playerHeight: 180 },
     { name: "stacked", width: 650, stats: true, playerHeight: 180 },
   ];
-  const html = `<!doctype html><meta charset="utf-8"><style>${style}\n${handheld}</style><body class="MODE">
+  const html = `<!doctype html><meta charset="utf-8"><style>${style}\n${responsive}</style><body class="MODE">
     ${cases.map(({ name, width, stats, playerHeight }) => fixture(name, width, stats, playerHeight)).join("")}
     <script>
       const results = [...document.querySelectorAll(".fixture")].map(f => {
@@ -1044,9 +1053,9 @@ test("stats scroll when constrained while sidebar overflow belongs to the termin
       });
       document.body.textContent = JSON.stringify(results);
     </script>`;
-  const profile = await mkdtemp(join(tmpdir(), "era-sidebar-layout-"));
+  const profile = await mkdtemp(join(process.cwd(), ".era-sidebar-layout-"));
   try {
-    for (const [mode, size] of [["desktop", "1440,900"], ["is-handheld", "1200,700"]] as const) {
+    for (const [mode, size] of [["desktop", "1440,900"], ["compact", "1200,700"]] as const) {
       const args = ["--headless", "--disable-gpu", "--no-first-run", `--user-data-dir=${profile}`, `--window-size=${size}`, "--dump-dom"];
       if (process.platform === "linux" && process.getuid?.() === 0) args.push("--no-sandbox");
       args.push(`data:text/html;base64,${Buffer.from(html.replace("MODE", mode)).toString("base64")}`);

@@ -28,9 +28,11 @@ test("plain button variants render one control, escape attributes and reject unk
   const game = emptyGame();
   indexScript(game, attributes.slice(attributes.indexOf("@HOTPATCH_ATTRIBUTE(")), "<attribute-helper>");
   indexScript(game, source.slice(source.indexOf("@HOTPATCH_BUTTON(")), "<button-helper>");
-  const variants = ["action", "sidebar", "sidebar-wide", "slim", "primary", "inventory", "unavailable"];
+  const variants = ["default", "block", "primary", "list"];
   indexScript(game, `@SYSTEM_TITLE
 ${variants.map((variant, i) => `HTML_PRINT HOTPATCH_BUTTON("A&B <label>", ${i}, "It's <safe>", "${variant}")`).join("\n")}
+HTML_PRINT HOTPATCH_BUTTON("Unavailable", 10, "", "default", "", "", "", 0)
+HTML_PRINT HOTPATCH_BUTTON("Inventory", 805, "", "block", "", "", "", 1, "'&>")
 BINPUT
 @TEST_BAD_VARIANT
 HTML_PRINT HOTPATCH_BUTTON("Bad", 0, "", "invented")`, "<button-test>");
@@ -38,19 +40,19 @@ HTML_PRINT HOTPATCH_BUTTON("Bad", 0, "", "invented")`, "<button-test>");
     const snapshot = new Runtime(game, undefined, { jit }).start();
     assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
     const buttons = snapshot.output.flatMap(item => item.type === "html" ? [item.text] : []);
-    assert.equal(buttons.length, variants.length);
-    for (const [i, markup] of buttons.entries()) {
+    assert.equal(buttons.length, variants.length + 2);
+    for (const [i, markup] of buttons.slice(0, variants.length).entries()) {
       assert.equal((markup.match(/<button\b/g) ?? []).length, 1);
-      assert.match(markup, /^<button[^>]*>A&amp;B &lt;label&gt;/);
+      assert.match(markup, /A&amp;B &lt;label&gt;/);
       assert.match(markup, /title='It&#39;s &lt;safe&gt;'/);
-      assert.match(markup, new RegExp(`class='era-button era-button-${variants[i]} '`));
-      assert.equal(markup.includes("command-number"), i < 3 || variants[i] === "inventory");
-      assert.equal(markup.includes("aria-disabled='true'"), variants[i] === "unavailable");
+      assert.match(markup, new RegExp(`class='era-button${i === 0 ? "" : ` era-button-${variants[i]}`} '`));
+      assert.match(markup, new RegExp(`data-command-number='${i}'`));
+      assert.doesNotMatch(markup, /class='command-number'|interactive-label/);
+      assert.match(markup, /aria-disabled='false'/);
     }
-    assert.match(buttons[5]!, /era-control-arrow/);
-    assert.match(buttons[5]!, /command-number'>\[5\]/);
-    assert.match(buttons[5]!, /A&amp;B &lt;label&gt; <span class='command-number'>/);
-    assert.match(buttons[6]!, /\[\.\.\.\]/);
+    assert.match(buttons[4]!, /aria-disabled='true'/);
+    assert.match(buttons[5]!, /data-suffix='&#39;&amp;&gt;'/);
+    assert.doesNotMatch(buttons[5]!, /era-control-arrow|class='command-number'/);
     const bad = new Runtime(game, undefined, { jit }).start("TEST_BAD_VARIANT");
     assert.ok(bad.error);
     assert.match(JSON.stringify(bad.error), /Unknown button variant: invented/);
@@ -92,8 +94,8 @@ RETURN ARG == 1`, "<custom-button-fixture>");
     assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
     assert.deepEqual(snapshot.input?.buttonValues, ["9000", "9001"]);
     const output = snapshot.output.flatMap(item => item.type === "html" ? [item.text] : []).join("");
-    assert.match(output, /value='9000' class='era-button era-button-action [^>]*>Play a game<span class='command-number'>\[9000\]/);
-    assert.match(output, /value='9001' class='era-button era-button-action [^>]*><span color='#[0-9A-F]{6}'>Highlighted action<\/span>/);
+    assert.match(output, /value='9000' class='era-button [^>]*data-command-number='9000'[^>]*>Play a game<\/button>/);
+    assert.match(output, /value='9001' class='era-button [^>]*><span color='#[0-9A-F]{6}'>Highlighted action<\/span>/);
     assert.doesNotMatch(output, /9002|print-cell|era-guard-control/);
   }
 });
@@ -711,8 +713,8 @@ test("main screen hotpatch opens and closes its panel boxes in balance", {
     }
     assert.doesNotMatch(html, /<div class='era-clock'><img/);
     assert.equal((html.match(/value='805'/g) ?? []).length, 1, "inventory has exactly one entry point");
-    assert.match(html, /era-player-actions'><button value='805' class='era-button era-button-inventory /, "inventory is on the player card");
-    assert.match(html, /Inventory <span class='command-number'>\[805\]/, "inventory displays its typed shortcut");
+    assert.match(html, /era-player-actions'><button value='805' class='era-button era-button-block /, "inventory is on the player card");
+    assert.match(html, /data-command-number='805' data-suffix='›'/, "inventory supplies its shortcut and suffix as metadata");
     assert.match(html, /value='490'/, "the game's Items command remains available alongside the GUI inventory");
     assert.match(html, /class='era-toggles era-auto-toggles'><button value='995'[^]*<button value='-9200' class='era-toggle[^']*' role='checkbox' aria-checked='(?:true|false)'[^>]*>Pushdown Guard<\/button><\/div>/, "the guard shares the compact checkbox row with Auto-TSP and Auto-Clean");
     assert.doesNotMatch(html, /era-player-toggles|Go &amp; Manage|Auto Items/);
@@ -1271,7 +1273,7 @@ test("room lineup renders every portrait and preserves target selection", {
     }
     const labels = [...html.matchAll(/<button value='(\d+)' class='era-occupant-label' aria-pressed='(true|false)'/g)];
     assert.doesNotMatch(html, /era-info-tabs|era-info-title|Go &amp; Manage/);
-    assert.match(html, /value='-9300' class='era-info-more'/, "More opens details for the selected character");
+    assert.match(html, /value='-9300' class='era-text-button'/, "More opens details for the selected character");
     assert.match(html, /<era-open class='era-info-summary'><button value='-9300'/, "See more is beside the character name");
     assert.match(html, /value='-9200' class='era-toggle' role='checkbox' aria-checked='false'/);
     assert.doesNotMatch(html, /Auto Items/);
@@ -1347,7 +1349,7 @@ test("character More opens the selected person's sheet while See more still open
     assert.equal(snapshot.target, selected, "sheet navigation does not change the room target");
     snapshot = runtime.input("0");
     settle();
-    assert.match(html(), /era-info-more/);
+    assert.match(html(), /era-text-button/);
     assert.equal(snapshot.target, selected);
   }
   snapshot = runtime.input("-9200");
@@ -1418,8 +1420,8 @@ PRINTW Bug cage opened`, "<item-picker-fixture>");
     assert.match(markup, /era-dialog era-inventory era-item-use/);
     assert.match(markup, /Player &lt;&amp;&gt;/);
     assert.match(markup, /3 item types/);
-    assert.match(markup, /value='120' class='era-inventory-item era-inventory-use' title='It&#39;s helpful\.'/);
-    assert.match(markup, /command-number'>\[120\]<\/span><span class='era-inventory-name'>Heal &lt;&amp;&gt;/);
+    assert.match(markup, /value='120' class='era-inventory-item era-inventory-use' data-command-number='120' title='It&#39;s helpful\.'/);
+    assert.match(markup, /data-command-number='120'[^>]*><span class='era-inventory-name'>Heal &lt;&amp;&gt;/);
     assert.match(markup, /title='Quantity'>3</);
     assert.match(markup, /Use on Partner/);
     assert.doesNotMatch(markup, /value='123'|value='124'|value='7777'|value='8888'/);

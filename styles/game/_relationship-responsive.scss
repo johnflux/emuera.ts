@@ -3,7 +3,7 @@
   .era-relationship:popover-open:has(.era-relationship-demo) { margin-top: 230px; max-height: calc(100dvh - 246px); }
   .era-relationship-demo { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; font-size: .75em; }
   .era-relationship-demo > .line > span { display: contents; }
-  .era-relationship-demo button { width: 100%; }
+
   .era-relationship-options { grid-template-columns: 1fr; padding: 0; background: none; }
   .era-relationship-header { gap: 8px; }
   .era-relationship .era-info-face { width: 64px; height: 64px; }
@@ -11,8 +11,7 @@
   .era-relationship-heading { font-size: 1.5em; }
   .era-relationship-summary { margin-inline: 0; gap: 8px 16px; font-size: 1em; }
   .era-relationship-timeline, .era-relationship-timeline:is(.is-early, .is-friendship, .is-casual) { padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; }
-  .era-relationship-timeline::after, .era-relationship-timeline.is-in-love::before,
-  .era-relationship-summary::before, .era-relationship-flag::before, .era-relationship-select::before { content: none; }
+
   .era-relationship-header { background: #191c24; padding: 10px; }
   .era-relationship .era-info-face, .era-relationship-header .era-relationship-icon,
   .era-timeline-glyph, .era-timeline-hearts, .era-timeline-rays, .era-timeline-boost, .era-timeline-flowers, .era-timeline-fwb-flourish, .era-timeline-scorch, .era-timeline-marriage-ring, .era-timeline-marriage-sparkles { display: none; }
@@ -21,12 +20,7 @@
   .is-married.is-reached > text { filter: none; transform: translateY(-16px); font-size: 18px; }
   .era-relationship-timeline .era-timeline-badge { fill: #17151e; filter: none; }
   .era-relationship-timeline .era-timeline-fill, .era-relationship-timeline .era-timeline-branch { filter: none; }
-  .era-relationship-option { --relationship-button-background: #493040; --relationship-button-border: #b97d9b; }
-  .era-relationship-action-3, .era-relationship-action-4 { --relationship-button-background: #3e304f; --relationship-button-border: #a68abc; }
-  .era-relationship-downgrade { --relationship-button-background: #492832; --relationship-button-border: #b16c7b; }
-  .era-relationship .line .era-relationship-select { min-height: 44px; border: 1px solid var(--relationship-button-border); background: var(--relationship-button-background); font-size: 1em; }
-  .era-relationship .line button.choice.era-relationship-select:enabled:is(:hover, :focus-visible) { border-color: var(--relationship-button-border); }
-  .era-relationship .line .era-relationship-select:is(:disabled, span) { background: #23232b; border-color: #514850; }
+
   .era-relationship-header .era-relationship-icon { width: 32px; height: 32px; }
   .era-relationship-header .era-dialog-close { margin-right: 8px; }
   .era-relationship-body, .era-relationship-footer { padding: 16px; }

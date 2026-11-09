@@ -14,25 +14,10 @@
 .era-shop-wake { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; margin-top: 4px; }
 .era-shop-wake .era-status-label { margin-right: 0; }
 .era-shop-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.line button.choice.era-timestop-button.era-wake-button { border-color: #bd8850; background: radial-gradient(ellipse at top, #3a3023, #191c20 75%); color: #ffe8b8; }
+
 @media (max-width: 600px) {
   .era-main-header > .era-watch-control { max-width: 100%; }
 }
-/* Labels are real controls over the artwork's plaque, not a second painted frame. */
-.era-watch-control .line button.choice.era-timestop-button, .era-watch-control .era-timestop-button { min-width: 0; width: 100%; height: 100%; padding: 2px 12px; border: 0; border-radius: 24px; background: transparent; box-shadow: none; color: #cceeea; text-shadow: 0 1px 2px #000; letter-spacing: 0; font-size: min(1.15em, var(--clock-label-size, 6cqi)); backdrop-filter: none; -webkit-backdrop-filter: none; }
-@media (min-width: 1281px), (min-height: 801px) {
-  body:not(.is-handheld) .era-watch-control .line button.choice.era-timestop-button:has(.era-timestop-gauge) { gap: 0; }
-}
-.era-watch-control :is(.era-unavailable, .era-wake-button) { --clock-label-size: 4.8cqi; }
-.era-watch-control .line button.choice.era-timestop-button.era-wake-button { color: #ffe8b8; }
-.era-watch-control .line button.choice.era-timestop-button.era-stopped { color: #f0d8ff; background: transparent; }
-.era-watch-control .era-timestop-button.era-unavailable { color: #999; background: transparent; }
-.era-watch-control .era-timestop-button .era-sub { font-size: .65em; margin-top: 1px; }
-.era-watch-control .era-timestop-gauge { margin-top: 4px; gap: 2px; }
-.era-watch-control .era-timestop-tsp { font-size: .65em; opacity: 1; }
-.era-watch-control .era-timestop-gauge .era-meter { background: #0006; }
-.era-watch-control .era-timestop-button:enabled:is(:hover, :focus-visible) { background: transparent; filter: none; }
-.era-watch-control button.era-timestop-button::before { content: ""; position: absolute; inset: -14px -16px; }
 @container (max-width: 1100px) {
   .era-shop { grid-template-columns: minmax(32ch, 40ch) minmax(0, 1fr); grid-template-areas: "header header" "player menu" "home menu" "system system" "tip tip"; }
   .screen.is-active .era-shop { grid-template-rows: auto auto 1fr auto auto; }

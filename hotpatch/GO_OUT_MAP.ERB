@@ -349,8 +349,8 @@ nHere = GET_MAPID(CFLAG:MASTER:現在位置)
 HTML_PRINT "<era-open class='era-layout era-move era-travel'>"
 sHtml '= ""
 SIF ARGS == "散策する"
-	sHtml += @"<button value='100' class='era-move-tab' title='Back to walking around %HTML_ESCAPE(GET_MAPNAME(nHere))%'>%HTML_ESCAPE(GET_MAPNAME(nHere))%</button>"
-sHtml += "<span class='era-move-tab era-move-current'>Gensokyo</span>"
+sHtml += @"<button value='100' class='era-sheet-page era-move-tab' title='Back to walking around %HTML_ESCAPE(GET_MAPNAME(nHere))%'>%HTML_ESCAPE(GET_MAPNAME(nHere))%</button>"
+sHtml += "<span class='era-sheet-page era-current era-move-tab era-move-current'>Gensokyo</span>"
 LOCALS '= ARGS == "散策する" ? "Keep walking around here" # "Stay home"
 HTML_PRINT @"<div class='era-move-header'><div class='era-move-tabs'>%sHtml%</div><button value='100' class='era-chip-button era-move-back' title='%LOCALS%'>Back</button></div>"
 
@@ -416,8 +416,8 @@ nArea = GET_MAPID(CFLAG:MASTER:現在位置)
 nHere = CFLAG:MASTER:現在位置 % 100 / 10
 sUnit '= TSPJUMP ? "TSP" # "min"
 HTML_PRINT "<era-open class='era-layout era-move era-travel'>"
-sHtml '= @"<span class='era-move-tab era-move-current'>%HTML_ESCAPE(GET_MAPNAME(nArea))%</span>"
-sHtml += "<button value='99' class='era-move-tab' title='Move to another area'>Gensokyo</button>"
+sHtml '= @"<span class='era-sheet-page era-current era-move-tab era-move-current'>%HTML_ESCAPE(GET_MAPNAME(nArea))%</span>"
+sHtml += "<button value='99' class='era-sheet-page era-move-tab' title='Move to another area'>Gensokyo</button>"
 HTML_PRINT @"<div class='era-move-header'><div class='era-move-tabs'>%sHtml%</div><button value='100' class='era-chip-button era-move-back' title='Stay here'>Back</button></div>"
 
 HTML_PRINT "<era-open class='era-move-body'>"

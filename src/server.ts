@@ -19,6 +19,7 @@ import type { CharacterHistory, Encounter, HistoryCharacter } from "./interactio
 import { LLM_REQUEST_BYTES, LlmRequestError, proxyLlm } from "./llm.js";
 import { readSuspend, writeSuspend } from "./suspend-format.js";
 import { backgroundQuicksave } from "./background-quicksave.js";
+import { componentGame, isComponentSample, startComponent } from "./component-demo.js";
 
 type BrowserSnapshot = ReturnType<typeof patchTitleImage>;
 
@@ -371,7 +372,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
   function deliver(response: ServerResponse, id: string, session: Session | undefined, advance: Advance, snapshot: Snapshot, game: Game, gameId = session?.game ?? path.basename(game.root)): void {
     const started = performance.now();
     const patched = patchTitleImage(game, snapshot);
-    if (session && patched.output.some((item) => item.type === "html" && item.text.includes("era-launch-continue")))
+    if (session && patched.output.some((item) => item.type === "html" && item.text.includes("era-title-continue")))
       patched.continueAvailable = session.mode === "game" && latestGameSave(entryFor(session.game).saves, session.runtime.middaySupported) !== null;
     if (patched.error?.context) patched.error.context.server = {
       game: gameId, session: id, step: session ? session.step + 1 : 0, action: advance,
@@ -454,7 +455,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
     void (async () => {
       response.setHeader("Cache-Control", "no-store");
       response.setHeader("X-Content-Type-Options", "nosniff");
-      response.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
+      response.setHeader("Content-Security-Policy", `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors ${development ? "'self'" : "'none'"}; form-action 'self'`);
       const host = request.headers.host ?? "";
       const allowedHost = /^(?:127\.0\.0\.1|localhost|\[::1\]):\d+$/.test(host);
       if (!allowedHost) throw new HttpError(403, "Only localhost access is allowed");
@@ -529,9 +530,12 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
       if (request.method === "POST" && url.pathname === "/api/start") {
         const data = await body(request);
         if (data.mode !== "game" && data.mode !== "demo") throw new HttpError(400, "mode must be game or demo");
-        const entry = data.mode === "demo" ? defaultEntry() : entryFor(data.game);
+        if (data.component !== undefined && (!development || data.mode !== "demo" || !isComponentSample(data.component)))
+          throw new HttpError(400, "component must name a development-only game preview in demo mode");
+        const component = isComponentSample(data.component) ? data.component : undefined;
+        const entry = component ? entryFor("tw") : data.mode === "demo" ? defaultEntry() : entryFor(data.game);
         if (data.debug !== undefined && typeof data.debug !== "boolean") throw new HttpError(400, "debug must be a boolean");
-        const debug = data.debug === true;
+        const debug = !component && data.debug === true;
         const display = displaySettings(data.display);
         const client = clientState(data.client);
         if (data.columns !== undefined && (typeof data.columns !== "number" || !Number.isSafeInteger(data.columns) || data.columns < 20 || data.columns > 1000))
@@ -543,21 +547,21 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
         const id = randomUUID();
         try {
           const baseGame = await ensureGame(entry);
-          const demo = data.mode === "demo" ? entry.demo ??= demoGame(baseGame) : undefined;
+          const demo = component ? componentGame(baseGame, component) : data.mode === "demo" ? entry.demo ??= demoGame(baseGame) : undefined;
           const game = demo ? debug ? entry.debugDemo ??= { ...demo, debug: true } : demo
             : debug ? await debugGame(entry) : baseGame;
           const runtime = new Runtime(game, GAME_INSTRUCTION_LIMIT, {
             store: data.mode === "game" ? entry.store : new MemoryGlobalStore(),
             saves: data.mode === "game" ? entry.saves : new MemorySaveStore(),
             // The demo plays the same game's characters, so their edited voices apply there too.
-            voices: entry.voices,
+            voices: component ? new MemoryVoiceStore() : entry.voices,
             columns: typeof data.columns === "number" ? data.columns : 120,
             ...(display ? { display } : {}),
             ...(client ? { client } : {}),
           });
           executionBreadcrumb(id, entry.id, 0, "start", debug);
           const started = performance.now();
-          const snapshot = runtime.start();
+          const snapshot = component ? startComponent(runtime, component) : runtime.start();
           serverTiming(response, "execute", started);
           const session: Session | undefined = snapshot.status === "waiting"
             ? { runtime, used: now, mode: data.mode, game: entry.id, debug, history: [], bytes: 0, step: 0 } : undefined;
@@ -872,7 +876,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
       const pages: Record<string, string> = {
         "/": "index.html", "/app.js": "app.js", "/translate.js": "translate.js", "/output-tools.js": "output-tools.js", "/interaction-history.js": "interaction-history.js", "/llm.js": "llm.js", "/encounters.js": "encounters.js", "/style.css": "generated/style.css",
         "/library.js": "library.js", "/library.css": "generated/library.css", "/cache.js": "cache.js", "/performance.js": "performance.js",
-        "/handheld.js": "handheld.js", "/handheld.css": "generated/handheld.css",
+        "/navigation.js": "navigation.js", "/responsive.css": "generated/responsive.css",
         "/controller-menu.js": "controller-menu.js",
         "/controls.js": "controls.js", "/auto-advance.js": "auto-advance.js",
         "/art-demo.js": "art-demo.js", "/art-demo.css": "generated/art-demo.css", "/sky.js": "sky.js",
@@ -894,6 +898,11 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
         "/fonts/BIZUDGothic-Regular.ttf": "fonts/BIZUDGothic-Regular.ttf",
         "/fonts/OFL.txt": "fonts/OFL.txt",
       };
+      if (development) {
+        pages["/components"] = "components.html";
+        pages["/components.js"] = "components.js";
+        pages["/chrome-button-samples.js"] = "chrome-button-samples.js";
+      }
       // The main screen's per-area header art (web/areas/<map id>-<name>.svg, or pictures in web/areas/<map id>-<name>/).
       // Map pictures (web/maps/<map key>.<ext>) replace the game's text maps.
       const page = pages[url.pathname] ?? (/^\/areas\/\d+-[a-z]+\.svg$/.test(url.pathname)

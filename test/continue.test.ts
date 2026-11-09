@@ -20,7 +20,7 @@ function fixture() {
   const game = emptyGame();
   game.names.set("CFLAG", new Map([["現在位置", 0], ["好感度", 2], ["信頼度", 4]]));
   indexScript(game, `@SYSTEM_TITLE
-HTML_PRINT "<div class='era-launch-actions'><button value='2' class='era-launch-continue' aria-disabled='true'>Continue</button><button value='0'>New game</button></div>"
+HTML_PRINT "<div class='era-launch-actions'><button value='2' class='era-title-continue' aria-disabled='true'>Continue</button><button value='0'>New game</button></div>"
 INPUT
 @NATIVE
 DAY = 3

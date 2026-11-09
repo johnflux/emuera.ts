@@ -1,3 +1,31 @@
+let chromeControllerHints = false;
+let previewControllerHints = null;
+
+function applyControllerHints(enabled) {
+  chromeControllerHints = previewControllerHints ?? enabled;
+  for (const control of document.querySelectorAll(".ui-button")) syncChromeControllerHints(control);
+  for (const control of document.querySelectorAll(".choice, .game-controller-link")) syncGameControllerHints(control);
+  document.body.classList.toggle("has-controller", chromeControllerHints);
+}
+
+export function setPreviewControllerHints(enabled) {
+  previewControllerHints = enabled;
+  applyControllerHints(enabled);
+}
+
+export function syncChromeControllerHints(control) {
+  control.classList.toggle("has-controller", chromeControllerHints);
+}
+
+export function syncGameControllerHints(control) {
+  const enabled = chromeControllerHints && control.matches(".game-controller-link, .choice[class*='era-']");
+  control.dataset.controllerHint = control.classList.contains("era-repeat") ? "X"
+    : control.classList.contains("era-timestop-button") ? "Y"
+    : control.classList.contains("era-move-back") || control.classList.contains("era-dialog-close") ? "B" : "A";
+  control.classList.toggle("has-controller-hint", enabled);
+  control.classList.toggle("controller-focus", enabled && control === document.activeElement);
+}
+
 export function activateControllerAction(selector = ".era-timestop-button") {
   if (document.body.classList.contains("is-home")
     || document.querySelector("dialog[open], .era-dialog:popover-open, #menu-panel:not([hidden])")) return;
@@ -39,18 +67,22 @@ export function setupControllerMenu({ restart, library, settings, exit, canResta
   let mode = modes.includes(saved) ? saved : "auto";
   let detected = false;
   function applyControllerMode() {
-    const enabled = mode === "on" || (mode === "auto" && (detected || globalThis.eraDesktop?.handheld === true));
-    document.body.classList.toggle("has-controller", enabled);
+    const enabled = mode === "on" || (mode === "auto" && detected);
+    applyControllerHints(enabled);
     setCheckboxState(hintsToggle, mode === "auto" ? "mixed" : mode === "on", enabled);
     document.querySelector("#controller-hints-label").textContent = `Controller hints: ${mode === "auto" ? `Auto (${enabled ? "On" : "Off"})` : mode === "on" ? "On" : "Off"}`;
   }
   applyControllerMode();
-  hintsToggle.addEventListener("click", (event) => {
-    event.preventDefault();
+  for (const type of ["focusin", "focusout"]) document.addEventListener(type, (event) => {
+    if (event.target instanceof Element && event.target.matches(".choice, .game-controller-link")) {
+      syncGameControllerHints(event.target);
+      event.target.classList.toggle("controller-focus", event.target.classList.contains("has-controller-hint") && type === "focusin");
+    }
+  });
+  hintsToggle.addEventListener("click", () => {
     mode = modes[(modes.indexOf(mode) + 1) % modes.length];
     localStorage.setItem(hintsKey, mode);
     applyControllerMode();
-    queueMicrotask(applyControllerMode);
   });
   const dialog = document.querySelector("#controller-menu");
   const actions = [...dialog.querySelectorAll(".controller-menu-actions button")];

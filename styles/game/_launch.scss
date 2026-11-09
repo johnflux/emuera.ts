@@ -1,6 +1,5 @@
 /* Keep the original TW title graphic, with its neon colors against black. */
 #terminal:has(.screen.is-active .era-launch)::before { margin-top: 0; }
-body.is-handheld:has(.screen.is-active .era-launch) #input-form { display: none; }
 body:has(.screen.is-active .era-launch) { overflow: hidden; }
 main:has(.screen.is-active .era-launch) { padding: 0; background: #000; }
 #terminal:has(.screen.is-active .era-launch) { padding: 0; overflow: hidden; scrollbar-gutter: auto; background: #000; container-type: size; }
@@ -14,32 +13,7 @@ main:has(.screen.is-active .era-launch) { padding: 0; background: #000; }
 .era-launch-version { position: absolute; top: 0; right: 41px; max-width: calc(100% - 41px); padding: 8px 14px; background: #000; color: #8a9c92; font-size: min(.75em, 3dvh); text-align: right; overflow-wrap: anywhere; }
 .era-launch-eyebrow { display: block; margin-bottom: 6px; color: #63d3f6; font-size: .75em; letter-spacing: .12em; }
 .era-launch-actions { display: flex; flex-direction: column; width: min(calc(100% - 24px), calc(var(--era-title-width) * .75)); margin: 0 auto; padding: 0 0 12px; }
-.era-setup .line button.choice.era-launch-primary { padding: 9px 22px; border: 1px solid #4bb9b4; border-radius: 6px; background: linear-gradient(135deg, #163d42, #16303a); color: #b6f3e7; }
-.era-setup .line button.choice.era-launch-primary:enabled:hover { background: #204856; border-color: #83e3db; }
-.era-launch .era-launch-actions button.choice { --era-button-glow: #7dff42; position: relative; display: block; flex: none; width: 67%; min-height: min(44px, 10dvh); aspect-ratio: 1672 / 286; margin: 0; padding: 0; border: 0; border-radius: 0; background: none; font-size: 0; text-shadow: none; box-shadow: none; }
-.era-launch .era-launch-actions button.choice.era-launch-load { --era-button-glow: #aa53ff; align-self: flex-end; aspect-ratio: 1545 / 273; }
-.era-launch .era-launch-actions button.choice.era-launch-continue { --era-button-glow: #34e9ff; align-self: center; aspect-ratio: 2172 / 421; }
-.era-launch-actions button.choice::before { content: ""; position: absolute; left: 0; top: 50%; width: 100%; aspect-ratio: inherit; transform: translateY(-50%) scale(1); pointer-events: none; background: url("/title/new-game.webp") center / 100% 100% no-repeat; filter: brightness(1) saturate(1) drop-shadow(0 0 0 transparent) drop-shadow(0 0 0 transparent); transition: filter 90ms ease-out, transform 60ms ease-out, opacity 90ms ease-out; }
-.era-launch-actions button.choice.era-launch-load::before { background-image: url("/title/load-game.webp"); }
-.era-launch-actions button.choice.era-launch-continue::before { background-image: url("/title/continue.webp"); }
-.era-launch-actions button.choice.era-launch-continue:disabled:not(.is-pending, .is-selected)::before { opacity: .35; filter: grayscale(.8); }
-.era-launch .era-launch-actions button.choice:enabled:is(:hover, :focus-visible) { background: transparent; }
-.era-launch-actions button.choice:is(:enabled:hover, :enabled:focus-visible, .is-pending, .is-selected)::before { transition: filter 180ms cubic-bezier(.34, 1.56, .64, 1), transform 60ms ease-out, opacity 90ms ease-out; filter: brightness(1.35) saturate(1.25) drop-shadow(0 0 2px var(--era-button-glow)) drop-shadow(0 0 7px #34e9ff80); }
-.screen.is-active .era-launch-actions button.choice.is-pending { animation: none; }
-.era-launch-actions button.choice:enabled:active::before { transform: translateY(-50%) scale(.985); }
-.era-launch-actions:has(button.choice:is(.is-pending, .is-selected)) button.choice:not(.is-pending, .is-selected)::before,
-.era-launch-actions:not(:has(button.choice:is(.is-pending, .is-selected))):has(button.choice:enabled:focus-visible) button.choice:not(:focus-visible)::before { opacity: .7; transform: translateY(-50%) scale(.95); }
-@media (hover: hover) {
-  .era-launch-actions:not(:has(button.choice:is(.is-pending, .is-selected))):has(button.choice:enabled:hover) button.choice:not(:hover)::before { opacity: .7; transform: translateY(-50%) scale(.95); }
-  .era-launch-actions:not(:has(button.choice:is(.is-pending, .is-selected))):has(button.choice:enabled:hover) button.choice:hover:not(:active)::before { opacity: 1; transform: translateY(-50%) scale(1); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .era-launch-actions button.choice::before,
-  .era-launch-actions button.choice:is(:enabled:hover, :enabled:focus-visible, .is-pending, .is-selected)::before { transition: none; }
-  .era-launch-actions button.choice:enabled:active::before { transform: translateY(-50%) scale(1); }
-}
-.era-launch .era-launch-actions button.choice:focus-visible,
-.is-handheld .era-launch .era-launch-actions button.choice:focus-visible { outline: none; }
-.era-launch .era-launch-actions button.choice:enabled:active { filter: brightness(.9); }
+
+
 .era-launch-footer { position: absolute; bottom: 0; left: 0; right: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; padding: 10px 24px; color: #718b9b; font-size: min(.75em, 3dvh); }
 .era-launch-debug { position: absolute; bottom: 36px; left: 0; right: 0; padding: 0 12px; text-align: center; font-size: min(.75em, 3dvh); }

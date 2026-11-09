@@ -208,9 +208,9 @@ RETURN nResult
 HTML_PRINT "<era-open class='era-relationship-demo'>"
 FOR nIndex, 0, 14
   nState = ORDER:nIndex
-  HTML_PRINT @"<button value='{nState}' class='era-chip-button era-relationship-demo-state' aria-pressed='%(DEMO_RELATIONSHIP_STATE == nState ? "true" # "false")%'>%(nState >= 114 ? MIXED_LABELS:(nState - 114) # nState < 109 ? LABELS:(nState == 101 ? 0 # nState - 102) # FAVOR_LABELS:(nState - 109))%</button>"
+  HTML_PRINT @"<button value='{nState}' class='era-chip-button' aria-pressed='%(DEMO_RELATIONSHIP_STATE == nState ? "true" # "false")%'>%(nState >= 114 ? MIXED_LABELS:(nState - 114) # nState < 109 ? LABELS:(nState == 101 ? 0 # nState - 102) # FAVOR_LABELS:(nState - 109))%</button>"
 NEXT
-HTML_PRINT @"<button value='116' class='era-chip-button era-relationship-demo-state' aria-pressed='%(DEMO_RELATIONSHIP_STATE == 116 ? "true" # "false")%'>Lovers (proposal fails)</button>"
+HTML_PRINT @"<button value='116' class='era-chip-button' aria-pressed='%(DEMO_RELATIONSHIP_STATE == 116 ? "true" # "false")%'>Lovers (proposal fails)</button>"
 HTML_PRINT "<era-close>"
 
 @SCENARIOS

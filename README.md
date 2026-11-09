@@ -25,7 +25,8 @@ https://gitgud.io/Legis1998/anon-tw/-/archive/anon-tw_eng-modding/anon-tw-anon-t
 (On macOS, use `unar` to extract the ZIP file to preserve Japanese filenames)
 
 See the [developer guide](docs/developer-guide.md) for compatibility details and
-additional documentation.
+additional documentation. For UI and artwork consistency, see the
+[visual design guidelines](docs/visual-design-guidelines.md).
 
 With the game input focused, press Up/Down to browse typed inputs and clicked commands.
 Going past the newest entry restores your unfinished input. History lasts until
@@ -169,16 +170,12 @@ Desktop windows fit the display's available area, including the Deck's
 1280 x 800 screen. During gameplay at viewport heights of 800 px or less, the
 header is hidden and a floating burger button keeps the menu accessible.
 Errors appear in a bar at the top, beside the menu button.
-Handheld gameplay removes bottom panel padding and keeps the command row compact.
-Button-only GUI dialogs hide the command row entirely; inline setup fields remain
-editable, and separate text or numeric-amount prompts still show the command row.
-Main gameplay and the home/shop screen hide the command row, as do
-click-to-continue pauses. Text-only pauses and processing retain the invisible row's spacing,
-while GUI screens collapse it. Click or press Enter to continue during pauses.
-Small-screen and handheld layouts hide the inline interaction history, use smaller
+The command row stays available for typed commands and separate text or
+numeric-amount prompts. Click or press Enter to continue during pauses.
+Small-screen layouts hide the inline interaction history, use smaller
 watch-button text, and keep action headings inline to save space.
 Number-hidden action tiles retain a 36 px minimum height with centered labels.
-At handheld widths of at least 1000 px, the home/shop screen is bounded to the
+At compact widths of at least 1000 px, the home/shop screen is bounded to the
 viewport and long panels scroll independently. Setup and character-sheet tabs
 keep focus when their contents redraw.
 The room panel uses content height in compact layouts; occupant names are white
@@ -187,19 +184,14 @@ The library retains its header. The menu stays within the viewport and scrolls
 when needed; **Game library** remains available there.
 
 **Settings…** opens the display, character, LLM, clipboard, and translation
-controls in a scrollable dialog. **Handheld layout** there increases text to at least
-20 px and enlarges controls. It defaults on when Steam reports `SteamDeck=1`
-or the device reports touch support or a coarse pointer. Other devices,
-including non-touch Macs, can enable it manually. The toggle is saved
-and overrides the automatic default without changing your normal font setting.
-Only handheld layout hides the bottom command input on button-only menus,
-inline setup screens, the title screen, and while waiting or processing.
-With handheld layout off, the command input stays visible.
+controls in a scrollable dialog. Font selection and colors remain configurable;
+use the browser's zoom controls to change text and interface size. Layouts adapt
+automatically to the viewport, without a separate device mode or font-size setting.
 
-In handheld layout, at viewport sizes of 1280 x 800 px or less, or when a touch pointer is available,
+At viewport sizes of 1280 x 800 px or less, or when a touch pointer is available,
 named game buttons hide their bracketed command numbers. Number-only buttons
 remain visible; command values and typed-input history are unchanged.
-In handheld mode or with touch input, Up/Down in the command field move focus
+With touch input, Up/Down in the command field move focus
 instead of recalling typed-input history.
 When a command-number button has a separate tile label, its hidden-number control
 covers the whole tile without leaving a blank gap or a separate focus outline.
@@ -208,10 +200,11 @@ command-number button.
 The Load game dialog initially focuses the first selectable save on the page,
 or Close if the page has no saves.
 Load, save, and delete use 10 manual slots per page (20 pages), with autosave
-available separately. Previous/Next retain focus after paging; L1/R1 page backward
+available separately. The picker opens on the page containing the last selected
+manual slot (for example, slot 113 is on Page 12). Previous/Next retain focus after paging; L1/R1 page backward
 and forward with controller hints. Compact GUI screens remove outer gutters.
 When a separate text or amount prompt appears, focus moves into its input field.
-Handheld relationship actions use uniform-height buttons with one clear focus ring.
+Compact relationship actions use uniform-height buttons with one clear focus ring.
 
 Keyboard navigation works on every platform, so it can be tested on a Mac:
 
@@ -267,17 +260,17 @@ hints are explicitly set to On.
 Auto (the default) detects a gamepad or Steam Deck, On shows hints without a controller
 for testing, and Off hides them even with a controller connected. The choice is
 saved and only affects hints, not controller input. F10 remains available for
-testing the centered menu. Handheld Settings uses a compact two-column layout
+testing the centered menu. Compact Settings uses a two-column layout
 to fit the Steam Deck's 1280×800 screen without scrolling; smaller screens can
 still scroll to keep every setting accessible.
-Handheld layouts also compact the library cards, artwork and translation
-dialogs, character-sheet gauges, and movement maps. Long inventories, character
+Responsive layouts also adapt artwork dialogs and character-sheet gauges.
+Long inventories, character
 lists, and history still scroll inside their panels; headers and close controls
-remain accessible. Text maps use smaller map glyphs while their destination
+remain accessible. Text maps fit their available space while their destination
 list retains normal-sized controls.
 
 LLM configuration is unavailable when the viewport is both at most 1280 pixels
-wide and at most 800 pixels high, regardless of handheld layout. Its Settings
+wide and at most 800 pixels high. Its Settings
 and chat configuration buttons are hidden, and resizing an open configuration
 dialog down to that size closes it without saving. Larger screens retain the
 full configuration form.

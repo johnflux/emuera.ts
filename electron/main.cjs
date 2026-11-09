@@ -82,7 +82,6 @@ async function createWindow() {
       sandbox: true,
       additionalArguments: [
         ...(steamLaunch ? ["--era-steam"] : []),
-        ...(process.env.SteamDeck === "1" ? ["--era-handheld"] : []),
       ],
     },
   });

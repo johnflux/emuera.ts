@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>In-game components - Emuera.ts</title>
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/components.js"></script>
+</head>
+<body class="ui-workbench-page">
+  <main class="ui-workbench">
+    <div class="ui-workbench-header">
+      <h1>In-game components</h1>
+      <a href="/">Back to Era</a>
+    </div>
+    <nav class="ui-workbench-navigation" aria-label="Game component previews">
+      <a href="#chrome" data-sample="chrome">App buttons</a>
+      <a href="#buttons" data-sample="buttons">Button variants</a>
+      <a href="#main" data-sample="main" aria-current="page">Main screen</a>
+      <a href="#alone" data-sample="alone">Empty room</a>
+      <a href="#time-stopped" data-sample="time-stopped">Time stopped</a>
+      <a href="#sleep" data-sample="sleep">Sleep menu</a>
+      <a href="#inventory" data-sample="inventory">Inventory</a>
+      <a href="#sheet" data-sample="sheet">Character sheet</a>
+      <a href="#calendar" data-sample="calendar">Calendar</a>
+      <a href="#map" data-sample="map">Map / Places</a>
+      <a href="#relationships" data-sample="relationships">Relationships</a>
+    </nav>
+    <div class="ui-workbench-controls">
+      <label><input id="preview-disabled" type="checkbox"> Disabled</label>
+      <label><input id="preview-controller-hints" type="checkbox"> Controller hints (hide command numbers)</label>
+      <label>Viewport
+        <select id="preview-size">
+          <option value="desktop">Desktop (responsive)</option>
+          <option value="deck">Steam Deck (1280 × 800)</option>
+          <option value="narrow">Narrow (640 × 800)</option>
+        </select>
+      </label>
+      <button id="reload-preview" class="ui-button" type="button">Reset preview</button>
+    </div>
+    <p id="preview-description">The real main screen: character cards, meters, action groups, chips, favourites, toggles, filters, player panel, and sidebar, with two people present.</p>
+    <p id="preview-status" role="status">Loading game preview...</p>
+    <section id="chrome-buttons" class="ui-button-catalog" aria-label="App button variants" hidden></section>
+    <div class="ui-workbench-viewport" data-size="desktop">
+      <iframe id="game-preview" title="In-game main screen"></iframe>
+    </div>
+    <p class="ui-workbench-note">The frame runs the production game renderer and hotpatches with the game's display settings. Preview sessions use memory-only saves and globals. Screen examples are interactive; Reset preview restores the prepared scene.</p>
+  </main>
+</body>
+</html>

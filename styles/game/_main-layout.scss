@@ -15,7 +15,5 @@
 .era-main-when:has(.era-calendar-button) { display: flex; align-items: inherit; gap: 8px; }
 .era-main-when:has(.era-calendar-button) > .line { min-width: 0; }
 .era-main-when > .line:has(.era-calendar-button) { flex: 0 0 40px; line-height: 0; }
-:is(.era-main, .era-shop) .era-main-when .line button.choice.era-calendar-button { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
-.screen.is-active .era-main-when .line button.choice.era-calendar-button:enabled:is(:hover, :focus-visible) { background: transparent; }
-.era-calendar-button::before { content: ""; width: 40px; height: 40px; margin-top: -5px; background: url("./calendar.svg") center / contain no-repeat; }
+
 .era-calendar-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

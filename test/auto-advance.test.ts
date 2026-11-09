@@ -273,7 +273,19 @@ test("auto-continue settings persist and only permit ordinary waits", () => {
     });
     assert.equal(eligible?.() === state.input, Object.keys(overrides).length === 0, JSON.stringify(overrides));
   }
-  assert.match(app, /autoAdvanceToggle\.checked = localStorage\.getItem\(AUTO_ADVANCE_KEY\) !== "0"/);
+  const initialization = app.match(/autoAdvanceToggle\.checked = [^;]+;/)?.[0];
+  assert.ok(initialization);
+  for (const componentSample of [null, "main"]) {
+    for (const saved of [null, "0", "1"]) {
+      const autoAdvanceToggle = { checked: true };
+      runInNewContext(initialization, {
+        autoAdvanceToggle, componentSample, AUTO_ADVANCE_KEY: "test",
+        localStorage: { getItem: () => saved },
+      });
+      assert.equal(autoAdvanceToggle.checked, !componentSample && saved === "1",
+        "previews do not auto-advance; ordinary gameplay retains its saved preference");
+    }
+  }
   assert.match(app, /localStorage\.setItem\(AUTO_ADVANCE_KEY, autoAdvanceToggle\.checked \? "1" : "0"\)/);
   assert.match(app, /submit\("", null, true\)/);
   assert.match(app, /autoAdvance\.observeResult\(snapshot, automatic\);[\s\S]*await render\(snapshot, waiting/);

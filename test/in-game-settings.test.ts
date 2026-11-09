@@ -75,13 +75,13 @@ QUIT`, "<settings-test>");
     assert.doesNotMatch(configScreen, new RegExp(`value='${value}'`));
     assert.ok(!configSnapshot.input?.buttonValues?.includes(String(value)));
   }
-  assert.match(configScreen, /value='1' class='era-button era-button-list era-config-hidden' aria-disabled='true'/,
+  assert.match(configScreen, /value='1' class='era-button era-button-list era-config-hidden'[^>]* aria-disabled='true'/,
     "pregnancy-dependent settings reserve invisible space");
   assert.doesNotMatch(configScreen, /title='[^']+'/);
   assert.match(markup(config.input("1")), /value='1' class='era-button era-button-list era-config-hidden'/,
     "hidden settings cannot be activated");
   const enabledScreen = markup(config.input("0"));
-  assert.match(enabledScreen, /value='1' class='era-button era-button-list ' aria-disabled='false'/,
+  assert.match(enabledScreen, /value='1' class='era-button era-button-list '[^>]* aria-disabled='false'/,
     "dependent settings appear after toggling pregnancy");
   assert.equal((configScreen.match(/era-config-label/g) ?? []).length, (enabledScreen.match(/era-config-label/g) ?? []).length,
     "toggling keeps the same rows");
@@ -93,7 +93,7 @@ QUIT`, "<settings-test>");
   assert.match(moddedScreen, /era-config-label[^]*Yandere options/);
   assert.match(moddedScreen, /This can also be set for individual characters/);
   assert.match(moddedScreen, /This only applies while time is not actively stopped/);
-  assert.match(moddedScreen, /value='1' class='era-button era-button-list ' aria-disabled='true'/);
+  assert.match(moddedScreen, /value='1' class='era-button era-button-list '[^>]* aria-disabled='true'/);
   const initialModState = /value='102'[^]*?<span class='era-config-state'>(.*?)<\/span>/.exec(moddedScreen)?.[1];
   const changedModState = /value='102'[^]*?<span class='era-config-state'>(.*?)<\/span>/.exec(markup(config.input("102")))?.[1];
   assert.ok(initialModState);
@@ -126,7 +126,7 @@ QUIT`, "<settings-test>");
   }
 
   const configButtons = readFileSync(new URL("../hotpatch/MAIN_SCREEN_COMMANDS.ERB", import.meta.url), "utf8");
-  assert.match(configButtons, /HOTPATCH_BUTTON\("Config", 809, "", "sidebar-wide"\)/);
+  assert.match(configButtons, /HOTPATCH_BUTTON\("Config", 809, "", "block"\)/);
   assert.match(configButtons, /HTML_PRINT HOTPATCH_BUTTON\("Config", 809\)/);
   assert.doesNotMatch(configButtons, /PRINTBUTTON_EX\([^,\n]*Config/);
 

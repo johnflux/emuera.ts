@@ -1,10 +1,11 @@
+@use "shared/chrome-buttons";
+
 .is-home { background: #10141b; }
 .is-home > header { height: 68px; padding: 0 max(24px, calc((100vw - 1160px) / 2)); background: #10141b; border-color: #ffffff0d; font-family: system-ui, sans-serif; }
 .is-home .brand { font-size: 19px; }
 .is-home .brand-mark { width: 30px; height: 30px; font-size: 18px; border-radius: 8px; }
 .is-home #status { text-align: right; color: #8994a7; }
 .is-home #mode, .is-home #activity, .is-home > main { display: none; }
-.library-toggle { border-radius: 5px; font-size: 12px; }
 .library { flex: 1; overflow-y: auto; padding: 0 max(24px, calc((100vw - 1160px) / 2)) 32px; background: radial-gradient(ellipse at 85% 0, #28424355, transparent 45%), #10141b; color: #e9edf4; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
 .library[hidden] { display: none; }
 .library-eyebrow { margin: 0 0 20px; color: #d6bd8a; font-size: 10px; font-weight: 700; letter-spacing: .24em; }
@@ -23,17 +24,11 @@
 .library-starter .library-eyebrow { margin: 0 0 7px; font-size: 9px; }
 .library-starter h3 { margin: 0 0 8px; font-size: 20px; font-weight: 550; letter-spacing: -.03em; }
 .library-starter p:not(.library-eyebrow) { margin: 0; max-width: 650px; color: #aabfb6; font-size: 12px; line-height: 1.7; }
-.library-starter > button { flex-shrink: 0; padding: 12px 24px; }
 .catalog-note { margin: 0 0 20px; }
 .game-zip-link { display: inline-block; margin-top: 14px; }
 .game-requirements { color: #d1bc96; }
 .library-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid #ffffff13; }
 .library-tabs { display: flex; gap: 28px; }
-.library-tabs button { --button-gap: 0; position: relative; padding: 17px 0; border: 0; background: transparent; color: #8e9bad; font-size: 14px; }
-.library-tabs button[aria-selected="true"] { color: #e8f1eb; }
-.library-tabs button[aria-selected="true"]::after { content: ""; position: absolute; bottom: -1px; left: 0; right: 0; height: 2px; background: #a9cdbd; }
-.library-tabs span { margin-left: 6px; padding: 2px 6px; background: #ffffff0a; border-radius: 5px; font-size: 11px; color: #94aaab; }
-.library-refresh { --button-padding: 7px 10px; --button-border: #ffffff1c; --button-background: transparent; --button-color: #aeb9c9; font-size: 12px; }
 .library-message { min-height: 20px; margin: 18px 0; color: #91a0b4; font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
 .library-message.error { color: #ffb7a9; }
 .library-progress { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 0 0 20px; padding: 14px 16px; border: 1px solid #98c8bc55; border-radius: 8px; background: #20312e; color: #dcebe3; font-size: 13px; }
@@ -43,7 +38,7 @@
 @keyframes library-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .library-progress-spinner { animation-duration: 2s; } }
 .game-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
-.game-card { min-width: 0; border: 1px solid #ffffff12; border-radius: 12px; overflow: hidden; background: #181e28; transition: border-color .2s, transform .2s; }
+.game-card { min-width: 0; border: 1px solid var(--ui-color-border); border-radius: var(--ui-radius-panel); overflow: hidden; background: var(--ui-color-surface); transition: border-color .2s, transform .2s; }
 .game-card:hover { border-color: #9bc8b54d; transform: translateY(-3px); }
 .game-card-art { --art-color: #7ba695; position: relative; height: 142px; overflow: hidden; background: radial-gradient(ellipse at 80% 80%, #73948655, transparent 60%), linear-gradient(135deg, #263c3b, #1a2b2c); }
 .game-card[data-theme="1"] .game-card-art { --art-color: #b2a2d5; background: radial-gradient(ellipse at 80% 80%, #8e76b355, transparent 60%), linear-gradient(135deg, #3b304e, #252339); }
@@ -62,9 +57,6 @@
 .game-card h3 { margin: 12px 0 10px; color: #f0f1f5; font-size: 20px; font-weight: 600; letter-spacing: -.03em; overflow-wrap: anywhere; }
 .game-card-blurb { min-height: 66px; margin: 0 0 20px; color: #a1acbd; font-size: 13px; line-height: 1.7; }
 .game-card-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
-.game-primary { --button-border: #a3c7b9; --button-background: #b5d5c5; --button-padding: 9px 15px; --button-radius: 6px; --button-color: #162b25; --button-hover-background: #d1e6da; --button-hover-border: #d1e6da; font-size: 12px; font-weight: 650; text-decoration: none; }
-.game-primary:hover:enabled, a.game-primary:hover { background: var(--button-hover-background); border-color: var(--button-hover-border); color: var(--button-color); }
-.game-primary:disabled { background: #384a43; border-color: #51675d; color: #a8b9b0; }
 .game-source { color: #aab7c7; font-size: 11px; text-decoration: none; }
 .game-source:hover { color: #e3eee7; text-decoration: underline; }
 .game-install-note { margin: 13px 0 0; color: #8998ab; font-size: 10px; line-height: 1.6; overflow-wrap: anywhere; }
@@ -76,7 +68,7 @@
 .library-note { margin: 0; color: #8693a5; font-size: 11px; line-height: 1.6; }
 .library-empty { grid-column: 1 / -1; padding: 48px 24px; border: 1px dashed #ffffff26; border-radius: 12px; text-align: center; color: #aab7c7; }
 .library-empty h3 { color: #e0e8e3; font-weight: 500; }
-.library :focus-visible, .library-toggle:focus-visible { outline: 2px solid #b5d5c5; outline-offset: 4px; }
+.library :focus-visible:not(.ui-button) { outline: 2px solid #b5d5c5; outline-offset: 4px; }
 @media (max-width: 950px) { .game-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .library-art { width: 260px; } }
 @media (max-width: 620px) {
   .is-home > header { height: 60px; padding: 0 20px; }
@@ -85,8 +77,6 @@
   .library-art, .wide-only { display: none; }
   .library-lead { font-size: 14px; }
   .library-tabs { gap: 18px; }
-  .library-tabs button { font-size: 12px; }
-  .library-refresh { font-size: 10px; }
   .library-starter { align-items: flex-start; flex-direction: column; gap: 16px; padding: 20px; }
   .game-grid { grid-template-columns: 1fr; }
   .game-card-blurb { min-height: 0; }

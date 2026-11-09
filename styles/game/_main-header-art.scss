@@ -10,8 +10,7 @@
 .era-watch-control > .line { position: static; z-index: auto; min-width: 0; }
 .era-watch-control > .line:has(.era-timestop-button) { position: absolute; left: 49%; top: 40.5%; width: 37.5%; height: 31%; z-index: 2; }
 .era-watch-control .era-timestop { height: 100%; gap: 4px; }
-.era-watch-control .era-timestop > .era-timestop-button { flex: 0 0 100%; }
-.era-watch-control .era-timestop-button { position: relative; z-index: 2; }
+
 .era-watch-control .era-clock { pointer-events: none; }
 .era-watch-control .era-clock > svg { z-index: 0; }
 .era-main-header .era-clock { --clock-face: #f4e6cc; --clock-rim: #b68a50; --clock-ink: #38271e; --clock-tick: #9b784f; --clock-accent: #76502e; position: absolute; inset: 0; width: 100%; height: 100%; }

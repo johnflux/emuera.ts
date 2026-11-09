@@ -4,7 +4,6 @@
 :is(.era-main, .era-shop) .era-main-header:has(.era-area-art) { height: calc(var(--area-art-height, 150px) + 2px); min-height: 0; max-height: calc(var(--area-art-height, 150px) + 2px); container-type: size; overflow: clip; overflow-clip-margin: 32px; }
 :is(.era-main, .era-shop) .era-main-header:has(.era-area-art) > .era-watch-control { position: absolute; top: -32px; right: -37px; margin: 0; width: 300px; container-type: inline-size; }
 #terminal:has(.screen.is-active :is(.era-main, .era-shop) .era-main-header .era-area-art) { overflow-x: hidden; }
-:is(.era-main, .era-shop) .era-main-header:has(.era-area-art) .era-watch-control .era-timestop-button { padding: 2px clamp(2px, 2cqw, 12px); transform: translateX(-5px); }
 :is(.era-main, .era-shop) .era-main-header:has(.era-area-art) > .era-main-when { max-width: calc(100% - 239px); max-height: 100%; overflow: auto; padding: 4px 12px; }
 .era-sky.era-area-art .era-sky-landmark { left: 0; right: 0; bottom: 0; width: auto; height: 100%; image-rendering: pixelated; -webkit-mask: none; mask: none;
   background: var(--area-left, none) left bottom / auto no-repeat, var(--area-right, none) right bottom / auto no-repeat, var(--area-middle) left bottom / auto repeat-x;

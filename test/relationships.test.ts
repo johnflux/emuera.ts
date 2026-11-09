@@ -237,7 +237,7 @@ test("demo previews every relationship state and supports proposals without chan
     assert.match(text(check(runtime.start())), /Relationship dialog states/);
     let snapshot = check(runtime.input("9"));
     assert.equal(snapshot.input?.kind, "integer");
-    assert.deepEqual([...text(snapshot).matchAll(/class='era-chip-button era-relationship-demo-state'[^>]*>([^<]+)<\/button>/g)].map((match) => match[1]),
+    assert.deepEqual([...text(snapshot).matchAll(/class='era-chip-button'[^>]*aria-pressed='(?:true|false)'[^>]*>([^<]+)<\/button>/g)].map((match) => match[1]),
       ["None", "Acquaintance", "Friendship", "Close Friend", "Best Friend", "Almost Family", "In love", "FWB", "Lovers", "Engaged", "Married", "Divorced", "In love + FWB", "In love + Divorced", "Lovers (proposal fails)"]);
     assert.doesNotMatch(text(snapshot), /Preview only|Use the states below|action buttons do not change/);
     assert.doesNotMatch(text(snapshot), /class='era-relationship-icon /);

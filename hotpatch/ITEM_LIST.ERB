@@ -81,7 +81,7 @@ LOOP 1
 #DIMS DYNAMIC sItem
 sItem '= @"<span class='era-inventory-name'>%HTML_ESCAPE(ITEMNAME_TR(nIndex))%</span><span class='era-inventory-quantity' title='Quantity'>{ITEM:nIndex}</span>"
 IF nUsable
-	RETURNF @"<button value='{nIndex}' class='era-inventory-item era-inventory-use' title='%HOTPATCH_ATTRIBUTE(HTML_ESCAPE(ITEM_EXPLANATION(nIndex)))%'><span class='command-number'>[{nIndex}]</span>%sItem%</button>"
+	RETURNF @"<button value='{nIndex}' class='era-inventory-item era-inventory-use' data-command-number='{nIndex}' title='%HOTPATCH_ATTRIBUTE(HTML_ESCAPE(ITEM_EXPLANATION(nIndex)))%'>%sItem%</button>"
 ENDIF
 RETURNF @"<div class='era-inventory-item' title='%HOTPATCH_ATTRIBUTE(HTML_ESCAPE(ITEM_EXPLANATION(nIndex)))%'>%sItem%</div>"
 

@@ -3,9 +3,7 @@
 .era-occupant-list { display: flex; align-items: stretch; justify-content: safe center; gap: 8px; overflow-x: auto; padding: 2px 2px 8px; }
 .era-occupant { display: flex; flex: 0 0 180px; flex-direction: column; align-items: center; justify-content: flex-end; gap: 6px; min-width: 0; padding: 6px; text-align: center; }
 .era-occupant > .line { width: 100%; white-space: normal; }
-.line button.choice.era-occupant-label { display: block; width: 100%; padding: 5px 8px; border: 1px solid #294c5b; border-radius: 5px; background: #05111aee; text-align: center; white-space: normal; }
-.line button.choice.era-occupant-label[aria-pressed="true"] { border-color: #65d8ed; color: #8ceaff; }
-.screen.is-active .line button.choice.era-occupant-label:enabled:is(:hover, :focus-visible) { background: #1e262d; }
+
 .era-occupant.era-request .era-occupant-state { color: #7f7; }
 .era-occupant.era-asleep .era-face { filter: brightness(.6) saturate(.5); }
 .era-occupant.era-occupant-caged { background: transparent; cursor: default; }
@@ -15,7 +13,6 @@
 .era-face-letter { color: #aaa; font-weight: bold; font-size: 1.3em; }
 .era-occupant-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
 .era-occupant-name { color: #eee; font-weight: bold; }
-.era-occupant:has(.era-occupant-label[aria-pressed="true"]) .era-occupant-name { color: #8fc8ff; }
 /* Names in the game's mood colours (SHOW_EQUIP_2: C_BLUE, C_H_PINK, C_ORANGE, C_AQUA, C_RED). */
 .era-occupant.era-mood-asleep .era-occupant-name { color: #306eff; }
 .era-occupant.era-mood-heat .era-occupant-name { color: #ff69b4; }
@@ -38,6 +35,7 @@
 @container (max-width: 1100px) {
   .era-character:has(.era-main-chat) { grid-template-rows: auto auto 1fr; }
 }
+
 .era-room-stage { --era-occupant-height: 216px; position: relative; isolation: isolate; display: flex; flex-direction: column; align-self: stretch; min-width: 0; width: 100%; padding: 3px 4px 0; overflow: hidden; border-radius: 3px; background: radial-gradient(ellipse at 50% 95%, #28415166, transparent 70%), linear-gradient(#0b1c27, #101c25); }
 .era-room-stage > .line:has(.era-place) { flex: none; }
 .era-room-stage .era-place { margin-bottom: 8px; }
@@ -50,10 +48,8 @@
 .era-room-stage .era-occupant-list:has(.era-alone-message) { align-items: stretch; }
 .era-room-stage .era-occupant { position: relative; padding: 0 2px; gap: 0; }
 .era-room-stage .era-occupant > .line:has(.era-occupant-label), .era-room-stage .era-occupant > .era-occupant-text { position: absolute; bottom: 4px; left: 2px; right: 2px; z-index: 1; width: auto; }
-.era-room-stage .line button.choice.era-occupant-label { padding: 1px 4px; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
-.screen.is-active .era-room-stage .line button.choice.era-occupant-label:enabled:is(:hover, :focus-visible) { background: transparent; text-decoration: underline; }
+
 .era-room-stage .era-occupant-state { color: #c1ccd3; }
-.era-room-stage .era-occupant-text, .era-room-stage .era-occupant-label { text-shadow: -1px -1px 0 #000, 0 -1px 0 #000, 1px -1px 0 #000, -1px 0 0 #000, 1px 0 0 #000, -1px 1px 0 #000, 0 1px 0 #000, 1px 1px 0 #000, 0 2px 3px #000; }
 .era-room-stage .era-occupant .era-occupant-text .era-occupant-name { color: #fff; }
 .era-room-stage .era-occupant:has(.era-portrait) { flex-basis: auto; min-width: 180px; width: max-content; }
 .era-room-stage .era-occupant-caged { flex-basis: 110px; gap: 6px; padding-bottom: 5px; font-size: .85em; }
@@ -89,36 +85,25 @@
 .era-portrait .sprite[data-src="時間停止"] { display: none; }
 .era-portrait .sprite { opacity: calc(1 - .35 * var(--era-freeze)); }
 .era-character-info { min-width: 0; width: 100%; max-width: 400px; align-self: stretch; display: flex; flex-direction: column; }
-.era-info-tab { padding: 7px 12px; border: 1px solid #28485b; border-bottom: 0; border-radius: 5px 5px 0 0; background: #0c1b27; color: #91adbd; font: inherit; font-size: .9em; cursor: pointer; }
-.era-info-tab[aria-pressed="true"] { border-color: #3c9bb7; background: linear-gradient(#16394b, #0b202e); color: #b7dbea; }
 .era-history-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px; }
-:is(.era-history-toolbar, .era-llm-message-tools, .era-llm-composer, .era-llm-voice-actions) button {
-  --button-color: #b7dbea; --button-background: #16394b; --button-border: #3c9bb7; --button-radius: 4px;
-}
 /* Stays in the top right corner while the history scrolls under it. */
-.era-history-more-overlay { position: sticky; top: 0; height: 0; z-index: 1; }
-.era-history-more { position: absolute; top: 0; right: 0; margin: 0; padding: 2px 8px; border: 0; border-radius: 0 0 0 5px; background: #05111b; color: #b7dbea; font: inherit; line-height: var(--era-history-line); cursor: pointer; }
-.era-history-more:is(:hover, :focus-visible) { text-decoration: underline; }
+.era-history-more-overlay { position: sticky; top: 0; height: 0; z-index: 1; display: flex; justify-content: flex-end; align-items: flex-start; }
 .era-history-dialog { width: min(calc(var(--logical-width, 1200px) + 64px), calc(100vw - 48px)); height: calc(100dvh - 48px); max-width: none; max-height: none; box-sizing: border-box; padding: 12px; border: 1px solid #3c9bb7; border-radius: 6px; background: #0b1c28; color: #d7eff8; }
 .era-history-dialog::backdrop { background: #000000b0; }
 .era-history-dialog h2 { font: inherit; font-size: var(--era-history-size); line-height: var(--era-history-line); margin: 0; color: #b7dbea; }
 .era-history-dialog[open] { display: flex; flex-direction: column; overflow: hidden; }
 .era-history-dialog .era-history-toolbar h2 { flex: 1; }
 .era-history-tabs { display: flex; gap: 4px; }
-.era-history-tabs .era-info-tab { border-bottom: 1px solid #28485b; border-radius: 5px; }
 .era-history-pane { flex: 1 1 auto; min-height: 0; overflow: auto; }
 .era-history-pane[hidden], .era-llm-composer[hidden] { display: none; }
 .era-llm-message-tools { display: inline-flex; gap: 4px; margin-left: 8px; vertical-align: baseline; visibility: hidden; }
 .era-history-text:hover .era-llm-message-tools, .era-llm-message-tools:focus-within { visibility: visible; }
 @media (hover: none) { .era-llm-message-tools { visibility: visible; } }
-.era-llm-message-tools button { --button-padding: 0 6px; font-size: .75em; opacity: .55; }
-.era-llm-message-tools button:hover, .era-llm-message-tools button:focus-visible { opacity: 1; }
+
 .era-llm-status { margin: 0 0 6px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .era-llm-status[hidden] { display: none; }
 .era-llm-composer { flex-shrink: 0; padding: 8px 0 0; border-top: 1px solid #28485b; }
 .era-llm-composer-row { display: flex; gap: 8px; align-items: stretch; }
 .era-llm-composer textarea { flex: 1; resize: vertical; min-height: 2.6em; max-height: 30vh; padding: 5px 8px; border: 1px solid #3c9bb7; border-radius: 4px; background: #06131c; color: #d7eff8; font: inherit; }
-:is(.era-llm-composer, .era-llm-voice-actions) button:disabled { opacity: .5; }
 .era-llm-composer-actions { display: flex; gap: 8px; align-items: center; margin-top: 6px; font-size: .85em; }
-.era-llm-composer-actions button { --button-padding: 2px 8px; }
 .era-llm-state { flex: 1; color: #9ab3c3; }

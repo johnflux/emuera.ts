@@ -76,7 +76,7 @@ test("gamepad A enters input editing and D-pad adjusts ranges only in edit mode"
   assert.deepEqual(h.calls, [0, 0, 0, 0]);
 });
 
-function harness(canExit = true, savedHints = "auto", legacyForce = "0", deck = false) {
+function harness(canExit = true, savedHints = "auto", legacyForce = "0") {
   type Key = {
     key: string; repeat?: boolean; ctrlKey?: boolean; defaultPrevented: boolean; stopped: boolean;
     preventDefault(): void; stopImmediatePropagation(): void;
@@ -118,11 +118,13 @@ function harness(canExit = true, savedHints = "auto", legacyForce = "0", deck = 
     const classes = new Set<string>();
     return {
       disabled: false, title: "", isConnected: true,
+      dataset: { controllerHint: "" },
       type: "", value: "14", min: "10", max: "20", step: "2",
       classList: {
         contains: (name: string) => classes.has(name),
         add: (name: string) => { classes.add(name); },
         remove: (...names: string[]) => { names.forEach(name => classes.delete(name)); },
+        toggle: (name: string, enabled: boolean) => { if (enabled) classes.add(name); else classes.delete(name); },
       },
       focus() { focused = this; },
       closest: () => dialog.open ? dialog : null,
@@ -156,7 +158,6 @@ function harness(canExit = true, savedHints = "auto", legacyForce = "0", deck = 
   let closeClick = () => {};
   let pads: ({ index: number; connected: boolean; mapping: string; buttons: { pressed: boolean }[] } | null)[] = [];
   const setup = runInNewContext(`${source}\nsetupControllerMenu`, {
-    eraDesktop: { handheld: deck },
     localStorage: {
       getItem: (key: string) => storage.get(key) ?? null,
       setItem: (key: string, value: string) => storage.set(key, value),
@@ -169,6 +170,11 @@ function harness(canExit = true, savedHints = "auto", legacyForce = "0", deck = 
       } } },
       get hidden() { return hidden; },
       get activeElement() { return focused; },
+      querySelectorAll(selector: string) {
+        if (selector === ".choice, .game-controller-link") return actions;
+        assert.equal(selector, ".ui-button");
+        return actions;
+      },
       querySelector(selector: string) {
         if (selector === "#controller-hints-toggle") return hintsToggle;
         if (selector === "#controller-hints-label") return hintsLabel;
@@ -256,6 +262,55 @@ function harness(canExit = true, savedHints = "auto", legacyForce = "0", deck = 
   };
 }
 
+test("game controller hints follow detection and focus on each control without ancestor stamping", () => {
+  const h = harness();
+  assert.equal(h.actions[0]!.classList.contains("has-controller-hint"), false);
+  h.focus(0);
+  h.poll([]);
+  assert.equal(h.actions[0]!.classList.contains("has-controller-hint"), true);
+  assert.equal(h.actions[0]!.classList.contains("controller-focus"), true);
+  assert.equal(h.actions[1]!.classList.contains("controller-focus"), false);
+  h.cycleHints();
+  h.cycleHints();
+  for (const action of h.actions) {
+    assert.equal(action.classList.contains("has-controller-hint"), false);
+    assert.equal(action.classList.contains("controller-focus"), false);
+  }
+  const app = readFileSync(new URL("../web/app.js", import.meta.url), "utf8");
+  assert.match(app, /button\.classList\.add\("choice"\);\s*syncGameControllerHints\(button\);/);
+});
+
+test("controller hints do not decorate legacy text choices even when forced on", () => {
+  const classes = new Set(["has-controller-hint", "controller-focus"]);
+  let gui = false;
+  const control = {
+    dataset: {},
+    matches: () => gui,
+    classList: {
+      contains: (name: string) => classes.has(name),
+      toggle(name: string, enabled: boolean) { if (enabled) classes.add(name); else classes.delete(name); },
+    },
+  };
+  const api = runInNewContext(`${source}\n({ setPreviewControllerHints, syncGameControllerHints })`, {
+    document: {
+      activeElement: control,
+      querySelectorAll: () => [],
+      body: { classList: { toggle() {} } },
+    },
+  });
+  api.setPreviewControllerHints(true);
+  api.syncGameControllerHints(control);
+  assert.equal(classes.has("has-controller-hint"), false);
+  assert.equal(classes.has("controller-focus"), false);
+  gui = true;
+  api.syncGameControllerHints(control);
+  assert.equal(classes.has("has-controller-hint"), true);
+  assert.equal(classes.has("controller-focus"), true);
+  api.setPreviewControllerHints(false);
+  api.syncGameControllerHints(control);
+  assert.equal(classes.has("has-controller-hint"), false);
+});
+
 test("map bumpers select adjacent tabs without wrapping or acting through overlays", () => {
   let overlay = false, hidden = false;
   const clicks: number[] = [], focused: number[] = [];
@@ -291,7 +346,7 @@ test("map bumpers select adjacent tabs without wrapping or acting through overla
   activate(1);
   assert.deepEqual(clicks, [2, 1, 0]);
   assert.deepEqual(focused, clicks);
-  const css = styleSource("handheld");
+  const css = styleSource("responsive");
   assert.match(css, /\.has-controller \.era-move-tabs::before \{ content: "L1"; \}/);
   assert.match(css, /\.has-controller \.era-move-tabs::after \{ content: "R1"; \}/);
 });
@@ -324,8 +379,9 @@ test("B activates map Back once per press and stays with dialogs when a modal is
   h.poll([1]);
   assert.equal(h.mapBackClicks, 1);
   assert.deepEqual(h.events, ["Escape"]);
-  const css = styleSource("style");
-  assert.match(css, /\.has-controller \.screen\.is-active button\.era-move-back:enabled:not\(\.is-stale\)::after \{ content: "B";/);
+  const controller = readFileSync(new URL("../web/controller-menu.js", import.meta.url), "utf8");
+  assert.match(controller, /dialog\[open\], \.era-dialog:popover-open, #menu-panel:not\(\[hidden\]\)/);
+  assert.match(controller, /\.screen\.is-active button\.era-move-back:enabled:not\(\.is-stale\)/);
 });
 
 test("L1 and R1 page dialogs once per press and do nothing without a dialog or map", () => {
@@ -413,14 +469,15 @@ test("controller hints cycle Auto/On/Off, persist, and follow detection only in 
   assert.equal(harness(true, "", "0").hintsLabel, "Controller hints: Auto (Off)");
 });
 
-test("Auto controller hints stay on for Steam Deck without a gamepad but explicit Off wins", () => {
-  const h = harness(true, "auto", "0", true);
-  assert.equal(h.hasController, true);
-  assert.equal(h.hintsLabel, "Controller hints: Auto (On)");
+test("Auto controller hints follow gamepad detection while explicit modes override it", () => {
+  const h = harness(true, "auto", "0");
+  assert.equal(h.hasController, false);
+  assert.equal(h.hintsLabel, "Controller hints: Auto (Off)");
   h.poll([]);
-  h.disconnect();
   assert.equal(h.hasController, true);
-  const off = harness(true, "off", "0", true);
+  h.disconnect();
+  assert.equal(h.hasController, false);
+  const off = harness(true, "off", "0");
   assert.equal(off.hasController, false);
   off.poll([]);
   assert.equal(off.hasController, false);
@@ -557,8 +614,9 @@ test("app Close and Cancel buttons carry Back hints without changing their form 
   const cancels = [...html.matchAll(/<button\b[^>]*value="cancel"[^>]*>/g)];
   assert.equal(cancels.length, 3);
   for (const [tag] of cancels) assert.match(tag, /data-controller-hint="B"/);
-  const css = styleSource("style");
-  assert.match(css, /\.has-controller :is\(dialog\[open\], \.screen\.is-active \.era-dialog:popover-open\).*:focus:not\(\[data-controller-hint\]\):not\(\.era-dialog-close\)::after/);
+  const css = readFileSync(new URL("../styles/shared/_chrome-buttons.scss", import.meta.url), "utf8");
+  assert.match(css, /\.ui-button\.has-controller:enabled:not\(\[aria-disabled="true"\]\)\[data-controller-hint="B"\]::after/);
+  assert.match(css, /\.ui-button\.has-controller:enabled:not\(\[aria-disabled="true"\]\):focus:not\(\[data-controller-hint\]\)::after/);
 });
 
 test("controller polling stops when hidden or disconnected and resumes on connection", () => {

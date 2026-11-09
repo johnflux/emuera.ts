@@ -17,7 +17,7 @@ DO
 		HTML_PRINT "<p align='center'><img src='TW_title" + TOSTR(LOCAL, "000") + "'></p>"
 	NEXT
 	HTML_PRINT "<era-close>"
-	HTML_PRINT "<div class='era-launch-actions'><button value='2' class='era-launch-continue' aria-disabled='true'>Continue</button><button value='0' class='era-launch-primary'>New game</button><button value='1' class='era-launch-load'>Load game</button></div>"
+	HTML_PRINT "<div class='era-launch-actions'><button value='2' class='era-title-continue' aria-disabled='true'>Continue</button><button value='0' class='era-title-new'>New game</button><button value='1' class='era-title-load'>Load game</button></div>"
 	[IF_DEBUG]
 	HTML_PRINT "<div class='era-launch-debug'><button value='99'>Dev Quicktest</button><button value='3'>Quicktest settings</button></div>"
 	[ENDIF]
@@ -213,7 +213,7 @@ DO
 		CALL HOTPATCH_SETUP_CHARACTER_BODIES(nLastBodyAction)
 	ENDSELECT
 	HTML_PRINT "<era-close>"
-	HTML_PRINT @"<div class='era-inventory-footer'><span class='era-tone-red'>%sError%</span><button value='100' class='era-launch-primary'>Start game</button></div>"
+	HTML_PRINT @"<div class='era-inventory-footer'><span class='era-tone-red'>%sError%</span><button value='100' class='era-button era-button-primary'>Start game</button></div>"
 	HTML_PRINT "<era-close>"
 	INPUT
 	nAction = RESULT
@@ -372,6 +372,8 @@ SIF MAIN_MAP != 3
 nMode = ARG
 LOADGLOBAL
 nPage = LIMIT(GLOBAL:999, 0, 9) * 2
+SIF GLOBAL:998 >= 0 && GLOBAL:998 < 200
+	nPage = GLOBAL:998 / 10
 nStart = LINECOUNT
 DO
 	CLEARLINE LINECOUNT - nStart

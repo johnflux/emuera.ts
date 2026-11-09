@@ -48,7 +48,7 @@ DO
 		HTML_PRINT "<div class='era-setup-description'>Your existing debt will transfer to the new landlord.</div>"
 	CALL HOTPATCH_SETUP_FARMING(nLandlord, nDifficulty, nLoan, 1, FLAG:地主貸付金 <= 0)
 	HTML_PRINT "<era-close>"
-	HTML_PRINT "<div class='era-inventory-footer'><button value='999' class='era-launch-load'>Cancel</button><button value='100' class='era-launch-primary'>Apply</button></div>"
+	HTML_PRINT "<div class='era-inventory-footer'><button value='999' class='era-launch-load'>Cancel</button><button value='100' class='era-button era-button-primary'>Apply</button></div>"
 	HTML_PRINT "<era-close>"
 	INPUT
 	nAction = RESULT

@@ -90,7 +90,6 @@ test("desktop window applies fullscreen only when launched through Steam", async
           assert.equal(options.minHeight, Math.min(560, height));
           assert.equal(options.webPreferences.additionalArguments.join(), [
             ...(steamLaunch ? ["--era-steam"] : []),
-            ...(deck ? ["--era-handheld"] : []),
           ].join());
           throw stopped;
         }
@@ -111,21 +110,17 @@ test("desktop window applies fullscreen only when launched through Steam", async
   }
 });
 
-test("preload exposes the handheld default only with the desktop launch argument", () => {
+test("preload exposes Steam launch context without display mode preferences", () => {
   const source = readFileSync(path.join(appDir, "electron", "preload.cjs"), "utf8");
-  for (const { handheld, steam } of [
-    { handheld: false, steam: false },
-    { handheld: false, steam: true },
-    { handheld: true, steam: true },
-  ]) {
+  for (const steam of [false, true]) {
     runInNewContext(source, {
-      process: { argv: ["electron", ...(handheld ? ["--era-handheld"] : []), ...(steam ? ["--era-steam"] : [])] },
+      process: { argv: ["electron", ...(steam ? ["--era-steam"] : [])] },
       require: () => ({
         ipcRenderer: {},
         contextBridge: {
-          exposeInMainWorld(name: string, bridge: { handheld: boolean; steam: boolean }) {
+          exposeInMainWorld(name: string, bridge: { steam: boolean }) {
             assert.equal(name, "eraDesktop");
-            assert.equal(bridge.handheld, handheld);
+            assert.equal("handheld" in bridge, false);
             assert.equal(bridge.steam, steam);
           },
         },

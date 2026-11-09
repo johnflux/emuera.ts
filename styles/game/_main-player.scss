@@ -3,7 +3,7 @@
 .era-player-actions { display: flex; padding-top: 10px; }
 .era-player > .era-player-management { flex: 1; display: flex; flex-direction: column; }
 .era-player-management > .line:has(.era-auto-toggles) { margin-top: auto; padding-top: 6px; }
-.era-main .era-player .line button.choice.era-player-control { display: inline-flex; align-items: center; gap: 14px; width: 100%; }
+
 .era-player-control .interactive-label { text-decoration: none; }
 .era-control-arrow { margin-left: auto; color: #71b8cd; font-size: 1.3em; line-height: .8; }
 .era-player-effects { display: flex; flex-wrap: wrap; gap: 4px 8px; margin-top: 10px; font-size: .8em; line-height: 1.4; }
@@ -19,9 +19,6 @@
 .era-cum .era-meter > span { background: #89c9d6; }
 .era-milk .era-meter > span { background: #d3b9df; }
 .era-gauge-caption { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 8px; margin-top: 4px; color: #8099a9; font-size: .9em; }
-.era-main .line button.choice.era-release-mode { padding: 1px 7px; border: 1px solid #43647766; border-radius: 999px; background: #18324066; color: #a4c6d6; font-size: .9em; }
-.era-main .line button.choice.era-release-mode .interactive-label { text-decoration: none; }
-.era-main .line button.choice.era-release-quick { color: #96ceae; }
-.era-main .line button.choice.era-release-endure { color: #dfbd88; }
+
 .era-gauge-imminent { margin-top: 4px; color: #ff9ac8; font-size: .9em; }
 .era-gauge-imminent.era-critical { color: #ff6666; }

@@ -1,5 +1,6 @@
 @use "shared/base";
 @use "shared/terminal";
+@use "app/components";
 @use "app/diagnostics-settings";
 @use "game/shared";
 @use "game/main-layout";
@@ -27,4 +28,5 @@
 @use "game/time-freeze";
 @use "game/shop";
 @use "game/movement";
+@use "game/button-variants";
 @use "app/llm-settings";

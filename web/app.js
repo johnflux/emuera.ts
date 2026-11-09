@@ -8,12 +8,23 @@ import { createOutputTools, gameOutputText } from "./output-tools.js";
 import { encountersEnabled, gossipEnabled, memoriesEnabled, runEncounters, runGossip, runMemories, writeMemory } from "./encounters.js";
 import { cached, LruCache } from "./cache.js";
 import { profiling, profileStart, profileEnd } from "./performance.js";
-import { decorateCommandNumbers, setupHandheld, setupKeyboardNavigation, touchInput } from "./handheld.js";
+import { decorateCommandNumbers, setupKeyboardNavigation, touchInput } from "./navigation.js";
 import { setupArtworkDemo } from "./art-demo.js";
-import { activateControllerAction, setupControllerMenu } from "./controller-menu.js";
+import { activateControllerAction, setupControllerMenu, syncGameControllerHints, setPreviewControllerHints } from "./controller-menu.js";
 import { createCheckbox, choiceControl } from "./controls.js";
 import { createAutoAdvance, screenTransitionIndex } from "./auto-advance.js";
 
+const componentSample = new URLSearchParams(location.search).get("component");
+if (componentSample) document.body.classList.add("is-component-preview");
+let previewDisabled = false;
+if (componentSample) document.addEventListener("era-preview-state", (event) => {
+  const state = event.detail;
+  if (typeof state?.disabled !== "boolean" || typeof state?.controllerHints !== "boolean")
+    throw new Error("Invalid component preview state");
+  previewDisabled = state.disabled;
+  setPreviewControllerHints(state.controllerHints);
+  updateControls();
+});
 const terminal = document.querySelector("#terminal");
 const timeEffect = document.querySelector("#time-effect");
 const timeState = document.querySelector("#time-state");
@@ -52,6 +63,7 @@ function showTimeState(stopped, fresh = false) {
   timeEffectTimer = setTimeout(clearTimeEffect, 1800);
 }
 const status = document.querySelector("#status");
+if (componentSample) terminal.before(status);
 const command = document.querySelector("#command");
 const send = document.querySelector("#submit");
 const report = document.querySelector("#compatibility");
@@ -124,6 +136,7 @@ function showRunInUrl() {
   window.history.replaceState(window.history.state, "", url.href.replace(/([?&]demo)=(?=&|#|$)/, "$1"));
 }
 function rememberRun() {
+  if (componentSample) return;
   if (session && input) sessionStorage.setItem(RUN_KEY, JSON.stringify({ session, mode: runMode, game: runGame }));
   else sessionStorage.removeItem(RUN_KEY);
 }
@@ -131,7 +144,7 @@ let input = null;
 let busy = false;
 const AUTO_ADVANCE_KEY = "era-typescript.auto-advance";
 const autoAdvanceToggle = document.querySelector("#auto-advance-toggle");
-autoAdvanceToggle.checked = localStorage.getItem(AUTO_ADVANCE_KEY) !== "0";
+autoAdvanceToggle.checked = !componentSample && localStorage.getItem(AUTO_ADVANCE_KEY) === "1";
 const autoAdvance = createAutoAdvance(
   () => autoAdvanceToggle.checked && session && !busy && !document.hidden
     && !document.body.classList.contains("is-home")
@@ -175,7 +188,11 @@ const BASE_DEFAULTS = { foreground: "#c0c0c0", background: "#000000", selection:
 let gameDefaults = { ...BASE_DEFAULTS };
 let settings = { ...gameDefaults };
 function savedSettings() {
-  try { return JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "{}") ?? {}; } catch { return {}; }
+  try {
+    const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "{}") ?? {};
+    return Object.fromEntries(["foreground", "background", "selection", "font"]
+      .filter((name) => typeof saved[name] === "string").map((name) => [name, saved[name]]));
+  } catch { return {}; }
 }
 function displaySettings() {
   const { foreground, background, selection, font } = settings;
@@ -188,9 +205,6 @@ function applySettings(force = false) {
   root.setProperty("--selection-color", settings.selection);
   const font = settings.font && !/["\\;{}<>]/.test(settings.font) ? `"${settings.font}", ` : "";
   root.setProperty("--terminal-font", `${font}"BIZ UD Gothic", "MS Gothic", "ＭＳ ゴシック", monospace`);
-  const fontSize = handheld.enabled() ? Math.max(20, settings.fontSize ?? 16) : settings.fontSize ?? 16;
-  root.setProperty("--font-size", `${fontSize}px`);
-  document.querySelector("#font-size").value = String(fontSize);
   const form = document.querySelector("#settings-form");
   for (const name of ["foreground", "background", "selection", "font"])
     if (force || form.elements[name] !== document.activeElement) form.elements[name].value = settings[name];
@@ -205,10 +219,6 @@ function updateSetting(name, value) {
   settings = { ...gameDefaults, ...saved };
   applySettings();
 }
-const handheld = setupHandheld(() => {
-  applySettings();
-  updateControls();
-});
 const keyboardNavigation = setupKeyboardNavigation({
   terminal, command,
   canNavigate: () => (!busy || expiring) && input?.kind !== "mousekey",
@@ -224,6 +234,8 @@ const settingsLoaded = (async () => {
   try {
     const runtime = await api("/api/runtime");
     games = runtime.games ?? [];
+    const componentsLink = document.querySelector("#components-link");
+    if (componentsLink) componentsLink.hidden = !runtime.development;
     showGames();
     if (games.length) useGameDisplay(games[0].id);
     await document.fonts.ready;
@@ -253,6 +265,7 @@ function showGames() {
   let last = button;
   for (const game of others) {
     const extra = document.createElement("button");
+    extra.className = "ui-button ui-button--menu-item";
     extra.dataset.game = game.id;
     extra.setAttribute("aria-pressed", "false");
     extra.textContent = game.title;
@@ -377,7 +390,8 @@ function endActivity() {
   activityChip.title = `Last step took ${seconds(total)}: script ${seconds(script)}, render ${seconds(total - script)}`;
 }
 function updateControls() {
-  for (const button of terminal.querySelectorAll(".screen.is-active .era-launch-continue")) {
+  for (const button of terminal.querySelectorAll(".screen.is-active .era-title-continue")) {
+    if (componentSample === "buttons") continue;
     button.setAttribute("aria-disabled", String(!continueAvailable));
     button.title = continueAvailable ? "Continue the newest save" : "No game saves";
   }
@@ -409,13 +423,6 @@ function updateControls() {
   startButtons.forEach((button) => { button.setAttribute("aria-disabled", String(busy)); });
   restartButton.setAttribute("aria-disabled", String(busy));
   debugButton.disabled = busy;
-  // Setup's inline fields use unrestricted INPUT; a prompt printed after the dialog still needs the command bar.
-  const inlineSetup = input?.kind === "integer"
-    && lastOutputLine()?.closest(".screen.is-active .era-setup:not(.era-setup-editor)");
-  const mainMenu = input?.kind === "integer"
-    && terminal.querySelector(".screen.is-active .era-main, .screen.is-active .era-shop");
-  document.querySelector("#input-form").hidden = handheld.enabled() && (!input || input.kind === "mousekey" || input.kind === "wait"
-    || input.buttonValues !== undefined || !!inlineSetup || !!mainMenu);
   command.placeholder = input?.kind === "wait" ? "" : input?.defaultValue !== undefined
     ? `Enter for ${JSON.stringify(input.defaultValue)}` : chatting ? "Command number, or say something…" : input ? lastCommand : "";
   [...terminal.querySelectorAll(".choice"), ...islandRoot.querySelectorAll(".choice")].forEach((button) => {
@@ -425,6 +432,7 @@ function updateControls() {
     choiceControl(button).disabled = !button.closest(".screen.is-active, .island-root") || button.classList.contains("is-stale") || (busy && !expiring) || !input || (input.kind === "wait" && !waitContinue) || !!input.blocking
       || (skyContinue && !waitContinue)
       || button.getAttribute("aria-disabled") === "true"
+      || previewDisabled
       || !!input.buttonValues && !input.buttonValues.includes(value);
   });
 }
@@ -1091,6 +1099,7 @@ function choice(label, value, title = "", checked = null) {
   const button = checked === null ? document.createElement("button") : createCheckbox(checked, activate);
   if (checked === null) button.type = "button";
   button.classList.add("choice");
+  syncGameControllerHints(button);
   button.dataset.value = value;
   (button.querySelector(".checkbox-label") ?? button).textContent = label;
   if (title) describe(button, title);
@@ -1103,7 +1112,7 @@ function decorateLabel(element) {
   const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
   const nodes = [];
   while (walker.nextNode()) {
-    if (!walker.currentNode.parentElement.closest(".interactive-label")) nodes.push(walker.currentNode);
+    if (!walker.currentNode.parentElement.closest(".interactive-label, [aria-hidden='true']")) nodes.push(walker.currentNode);
   }
   let inBrackets = false;
   for (const node of nodes) {
@@ -1681,7 +1690,7 @@ function layoutMapPictures() {
     show(localStorage.getItem(MAP_TEXT_KEY) === "1");
   }
 }
-const allowedTags = new Set(["P", "BR", "B", "STRONG", "I", "EM", "U", "S", "SPAN", "NOBR", "FONT", "NONBUTTON", "DIV", "H1", "H2", "H3", "H4", "H5", "H6"]);
+const allowedTags = new Set(["P", "BR", "B", "STRONG", "I", "EM", "U", "S", "CODE", "SPAN", "NOBR", "FONT", "NONBUTTON", "DIV", "H1", "H2", "H3", "H4", "H5", "H6"]);
 /** A locked HTML position resets the cursor from the line's left edge, including when it moves backwards. */
 function layoutHtmlPositions() {
   for (const element of terminal.querySelectorAll(".html-positioned")) {
@@ -1920,6 +1929,8 @@ async function renderHtml(markup, parent, sprites) {
       const url = new URL(href);
       if (url.username || url.password) throw new Error("Links containing credentials are not allowed");
       element = document.createElement("a");
+      element.classList.add("game-controller-link");
+      syncGameControllerHints(element);
       element.href = url.href;
       element.target = "_blank";
       element.rel = "noopener noreferrer";
@@ -1943,11 +1954,17 @@ async function renderHtml(markup, parent, sprites) {
       element.dataset.htmlPosition = String(sizeAttribute(position, 0, scale ?? imageScale()));
     }
     applyClasses(element, node);
+    if (element.matches(".choice")) syncGameControllerHints(element);
     if (node.tagName === "DIV" && element.classList.contains("era-sky") && node.hasAttribute("data-minutes")) sky(node, element);
-    if (element.matches(".era-occupant-label, .era-setup-choice, .era-relationship-demo-state"))
+    if (element.matches(".era-occupant-label, .era-setup-choice, .era-chip-button"))
       element.setAttribute("aria-pressed", String(node.getAttribute("aria-pressed") === "true"));
-    if (element.matches(".era-setup-choice, .era-setup-step, .era-setup-trait"))
-      element.setAttribute("aria-disabled", String(node.getAttribute("aria-disabled") === "true"));
+    if (node.tagName === "BUTTON" || element.matches(".era-setup-choice, .era-setup-step, .era-setup-trait"))
+      element.setAttribute("aria-disabled", String(node.hasAttribute("disabled") || node.getAttribute("aria-disabled") === "true"));
+    if (node.tagName === "BUTTON") {
+      for (const attribute of ["data-command-number", "data-suffix"]) {
+        if (node.hasAttribute(attribute)) element.setAttribute(attribute, node.getAttribute(attribute));
+      }
+    }
     // Hotpatch extension: data-room links a non-button element to the map's room buttons with that value.
     const room = node.getAttribute("data-room");
     if (room !== null && /^-?\d+$/.test(room)) element.dataset.room = room;
@@ -2112,7 +2129,7 @@ async function renderSteps(steps, fresh = false, keepFocus = false, toBottom = f
     profileEnd("render.layout", phaseStarted);
     phaseStarted = profileStart();
     const printed = gameOutputText(steps.flatMap(({ snapshot }) => snapshot.output ?? []));
-    if (printed || fresh) outputTools.publish(printed);
+    if (!componentSample && (printed || fresh)) outputTools.publish(printed);
     translation.translateTree(terminal);
     profileEnd("render.translation", phaseStarted);
     phaseStarted = profileStart();
@@ -2394,6 +2411,7 @@ async function renderSnapshot(snapshot, advanceScreen) {
         if (output.cell) fragment.classList.add("print-cell");
         if (output.plain) fragment.textContent = parts[i];
         else appendText(fragment, parts[i]);
+        if (output.cell && fragment.querySelector("button.choice")) fragment.classList.add("era-command-tile");
         textLine.append(fragment);
       }
       if (output.newline) currentLine = null;
@@ -2475,6 +2493,7 @@ async function renderSnapshot(snapshot, advanceScreen) {
     currentLine.classList.add("missing");
     currentLine = null;
     const copy = document.createElement("button");
+    copy.className = "ui-button ui-button--small";
     copy.type = "button";
     copy.textContent = "Copy debug report";
     copy.addEventListener("click", async (event) => {
@@ -2652,14 +2671,15 @@ async function start(mode, game = runGame, debug = debugPreferred()) {
   resetRun();
   try {
     await settingsLoaded;
-    runGame = mode === "game" && games.some((entry) => entry.id === game) ? game : games[0]?.id ?? null;
+    runGame = componentSample ? "tw" : mode === "game" && games.some((entry) => entry.id === game) ? game : games[0]?.id ?? null;
     showReport(false);
     message(`Starting ${runName(mode, runGame)}${debug ? " in debug mode" : ""}...`);
     useGameDisplay(runGame);
     showRunInUrl();
     await terminalReady();
     const columns = terminalColumns();
-    const snapshot = await api("/api/start", { mode, game: runGame ?? undefined, debug, previousSession: session, columns, display: displaySettings(), client: clientState() });
+    const snapshot = await api("/api/start", { mode, game: runGame ?? undefined, debug, previousSession: session, columns, display: displaySettings(), client: clientState(),
+      ...(componentSample ? { component: componentSample } : {}) });
     activityResponded();
     await render(snapshot, false, true);
   }
@@ -2734,10 +2754,7 @@ function setupConfigSubmenu(submenu) {
     setting.className = "era-config-setting";
     const label = document.createElement("span");
     label.className = "era-config-label";
-    const number = document.createElement("span");
-    number.className = "command-number";
-    number.textContent = `[${button.dataset.value}]`;
-    label.append(number, document.createTextNode(` ${name}`));
+    label.textContent = name;
     const answer = document.createElement("span");
     answer.className = "era-config-state";
     answer.classList.toggle("era-config-state-off", /^(no|off)$/i.test(state));
@@ -2749,6 +2766,8 @@ function setupConfigSubmenu(submenu) {
     else help.textContent = button.dataset.tooltip ?? button.getAttribute("title") ?? "";
     button.replaceChildren(setting, help);
     button.classList.add("era-button", "era-button-list");
+    button.dataset.commandNumber = button.dataset.value;
+    decorateCommandNumbers(button);
     button.classList.remove("has-tooltip", "era-setup-choice");
     delete button.dataset.tooltip;
     button.removeAttribute("title");
@@ -2770,7 +2789,7 @@ function setupMainSidebar(main) {
     const row = document.createElement("div");
     row.className = "era-quicksave-row";
     const button = choice("Quicksave", "quicksave");
-    button.classList.add("era-button", "era-button-sidebar-wide", "era-quicksave");
+    button.classList.add("era-button", "era-button-block", "era-quicksave");
     row.append(button);
     config.after(row);
   }
@@ -2803,7 +2822,7 @@ async function submit(value, selectedChoice = null, automatic = false) {
     await saveMidday();
     return;
   }
-  if (value === "2" && terminal.querySelector(".screen.is-active .era-launch-continue")) {
+  if (componentSample !== "buttons" && value === "2" && terminal.querySelector(".screen.is-active .era-title-continue")) {
     if (continueAvailable) await continueGame();
     return;
   }
@@ -2896,6 +2915,7 @@ async function submit(value, selectedChoice = null, automatic = false) {
  * input cancels it.
  */
 async function reactToEncounters() {
+  if (componentSample) return;
   if (pendingScreen) return;
   const pendingRun = pendingEncounters;
   pendingEncounters = null;
@@ -3207,7 +3227,7 @@ function rememberCommand(value, selectedChoice) {
   showCommandHint();
 }
 command.addEventListener("keydown", (event) => {
-  if (touchInput() || document.body.classList.contains("is-handheld")) return;
+  if (touchInput()) return;
   if (event.defaultPrevented || event.isComposing || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey
     || (event.key !== "ArrowUp" && event.key !== "ArrowDown") || !commandHistory.length) return;
   event.preventDefault();
@@ -3382,7 +3402,7 @@ async function loadMidday() {
   if (id) await resume(id);
 }
 async function continueGame() {
-  const pending = terminal.querySelector(".screen.is-active .era-launch-continue");
+  const pending = terminal.querySelector(".screen.is-active .era-title-continue");
   pending?.classList.add("is-pending");
   busy = true;
   beginActivity();
@@ -3427,9 +3447,6 @@ document.querySelector("#debug-minimize").addEventListener("click", (event) => {
   debugLog.hidden = !debugLog.hidden;
   event.currentTarget.setAttribute("aria-expanded", String(!debugLog.hidden));
   event.currentTarget.textContent = debugLog.hidden ? "Expand" : "Minimize";
-});
-document.querySelector("#font-size").addEventListener("input", (event) => {
-  updateSetting("fontSize", Number(event.target.value));
 });
 const translateToggle = document.querySelector("#translate-toggle");
 const translateState = document.querySelector("#translate-state");
@@ -3571,10 +3588,9 @@ async function resetSettings() {
   }
   localStorage.removeItem(SETTINGS_KEY);
   settings = { ...gameDefaults };
-  handheld.reset();
   controllerMenu.reset();
   localStorage.removeItem(AUTO_ADVANCE_KEY);
-  autoAdvanceToggle.checked = true;
+  autoAdvanceToggle.checked = false;
   autoAdvance.update();
   characterHistory.reset();
   outputTools.configure({ clipboard: false, local: false });
@@ -3631,6 +3647,7 @@ document.querySelector("#report").addEventListener("click", async () => {
     };
     renderDiagnostics(diagnostics, `Loader diagnostics: ${data.diagnosticCount}`, data.diagnostics);
     const syntaxButton = document.createElement("button");
+    syntaxButton.className = "ui-button";
     syntaxButton.textContent = "Check syntax";
     const syntaxResults = document.createElement("pre");
     syntaxResults.setAttribute("role", "status");
@@ -3691,6 +3708,10 @@ document.querySelector("#library-toggle").addEventListener("click", async () => 
 // Fresh visits open the library; explicit game links and reloads retain the existing run behavior.
 void (async () => {
   await settingsLoaded;
+  if (componentSample) {
+    await start("demo", "tw", false);
+    return;
+  }
   const requested = urlRun();
   let saved = savedRun();
   // An address naming a different game than this tab's run (edited or pasted) starts that game instead.
@@ -3701,3 +3722,9 @@ void (async () => {
   await start(requested?.mode ?? saved?.mode ?? "game", requested?.game ?? saved?.game);
   if (saved && session) message(`The previous run had ended or expired (or the server restarted), so a new run started. ${status.textContent}`);
 })();
+if (componentSample) window.addEventListener("pagehide", () => {
+  if (session) void fetch("/api/stop", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ session }), keepalive: true,
+  }).catch((error) => console.error("Could not close component preview session:", error));
+});

@@ -202,7 +202,7 @@ FOR nCharacter, 1, CHARANUM
 		CALL 仕事内容設定(nCharacter, 1)
 		IF !CHARA_HOLIDAY(nCharacter, 1) && CFLAG:nCharacter:信頼度 >= 10
 			nCount ++
-			PRINTBUTTON CALLNAME:nCharacter, nCharacter
+			HTML_PRINT @"<button value='{nCharacter}' class='era-calendar-person'>%HTML_ESCAPE(CALLNAME:nCharacter)%</button>"
 			PRINT 　
 		ENDIF
 		MAXBASE:nCharacter:仕事量 = nWorkAmount
@@ -218,7 +218,7 @@ FOR nCharacter, 1, CHARANUM
 			SETCOLOR C_GREEN
 		SIF CFLAG:nCharacter:妊娠経過日数
 			SETCOLOR C_PINK
-		PRINTBUTTON CALLNAME:nCharacter, nCharacter
+		HTML_PRINT @"<button value='{nCharacter}' class='era-calendar-person'>%HTML_ESCAPE(CALLNAME:nCharacter)%</button>"
 		SETCOLOR C_PINK
 		CALL HEART
 		RESETCOLOR

@@ -284,16 +284,16 @@ DO
 		sReason '= HOTPATCH_RELATIONSHIP_REASON(nAction, TARGET)
 		HTML_PRINT @"<era-open class='era-relationship-option era-relationship-action-{nAction}%(INRANGE(nAction, 5, 7) ? " era-relationship-downgrade" # "")%'>"
 		IF STRLENS(sReason)
-			HTML_PRINT @"<h3 class='era-relationship-option-title'><button disabled class='era-relationship-select'>%HOTPATCH_RELATIONSHIP_ACTION_NAME(nAction)%</button></h3><span class='era-relationship-reason'>Unavailable</span><span class='era-relationship-reason'>%HTML_ESCAPE(sReason)%</span>"
+			HTML_PRINT @"<h3 class='era-relationship-option-title'><button disabled class='era-relationship-select era-relationship-action-{nAction}'>%HOTPATCH_RELATIONSHIP_ACTION_NAME(nAction)%</button></h3><span class='era-relationship-reason'>Unavailable</span><span class='era-relationship-reason'>%HTML_ESCAPE(sReason)%</span>"
 		ELSE
-			HTML_PRINT @"<h3 class='era-relationship-option-title'><button value='{nAction}' class='era-relationship-select'>%HOTPATCH_RELATIONSHIP_ACTION_NAME(nAction)%</button></h3>"
+			HTML_PRINT @"<h3 class='era-relationship-option-title'><button value='{nAction}' class='era-relationship-select era-relationship-action-{nAction}'>%HOTPATCH_RELATIONSHIP_ACTION_NAME(nAction)%</button></h3>"
 		ENDIF
 		CALL HOTPATCH_RELATIONSHIP_REQUIREMENTS(nAction, TARGET)
 		HTML_PRINT "<era-close>"
 	NEXT
 	HTML_PRINT "<era-close>"
 	HTML_PRINT "<era-close>"
-	HTML_PRINT "<div class='era-relationship-footer'>" + HOTPATCH_BUTTON("Close", 999, "", "slim") + "</div>"
+	HTML_PRINT "<div class='era-relationship-footer'>" + HOTPATCH_BUTTON("Close", 999, "", "default") + "</div>"
 	HTML_PRINT "<era-close>"
 	BINPUT
 	sError '= ""

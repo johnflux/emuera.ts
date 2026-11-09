@@ -89,8 +89,12 @@ const LIMIT = 20;
 const TEXT_LIMIT = 16_000;
 const uuid = (value: unknown): value is string => typeof value === "string" && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(value);
 const digest = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
-const eventFile = (id: string) => `era-history-event-${id}.json`;
-const checkpointFile = (save: string) => `era-history-${save}.json`;
+const HISTORY_FILE = "era-history.json";
+interface HistoryArchive {
+  version: 1;
+  events: Record<string, unknown>;
+  checkpoints: Record<string, unknown>;
+}
 const isRecord = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
 const strings = (value: unknown): value is string[] => Array.isArray(value) && value.every((item) => typeof item === "string");
 const uuidMap = (value: unknown): value is Record<string, string> =>
@@ -124,9 +128,7 @@ function memory(value: unknown): value is Memory {
   return isRecord(value) && typeof value.text === "string" && (value.covers === null || uuid(value.covers))
     && typeof value.day === "string" && strings(value.time);
 }
-function readJson(store: SaveStore, file: string): unknown {
-  const raw = store.read(file);
-  if (raw === null) throw new EraError(`Interaction history file is missing: ${file}`);
+function readJson(raw: string | Buffer, file: string): unknown {
   try { return JSON.parse(raw.toString()); }
   catch (error) {
     if (!(error instanceof SyntaxError)) throw error;
@@ -170,7 +172,29 @@ export class TwInteractionHistory {
   private told = new Map<string, string | null>();
   /** Gossip events still open (until the next command), by their two characters' ids in order. */
   private gossips = new Map<string, Interaction>();
-  constructor(private store: SaveStore, private host: Host) {}
+  constructor(private store: SaveStore, private host: Host) {
+    for (const name of store.list()) {
+      if (/^era-history-event-[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}\.json$/i.test(name)
+        || /^era-history-save\d+\.sav\.json$/i.test(name)
+        || name.toLowerCase() === "era-history-midday.erasuspend.json")
+        store.remove(name);
+    }
+  }
+
+  private archive(): HistoryArchive {
+    const raw = this.store.read(HISTORY_FILE);
+    if (raw === null) return { version: 1, events: {}, checkpoints: {} };
+    const data = readJson(raw, HISTORY_FILE);
+    if (!isRecord(data) || data.version !== 1 || !isRecord(data.events) || !Object.keys(data.events).every(uuid)
+      || !isRecord(data.checkpoints))
+      throw new EraError(`Invalid interaction history archive: ${HISTORY_FILE}`);
+    return { version: 1, events: data.events, checkpoints: data.checkpoints };
+  }
+  private writeEvent(event: Interaction): void {
+    const archive = this.archive();
+    archive.events[event.id] = { version: 1, event };
+    this.store.write(HISTORY_FILE, JSON.stringify(archive));
+  }
 
   suspendState() {
     return {
@@ -188,7 +212,7 @@ export class TwInteractionHistory {
     Object.assign(this, fields);
     this.heard = new WeakMap(heard.map(({ line, copies }) => [line, copies]));
     for (const event of [...this.conversations.values(), ...this.gossips.values()])
-      this.store.write(eventFile(event.id), JSON.stringify({ version: 1, event }));
+      this.writeEvent(event);
   }
 
   reset(): void {
@@ -593,7 +617,7 @@ export class TwInteractionHistory {
     if (target < 0) throw new EraError("Interaction history target was removed during an interaction");
     event.after = this.state(target, event.action.id === "reaction");
     event.previous = Object.fromEntries(event.participants.map((person) => [person.id, this.heads.get(person.id) ?? null]));
-    this.store.write(eventFile(event.id), JSON.stringify({ version: 1, event }));
+    this.writeEvent(event);
     this.head = event.id;
     for (const person of event.participants) this.heads.set(person.id, event.id);
     this.turn.push(event);
@@ -658,10 +682,11 @@ export class TwInteractionHistory {
     return due.sort((a, b) => (order.get(a.id) ?? Infinity) - (order.get(b.id) ?? Infinity)).slice(0, limit);
   }
   private readEvent(id: string): Interaction | undefined {
-    try {
-      const data = readJson(this.store, eventFile(id));
-      return isRecord(data) && interaction(data.event) ? data.event : undefined;
-    } catch (error) { if (error instanceof EraError) return undefined; throw error; }
+    const data = this.archive().events[id];
+    if (data === undefined) return undefined;
+    if (!isRecord(data) || data.version !== 1 || !interaction(data.event) || data.event.id !== id)
+      throw new EraError(`Invalid interaction history event in ${HISTORY_FILE}: ${id}`);
+    return data.event;
   }
   /**
    * Called at each command prompt: characters who have just come together somewhere away from the player, where one has
@@ -845,7 +870,7 @@ export class TwInteractionHistory {
   /** Whether a conversation through the chat window is open (no command has been entered since it started). */
   get chatting(): boolean { return this.conversations.size > 0; }
   private writeChat(event: Interaction): void {
-    this.store.write(eventFile(event.id), JSON.stringify({ version: 1, event }));
+    this.writeEvent(event);
     this.head = event.id;
     for (const person of event.participants) this.heads.set(person.id, event.id);
   }
@@ -855,27 +880,28 @@ export class TwInteractionHistory {
   }
   checkpoint(save: string, bytes: Buffer): void {
     this.sync();
-    this.store.write(checkpointFile(save), JSON.stringify({
+    const archive = this.archive();
+    archive.checkpoints[save] = {
       version: 1, digest: digest(bytes), head: this.head, ids: this.ids, heads: Object.fromEntries(this.heads),
       ...(this.memories.size ? { memories: Object.fromEntries(this.memories) } : {}),
       ...(this.frozenPresence ? { frozenPresence: Object.fromEntries(this.frozenPresence) } : {}),
-    }));
+    };
+    this.store.write(HISTORY_FILE, JSON.stringify(archive));
   }
   restore(save: string, bytes: Buffer): void {
     this.reset();
-    const file = checkpointFile(save);
-    if (this.store.read(file) === null) {
+    const data = this.archive().checkpoints[save];
+    if (data === undefined) {
       this.notice = "This save predates interaction logging. Earlier interactions are unavailable.";
       return;
     }
-    const data = readJson(this.store, file);
     if (!isRecord(data) || data.version !== 1 || typeof data.digest !== "string" || (data.head !== null && !uuid(data.head))
       || !Array.isArray(data.ids) || !data.ids.every(uuid) || new Set(data.ids).size !== data.ids.length
       || !uuidMap(data.heads) || (data.memories !== undefined && !(isRecord(data.memories)
         && Object.entries(data.memories).every(([id, item]) => uuid(id) && memory(item))))
       || (data.frozenPresence !== undefined && !(isRecord(data.frozenPresence)
         && Object.entries(data.frozenPresence).every(([id, here]) => uuid(id) && typeof here === "boolean"))))
-      throw new EraError(`Invalid interaction history checkpoint: ${file}`);
+      throw new EraError(`Invalid interaction history checkpoint in ${HISTORY_FILE}: ${save}`);
     if (data.digest !== digest(bytes) || data.ids.length !== this.host.count()) {
       this.notice = "This save was replaced outside the app. Its previous interaction history was not attached.";
       return;
@@ -887,7 +913,12 @@ export class TwInteractionHistory {
     if (data.frozenPresence !== undefined)
       this.frozenPresence = new Map(Object.entries(data.frozenPresence as Record<string, boolean>));
   }
-  remove(save: string): void { this.store.remove(checkpointFile(save)); }
+  remove(save: string): void {
+    const archive = this.archive();
+    if (!Object.hasOwn(archive.checkpoints, save)) return;
+    delete archive.checkpoints[save];
+    this.store.write(HISTORY_FILE, JSON.stringify(archive));
+  }
   selected(): CharacterHistory | undefined {
     const selected = this.person(Number(this.host.read("TARGET")));
     if (!selected || this.host.read("TARGET") === this.host.read("MASTER")) return undefined;
@@ -895,13 +926,14 @@ export class TwInteractionHistory {
   }
   forCharacter(selected: HistoryCharacter, head: string | null, limit = Infinity): CharacterHistory {
     const entries: Interaction[] = [], seen = new Set<string>();
+    const archive = head ? this.archive() : undefined;
     let id = head;
     while (id && entries.length < limit) {
       if (seen.has(id)) throw new EraError("Interaction history contains a cycle");
       seen.add(id);
-      const data = readJson(this.store, eventFile(id));
+      const data = archive?.events[id];
       if (!isRecord(data) || data.version !== 1 || !interaction(data.event) || data.event.id !== id)
-        throw new EraError(`Invalid interaction history event: ${eventFile(id)}`);
+        throw new EraError(`Invalid or missing interaction history event in ${HISTORY_FILE}: ${id}`);
       if (!data.event.participants.some((item) => item.id === selected.id))
         throw new EraError(`Interaction history index does not match character: ${id}`);
       entries.push(data.event);

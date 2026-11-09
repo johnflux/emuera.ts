@@ -6,11 +6,12 @@ import { runInNewContext } from "node:vm";
 import { parseFragment, type DefaultTreeAdapterMap } from "parse5";
 import { createCanvas, loadImage } from "@napi-rs/canvas";
 
-test("HTML renderer supports semantic headings while keeping executable tags disallowed", async () => {
+test("HTML renderer supports semantic headings and code while keeping executable tags disallowed", async () => {
   const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
   const declaration = source.match(/^const allowedTags = .+;$/m)![0];
   const allowed = runInNewContext(`${declaration}\nallowedTags`) as Set<string>;
   for (let level = 1; level <= 6; level++) assert.ok(allowed.has(`H${level}`));
+  assert.ok(allowed.has("CODE"));
   for (const tag of ["SCRIPT", "STYLE", "IFRAME", "OBJECT", "EMBED"]) assert.ok(!allowed.has(tag));
   assert.match(source, /node\.getAttribute\("role"\) === "checkbox"/);
   assert.match(source, /checkbox \? checked === "mixed" \? "mixed" : checked === "true" : null/);
@@ -19,7 +20,6 @@ test("HTML renderer supports semantic headings while keeping executable tags dis
 
 test("Move viewport fills the game area without capping destination groups", async () => {
   const css = styleSource("style");
-  const handheld = styleSource("handheld");
   assert.match(css, /#terminal:has\(\.screen\.is-active \.era-move\) \{ container-type: size; \}/);
   assert.match(css, /\.era-layout \{ margin-top: 1em; \}/);
   assert.match(css, /\.screen\.is-active \.era-move \{ height: calc\(100cqh - 8px\); \}/);
@@ -27,7 +27,6 @@ test("Move viewport fills the game area without capping destination groups", asy
   assert.match(css, /\.era-move-side > \* \{ flex-shrink: 0; \}/);
   assert.match(css, /\.era-move-dests, \.era-move-more-list \{ min-height: 0; \}/);
   assert.doesNotMatch(css, /\.era-move-(?:dests|more-list|side|map) \{[^}]*max-height:/);
-  assert.match(handheld, /\.is-handheld \.era-move-body \{[^}]*grid-template-rows: minmax\(0, 1fr\);/);
 });
 
 test("resize following reveals output vertically without shifting the horizontal gutter", async () => {
@@ -288,7 +287,7 @@ test("date panel hides blank text lines and renders an accessible calendar icon"
   assert.match(css, /\.era-main-when \{ flex: 0 1 auto; width: max-content; min-width: 0;/);
   assert.match(css, /\.era-main-header:has\(\.era-area-art\) > \.era-main-when \{ max-width: calc\(100% - 239px\); max-height: 100%; overflow: auto; padding: 4px 12px;/);
   assert.match(css, /\.era-calendar-label \{[^}]*clip-path: inset\(50%\);/);
-  assert.match(css, /:is\(\.era-main, \.era-shop\) \.era-main-when \.line button\.choice\.era-calendar-button/);
+  assert.doesNotMatch(css, /\.era-main-when \.line button\.choice\.era-calendar-button/);
   for (const [file, value] of [["MAIN_SCREEN.ERB", "993"], ["SLEEP_MENU.ERB", "3333"]]) {
     const patch = await readFile(new URL(`../hotpatch/${file}`, import.meta.url), "utf8");
     const button = `<button value='${value}' class='era-chip-button era-calendar-button' title='Calendar'><span class='era-calendar-label'>Calendar</span></button>`;
@@ -349,13 +348,12 @@ test("friendship uses a gold heart without recoloring the romance icons", async 
 
 test("compact relationship actions preserve pink, lavender and danger palettes", async () => {
   const css = styleSource("style");
-  const compact = css.slice(css.indexOf("@media (max-width: 1100px)"), css.indexOf(".era-sheet-header {"));
-  assert.match(compact, /\.era-relationship-option \{ --relationship-button-background: #493040; --relationship-button-border: #b97d9b; \}/);
-  assert.match(compact, /\.era-relationship-action-3, \.era-relationship-action-4 \{ --relationship-button-background: #3e304f; --relationship-button-border: #a68abc; \}/);
-  assert.match(compact, /\.era-relationship-downgrade \{ --relationship-button-background: #492832; --relationship-button-border: #b16c7b; \}/);
-  assert.match(compact, /background: var\(--relationship-button-background\);/);
-  assert.match(compact, /:enabled:is\(:hover, :focus-visible\) \{ border-color: var\(--relationship-button-border\); \}/);
-  assert.match(compact, /:is\(:disabled, span\) \{ background: #23232b; border-color: #514850; \}/);
+  assert.match(css, /\.era-relationship-select \{[^}]*--relationship-button-background: #493040; --relationship-button-border: #b97d9b;/);
+  assert.match(css, /button\.choice:is\(\.era-relationship-action-3, \.era-relationship-action-4\) \{[^}]*--relationship-button-background: #3e304f; --relationship-button-border: #a68abc;/);
+  assert.match(css, /button\.choice:is\(\.era-relationship-action-5, \.era-relationship-action-6, \.era-relationship-action-7\) \{[^}]*--relationship-button-background: #492832; --relationship-button-border: #b16c7b;/);
+  assert.match(css, /background: var\(--relationship-button-background\);/);
+  assert.match(css, /:enabled:is\(:hover, :focus-visible\) \{ border-color: var\(--relationship-button-border\); \}/);
+  assert.match(css, /:is\(:disabled, \[aria-disabled=['"]true['"]\]\) \{ background: #23232b; border-color: #514850; \}/);
 });
 
 test("wedding skips proposal checks and reuses the celebratory outcome with a married emblem", async () => {
@@ -598,12 +596,12 @@ test("vector clock draws exact game minutes, wraps days and rejects invalid inpu
   assert.match(css, /\.era-main-header > \.era-main-when \{ order: 0; flex: 0 1 auto;/);
   assert.match(css, /\.era-main-header > \.era-watch-control \{[^}]*width: 420px; max-width: 100%; aspect-ratio: 825 \/ 509;/);
   assert.match(css, /\.era-watch-control > \.line \{ position: static; z-index: auto;/);
-  assert.match(css, /\.era-watch-control \.era-timestop-button \{ position: relative; z-index: 2; \}/);
+  assert.match(css, /\.era-timestop-button \{ position: relative; z-index: 2; \}/);
   assert.match(css, /\.era-watch-control \.era-clock > svg \{ z-index: 0; \}/);
   assert.match(css, /\.era-watch-control > \.line:has\(\.era-timestop-button\) \{[^}]*left: 49%; top: 40\.5%; width: 37\.5%; height: 31%;/);
   assert.match(css, /\.era-clock > svg \{[^}]*left: 13\.9383%; top: 31\.4034%; width: 31\.1414%; height: 50\.4748%;/);
   assert.match(css, /\.era-clock > svg \{[^}]*transform: matrix\(\.992769, -\.00638, -\.00638, 1\.007231, 0, 0\) rotate\(8deg\); transform-origin: center;/);
-  assert.match(css, /\.era-watch-control \.line button.choice.era-timestop-button, \.era-watch-control \.era-timestop-button \{[^}]*border: 0;[^}]*background: transparent; box-shadow: none;/);
+  assert.match(css, /button.choice.era-timestop-button, \.era-timestop-button \{[^}]*border: 0;[^}]*background: transparent; box-shadow: none;/);
   assert.match(css, /\.era-clock-tick \{[^}]*stroke-width: \.75;/);
   assert.match(css, /\.era-clock-hour-mark \{[^}]*stroke-width: 1\.15;/);
   assert.match(css, /\.era-clock::before \{[^}]*pointer-events: none;[^}]*background: url\("\.\/clock-frame\.png"\)/);
@@ -638,7 +636,7 @@ test("hover artwork is an additive layer that fades above the normal frame", asy
   assert.match(css, /\.era-watch-control > \.line:has\(\.era-timestop-button\) \{[^}]*left: 49%; top: 40\.5%; width: 37\.5%; height: 31%;/);
   assert.match(css, /\.era-watch-control::after \{[^}]*left: 45%; top: 40\.5%; width: 41\.5%; height: 31%; z-index: 0; pointer-events: none; background:/);
   assert.match(css, /\.era-watch-control:has\(\.era-timestop-button:enabled:is\(:hover, :focus-visible\)\)::after \{ filter: brightness\(1\.35\); \}/);
-  assert.match(css, /\.era-watch-control \.line button\.choice\.era-timestop-button,[^}]*font-size: min\(1\.15em, var\(--clock-label-size, 6cqi\)\);/);
+  assert.match(css, /button\.choice\.era-timestop-button,[^}]*font-size: 1\.15rem;/);
   assert.match(css, /\.era-clock::after, \.clock-overhang::after \{[^}]*background: url\("\.\/clock-frame-hover\.png"\)[^}]*opacity: 0; transition: opacity 220ms ease-in-out;/);
   assert.match(css, /\.era-watch-control:has\(\.era-timestop-button:enabled:is\(:hover, :focus-visible\)\) \.era-clock::after \{ opacity: 1; \}/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\) \{ \.era-clock::after \{ transition: none; \} \}/);
@@ -721,9 +719,9 @@ test("area artwork fixes the header height and prevents horizontal scrolling fro
   const css = styleSource("style");
   assert.match(css, /\.era-main-header:has\(\.era-area-art\) \{ height: calc\(var\(--area-art-height, 150px\) \+ 2px\); min-height: 0; max-height:[^}]*container-type: size; overflow: clip; overflow-clip-margin: 32px;/);
   assert.match(css, /\.era-main-header:has\(\.era-area-art\) > \.era-watch-control \{ position: absolute; top: -32px; right: -37px; margin: 0; width: 300px; container-type: inline-size;/);
-  assert.match(css, /\.era-main-header:has\(\.era-area-art\) \.era-watch-control \.era-timestop-button \{ padding: 2px clamp\(2px, 2cqw, 12px\); transform: translateX\(-5px\); \}/);
+  assert.doesNotMatch(css, /\.era-main-header:has\(\.era-area-art\) \.era-watch-control \.era-timestop-button \{/);
   assert.match(css, /#terminal:has\(\.screen\.is-active :is\(\.era-main, \.era-shop\) \.era-main-header \.era-area-art\) \{ overflow-x: hidden; \}/);
-  assert.match(css, /\.era-watch-control button\.era-timestop-button::before \{ content: ""; position: absolute; inset: -14px -16px; \}/);
+  assert.match(css, /button\.era-timestop-button::before \{ content: ""; position: absolute; inset: -14px -16px; \}/);
   assert.match(css, /\.era-main-header:has\(\.era-area-art\) > \.era-main-when \{[^}]*max-height: 100%; overflow: auto;/);
 });
 
@@ -1096,8 +1094,10 @@ test("configuration controls live in a modal Settings dialog and have unique IDs
   const html = await readFile(new URL("../web/index.html", import.meta.url), "utf8");
   const settings = html.match(/<dialog id="settings"[\s\S]*?<\/dialog>/)![0];
   for (const id of ["llm-toggle", "translate-toggle", "clipboard-toggle", "local-translate-toggle",
-    "local-translate-configure", "handheld-toggle", "character-history-toggle", "font-size", "settings-form"])
+    "local-translate-configure", "character-history-toggle", "settings-form"])
     assert.ok(settings.includes(`id="${id}"`), `${id} belongs to Settings`);
+  assert.doesNotMatch(settings, /id="(?:handheld-toggle|font-size)"/);
+  assert.match(settings, /input name="font"/);
   const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]);
   assert.equal(ids.length, new Set(ids).size);
   const app = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
@@ -1106,7 +1106,7 @@ test("configuration controls live in a modal Settings dialog and have unique IDs
 });
 
 test("compact gameplay header preserves its menu and scrolling menu rows cannot shrink", async () => {
-  const compact = styleSource("handheld");
+  const compact = styleSource("responsive");
   assert.match(compact, /@media \(max-height: 800px\)/);
   assert.match(compact, /body:not\(\.is-home\) > header \{ height: 0;/);
   assert.match(compact, /body:not\(\.is-home\) > header > :not\(\.menu\) \{ display: none;/);
@@ -1232,7 +1232,9 @@ test("LLM configuration keeps provider controls in a responsive scrollable dialo
   assert.match(css, /@media \(max-width: 600px\) \{[^]*?\.llm-config-fields \{ grid-template-columns: minmax\(0, 1fr\);/);
   assert.match(css, /\.llm-config-row \{[^}]*flex-wrap: wrap;[^}]*min-width: 0;/);
   assert.match(css, /\.llm-config-fields input[^}]*min-width: 0;/);
-  assert.match(css, /\.llm-config :is\(input, select, textarea, button\):focus-visible \{ outline: 2px solid #69c9b5;/);
+  assert.match(css, /\.llm-config :is\(input, select, textarea\):focus-visible \{ outline: 2px solid #69c9b5;/);
+  const buttonStyles = await readFile(new URL("../styles/shared/_chrome-buttons.scss", import.meta.url), "utf8");
+  assert.match(buttonStyles, /\.ui-button--llm:enabled:not\(\[aria-disabled="true"\]\):focus-visible \{ outline: 2px solid #69c9b5;/);
 });
 
 test("action headers reserve filter-row height without preventing wrapping", async () => {
@@ -1254,12 +1256,12 @@ test("last command is a placeholder, never input data, and defaults and waits ta
     lastOutputLine: () => null,
     terminal: { ...element, querySelectorAll: () => [], querySelector: () => chatHost },
     islandRoot: { querySelectorAll: () => [] },
-    handheld: { enabled: () => false },
     command: field, send: { ...element, disabled: false, textContent: "" },
     document: { querySelector: () => ({ hidden: false }) },
     startButtons: [], restartButton: element, debugButton: { disabled: false },
     autoAdvance: { update() {}, isPaused: () => false },
     busy: false, expiring: false,
+    componentSample: null, previewDisabled: false,
     middaySaveButtons: [], middayLoadButtons: [], midday: null, continueAvailable: false,
     input: { kind: "integer", defaultValue: undefined as string | undefined },
     lastCommand: "Last Command: Time Stop",
@@ -1335,21 +1337,20 @@ test("active title fills the terminal below the visible interpreter header", asy
   assert.doesNotMatch(css, /body:has\(\.screen\.is-active \.era-launch\) > header/);
   assert.match(css, /#terminal:has\(\.screen\.is-active \.era-launch\) \{[^}]*container-type: size;/);
   assert.match(css, /\.screen\.is-active \.era-launch \{[^}]*100cqw[^}]*100cqh[^}]*height: 100%;/);
-  assert.match(css, /body\.is-handheld:has\(\.screen\.is-active \.era-launch\) #input-form \{ display: none; \}/);
+  assert.doesNotMatch(css, /body\.is-handheld/);
 });
 
 test("title choices highlight the focused or hovered button without an outline", async () => {
   const css = styleSource("style");
-  assert.match(css, /\.era-launch-actions:has\(button\.choice:is\(\.is-pending, \.is-selected\)\) button\.choice:not\(\.is-pending, \.is-selected\)::before/);
-  assert.match(css, /:has\(button\.choice:enabled:focus-visible\) button\.choice:not\(:focus-visible\)::before \{ opacity: \.7; transform: translateY\(-50%\) scale\(\.95\); \}/);
-  assert.match(css, /@media \(hover: hover\) \{\s*\.era-launch-actions[^{}]*:has\(button\.choice:enabled:hover\) button\.choice:not\(:hover\)::before \{ opacity: \.7; transform: translateY\(-50%\) scale\(\.95\); \}/);
-  assert.match(css, /\.is-handheld \.era-launch \.era-launch-actions button\.choice:focus-visible \{ outline: none; \}/);
+  assert.match(css, /button\.choice:is\(\.era-title-new, \.era-title-load, \.era-title-continue\):is\(:enabled:hover, :enabled:focus-visible, \.is-pending, \.is-selected\)::before \{[^}]*brightness\(1\.35\)/);
+  assert.match(css, /button\.choice:is\(\.era-title-new, \.era-title-load, \.era-title-continue\):enabled:focus-visible[^}]*outline: none;/);
+  assert.doesNotMatch(css, /\.era-launch-actions[^{}]+button\.choice[^{}]*::before \{/);
 });
 
 test("Continue uses its supplied artwork and has a visibly disabled state", () => {
   const css = styleSource("style");
-  assert.match(css, /\.era-launch-continue::before \{ background-image: url\("\/title\/continue\.webp"\); \}/);
-  assert.match(css, /\.era-launch-continue:disabled:not\(\.is-pending, \.is-selected\)::before \{ opacity: \.35; filter: grayscale\(\.8\); \}/);
+  assert.match(css, /\.era-title-continue::before \{ background-image: url\("\/title\/continue\.webp"\); \}/);
+  assert.match(css, /\.era-title-continue:disabled:not\(\.is-pending, \.is-selected\)::before \{ opacity: \.35; filter: grayscale\(\.8\); \}/);
 });
 
 test("quicksave controls live in the quick menu and below Config, not the burger menu", async () => {
@@ -1462,9 +1463,10 @@ test("title Continue is disabled without a save and enabled when a save is avail
     islandRoot: { querySelectorAll: () => [] }, choiceControl: () => button,
     document: { querySelector: () => ({ hidden: false }) },
     command: {}, send: element, startButtons: [], restartButton: element, debugButton: {},
-    autoAdvance: { update() {}, isPaused: () => false }, handheld: { enabled: () => false },
+    autoAdvance: { update() {}, isPaused: () => false },
     mainChatInput: () => false, lastOutputLine: () => null,
     busy: false, expiring: false, input: { kind: "integer", buttonValues: ["2", "0", "1"] },
+    componentSample: null, previewDisabled: false,
     middaySaveButtons: [], middayLoadButtons: [], midday: null, continueAvailable: false, lastCommand: "",
   };
   const update = () => runInNewContext(`${controls}\nupdateControls();`, context);
@@ -1483,7 +1485,7 @@ test("room overlays reserve no layout height and chat follows every responsive m
   const css = styleSource("style");
   assert.match(css, /\.era-room-stage \.era-scene \{[^}]*position: absolute;[^}]*top: 2em;[^}]*pointer-events: none;/);
   assert.match(css, /\.era-room-stage \.era-occupant > \.line:has\(\.era-occupant-label\)[^{]*\{[^}]*position: absolute;[^}]*bottom: 4px;/);
-  assert.match(css, /\.era-room-stage \.line button\.choice\.era-occupant-label \{[^}]*border: 0;[^}]*background: transparent;/);
+  assert.match(css, /button\.choice\.era-occupant-label \{[^}]*border: 0;[^}]*background: transparent;/);
   assert.ok(css.includes('"center sidebar" "actions sidebar" "counters sidebar"'));
   assert.ok(css.includes('"center" "actions" "sidebar"'));
   assert.match(css, /\.era-main-chat \{ grid-column: 1 \/ -1;/);
@@ -1497,7 +1499,7 @@ test("room overlays reserve no layout height and chat follows every responsive m
   assert.match(css, /\.era-room-stage > \.era-occupants \{[^}]*margin-top: auto;/);
   assert.match(css, /\.era-info-face \{[^}]*width: 76px; height: 76px; overflow: visible;/);
   assert.match(css, /\.era-info-body \{[^}]*padding: 12px 4px 4px; border: 0;/);
-  assert.match(css, /\.era-main-header:has\(\.era-area-art\) \.era-watch-control \.era-timestop-button \{[^}]*transform: translateX\(-5px\);/);
+  assert.doesNotMatch(css, /\.era-main-header:has\(\.era-area-art\) \.era-watch-control \.era-timestop-button \{/);
   assert.match(css, /\.era-main:not\(:has\(\.era-counters\)\) \{\s*grid-template-rows: auto auto 1fr auto;\s*grid-template-areas: "header header" "center sidebar" "actions sidebar" "last last";/);
   assert.match(css, /\.era-info-face \.sprite-clip \{[^}]*scale\(1\.1\);[^}]*transform-origin: center bottom;/);
   assert.match(css, /\.era-info-body \.era-look \{ margin-top: auto; font: inherit;/);
@@ -1505,7 +1507,9 @@ test("room overlays reserve no layout height and chat follows every responsive m
   assert.match(css, /\.era-main-chat \{ --era-history-size: 14px; \}/);
   assert.match(css, /\.era-history-body \{[^}]*padding: 0;/);
   assert.match(css, /\.era-history-more-overlay \{ position: sticky; top: 0; height: 0;/);
-  assert.match(css, /\.era-history-more \{ position: absolute; top: 0; right: 0;/);
+  const chromeButtons = await readFile(new URL("../styles/shared/_chrome-buttons.scss", import.meta.url), "utf8");
+  assert.doesNotMatch(chromeButtons, /\.ui-button--history-more \{[^}]*position: absolute;/);
+  assert.match(css, /\.era-history-more-overlay \{[^}]*display: flex;[^}]*justify-content: flex-end;/);
   assert.match(css, /\.era-main-chat > \.era-history-pane \{[^}]*contain: size; overflow: auto;/);
   assert.match(css, /\.era-main-actions \{ display: flex; flex-wrap: wrap;/);
   assert.match(css, /\.era-main-actions > \.era-actions-group \{ flex: 0 1 auto;/);
@@ -1514,15 +1518,15 @@ test("room overlays reserve no layout height and chat follows every responsive m
   assert.match(css, /\.era-main:has\(\.era-main-chat\):not\(:has\(\.era-counters\)\) \{ grid-template-rows: auto 1fr auto auto; \}/);
   assert.match(css, /\.era-main:has\(\.era-main-chat\) \{ grid-template-rows: auto 1fr auto auto auto auto; \}/);
   assert.match(css, /\.era-character:has\(\.era-main-chat\) \{ grid-template-rows: auto 1fr; \}/);
-  assert.match(css, /\.era-player-management \.era-actions-group \.era-button-sidebar \{ flex: 1 1 100%; min-width: 0; \}/);
-  assert.match(css, /button\.choice:is\(\.era-see-more, \.era-info-more\) \{[^}]*border: 0; border-radius: 0;/);
+  assert.match(css, /button\.choice\.era-button-block \{ width: 100%; flex: 1 1 100%; min-width: 0; \}/);
+  assert.match(css, /button\.choice\.era-text-button \{[^}]*border: 0; border-radius: 0;/);
   assert.match(css, /\.era-main-sidebar > \.era-main-right \{ flex: 1; \}/);
   assert.match(css, /\.era-main-sidebar > \.era-main-left \{ display: contents; \}/);
   assert.match(css, /\.era-main-left > \.era-stats \{ flex: none; max-height: fit-content; \}/);
   assert.match(css, /\.era-main-sidebar \{ min-height: 0; contain: size; \}/);
   assert.match(css, /\.era-main-sidebar \.era-stats \{ flex: 0 1 auto; min-height: 0; overflow-y: auto; \}/);
   assert.match(css, /\.era-player-management > \.line:has\(\.era-auto-toggles\) \{ margin-top: auto;/);
-  assert.match(css, /\.line button\.choice:is\(\.era-button-sidebar, \.era-button-sidebar-wide, \.era-button-inventory\) \{ padding: 6px 10px; \}/);
+  assert.match(css, /button\.choice\.era-button \{[^}]*padding: 6px 12px;/);
   assert.match(css, /\.checkbox-control\.era-toggle \{ padding: 3px 7px; gap: 6px;/);
   assert.match(css, /\.checkbox-control \{[^}]*display: inline-flex; align-items: center;/);
   const patch = await readFile(new URL("../hotpatch/MAIN_SCREEN.ERB", import.meta.url), "utf8");
@@ -1653,6 +1657,9 @@ test("character history renders literal text and local controls without game inp
   const module = (code: string) => code.replace(/^import [^;]+;$/gm, "").replace(/^export /gm, "");
   const { render, setupInline, sendInline, dispose, setTranslator } = runInNewContext(`${module(llmSource)}\n${module(source)}\n({render: renderCharacterHistory, setupInline: setupInlineChat, sendInline: sendInlineChat, dispose: disposeCharacterChats, setTranslator: setHistoryTranslator})`, {
     speechQuotes: (await import("../web/translate.js")).speechQuotes,
+    syncChromeControllerHints: (control: Element) => {
+      assert.ok(control.className.split(" ").includes("ui-button"));
+    },
     document: {
       createElement: (tag: string) => new Element(tag),
       addEventListener() {}, removeEventListener() {},

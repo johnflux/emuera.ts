@@ -21,9 +21,8 @@ function harness({ debug = false, busy = false, confirm = true } = {}) {
     session: "active", input: {}, runDebug: debug, busy, runMode: "game", runGame: "tw",
     SETTINGS_KEY: "settings", AUTO_ADVANCE_KEY: "auto", DEBUG_KEY: "debug",
     localStorage: { removeItem: (key: string) => { storage.delete(key); } },
-    handheld: { reset: () => calls.push("handheld") },
     controllerMenu: { reset: () => calls.push("controller") },
-    autoAdvanceToggle: { checked: false },
+    autoAdvanceToggle: { checked: true },
     autoAdvance: { update: () => calls.push("auto") },
     characterHistory: { reset: () => calls.push("history") },
     outputTools: { configure: (values: Partial<typeof output>) => { Object.assign(output, values); } },
@@ -39,7 +38,7 @@ function harness({ debug = false, busy = false, confirm = true } = {}) {
   return { reset, state, storage, output, calls, errors };
 }
 
-test("Reset all restores main settings including font size without erasing model configuration", async () => {
+test("Reset all restores display settings without erasing model configuration", async () => {
   const h = harness();
   await h.reset();
   assert.deepEqual(JSON.parse(JSON.stringify(h.state.settings)), h.state.gameDefaults);
@@ -49,9 +48,9 @@ test("Reset all restores main settings including font size without erasing model
   assert.equal(h.storage.has("debug"), false);
   assert.equal(h.storage.get("llm"), "saved credentials");
   assert.deepEqual(h.output, { clipboard: false, local: false, endpoint: "http://localhost:9999/v1", model: "my-model", language: "French" });
-  assert.equal(h.state.autoAdvanceToggle.checked, true);
+  assert.equal(h.state.autoAdvanceToggle.checked, false);
   assert.equal(h.state.debugButton.checked, false);
-  assert.deepEqual(h.calls, ["handheld", "controller", "auto", "history", "translation", "display"]);
+  assert.deepEqual(h.calls, ["controller", "auto", "history", "translation", "display"]);
 });
 
 test("Reset all confirms debug restart before changing anything and respects cancellation", async () => {
@@ -107,14 +106,13 @@ test("reset display refreshes even a focused damaged font field", () => {
   const fields = {
     font: { value: "Game Fon" }, foreground: { value: "" }, background: { value: "" }, selection: { value: "" },
   };
-  const size = { value: "" };
+  const properties = new Map<string, string>();
   const apply = runInNewContext(`${applySource}\napplySettings`, {
     settings: { font: "Game Font", foreground: "#c0c0c0", background: "#000000", selection: "#ffff00" },
-    handheld: { enabled: () => false },
     document: {
       activeElement: fields.font,
-      documentElement: { style: { setProperty() {} } },
-      querySelector: (selector: string) => selector === "#font-size" ? size : { elements: fields },
+      documentElement: { style: { setProperty: (name: string, value: string) => properties.set(name, value) } },
+      querySelector: () => ({ elements: fields }),
     },
     terminalColumns() {}, fitMoveMaps() {},
   });
@@ -122,5 +120,19 @@ test("reset display refreshes even a focused damaged font field", () => {
   assert.equal(fields.font.value, "Game Fon", "ordinary updates preserve typing");
   apply(true);
   assert.equal(fields.font.value, "Game Font");
-  assert.equal(size.value, "16");
+  assert.equal(properties.has("--font-size"), false);
+});
+
+test("saved display settings ignore obsolete font size and persist only supported fields", () => {
+  const start = source.indexOf("function savedSettings()");
+  const end = source.indexOf("function displaySettings()", start);
+  let stored = JSON.stringify({ font: "Game Font", fontSize: 24, foreground: "#abcdef", arbitrary: "ignored" });
+  const load = runInNewContext(`${source.slice(start, end)}\nsavedSettings`, {
+    SETTINGS_KEY: "settings", localStorage: { getItem: () => stored },
+  });
+  assert.deepEqual(JSON.parse(JSON.stringify(load())), { font: "Game Font", foreground: "#abcdef" });
+  for (const value of ["null", "[]", "invalid", '{"font":12,"fontSize":20}']) {
+    stored = value;
+    assert.deepEqual(JSON.parse(JSON.stringify(load())), {});
+  }
 });
