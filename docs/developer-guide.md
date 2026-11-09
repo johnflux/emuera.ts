@@ -410,6 +410,8 @@ unavailable in production builds.
 
 Fresh visits open the **game library**, with **Installed** and **Not installed**
 tabs, short game descriptions, and a Play button for each local game. The library
+shows a loading status until its game list is ready; startup uses a neutral loading
+message while deciding whether to show the library or restore a run. The library
 also works with an empty `GAMES/` folder: TW, K, and Rance are catalog entries,
 not required bundled games, and appear under Not installed when absent. Their
 monograms include **TW** for The World and **K** for eraTohoK.

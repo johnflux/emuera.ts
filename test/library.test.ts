@@ -47,6 +47,9 @@ test("first launch installs TW adjacent once, keeps AppData installations, and r
 });
 
 test("library loads and refreshes without the optional starter panel", async () => {
+  const html = await readFile(new URL("../web/index.html", import.meta.url), "utf8");
+  assert.match(html, /id="status" role="status">Loading\.\.\.</);
+  assert.doesNotMatch(html, /Select a game/);
   let tabs: Element[] = [];
   class Element {
     textContent = "";
@@ -77,9 +80,15 @@ test("library loads and refreshes without the optional starter panel", async () 
   });
   const requests: string[] = [];
   let finishInstall!: () => void;
+  let finishLoad!: () => void;
+  let failLoad = false;
   const library = createLibrary({
     api: async (url: string) => {
       requests.push(url);
+      if (url === "/api/library") {
+        await new Promise<void>((resolve) => { finishLoad = resolve; });
+        if (failLoad) throw new Error("Network failure");
+      }
       if (url === "/api/library/install") {
         await new Promise<void>((resolve) => { finishInstall = resolve; });
         return { ok: true };
@@ -97,7 +106,12 @@ test("library loads and refreshes without the optional starter panel", async () 
     gamesChanged: async () => {},
     confirmAction: async () => true,
   });
-  await library.show();
+  const showing = library.show();
+  assert.equal(nodes.get("#status")!.textContent, "Loading games...");
+  assert.equal(nodes.get("#library-message")!.textContent, "Loading games...");
+  finishLoad();
+  await showing;
+  assert.equal(nodes.get("#status")!.textContent, "Select a game.");
   assert.equal(nodes.get("#library-message")!.textContent, "Select Play game to start.");
   assert.equal(nodes.get("#catalog-count")!.textContent, 3);
   assert.equal(nodes.get("#game-grid")!.children.length, 1);
@@ -119,13 +133,34 @@ test("library loads and refreshes without the optional starter panel", async () 
   assert.match(catalogText(nodes.get("#game-grid")!), /Downloading\.\.\./);
   finishInstall();
   await new Promise<void>((resolve) => setImmediate(resolve));
+  finishLoad();
+  await new Promise<void>((resolve) => setImmediate(resolve));
   assert.equal(nodes.get("#library-progress")!.hidden, true);
   assert.match(nodes.get("#library-message")!.textContent, /source downloaded for inspection/);
   nodes.get("#library-refresh")!.listeners.get("click")!();
   await new Promise<void>((resolve) => setImmediate(resolve));
+  finishLoad();
+  await new Promise<void>((resolve) => setImmediate(resolve));
   assert.deepEqual(requests, ["/api/library", "/api/library/install", "/api/library", "/api/library/refresh", "/api/library"]);
   assert.match(nodes.get("#library-message")!.textContent, /Library refreshed/);
   assert.equal(nodes.get("#library-refresh")!.disabled, false);
+  failLoad = true;
+  const failing = library.show();
+  assert.equal(nodes.get("#status")!.textContent, "Loading games...");
+  assert.equal(nodes.get("#library-message")!.textContent, "Loading games...");
+  finishLoad();
+  await failing;
+  assert.equal(nodes.get("#status")!.textContent, "Could not load the library.");
+  assert.match(nodes.get("#library-message")!.textContent, /Network failure.*Try Refresh library/);
+  assert.equal(nodes.get("#library-message")!.attributes.get("role"), "alert");
+  failLoad = false;
+  nodes.get("#library-refresh")!.listeners.get("click")!();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  finishLoad();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(nodes.get("#status")!.textContent, "Select a game.");
+  assert.equal(nodes.get("#library-message")!.textContent, "Library refreshed.");
+  assert.equal(nodes.get("#library-message")!.attributes.get("role"), "status");
 });
 
 test("catalog has unique ids and verified group blurbs and restricts clone sources", () => {

@@ -148,6 +148,7 @@ export function createLibrary({ api, launch, gamesChanged, confirmAction }) {
       await api("/api/library/refresh", {});
       await gamesChanged();
       await load();
+      document.querySelector("#status").textContent = "Select a game.";
       message("Library refreshed.");
     } catch (error) { message(error.message, true); }
     finally { working = false; render(); }
@@ -186,14 +187,19 @@ export function createLibrary({ api, launch, gamesChanged, confirmAction }) {
     async show() {
       document.body.classList.add("is-home");
       document.title = "Emuera.ts - Game library";
-      document.querySelector("#status").textContent = "Select a game.";
+      document.querySelector("#status").textContent = "Loading games...";
       document.querySelector("#status").classList.remove("error");
       root.hidden = false;
       document.querySelector("#library-toggle").hidden = true;
+      message("Loading games...");
       try {
         await load();
+        document.querySelector("#status").textContent = "Select a game.";
         message("Select Play game to start.");
-      } catch (error) { message(`Could not load the library: ${error.message}. Try Refresh library.`, true); }
+      } catch (error) {
+        document.querySelector("#status").textContent = "Could not load the library.";
+        message(`Could not load the library: ${error.message}. Try Refresh library.`, true);
+      }
     },
     hide() {
       root.hidden = true;
