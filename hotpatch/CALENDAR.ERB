@@ -29,7 +29,8 @@ DO
 		HTML_PRINT @"<div class='era-calendar-tribute-notice'>%HTML_ESCAPE(HOTPATCH_CALENDAR_TRIBUTE(nDay, nDay))%</div>"
 	IF nCharacter
 		HTML_PRINT "<era-open class='era-calendar-detail'>"
-		HTML_PRINT @"<div class='era-card-title'>%HTML_ESCAPE(CALLNAME:nCharacter)%<button value='-1' class='era-chip-button'>Back to week</button></div>"
+		CALL HOTPATCH_FACE(nCharacter, 74)
+		HTML_PRINT @"<div class='era-card-title'><div class='era-calendar-detail-person'><div class='era-info-face'>%RESULTS%</div><span>%HTML_ESCAPE(CALLNAME:nCharacter)%</span></div><button value='-1' class='era-chip-button'>Back to week</button></div>"
 		IF CFLAG:nCharacter:自宅位置
 			IF CFLAG:nCharacter:神社在住
 				HTML_PRINT @"<div class='era-calendar-fact'><span class='era-status-label'>Home</span>%HTML_ESCAPE(NAME_FROM_PLACE(CFLAG:nCharacter:神社在住))%</div>"
@@ -202,8 +203,9 @@ FOR nCharacter, 1, CHARANUM
 		CALL 仕事内容設定(nCharacter, 1)
 		IF !CHARA_HOLIDAY(nCharacter, 1) && CFLAG:nCharacter:信頼度 >= 10
 			nCount ++
+			HTML_PRINT "<era-open class='era-calendar-person-entry'>"
 			HTML_PRINT @"<button value='{nCharacter}' class='era-calendar-person'>%HTML_ESCAPE(CALLNAME:nCharacter)%</button>"
-			PRINT 　
+			HTML_PRINT "<era-close>"
 		ENDIF
 		MAXBASE:nCharacter:仕事量 = nWorkAmount
 		TCVAR:nCharacter:仕事開始 = nWorkStart
@@ -218,11 +220,12 @@ FOR nCharacter, 1, CHARANUM
 			SETCOLOR C_GREEN
 		SIF CFLAG:nCharacter:妊娠経過日数
 			SETCOLOR C_PINK
+		HTML_PRINT "<era-open class='era-calendar-person-entry'>"
 		HTML_PRINT @"<button value='{nCharacter}' class='era-calendar-person'>%HTML_ESCAPE(CALLNAME:nCharacter)%</button>"
 		SETCOLOR C_PINK
 		CALL HEART
 		RESETCOLOR
-		PRINT 　
+		HTML_PRINT "<era-close>"
 	ENDIF
 NEXT
 HTML_PRINT "<era-close>"

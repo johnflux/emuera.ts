@@ -322,10 +322,13 @@ test("room occupant names are white with a dark outline and summary portraits fi
   assert.match(app, /await image\(node,[\s\S]*?!!destination\.closest\("\.era-info-head \.era-info-face"\)\)/);
 });
 
-test("command bar no longer has configurable display mode visibility", () => {
+test("command bar is visible outside controller mode and hidden in controller mode", () => {
   const app = readFileSync(new URL("../web/app.js", import.meta.url), "utf8");
   assert.doesNotMatch(app, /setupHandheld|is-handheld|#font-size|#handheld-toggle/);
   assert.doesNotMatch(app, /querySelector\("#input-form"\)\.hidden/);
+  const html = readFileSync(new URL("../web/index.html", import.meta.url), "utf8");
+  assert.match(html, /<form id="input-form" autocomplete="off">/);
+  assert.match(styleSource("style"), /body\.has-controller #input-form \{ display: none; \}/);
 });
 
 test("small screens hide LLM configuration and the opener blocks all entry points", () => {

@@ -82,7 +82,7 @@
       </div>
     </section>
     <button id="continue-hint" class="ui-button ui-button--quiet ui-button--continue" type="button" hidden>Click to continue</button>
-    <form id="input-form" autocomplete="off" hidden>
+    <form id="input-form" autocomplete="off">
       <div class="command-field">
         <input id="command" aria-label="Game input" aria-describedby="command-hint" disabled spellcheck="false">
         <div class="command-hint-overlay" aria-hidden="true"><span id="command-hint-prefix"></span><span id="command-hint"></span></div>
@@ -121,7 +121,7 @@
       </div>
       <h3>Display</h3>
       <div class="settings-actions">
-        <label class="checkbox-control" title="Cycle Auto, On, and Off. Auto detects a gamepad or Steam Deck; this only changes hints, not controller input."><input id="controller-hints-toggle" type="checkbox"><span id="controller-hints-label">Controller hints: Auto</span></label>
+        <label class="checkbox-control" title="Cycle Auto, On, and Off. Auto detects a gamepad or Steam Deck; enabled mode hides the command line and shows controller hints. Controller input works in all modes."><input id="controller-hints-toggle" type="checkbox"><span id="controller-hints-label">Controller mode: Auto</span></label>
       </div>
       <p>Uses the game's <code>emuera.config</code> settings unless changed here. Changes are saved only in this browser.</p>
       <form id="settings-form">

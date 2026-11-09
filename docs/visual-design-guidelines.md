@@ -125,9 +125,10 @@ Game button variants and states also require fixtures in `src/button-samples.ts`
 rules; `test/components-browser.test.ts` verifies real-renderer parent independence
 and content-sized, left-aligned map controls. Use browser zoom for interface sizing;
 there is no font-size setting or handheld-mode styling switch. Responsive layouts
-and controller navigation remain automatic. Controller hints hide command
-numbers regardless of viewport size. The catalog's sticky state bar toggles
-disabled controls and controller hints without changing saved game preferences.
+and controller navigation remain automatic. Controller mode hides the command
+line; controller hints hide command numbers regardless of viewport size. The
+catalog's sticky state bar toggles disabled controls and controller mode without
+changing saved game preferences.
 
 - Align content to a clear container or grid. The library's existing centered
   content width of about 1160px is a good starting point for similar pages.

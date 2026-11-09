@@ -7,7 +7,7 @@ import { createServer } from "node:http";
 import { join } from "node:path";
 import { test } from "node:test";
 import { promisify } from "node:util";
-import { GAME_ROOT, applyHotpatches, loadGame } from "../src/loader.js";
+import { GAME_ROOT, applyHotpatches, emptyGame, indexScript, loadGame } from "../src/loader.js";
 import { createApp } from "../src/server.js";
 
 const browser = [process.env.CHROME_PATH, "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
@@ -357,6 +357,159 @@ test("catalog uses production rendering and context-independent buttons at wide 
     assert.equal(result.map.narrowStacked, true);
     assert.equal(result.map.narrowOverflow, false);
     assert.equal(result.map.backWorks, true);
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    app.closeAllConnections();
+    await rm(profile, { recursive: true, force: true });
+  }
+});
+
+test("calendar character lists wrap horizontally in the production renderer", {
+  skip: !browser || !existsSync(GAME_ROOT),
+}, async () => {
+  const game = await loadGame();
+  await applyHotpatches(game);
+  const fixture = emptyGame(game.root);
+  indexScript(fixture, `@SYSTEM_TITLE
+FOR LOCAL, 0, 14
+  ADDCHARA LOCAL
+  CFLAG:LOCAL:信頼度 = 100
+NEXT
+MASTER = 0
+TARGET = 1
+DAY = 94
+DAY:2 = 4
+DAY:3 = 1
+FLAG:1007 = 1
+CALL CALENDAR
+QUIT
+@CHARA_HOLIDAY(ARG, ARG:1)
+#FUNCTION
+RETURNF 0
+@ESTRUS_CATEGORY(ARG, ARG:1)
+#FUNCTIONS
+RETURNF "危険日"`, "<calendar-browser-fixture>");
+  for (const [name, routines] of fixture.routines) game.routines.set(name, routines);
+  const app = createApp([{ id: "tw", title: "eraTW", game }], true);
+  const server = createServer((request, response) => {
+    if (request.url !== "/calendar-probe") { app.emit("request", request, response); return; }
+    response.setHeader("Content-Type", "text/html; charset=utf-8");
+    response.end(`<!doctype html><style>iframe{width:1440px;height:900px;border:0}</style>
+      <iframe id="calendar" src="/?game=tw"></iframe><pre id="result"></pre><script>
+      const pause = () => new Promise(resolve => setTimeout(resolve, 100));
+      let stage = "opening calendar";
+      async function until(read) {
+        for (let n = 0; n < 180; n++) { const value = read(); if (value) return value; await pause(); }
+        throw new Error("Calendar preview did not become ready: " + stage);
+      }
+      (async () => {
+        const frame = document.querySelector("#calendar");
+        const doc = await until(() => {
+          const doc = frame.contentDocument;
+          return doc?.querySelector(".era-calendar:popover-open .era-calendar-person:enabled")
+            && !doc.body.classList.contains("is-busy") && doc;
+        });
+        await doc.fonts.ready;
+        const layouts = [];
+        for (const view of ["Work", "Fertility"]) {
+          if (view === "Fertility") {
+            stage = "fertility view";
+            doc.querySelector(".era-calendar button[data-value='901']").click();
+            await until(() => !doc.body.classList.contains("is-busy")
+              && doc.querySelector(".era-calendar .era-current[data-value='901']"));
+          }
+          for (const width of [1440, 1200, 640, 390]) {
+            frame.style.width = width + "px";
+            await pause();
+            const dialog = doc.querySelector(".era-calendar:popover-open");
+            const people = dialog.querySelector(".era-calendar-people");
+            const buttons = [...people.querySelectorAll("button")];
+            const bounds = people.getBoundingClientRect();
+            layouts.push({view, width, display:frame.contentWindow.getComputedStyle(people).display,
+              count:buttons.length,
+              sameRow:Math.abs(buttons[0].getBoundingClientRect().top - buttons[1].getBoundingClientRect().top) < 1,
+              fits:buttons.every(button => button.getBoundingClientRect().right <= bounds.right + 1),
+              maxDayHeight:Math.max(...[...dialog.querySelectorAll(".era-calendar-day")]
+                .map(day => day.getBoundingClientRect().height)),
+              overflow:dialog.querySelector(".era-inventory-body").scrollWidth
+                > dialog.querySelector(".era-inventory-body").clientWidth + 1});
+          }
+        }
+        const entries = [...doc.querySelector(".era-calendar-people").querySelectorAll(".era-calendar-person-entry")];
+        const fertilityGrouped = entries.length === 13 && entries.every(entry =>
+          entry.querySelectorAll("button").length === 1 && entry.textContent.includes("♥"));
+        stage = "character detail";
+        doc.querySelector(".era-calendar-person").click();
+        const detail = await until(() => !doc.body.classList.contains("is-busy")
+          && doc.querySelector(".era-calendar-detail"));
+        const firstAvatar = !!detail.querySelector(".era-info-face .sprite-clip");
+        stage = "returning to week";
+        detail.querySelector("button").click();
+        await until(() => !doc.body.classList.contains("is-busy") && doc.querySelector(".era-calendar-people"));
+        stage = "sprite character detail";
+        doc.querySelector(".era-calendar-person[data-value='2']").click();
+        const spriteDetail = await until(() => !doc.body.classList.contains("is-busy")
+          && doc.querySelector(".era-calendar-detail .era-info-face .sprite-clip"));
+        const face = spriteDetail.closest(".era-info-face");
+        const sprite = face.querySelector(".sprite-clip");
+        const avatarLayouts = [];
+        for (const width of [1440, 390]) {
+          frame.style.width = width + "px";
+          await pause();
+          const bounds = face.getBoundingClientRect();
+          const name = face.nextElementSibling.getBoundingClientRect();
+          const detail = face.closest(".era-calendar-detail");
+          avatarLayouts.push({width, faceWidth:bounds.width, faceHeight:bounds.height,
+            besideName:name.left >= bounds.right,
+            spriteHeight:sprite.getBoundingClientRect().height,
+            fits:detail.scrollWidth <= detail.clientWidth + 1});
+        }
+        document.querySelector("#result").textContent = JSON.stringify({
+          layouts, fertilityGrouped, detailWorks:true, firstAvatar, avatarLayouts});
+      })().catch(error => {
+        const doc = document.querySelector("#calendar").contentDocument;
+        document.querySelector("#result").textContent = JSON.stringify({error:error.message,
+          status:doc?.querySelector("#status")?.textContent,
+          choices:[...doc?.querySelectorAll(".screen.is-active button.choice") ?? []]
+            .map(button => [button.dataset.value, button.disabled, button.textContent]),
+          terminal:doc?.querySelector("#terminal")?.textContent.slice(-1000)});
+      });
+      </script>`);
+  });
+  const profile = await mkdtemp(join(process.cwd(), ".era-calendar-browser-"));
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address !== "string");
+    const { stdout } = await promisify(execFile)(browser!, [
+      "--headless=new", "--no-sandbox", "--disable-gpu", "--disable-background-networking",
+      `--user-data-dir=${profile}`, "--window-size=1600,1000", "--dump-dom", "--virtual-time-budget=30000",
+      `http://127.0.0.1:${address.port}/calendar-probe`,
+    ], { timeout: 60000, maxBuffer: 2_000_000 });
+    const encoded = stdout.match(/<pre id="result">([^<]+)<\/pre>/)?.[1];
+    assert.ok(encoded, stdout.slice(0, 2000));
+    const result = JSON.parse(encoded.replaceAll("&quot;", '"').replaceAll("&amp;", "&"));
+    assert.equal(result.error, undefined, JSON.stringify(result));
+    for (const layout of result.layouts) {
+      assert.ok(layout.count >= 3, "exercise a populated work schedule");
+      assert.equal(layout.display, "flex", JSON.stringify(layout));
+      assert.equal(layout.sameRow, true, JSON.stringify(layout));
+      assert.equal(layout.fits, true, JSON.stringify(layout));
+      assert.equal(layout.overflow, false, JSON.stringify(layout));
+      assert.ok(layout.maxDayHeight < (layout.width < 600 ? 400 : 240), JSON.stringify(layout));
+    }
+    assert.equal(result.detailWorks, true);
+    assert.equal(result.fertilityGrouped, true, "fertility hearts must wrap together with their character names");
+    assert.equal(result.firstAvatar, true, "character details show the shared boxed head avatar");
+    for (const layout of result.avatarLayouts) {
+      assert.equal(layout.faceWidth, 76, JSON.stringify(layout));
+      assert.equal(layout.faceHeight, 76, JSON.stringify(layout));
+      assert.equal(layout.besideName, true, JSON.stringify(layout));
+      assert.ok(layout.spriteHeight >= 74, JSON.stringify(layout));
+      assert.equal(layout.fits, true, JSON.stringify(layout));
+    }
   } finally {
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));

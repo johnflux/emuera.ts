@@ -155,9 +155,9 @@ test("controller hint checkbox keeps native checkmark in sync after each three-s
     const match = stdout.match(/<pre id="result">([^]*?)<\/pre>/);
     assert.ok(match?.[1], stdout.slice(-4000));
     const states = JSON.parse(match[1]);
-    const auto = {checked:false, mixed:true, active:"false", label:"Controller hints: Auto (Off)", saved:"auto"};
-    const on = {checked:true, mixed:false, active:"true", label:"Controller hints: On", saved:"on"};
-    const off = {checked:false, mixed:false, active:"false", label:"Controller hints: Off", saved:"off"};
+    const auto = {checked:false, mixed:true, active:"false", label:"Controller mode: Auto (Off)", saved:"auto"};
+    const on = {checked:true, mixed:false, active:"true", label:"Controller mode: On", saved:"on"};
+    const off = {checked:false, mixed:false, active:"false", label:"Controller mode: Off", saved:"off"};
     assert.deepEqual(states, [{...auto, saved:null}, on, off, auto, on, off, auto]);
   } finally {
     await rm(profile, { recursive: true, force: true });

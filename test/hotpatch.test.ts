@@ -821,7 +821,11 @@ RETURNF 0`, "<calendar-popup-test>");
       assert.ok(snapshot.input?.buttonValues?.includes(value), `${value}: ${snapshot.input?.buttonValues}`);
       snapshot = runtime.input(value);
       const html = check(value === "1" ? 0 : 7);
-      if (value === "1") assert.match(html, /era-calendar-detail/);
+      if (value === "1") {
+        assert.match(html, /era-calendar-detail/);
+        assert.match(html, /class='era-info-face'/);
+        assert.match(html, /<img src='[^']+' height='74px'>/, "details reuse the selected character's head artwork");
+      }
     }
     assert.ok(snapshot.input?.buttonValues?.includes("0"));
     assert.throws(() => runtime.input("9999"), /displayed button/);

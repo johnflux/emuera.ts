@@ -40,12 +40,12 @@ test("debug checkbox belongs to settings rather than the burger menu", () => {
 test("resetting controller hints restores Auto and removes the legacy override", () => {
   const h = harness(false, "on", "1");
   h.menu.reset();
-  assert.equal(h.hintsLabel, "Controller hints: Auto (Off)");
+  assert.equal(h.hintsLabel, "Controller mode: Auto (Off)");
   assert.equal(h.storage.has("era-typescript.controller-hints"), false);
   assert.equal(h.storage.has("era-typescript.force-controller"), false);
   assert.equal(h.hintsToggle.indeterminate, true);
   h.poll([]);
-  assert.equal(h.hintsLabel, "Controller hints: Auto (On)");
+  assert.equal(h.hintsLabel, "Controller mode: Auto (On)");
 });
 
 test("gamepad A enters input editing and D-pad adjusts ranges only in edit mode", () => {
@@ -436,14 +436,14 @@ test("Y triggers once per press only outside modals and supported controllers co
 test("controller hints cycle Auto/On/Off, persist, and follow detection only in Auto", () => {
   const h = harness();
   assert.equal(h.hasController, false);
-  assert.equal(h.hintsLabel, "Controller hints: Auto (Off)");
+  assert.equal(h.hintsLabel, "Controller mode: Auto (Off)");
   h.poll([]);
   assert.equal(h.hasController, true);
-  assert.equal(h.hintsLabel, "Controller hints: Auto (On)");
+  assert.equal(h.hintsLabel, "Controller mode: Auto (On)");
   h.disconnect();
   h.cycleHints();
   assert.equal(h.hasController, true);
-  assert.equal(h.hintsLabel, "Controller hints: On");
+  assert.equal(h.hintsLabel, "Controller mode: On");
   assert.equal(h.storage.get("era-typescript.controller-hints"), "on");
   h.poll([], "");
   assert.equal(h.hasController, true);
@@ -452,7 +452,7 @@ test("controller hints cycle Auto/On/Off, persist, and follow detection only in 
   assert.equal(h.hasController, true);
   h.cycleHints();
   assert.equal(h.hasController, false);
-  assert.equal(h.hintsLabel, "Controller hints: Off");
+  assert.equal(h.hintsLabel, "Controller mode: Off");
   assert.equal(h.storage.get("era-typescript.controller-hints"), "off");
   h.poll([]);
   assert.equal(h.hasController, false);
@@ -466,13 +466,13 @@ test("controller hints cycle Auto/On/Off, persist, and follow detection only in 
   restoredOff.poll([]);
   assert.equal(restoredOff.hasController, false);
   assert.equal(harness(true, "", "1").hasController, true);
-  assert.equal(harness(true, "", "0").hintsLabel, "Controller hints: Auto (Off)");
+  assert.equal(harness(true, "", "0").hintsLabel, "Controller mode: Auto (Off)");
 });
 
 test("Auto controller hints follow gamepad detection while explicit modes override it", () => {
   const h = harness(true, "auto", "0");
   assert.equal(h.hasController, false);
-  assert.equal(h.hintsLabel, "Controller hints: Auto (Off)");
+  assert.equal(h.hintsLabel, "Controller mode: Auto (Off)");
   h.poll([]);
   assert.equal(h.hasController, true);
   h.disconnect();
@@ -483,7 +483,7 @@ test("Auto controller hints follow gamepad detection while explicit modes overri
   assert.equal(off.hasController, false);
   off.cycleHints();
   assert.equal(off.hasController, true);
-  assert.equal(off.hintsLabel, "Controller hints: Auto (On)");
+  assert.equal(off.hintsLabel, "Controller mode: Auto (On)");
 });
 
 test("controller shortcuts select active visible actions, not historical or unavailable buttons", () => {

@@ -70,7 +70,7 @@ export function setupControllerMenu({ restart, library, settings, exit, canResta
     const enabled = mode === "on" || (mode === "auto" && detected);
     applyControllerHints(enabled);
     setCheckboxState(hintsToggle, mode === "auto" ? "mixed" : mode === "on", enabled);
-    document.querySelector("#controller-hints-label").textContent = `Controller hints: ${mode === "auto" ? `Auto (${enabled ? "On" : "Off"})` : mode === "on" ? "On" : "Off"}`;
+    document.querySelector("#controller-hints-label").textContent = `Controller mode: ${mode === "auto" ? `Auto (${enabled ? "On" : "Off"})` : mode === "on" ? "On" : "Off"}`;
   }
   applyControllerMode();
   for (const type of ["focusin", "focusout"]) document.addEventListener(type, (event) => {

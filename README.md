@@ -255,12 +255,14 @@ Detection uses the Gamepad API,
 not the screen size or Steam launch status; browsers may require a controller
 button press before exposing the connected device. The hint disappears when
 the last supported controller disconnects, unless Steam Deck is detected or
-hints are explicitly set to On.
-**Settings > Controller hints** cycles through **Auto**, **On**, and **Off**.
-Auto (the default) detects a gamepad or Steam Deck, On shows hints without a controller
-for testing, and Off hides them even with a controller connected. The choice is
-saved and only affects hints, not controller input. F10 remains available for
-testing the centered menu. Compact Settings uses a two-column layout
+controller mode is explicitly set to On.
+**Settings > Controller mode** cycles through **Auto**, **On**, and **Off**.
+Auto (the default) detects a gamepad or Steam Deck; when enabled, controller mode
+hides the command-line input and shows controller hints. On enables it for testing
+without a controller, and Off keeps the command line visible and hides hints even
+with a controller connected. The choice is saved and does not affect controller
+input, which works in every mode. F10 remains available for testing the centered
+menu. Compact Settings uses a two-column layout
 to fit the Steam Deck's 1280×800 screen without scrolling; smaller screens can
 still scroll to keep every setting accessible.
 Responsive layouts also adapt artwork dialogs and character-sheet gauges.

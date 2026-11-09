@@ -311,6 +311,8 @@ test("calendar popup presents seven day rows with a shared day and schedule head
   assert.match(css, /\.era-calendar-month-grid \{ display: grid; grid-template-columns: repeat\(7, minmax\(0, 1fr\)\);/);
   assert.match(css, /\.era-calendar \.era-inventory-body \{ flex: 0 1 auto;/);
   assert.match(css, /\.era-calendar-table-heading, \.era-calendar-week > \.era-calendar-day \{ display: grid; grid-template-columns: var\(--calendar-day-width\) minmax\(0, 1fr\);/);
+  assert.match(css, /\.era-calendar-events, \.era-calendar-people \{ flex: 1 1 280px; min-width: 0; \}/);
+  assert.match(css, /\.era-calendar-events, \.era-calendar-people \{ flex-basis: 100%; \}/);
   assert.match(css, /\.era-inventory-body \{ flex: 1; min-height: 0; overflow: auto;/);
   const patch = await readFile(new URL("../hotpatch/CALENDAR.ERB", import.meta.url), "utf8");
   assert.match(patch, /class='era-dialog era-calendar'/);

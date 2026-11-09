@@ -392,10 +392,11 @@ The button catalog shows Continue's available appearance independently of save
 availability; actual title screens still require a save. Compatibility examples
 cover unpatched games' PRINTC renderer path, not additional hotpatch variants.
 Examples show their actual class hierarchy without repeated state labels.
-A sticky control bar switches all examples to Disabled or Controller hints,
-without duplicating controls. Controller hints hide command numbers in gameplay
-and previews alike; viewport size alone no longer hides them. Preview toggles
-do not change saved gameplay preferences. The shared game
+A sticky control bar switches all examples to Disabled or Controller mode,
+without duplicating controls. Controller mode hides the command line and
+controller hints hide command numbers in gameplay and previews alike; viewport
+size alone no longer hides them. Preview toggles do not change saved gameplay
+preferences. The shared game
 helper has four variants: standard (`default`), full-width (`block`), `primary`,
 and `list`. Action and sidebar padding are identical; Inventory adds metadata
 for its trailing arrow rather than defining another button style.
@@ -1110,8 +1111,8 @@ Two-state settings and game controls use native checkboxes with the shared
 state comes from the runtime snapshot, not an optimistic local toggle. Controller
 hints and Auto-moan use three-state checkboxes (empty, checked, indeterminate dash)
 with the mode name visible and their existing cycle order unchanged. Debug mode
-is in Settings under Interpreter. Controller hints highlights its row only when
-hints are actually enabled: Auto (Off) keeps the dash without the active tint.
+is in Settings under Interpreter. Controller mode highlights its row only when
+active: Auto (Off) keeps the dash without the active tint.
 Game controller badges are limited to styled GUI controls and links; plain-text
 game prompts retain normal keyboard focus without controller badges.
 The controller-hint cycle does not cancel native checkbox clicks: cancelling
@@ -1122,7 +1123,7 @@ Font selection remains independent of size. Browser zoom scales the interface;
 responsive Settings layouts fit compact viewports without a separate device mode.
 The large **Reset all** button beside Close restores the main Settings controls:
 game-default font and colors,
-Auto controller hints, auto-continue off, platform-default character history and
+Auto controller mode, auto-continue off, platform-default character history and
 built-in translation, clipboard/local-model translation off, and debug mode off.
 Translation-model endpoint, model and language, and LLM configuration are
 preserved. Resetting an active debug run asks for confirmation before restarting;

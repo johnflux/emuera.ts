@@ -35,6 +35,7 @@
 #settings-form input:focus-visible:not(.is-control-navigation) { outline: 2px solid #69c9b5; outline-offset: 2px; }
 #input-form { order: 1; flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding: 0 10px; font-size: var(--font-size); line-height: var(--line-height, 1.25); }
 #input-form[hidden] { display: none; }
+body.has-controller #input-form { display: none; }
 body.is-busy main:not(:has(.screen.is-active :is(.era-main, .era-shop, .era-dialog, .era-launch))) > #input-form[hidden],
 main:has(> #terminal.is-waiting):not(:has(.screen.is-active :is(.era-main, .era-shop, .era-dialog, .era-launch))) > #input-form[hidden] { display: flex; visibility: hidden; }
 .command-field { position: relative; flex: 1; min-width: 0; }

@@ -191,6 +191,10 @@ Past obligations and already-collected tribute are not inferred. These reminders
 do not alter tribute flags, harvest totals, loans or native collection rules.
 A compact table has seven
 horizontal rows, a narrow date/weekday column, and a shared events/work heading.
+Work lists show trusted characters scheduled to work that day; selecting a name
+opens their home and work details, with the shared boxed head avatar beside
+their name. Character entries use a wrapping flex row,
+with fertility hearts kept beside their corresponding names.
 Today has a green date number; empty work lists take no space. Content wraps on
 narrow screens. The dialog fits its contents vertically, capped at the viewport
 height with a scrollable body. Day cells show native
