@@ -115,7 +115,7 @@ QUIT`, "TEST_BODY_BULK_FEEDBACK.ERB");
   }
   assert.match(world, /Map details and room selection/);
   assert.match(world, /Animation: On/);
-  assert.match(world, /value='4130' class='era-setup-choice era-current'/);
+  assert.match(world, /value='4130' class='era-radio era-current'/);
   assert.doesNotMatch(world, /value='414[123]'/, "normal mode has no extra assertiveness setting");
   assert.match(markup(runtime.input("23")), /Animation: Off/);
   assert.match(markup(runtime.input("23")), /Animation: On/);
@@ -125,20 +125,20 @@ QUIT`, "TEST_BODY_BULK_FEEDBACK.ERB");
   assert.doesNotMatch(dialogue, /Configure dialogue/);
   assert.match(dialogue, /&#10;/, "dialogue descriptions render line breaks");
   assert.doesNotMatch(dialogue, /&lt;br&gt;/, "literal break tags are not shown");
-  const dialogueAction = /value='(2\d{4})' class='era-setup-choice/.exec(dialogue)?.[1];
+  const dialogueAction = /value='(2\d{4})' class='era-radio/.exec(dialogue)?.[1];
   assert.ok(dialogueAction, "dialogue choices are available inline");
-  assert.match(markup(runtime.input(dialogueAction)), new RegExp(`value='${dialogueAction}' class='era-setup-choice era-current'`));
+  assert.match(markup(runtime.input(dialogueAction)), new RegExp(`value='${dialogueAction}' class='era-radio era-current'`));
   const bonuses = markup(runtime.input("703"));
   assert.match(bonuses, /Starting money/);
   assert.match(bonuses, /Basic Combat Proficiency/);
-  assert.match(bonuses, /value='1000' class='era-setup-choice era-current'/);
+  assert.match(bonuses, /value='1000' class='era-radio era-current'/);
   assert.doesNotMatch(bonuses, /Starting bonuses/);
-  assert.match(markup(runtime.input("1008")), /value='1008' class='era-setup-choice era-current'/);
+  assert.match(markup(runtime.input("1008")), /value='1008' class='era-radio era-current'/);
   assert.match(markup(runtime.input("1001")), /Bonus Character/);
-  assert.match(markup(runtime.input("10001")), /value='10001' class='era-setup-choice era-current'/);
+  assert.match(markup(runtime.input("10001")), /value='10001' class='era-radio era-current'/);
   markup(runtime.input("1000"));
   const farming = markup(runtime.input("704"));
-  const landlordAction = /value='(3\d{4})' class='era-setup-choice/.exec(farming)?.[1];
+  const landlordAction = /value='(3\d{4})' class='era-radio/.exec(farming)?.[1];
   assert.ok(landlordAction, "landlords are available inline");
   const contract = markup(runtime.input(landlordAction));
   assert.match(contract, /Initial loan/);
@@ -156,9 +156,9 @@ QUIT`, "TEST_BODY_BULK_FEEDBACK.ERB");
   assert.match(contract, /Tyrannical landlord\. <strong>5\.0%<\/strong> monthly interest; tools lent with higher monthly fees/);
   assert.match(contract, /Contract Terms[\s\S]*Normal Peasant[\s\S]*Farming Contract[\s\S]*No farming contract[\s\S]*value='3\d{4}'/,
     "contract terms are separate from the list containing no contract and landlords");
-  assert.match(markup(runtime.input("3103")), /value='3103' class='era-setup-choice era-current'/);
+  assert.match(markup(runtime.input("3103")), /value='3103' class='era-radio era-current'/);
   const noContract = markup(runtime.input("3000"));
-  assert.match(noContract, /value='3000' class='era-setup-choice era-current'/);
+  assert.match(noContract, /value='3000' class='era-radio era-current'/);
   assert.doesNotMatch(noContract, /era-setup-landlord-face/);
   assert.match(noContract, /Contract Terms[\s\S]*Normal Peasant/,
     "contract terms remain visible without a farming contract");
@@ -199,26 +199,26 @@ QUIT`, "TEST_BODY_BULK_FEEDBACK.ERB");
   markup(runtime.input("701"));
   const restricted = markup(runtime.input("4131"));
   assert.match(restricted, /You cannot confess/);
-  assert.match(restricted, /value='4141' class='era-setup-choice era-current'/);
+  assert.match(restricted, /value='4141' class='era-radio era-current'/);
   for (let level = 1; level <= 3; level++) {
     assert.match(markup(runtime.input(String(4140 + level))),
-      new RegExp(`value='${4140 + level}' class='era-setup-choice era-current'`));
+      new RegExp(`value='${4140 + level}' class='era-radio era-current'`));
   }
   const lustMode = markup(runtime.input("4132"));
-  assert.match(lustMode, /value='4132' class='era-setup-choice era-current'/);
-  assert.match(lustMode, /value='4143' class='era-setup-choice era-current'/,
+  assert.match(lustMode, /value='4132' class='era-radio era-current'/);
+  assert.match(lustMode, /value='4143' class='era-radio era-current'/,
     "switching mode preserves assertiveness");
   assert.match(lustMode, /You can still confess and use all actions/);
-  assert.match(markup(runtime.input("4131")), /value='4143' class='era-setup-choice era-current'/);
-  assert.match(markup(runtime.input("4110")), /value='4110' class='era-setup-choice era-current'/);
+  assert.match(markup(runtime.input("4131")), /value='4143' class='era-radio era-current'/);
+  assert.match(markup(runtime.input("4110")), /value='4110' class='era-radio era-current'/);
   markup(runtime.input("4110"));
   const normalMode = markup(runtime.input("4130"));
-  assert.match(normalMode, /value='4130' class='era-setup-choice era-current'/);
+  assert.match(normalMode, /value='4130' class='era-radio era-current'/);
   assert.doesNotMatch(normalMode, /value='414[123]'/);
   const mansionWorld = markup(runtime.input("2003"));
-  assert.match(mansionWorld, /value='2003' class='era-setup-choice era-current'/);
+  assert.match(mansionWorld, /value='2003' class='era-radio era-current'/);
   assert.match(mansionWorld, /era-setup-help-row'>.*value='4120'.*character behaviour\. <button value='32'/);
-  assert.match(markup(runtime.input("2000")), /value='2000' class='era-setup-choice era-current'/);
+  assert.match(markup(runtime.input("2000")), /value='2000' class='era-radio era-current'/);
   markup(runtime.input("700"));
   const characterOptions = markup(runtime.input("710"));
   assert.match(characterOptions, /era-setup-player-face/);
@@ -229,7 +229,7 @@ QUIT`, "TEST_BODY_BULK_FEEDBACK.ERB");
   assert.doesNotMatch(characterOptions, /PLAYER ·|Custom character|Predefined character/);
   assert.doesNotMatch(characterOptions, /value='500[01]'/);
   assert.doesNotMatch(characterOptions, /Customize character/);
-  assert.match(characterOptions, /value='1199' class='era-setup-choice era-current'[^>]*>.*Default.*Men's clothing/);
+  assert.match(characterOptions, /value='1199' class='era-radio era-current'[^>]*>.*Default.*Men's clothing/);
   assert.ok(characterOptions.indexOf("value='1199'") < characterOptions.indexOf("value='1101'"),
     "Default is the first clothing option");
   assert.match(characterOptions, /value='700' class='era-sheet-subpage era-current'>Player/);
@@ -246,17 +246,17 @@ QUIT`, "TEST_BODY_BULK_FEEDBACK.ERB");
   markup(runtime.input("700"));
   const bodyOptions = markup(runtime.input("715"));
   assert.match(bodyOptions, /era-setup-body-options/);
-  assert.match(bodyOptions, /value='100212' class='era-setup-choice era-current'/);
+  assert.match(bodyOptions, /value='100212' class='era-radio era-current'/);
   assert.match(bodyOptions, /value='100211'[^>]*>.*Female/);
   assert.doesNotMatch(bodyOptions, /Breast Size/);
   assert.match(bodyOptions, /Butt Size/);
   assert.match(bodyOptions, /era-launch-eyebrow'>Animal Ears/);
   assert.match(bodyOptions, /era-launch-eyebrow'>Cat Tongue/);
-  assert.match(bodyOptions, /value='105410'[^>]*>.*<span class='era-setup-choice-description'><\/span>/);
-  assert.match(bodyOptions, /value='114310'[^>]*>.*<span class='era-setup-choice-description'><\/span>/);
+  assert.match(bodyOptions, /value='105410'[^>]*>.*<span class='era-radio-description'><\/span>/);
+  assert.match(bodyOptions, /value='114310'[^>]*>.*<span class='era-radio-description'><\/span>/);
   assert.match(bodyOptions, /value='100213'[^>]*>.*Has both genitals\./);
   for (let value = 1; value <= 4; value++) {
-    assert.match(bodyOptions, new RegExp(`value='${114310 + value}'[^>]*>.*<span class='era-setup-choice-description'>Can go into heat; dislikes washing; prefers Doggy Style; matching Fortune boosts Favor/Trust\\.</span>`));
+    assert.match(bodyOptions, new RegExp(`value='${114310 + value}'[^>]*>.*<span class='era-radio-description'>Can go into heat; dislikes washing; prefers Doggy Style; matching Fortune boosts Favor/Trust\\.</span>`));
   }
   assert.match(bodyOptions, /era-launch-eyebrow'>Figure/);
   assert.match(bodyOptions, /Very small or large bodies cannot use many commands without Forbidden Knowledge/);
@@ -272,15 +272,15 @@ QUIT`, "TEST_BODY_BULK_FEEDBACK.ERB");
   ] as const) {
     assert.match(bodyOptions, new RegExp(`value='${110010 + value}'[^>]*>.*${name}`));
     const figureChoice = bodyOptions.match(new RegExp(`value='${110010 + value}'[^>]*>.*?</button>`))?.[0];
-    assert.ok(figureChoice?.includes(`<span class='era-setup-choice-description'>${description}</span>`));
+    assert.ok(figureChoice?.includes(`<span class='era-radio-description'>${description}</span>`));
     assert.match(markup(runtime.input(String(110010 + value))),
-      new RegExp(`value='${110010 + value}' class='era-setup-choice era-current'`));
+      new RegExp(`value='${110010 + value}' class='era-radio era-current'`));
   }
   assert.doesNotMatch(bodyOptions, /Indicates the body size/);
   markup(runtime.input("110010"));
-  assert.match(markup(runtime.input("105411")), /value='105411' class='era-setup-choice era-current'/);
+  assert.match(markup(runtime.input("105411")), /value='105411' class='era-radio era-current'/);
   markup(runtime.input("105410"));
-  assert.match(markup(runtime.input("114314")), /value='114314' class='era-setup-choice era-current'/);
+  assert.match(markup(runtime.input("114314")), /value='114314' class='era-radio era-current'/);
   markup(runtime.input("114310"));
   assert.match(markup(runtime.input("130090")), /Human · Male · Adult/);
   assert.match(markup(runtime.input("6090")), /Human · Male · Adult/);
@@ -300,12 +300,12 @@ QUIT`, "TEST_BODY_BULK_FEEDBACK.ERB");
   assert.doesNotMatch(femaleBody, /Penis Size/);
   const restoredMale = markup(runtime.input("100212"));
   assert.match(restoredMale, /Human · Male · Adult/);
-  assert.match(bodyOptions, /value='101710' class='era-setup-choice era-current'[^>]*>.*Adult/);
+  assert.match(bodyOptions, /value='101710' class='era-radio era-current'[^>]*>.*Adult/);
   assert.match(bodyOptions, /value='101709'[^>]*>.*Child/);
   assert.match(bodyOptions, /value='101711'[^>]*>.*Middle Age/);
   assert.match(bodyOptions, /value='101712'[^>]*>.*Elder/);
   for (const action of [101709, 101710, 101711, 101712]) {
-    assert.match(bodyOptions, new RegExp(`value='${action}'[^>]*>.*<span class='era-setup-choice-description'></span>`));
+    assert.match(bodyOptions, new RegExp(`value='${action}'[^>]*>.*<span class='era-radio-description'></span>`));
   }
   assert.doesNotMatch(bodyOptions, /Physically /);
   assert.doesNotMatch(bodyOptions, /Shows the physical age of the character/);
@@ -317,17 +317,17 @@ QUIT`, "TEST_BODY_BULK_FEEDBACK.ERB");
     [5, "Have you forgotten to be considerate of others"],
     [6, "A heart can only pump so much blood"],
   ] as const) {
-    assert.match(bodyOptions, new RegExp(`value='${1200 + type}'[^<]*>.*?<span class='era-setup-choice-description'>[^<]*${description}`));
+    assert.match(bodyOptions, new RegExp(`value='${1200 + type}'[^<]*>.*?<span class='era-radio-description'>[^<]*${description}`));
   }
   for (let type = 1; type <= 6; type++) {
     const character = markup(runtime.input(String(1200 + type)));
-    assert.match(character, new RegExp(`value='${1200 + type}' class='era-setup-choice era-current'`));
+    assert.match(character, new RegExp(`value='${1200 + type}' class='era-radio era-current'`));
     assert.doesNotMatch(character, /era-setup-editor/, "type selection stays inside the setup dialog");
   }
   markup(runtime.input("1203"));
   markup(runtime.input("710"));
-  assert.match(markup(runtime.input("1104")), /value='1104' class='era-setup-choice era-current'/);
-  assert.match(markup(runtime.input("1199")), /value='1199' class='era-setup-choice era-current'/);
+  assert.match(markup(runtime.input("1104")), /value='1104' class='era-radio era-current'/);
+  assert.match(markup(runtime.input("1199")), /value='1199' class='era-radio era-current'/);
   assert.match(markup(runtime.input("5000")), /enter a new name/);
   assert.match(markup(runtime.input("")), /era-setup-player/);
   assert.match(markup(runtime.input("5101")), /<span>STA<\/span>.*value='9500'[^>]*>1600<\/button>/);
@@ -347,30 +347,30 @@ QUIT`, "TEST_BODY_BULK_FEEDBACK.ERB");
   assert.doesNotMatch(traits, /value='6002'|value='6105'|value='6108'|Penis Size/);
   assert.match(traits, /class='era-setup-trait[^']*' aria-disabled='[^']*' title='[^']+'/,
     "native trait descriptions are available as tooltips");
-  assert.doesNotMatch(traits, /era-setup-choice-name/);
+  assert.doesNotMatch(traits, /era-radio-name/);
   assert.doesNotMatch(traits, /era-setup-editor/);
   markup(runtime.input("715"));
   const futanariBody = markup(runtime.input("6002")); // Native default becomes women's clothing.
-  assert.match(futanariBody, /value='100213' class='era-setup-choice era-current'/);
+  assert.match(futanariBody, /value='100213' class='era-radio era-current'/);
   markup(runtime.input("6105"));
-  assert.match(markup(runtime.input("6105")), /value='110510' class='era-setup-choice era-current'/);
+  assert.match(markup(runtime.input("6105")), /value='110510' class='era-radio era-current'/);
   assert.match(markup(runtime.input("710")), /Default.*Women's clothing/);
   markup(runtime.input("711"));
   markup(runtime.input("6002"));
   markup(runtime.input("6002"));
   const maleTraits = markup(runtime.input("715"));
-  assert.match(maleTraits, /value='100212' class='era-setup-choice era-current'/,
+  assert.match(maleTraits, /value='100212' class='era-radio era-current'/,
     "native sex cycling returns to Male, never no sex");
   const buttSizes = [];
   for (let step = 0; step < 8; step++) {
     const body = markup(runtime.input(String(110800 + step + 7)));
-    buttSizes.push(/value='1108\d+' class='era-setup-choice era-current'[^>]*><span class='era-setup-choice-name'>([^<]+)/.exec(body)?.[1]);
+    buttSizes.push(/value='1108\d+' class='era-radio era-current'[^>]*><span class='era-radio-name'>([^<]+)/.exec(body)?.[1]);
   }
   assert.equal(new Set(buttSizes).size, 8, "all eight native butt sizes have distinct labels");
   assert.ok(buttSizes.every((size) => size && size !== "-"), "no unnamed butt sizes");
   const middleAge = markup(runtime.input("101711"));
   assert.match(middleAge, /Human · Male · Adult/);
-  assert.match(middleAge, /value='101711' class='era-setup-choice era-current'/);
+  assert.match(middleAge, /value='101711' class='era-radio era-current'/);
   markup(runtime.input("101710"));
   const abilities = markup(runtime.input("712"));
   assert.match(abilities, /Sensitivity &amp; Response/);
@@ -509,10 +509,10 @@ QUIT`, "TEST_SAVE_PICKER.ERB");
   markup(configured.input("700"));
   const predefinedPlayer = markup(configured.input("710"));
   assert.match(predefinedPlayer, /era-setup-player-face'><img src='[^']+' height='112px'/);
-  assert.match(predefinedPlayer, /value='1199' class='era-setup-choice era-current'[^>]*>.*Default.*Yukari/);
+  assert.match(predefinedPlayer, /value='1199' class='era-radio era-current'[^>]*>.*Default.*Yukari/);
   assert.match(predefinedPlayer, /value='12'[^>]*>Custom Character/);
   const home = markup(configured.input("701"));
-  assert.match(home, /value='2006' class='era-setup-choice era-current'/, "predefined characters retain their own home");
+  assert.match(home, /value='2006' class='era-radio era-current'/, "predefined characters retain their own home");
   markup(configured.input("700"));
   const customAgain = markup(configured.input("12"));
   assert.match(customAgain, /era-setup-name-field'>Player/);
@@ -533,7 +533,7 @@ QUIT`, "TEST_INLINE_SETUP.ERB");
   markup(inline.input("703"));
   for (let bonus = 0; bonus < 12; bonus++) {
     assert.match(markup(inline.input(String(1000 + bonus))),
-      new RegExp(`value='${1000 + bonus}' class='era-setup-choice era-current'`),
+      new RegExp(`value='${1000 + bonus}' class='era-radio era-current'`),
       `bonus ${bonus} can be selected without a submenu or confirmation`);
   }
   markup(inline.input("1008"));
@@ -582,9 +582,9 @@ QUIT`, "TEST_PLAYER_SETUP.ERB");
   markup(player.input("711"));
   markup(player.input("6002"));
   const explicitClothes = markup(player.input("710"));
-  assert.match(explicitClothes, /value='1104' class='era-setup-choice era-current'/,
+  assert.match(explicitClothes, /value='1104' class='era-radio era-current'/,
     "an explicit outfit survives gender changes");
-  assert.doesNotMatch(explicitClothes, /value='1199' class='era-setup-choice era-current'/);
+  assert.doesNotMatch(explicitClothes, /value='1199' class='era-radio era-current'/);
   const playerAccepted = player.input("100");
   assert.equal(playerAccepted.error, null);
   assert.equal(playerAccepted.status, "halted");
@@ -612,8 +612,8 @@ QUIT`, "TEST_BODY_RACES.ERB");
   assert.match(races.output.flatMap(item => "text" in item ? [item.text] : []).join("\n"),
     /human=0;youkai=2;butt=4/);
   const raceMarkup = races.output.flatMap(item => "text" in item ? [item.text] : []).join("\n");
-  assert.match(raceMarkup, /value='119112' class='era-setup-choice era-current'/);
-  assert.match(raceMarkup, /value='130191' class='era-setup-choice era-current'/);
+  assert.match(raceMarkup, /value='119112' class='era-radio era-current'/);
+  assert.match(raceMarkup, /value='130191' class='era-radio era-current'/);
   assert.match(raceMarkup, /value='130090'/);
   assert.match(raceMarkup, /value='130091'/);
   assert.match(raceMarkup, /fox=1;youkai=0/);

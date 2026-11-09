@@ -34,6 +34,19 @@ PRINTL Original title`, "<original>");
   assert.match(html, /\[data-suffix=&quot;›&quot;\]/);
   assert.doesNotMatch(html, /era-component-state/);
   assert.doesNotMatch(html, /ui-button/);
+  assert.match(html, /class='era-radio' role='radio' aria-checked='false'/);
+  assert.match(html, /class='era-radio era-current' role='radio' aria-checked='true'/);
+  assert.match(html, /role='radiogroup' aria-label='Home example'/);
+  assert.match(html, /value='9102'[^>]*aria-disabled='true'/);
+  assert.match(html, /<code>\.choice<\/code>/);
+  const nativeChoices = snapshot.output.filter(item => item.type === "text" && item.text.includes("Choice "));
+  assert.equal(nativeChoices.length, 8);
+  assert.ok(nativeChoices.every(item => "newline" in item && !item.newline));
+  const selected = runtime.input("9101");
+  assert.equal(selected.error, null);
+  const selectedHtml = selected.output.flatMap(item => item.type === "html" ? [item.text] : []).join("");
+  assert.match(selectedHtml, /value='9101' class='era-radio era-current' role='radio' aria-checked='true'/);
+  assert.match(selectedHtml, /value='9100' class='era-radio' role='radio' aria-checked='false'/);
   assert.equal(game.routines.get("SYSTEM_TITLE"), title);
   assert.notEqual(preview.routines, game.routines);
   assert.equal(runtime.input("100").status, "waiting", "clicking redisplays the fixture");
@@ -66,4 +79,20 @@ test("all game catalog scenes render their actual production surfaces", { skip: 
     assert.match(html, expected[sample]!, sample);
   }
   assert.equal(game.routines.get("SYSTEM_TITLE"), originalTitle);
+});
+
+test("radio helper escapes labels and descriptions and exposes selected and unavailable states", async () => {
+  const game = emptyGame();
+  const source = await readFile(new URL("../hotpatch/MAIN_SCREEN_COMMANDS.ERB", import.meta.url), "utf8");
+  indexScript(game, source.slice(source.indexOf("@HOTPATCH_RADIO(")), "<production-radios>");
+  indexScript(game, `@SYSTEM_TITLE
+HTML_PRINT HOTPATCH_RADIO(12, "<Home> & away", 1, "<b>Not markup</b>", 0)
+INPUT`, "<radio-test>");
+  const snapshot = new Runtime(game).start();
+  assert.equal(snapshot.error, null);
+  const html = snapshot.output.flatMap(item => item.type === "html" ? [item.text] : []).join("");
+  assert.match(html, /role='radio' aria-checked='true' aria-disabled='true'/);
+  assert.match(html, /&lt;Home&gt; &amp; away/);
+  assert.match(html, /&lt;b&gt;Not markup&lt;\/b&gt;/);
+  assert.doesNotMatch(html, /aria-pressed|<b>/);
 });

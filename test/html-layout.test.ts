@@ -324,7 +324,7 @@ test("sky narration keeps its dialog open across waits and continues through its
   assert.match(app, /const skyContinue = button\.matches\("\.era-sky-dialog \.era-wait-continue"\);/);
   assert.match(app, /skyContinue && !waitContinue/);
   assert.match(app, /submit\(input\?\.kind === "wait" && button\.matches\("\.era-sky-dialog \.era-wait-continue"\) \? "" : value, button\)/);
-  assert.match(app, /advanceScreen && currentScreen\?\.querySelector\("\.era-sky-dialog:not\(\[data-closed\]\)"\)\) advanceScreen = false/);
+  assert.match(app, /advanceScreen && currentScreen\?\.querySelector\("\.era-dialog:not\(\[data-closed\]\)"\)\) advanceScreen = false/);
   assert.match(app, /dialog\.matches\("\.era-sky-dialog"\) && dialog\.dataset\.closed && input\?\.kind !== "wait"/);
   assert.match(app, /pageTranslated\(\) \|\| !!terminal\.querySelector\("\.screen\.is-active \.era-sky-dialog:popover-open"\)/);
 });
@@ -1313,6 +1313,7 @@ test("last command is a placeholder, never input data, and defaults and waits ta
     lastOutputLine: () => null,
     terminal: { ...element, querySelectorAll: () => [], querySelector: () => chatHost },
     islandRoot: { querySelectorAll: () => [] },
+    syncRadioGroups() {},
     command: field, send: { ...element, disabled: false, textContent: "" },
     document: { querySelector: () => ({ hidden: false }) },
     startButtons: [], restartButton: element, debugButton: { disabled: false },
@@ -1517,7 +1518,7 @@ test("title Continue is disabled without a save and enabled when a save is avail
   const context = {
     terminal: { ...element, querySelector: () => null,
       querySelectorAll: (selector: string) => selector.includes("era-quicksave") ? [] : [button] },
-    islandRoot: { querySelectorAll: () => [] }, choiceControl: () => button,
+    islandRoot: { querySelectorAll: () => [] }, choiceControl: () => button, syncRadioGroups() {},
     document: { querySelector: () => ({ hidden: false }) },
     command: {}, send: element, startButtons: [], restartButton: element, debugButton: {},
     autoAdvance: { update() {}, isPaused: () => false },

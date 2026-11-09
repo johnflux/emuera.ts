@@ -153,25 +153,25 @@ QUIT`, "<settings-test>");
   const dialogue = new Runtime(game, GAME_INSTRUCTION_LIMIT);
   const screen = markup(dialogue.start("TEST_DIALOGUE_SETTINGS"));
   assert.match(screen, /Dialogue Settings/);
-  assert.match(screen, /era-setup-choice/);
-  const option = /value='(2\d{4})' class='era-setup-choice'/.exec(screen)?.[1];
+  assert.match(screen, /era-radio/);
+  const option = /value='(2\d{4})' class='era-radio'/.exec(screen)?.[1];
   assert.ok(option, "an alternative dialogue is available");
   let dialogueResult = markup(dialogue.input(option));
   if (dialogueResult.includes("resets the character's relationships")) {
     dialogueResult = markup(dialogue.input("0"));
-    assert.match(dialogueResult, new RegExp(`value='${option}' class='era-setup-choice'`));
+    assert.match(dialogueResult, new RegExp(`value='${option}' class='era-radio'`));
   } else {
     assert.match(dialogueResult, /dialogue/);
     dialogueResult = markup(dialogue.input(""));
-    assert.match(dialogueResult, new RegExp(`value='${option}' class='era-setup-choice era-current'`));
+    assert.match(dialogueResult, new RegExp(`value='${option}' class='era-radio era-current'`));
   }
   assert.match(markup(dialogue.input("999")), /finished/);
 
   const home = new Runtime(game, GAME_INSTRUCTION_LIMIT);
   const homeScreen = markup(home.start("TEST_MOVE_HOME"));
-  assert.match(homeScreen, /era-setup-choice/);
-  assert.match(homeScreen, /value='2000' class='era-setup-choice era-current'/);
-  assert.match(markup(home.input("2001")), /value='2001' class='era-setup-choice era-current'/);
+  assert.match(homeScreen, /era-radio/);
+  assert.match(homeScreen, /value='2000' class='era-radio era-current'/);
+  assert.match(markup(home.input("2001")), /value='2001' class='era-radio era-current'/);
   assert.match(markup(home.input("1998")), /home=0,0/);
   const move = new Runtime(game, GAME_INSTRUCTION_LIMIT);
   markup(move.start("TEST_MOVE_HOME"));
@@ -210,6 +210,7 @@ CALL ADDCHARA_INIT(0)
 CALL MAKE_ALL_CLASS_LIST
 CALL ADD_ALL_CHARACTERS
 CFLAG:1:口上実装状況 = 2
+CALLNAME:1 '= "Test's hero"
 INPUT
 FLAG:9000 = RESULT
 CALL HOTPATCH_DIALOGUE_SETTINGS
@@ -219,7 +220,7 @@ QUIT`, "<dialogue-settings-test>");
   function open(compatible: boolean): Runtime {
     const runtime = new Runtime(game, GAME_INSTRUCTION_LIMIT);
     markup(runtime.start("TEST_DIALOGUE_CHANGE"));
-    markup(runtime.input(compatible ? "1" : "0"));
+    assert.match(markup(runtime.input(compatible ? "1" : "0")), /aria-label='Test&#39;s hero dialogue'/);
     return runtime;
   }
   const canceled = open(false);

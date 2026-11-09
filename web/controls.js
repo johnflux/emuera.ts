@@ -64,3 +64,37 @@ export function createCheckbox(checked, activate) {
 export function choiceControl(element) {
   return element.querySelector(":scope > input[type=checkbox]") ?? element;
 }
+
+export function setupRadio(element, checked) {
+  if (!["true", "false"].includes(checked)) throw new Error(`Unsupported radio state: ${checked}`);
+  element.setAttribute("role", "radio");
+  element.setAttribute("aria-checked", checked);
+  element.classList.toggle("era-current", checked === "true");
+  element.addEventListener("keydown", event => {
+    if (!["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    const group = element.closest('[role="radiogroup"]');
+    if (!group || element.disabled) return;
+    const radios = [...group.querySelectorAll('[role="radio"]')]
+      .filter(radio => radio.closest('[role="radiogroup"]') === group && !radio.disabled
+        && radio.getAttribute("aria-disabled") !== "true");
+    const index = radios.indexOf(element);
+    if (index < 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const previous = event.key === "ArrowUp" || event.key === "ArrowLeft";
+    const next = event.key === "Home" ? 0 : event.key === "End" ? radios.length - 1
+      : (index + (previous ? -1 : 1) + radios.length) % radios.length;
+    radios[next].focus({ preventScroll: true });
+    if (next !== index) radios[next].click();
+  });
+}
+
+export function syncRadioGroups(root) {
+  for (const group of root.querySelectorAll('[role="radiogroup"]')) {
+    const radios = [...group.querySelectorAll('[role="radio"]')]
+      .filter(radio => radio.closest('[role="radiogroup"]') === group);
+    const enabled = radios.filter(radio => !radio.disabled && radio.getAttribute("aria-disabled") !== "true");
+    const selected = enabled.find(radio => radio.getAttribute("aria-checked") === "true") ?? enabled[0];
+    for (const radio of radios) radio.tabIndex = radio === selected ? 0 : -1;
+  }
+}

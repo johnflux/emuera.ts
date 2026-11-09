@@ -791,3 +791,25 @@ IF sVariant == "list"
 	sLabel '= @"<span class='era-config-setting'><span class='era-config-label'>%sLabel%</span><span class='era-config-state%sStateClass%'>%HTML_ESCAPE(sState)%</span></span><span class='era-config-help'>%HTML_ESCAPE(sHelp)%</span>"
 ENDIF
 RETURNF @"<button value='{nValue}' class='era-button%(sVariant == "default" ? "" # " era-button-" + sVariant)% %HOTPATCH_ATTRIBUTE(HTML_ESCAPE(sClass))%' data-command-number='{nValue}' data-suffix='%HOTPATCH_ATTRIBUTE(HTML_ESCAPE(sSuffix))%' aria-disabled='%(!nEnabled ? "true" # "false")%' title='%HOTPATCH_ATTRIBUTE(HTML_ESCAPE(sTitle))%'>%sLabel%</button>"
+
+@HOTPATCH_RADIO(nValue, sName, nSelected, sDescription = "", nEnabled = 1)
+#FUNCTIONS
+#DIM DYNAMIC nValue
+#DIMS DYNAMIC sName
+#DIM DYNAMIC nSelected
+#DIMS DYNAMIC sDescription
+#DIM DYNAMIC nEnabled
+RETURNF HOTPATCH_CHOICE_MARKUP(nValue, sName, nSelected, HTML_ESCAPE(sDescription), nEnabled, 0)
+
+; Internal helper: sDescription is escaped markup prepared by the public helpers.
+@HOTPATCH_CHOICE_MARKUP(nValue, sName, nSelected, sDescription, nEnabled, nToggle)
+#FUNCTIONS
+#DIM DYNAMIC nValue
+#DIMS DYNAMIC sName
+#DIM DYNAMIC nSelected
+#DIMS DYNAMIC sDescription
+#DIM DYNAMIC nEnabled
+#DIM DYNAMIC nToggle
+#DIMS DYNAMIC sState
+sState '= nToggle ? "aria-pressed" # "role='radio' aria-checked"
+RETURNF @"<button value='{nValue}' class='era-radio%(nSelected ? " era-current" # "")%' %sState%='%(nSelected ? "true" # "false")%' aria-disabled='%(nEnabled ? "false" # "true")%'><span class='era-radio-name'>%HTML_ESCAPE(sName)%</span><span class='era-radio-description'>%sDescription%</span></button>"

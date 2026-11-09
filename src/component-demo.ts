@@ -23,6 +23,7 @@ function classHeading(html: string): string {
 
 const buttons = `
 @SYSTEM_TITLE
+#DIM RADIO_SELECTION
 ${["default", "block", "primary", "list"].map((variant, index) => `
 HTML_PRINT "<era-open class='era-section era-helper-samples era-button-sample'>"
 PRINTL ${variant === "default" ? "Standard button" : variant === "block" ? "Full-width layout (same button)" : variant === "list" ? "Setting row" : "Primary action"}
@@ -37,7 +38,43 @@ HTML_PRINT "${classHeading(html)}"
 HTML_PRINT "${html}"
 HTML_PRINT "<era-close>"
 `).join("")}
+${[
+  ["Radio", "Radio choice", 0, "", 1],
+  ["Radio selected", "Selected choice", 1, "", 1],
+  ["Radio with description", "Choice with help", 0, "Explanation of this choice.", 1],
+  ["Radio unavailable", "Unavailable choice", 0, "Requires an unlocked area.", 0],
+  ["Radio selected unavailable", "Current unavailable choice", 1, "", 0],
+  ["Radio long label", "Bamboo Forest of the Lost", 0, "A longer label without a setup-card dependency.", 1],
+].map(([heading, label, selected, description, enabled], index) => `
+HTML_PRINT "<era-open class='era-section era-button-sample'>"
+PRINTL ${heading}
+HTML_PRINT "${classHeading("<button class='era-radio'></button>")}"
+HTML_PRINT HOTPATCH_RADIO(${9200 + index}, "${label}", ${selected}, "${description}", ${enabled})
+HTML_PRINT "<era-close>"
+`).join("")}
+HTML_PRINT "<era-open class='era-section era-button-sample'>"
+PRINTL Radio group
+HTML_PRINT "${classHeading("<div class='era-radio-group'></div>")}"
+HTML_PRINT "<era-open class='era-radio-group' role='radiogroup' aria-label='Home example'>"
+HTML_PRINT HOTPATCH_RADIO(9100, "Hakurei Shrine", RADIO_SELECTION == 0)
+HTML_PRINT HOTPATCH_RADIO(9101, "Bamboo Forest of the Lost", RADIO_SELECTION == 1, "A home among the bamboo.")
+HTML_PRINT HOTPATCH_RADIO(9102, "Scarlet Devil Mansion", RADIO_SELECTION == 2, "Requires an unlocked area.", 0)
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-open class='era-section era-button-sample'>"
+PRINTL Inline native choices
+HTML_PRINT "${classHeading("<button class='choice'></button>")}"
+HTML_PRINT "<era-open class='era-config era-setup-editor'>"
+FOR LOCAL, 0, 8
+  PRINTFORM [{LOCAL,3}] Choice {LOCAL}
+  SIF (LOCAL + 1) % 4 == 0
+    PRINTL
+NEXT
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-close>"
 BINPUT
+SIF RESULT >= 9100 && RESULT <= 9101
+  RADIO_SELECTION = RESULT - 9100
 CLEARLINE LINECOUNT
 RESTART
 `;

@@ -49,7 +49,7 @@ QUIT`, "<farm-settings-test>");
   }
   const free = open(0);
   assert.match(free.screen, /Farm Settings[\s\S]*Contract Terms[\s\S]*Farming Contract/);
-  const landlordAction = /value='(3\d{4})' class='era-setup-choice/.exec(free.screen)?.[1];
+  const landlordAction = /value='(3\d{4})' class='era-radio/.exec(free.screen)?.[1];
   assert.ok(landlordAction);
   assert.match(markup(free.runtime.input(landlordAction)), /Debt:/);
   markup(free.runtime.input("3103"));
@@ -75,7 +75,7 @@ QUIT`, "<farm-settings-test>");
   assert.match(markup(same.runtime.input("100")), /state=1,3,3,12345,45678,73,4,5,6,7/);
 
   const switched = open(1);
-  const actions = [...switched.screen.matchAll(/value='(3\d{4})' class='era-setup-choice/g)].map((match) => match[1]!);
+  const actions = [...switched.screen.matchAll(/value='(3\d{4})' class='era-radio/g)].map((match) => match[1]!);
   const other = actions.find((value) => value !== "30001");
   assert.ok(other);
   const preview = markup(switched.runtime.input(other));

@@ -136,8 +136,13 @@ screen-parent selectors.
 Game button variants and states also require fixtures in `src/button-samples.ts`.
 `test/button-system.test.ts` checks coverage and prohibits panel-level appearance
 rules; `test/components-browser.test.ts` verifies real-renderer parent independence
-and content-sized, left-aligned map controls. Use browser zoom for interface sizing;
-there is no font-size setting or handheld-mode styling switch. Responsive layouts
+and content-sized, left-aligned map controls.
+Native printed choices retain the game's inline grouping and explicit newlines,
+including inside settings dialogs. Full-width rows must explicitly request the
+`list` or `block` component variant; do not infer them from the containing screen
+or from a choice being alone on a line.
+Use browser zoom for interface sizing; there is no font-size setting or
+handheld-mode styling switch. Responsive layouts
 and controller navigation remain automatic. Controller mode hides the command
 line; controller hints hide command numbers regardless of viewport size. The
 catalog's sticky state bar toggles disabled controls and controller mode without

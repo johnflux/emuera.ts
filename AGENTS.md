@@ -34,6 +34,19 @@
   safe and errors explicit.
 - This does not relax the native Emuera save-compatibility requirements above.
 
+# Shared components
+
+- Before adding or restyling a screen control, check `/components` and existing
+  shared components for something reusable.
+- Prefer common components over one-off screen controls, and convert existing
+  bespoke controls when touching them. Add component variants to the shared
+  component rather than duplicating their markup or behavior in screens.
+- Component styles own their appearance and interaction states. Screens may
+  arrange and size components, but must not restyle or override their visual
+  treatment.
+- Keep the component catalog and relevant tests in sync when adding or changing
+  a shared component.
+
 # Native Emuera spot checks (Wine)
 
 - For behavior parity questions, prefer a direct run of native Emuera before

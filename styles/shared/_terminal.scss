@@ -56,8 +56,8 @@
 /* With line-height 0 an inline span still paints its background over a font-height box centred on the baseline,
    half a line above the image, covering the previous line. The title strip has no text, so drop the font box. */
 .title-image .output-text { font-size: 0; }
-button.choice { display: inline-block; font: inherit; background: transparent; color: inherit; border: 0; border-radius: 0; padding: 0; vertical-align: baseline; text-decoration: none; }
-.choice .command-number { flex: 0 0 auto; white-space: nowrap; overflow-wrap: normal; }
+button.choice { display: inline-block; font: inherit; background: transparent; color: inherit; border: 0; border-radius: 0; padding: 0; vertical-align: baseline; text-align: left; text-decoration: none; }
+.choice .command-number { flex: 0 0 auto; white-space: pre; overflow-wrap: normal; }
 button, a.game-primary, button.choice:is(.era-chip-button, .era-star, .era-dialog-close, .era-cycle-toggle), .era-chip-button {
   display: inline-flex; align-items: center; justify-content: center; gap: var(--button-gap, .45em); vertical-align: middle;
   padding: var(--button-padding, 1px 9px); border: 1px solid var(--button-border, #39434c); border-radius: var(--button-radius, 999px);

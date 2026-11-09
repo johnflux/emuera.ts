@@ -11,7 +11,7 @@ import { profiling, profileStart, profileEnd } from "./performance.js";
 import { decorateCommandNumbers, setupKeyboardNavigation, touchInput } from "./navigation.js";
 import { setupArtworkDemo } from "./art-demo.js";
 import { activateControllerAction, setupControllerMenu, syncGameControllerHints, setPreviewControllerHints } from "./controller-menu.js";
-import { createCheckbox, choiceControl } from "./controls.js";
+import { createCheckbox, choiceControl, setupRadio, syncRadioGroups } from "./controls.js";
 import { createAutoAdvance, screenTransitionIndex } from "./auto-advance.js";
 
 const componentSample = new URLSearchParams(location.search).get("component");
@@ -434,6 +434,8 @@ function updateControls() {
       || previewDisabled
       || !!input.buttonValues && !input.buttonValues.includes(value);
   });
+  syncRadioGroups(terminal);
+  syncRadioGroups(islandRoot);
 }
 function screen() {
   if (currentScreen?.parentElement !== outputRoot) {
@@ -1926,6 +1928,10 @@ async function renderHtml(markup, parent, sprites) {
       if (checkbox && !["true", "false", "mixed"].includes(checked)) throw new Error(`Unsupported checkbox state: ${checked}`);
       if (value !== null) element = choice("", value, node.classList.contains("era-dialog-close") ? "" : node.getAttribute("title") ?? "", checkbox ? checked === "mixed" ? "mixed" : checked === "true" : null);
       else element = document.createElement("span");
+      if (node.getAttribute("role") === "radio") {
+        if (value === null) throw new Error("Radio choices require a command value");
+        setupRadio(element, checked);
+      }
     } else if (node.tagName === "A") {
       const href = node.getAttribute("href") ?? "";
       if (!/^https?:\/\//i.test(href)) throw new Error(`Unsupported link target: ${href}`);
@@ -1959,9 +1965,14 @@ async function renderHtml(markup, parent, sprites) {
     applyClasses(element, node);
     if (element.matches(".choice")) syncGameControllerHints(element);
     if (node.tagName === "DIV" && element.classList.contains("era-sky") && node.hasAttribute("data-minutes")) sky(node, element);
-    if (element.matches(".era-occupant-label, .era-setup-choice, .era-chip-button"))
+    if (element.matches(".era-occupant-label, .era-chip-button")
+      || element.matches(".era-radio") && node.getAttribute("role") !== "radio")
       element.setAttribute("aria-pressed", String(node.getAttribute("aria-pressed") === "true"));
-    if (node.tagName === "BUTTON" || element.matches(".era-setup-choice, .era-setup-step, .era-setup-trait"))
+    if (node.tagName === "DIV" && node.getAttribute("role") === "radiogroup") {
+      element.setAttribute("role", "radiogroup");
+      if (node.hasAttribute("aria-label")) element.setAttribute("aria-label", node.getAttribute("aria-label"));
+    }
+    if (node.tagName === "BUTTON" || element.matches(".era-radio, .era-setup-step, .era-setup-trait"))
       element.setAttribute("aria-disabled", String(node.hasAttribute("disabled") || node.getAttribute("aria-disabled") === "true"));
     if (node.tagName === "BUTTON") {
       for (const attribute of ["data-command-number", "data-suffix"]) {
@@ -2318,8 +2329,8 @@ async function renderSnapshot(snapshot, advanceScreen) {
   }
   const previousScreen = currentScreen;
   const previousLine = currentLine;
-  // Weather narration can pause for waits and diary choices; both must resume inside the same open box.
-  if (advanceScreen && currentScreen?.querySelector(".era-sky-dialog:not([data-closed])")) advanceScreen = false;
+  // Dialogs can call native submenus across inputs; keep printing inside their open boxes until they close.
+  if (advanceScreen && currentScreen?.querySelector(".era-dialog:not([data-closed])")) advanceScreen = false;
   if (advanceScreen === "continue") {
     // An unfinished line keeps printing into its screen; otherwise the continued output starts a new screen.
     if (currentScreen && !currentLine) {
@@ -2455,7 +2466,6 @@ async function renderSnapshot(snapshot, advanceScreen) {
     }
   }
   outputRoot.querySelectorAll("button.choice").forEach(decorateCommandNumbers);
-  for (const submenu of outputRoot.querySelectorAll(".screen.is-active .era-config")) setupConfigSubmenu(submenu);
   markTarget(snapshot.target);
   for (const main of outputRoot.querySelectorAll(".screen.is-active .era-main")) setupMainSidebar(main);
   for (const scene of outputRoot.querySelectorAll(".screen.is-active .era-scene")) syncSceneLines(scene);
@@ -2739,44 +2749,6 @@ function staleTab(error) {
   setTimeout(() => { void resume(id).then((ok) => { if (ok) message("This run was continued in another tab; caught up with it."); }); });
   return true;
 }
-function setupConfigSubmenu(submenu) {
-  for (const button of submenu.querySelectorAll("button.choice:not(.era-button):not(.era-dialog-close)")) {
-    const structured = button.matches(".era-setup-choice");
-    if (!structured && !button.closest(".era-setup-editor")) continue;
-    if (button.querySelector("input, img, .sprite") || button.getAttribute("role") === "checkbox") continue;
-    const existingName = button.querySelector(".era-setup-choice-name");
-    const existingHelp = button.querySelector(".era-setup-choice-description");
-    const text = button.textContent.trim().replace(/^\[\s*-?\d+\s*\]\s*[-–]?\s*/, "")
-      .replace(/\s*\[\s*(-?\d+)\s*\]$/, (marker, value) => value === button.dataset.value ? "" : marker);
-    const separator = /[：:]\s*/.exec(text);
-    const name = structured ? existingName.textContent : separator ? text.slice(0, separator.index).trimEnd() : text;
-    const state = structured ? button.classList.contains("era-current") ? "Selected" : "" :
-      separator ? text.slice(separator.index + separator[0].length).trim() : "";
-    const setting = document.createElement("span");
-    setting.className = "era-config-setting";
-    const label = document.createElement("span");
-    label.className = "era-config-label";
-    label.textContent = name;
-    const answer = document.createElement("span");
-    answer.className = "era-config-state";
-    answer.classList.toggle("era-config-state-off", /^(no|off)$/i.test(state));
-    answer.textContent = state;
-    setting.append(label, answer);
-    const help = document.createElement("span");
-    help.className = "era-config-help";
-    if (existingHelp) help.append(...existingHelp.cloneNode(true).childNodes);
-    else help.textContent = button.dataset.tooltip ?? button.getAttribute("title") ?? "";
-    button.replaceChildren(setting, help);
-    button.classList.add("era-button", "era-button-list");
-    button.dataset.commandNumber = button.dataset.value;
-    decorateCommandNumbers(button);
-    button.classList.remove("has-tooltip", "era-setup-choice");
-    delete button.dataset.tooltip;
-    button.removeAttribute("title");
-    button.removeAttribute("aria-description");
-  }
-}
-
 function setupMainSidebar(main) {
   if (main.querySelector(".era-main-sidebar")) return;
   const sidebar = document.createElement("div");

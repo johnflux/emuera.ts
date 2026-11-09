@@ -41,8 +41,6 @@ export const GAME_BUTTON_SAMPLES = [
   ...Array.from({ length: 9 }, (_, i) => ({
     name: `Relationship action ${i + 1}`, html: button(`era-relationship-select era-relationship-action-${i + 1}`, "Relationship"),
   })),
-  { name: "Setup choice", html: button("era-setup-choice", "Option", "<span class='era-setup-choice-name'>Example choice</span><span class='era-setup-choice-description'>Explanation of this choice.</span>") },
-  { name: "Setup choice selected", html: button("era-setup-choice era-current", "Option", "<span class='era-setup-choice-name'>Selected choice</span><span class='era-setup-choice-description'>Explanation.</span>") },
   { name: "Predefined character", html: button("era-predefined-character", "Character", "<span class='era-predefined-face'></span><span class='era-predefined-info'><span class='era-predefined-name'>Example character</span><span class='era-predefined-summary'>Character summary</span></span>") },
   { name: "Save slot", html: button("era-save-slot", "Save", "<span class='era-save-slot-number'>1</span><span class='era-save-slot-info'>Saved game</span>") },
   ...["era-title-new", "era-title-load", "era-title-continue"].map(classes => ({ name: classes, html: button(classes) })),

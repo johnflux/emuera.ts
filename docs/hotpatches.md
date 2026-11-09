@@ -50,6 +50,44 @@ See more actions share `.era-text-button`; setup presets use ordinary chips.
 Map tabs use the same `.era-sheet-page` and `.era-current` appearance as sheet
 tabs. Their map-specific classes remain only for navigation and map linking.
 
+### Radio choices
+
+`HOTPATCH_RADIO(value, label, selected, description = "", enabled = 1)` in
+`MAIN_SCREEN_COMMANDS.ERB` produces the shared `.era-radio` component. Labels
+and descriptions are escaped. The optional description is below the label by
+default; setup layouts can align descriptions in columns without changing the
+control's appearance. The control works without a setup card or dialog.
+The shared `--era-radio-indicator-width` is 19px in both standalone controls and
+setup grids. Together with the 12px column gap and unchanged 14px circle, this
+leaves 17px between the circle and label at all viewport sizes.
+
+Wrap mutually exclusive choices in a labeled `.era-radio-group`:
+
+```erb
+HTML_PRINT "<era-open class='era-radio-group' role='radiogroup' aria-label='Home'>"
+HTML_PRINT HOTPATCH_RADIO(2000, "Hakurei Shrine", MAIN_MAP == 0)
+HTML_PRINT HOTPATCH_RADIO(2001, "Myouren Temple", MAIN_MAP == 1)
+HTML_PRINT "<era-close>"
+```
+
+The renderer preserves `role="radio"` and `aria-checked`, validates checked
+states, and applies native button disabling. Tab enters a group at its selected
+enabled choice (or first enabled choice). Arrow keys wrap through enabled
+choices; Home/End select the first/last enabled choice. Enter, Space, clicks and
+controller activation use the existing game-command path. No browser-side
+selection is committed: the game's response determines the checked state.
+Rendered line wrappers span the entire group instead of individual grid tracks.
+
+`HOTPATCH_SETUP_CHOICE` delegates to the same markup builder while retaining
+setup-specific location notes and emphasized descriptions. Exclusive setup
+choices use labeled radio groups. Independent race and option toggles retain
+pressed-button semantics rather than becoming mutually exclusive radios.
+The Config adapter leaves radios intact instead of converting them into setting
+rows. `/components` calls the production radio helper for standalone, selected,
+unavailable, described, long-label and interactive grouped examples.
+Shared appearance lives in `styles/game/_radio.scss`; browser state and keyboard
+behavior live alongside checkboxes in `web/controls.js`.
+
 `IN_GAME_SETTINGS.ERB` replaces Config [809] with a responsive, scrollable
 single-column list dialog showing native setting names, current values and
 right-hand help (below the row on narrow screens). Its row helper delegates to
@@ -63,14 +101,16 @@ explicit width limits. Help stacks below when the available width cannot fit
 the minimum setting width and gap. Narrow screens also stack labels and states.
 States reading `No` or `Off` and their labels are dimmed to 50% opacity without
 disabling the option; help text remains unchanged.
-Config submenus share this presentation. The browser's `setupConfigSubmenu`
-adapter applies the explicit `list` variant to existing native choices in Config
-editors and structured setup choices in Config dialogs, retaining their button
-values and listeners. It places native tooltip help inline and keeps structured
-descriptions, including emphasis. Selected structured choices show `Selected`.
-Number inputs, steppers, checkboxes and artwork controls remain specialized.
-Native input modes and setting routines are unchanged; startup dialogs are not
-restyled by this adapter.
+Full-width setting rows must explicitly use `HOTPATCH_CONFIG_ROW` or the shared
+`list` button variant. Native choices are not converted based on their containing
+dialog or the number of choices on a line: `PRINTFORM` and `PRINTBUTTON` stay
+inline until the game prints a newline. This preserves multi-column character
+pickers, native labels, colors and tooltips in Config submenus. Explicit radios,
+number inputs, steppers, checkboxes and artwork controls retain their components.
+Native input modes and setting routines are unchanged.
+Open dialogs retain their layout context while native submenus wait for input
+and return via `CLEARLINE`; only a closing marker ends that context. Native
+printed lines preserve padding spaces so character columns remain aligned.
 The stars around
 **Select An Option** both open the native cheat menu. The Modded page keeps the
 three gameplay sections, omitting UI elements. Base options 8, 9, 10, 13, 14, 20,
@@ -732,6 +772,8 @@ are indented to the radio circles; Detailed rules follows the survival help
 inline. Dialogue also shares a label column across characters so all help
 text aligns. Non-choice content spans the shared grid rather than occupying
 an individual radio or label column.
+Rendered choice rows span the full list grid, including the in-game Change Home
+selector, so area names cannot collapse into the radio-icon column.
 Traits use compact text entries without hover recolouring. Native descriptions
 appear in a scrollable side panel on hover or focus (above the list on narrow
 screens), rather than covering the choices. The smaller-text panel is at most

@@ -189,65 +189,118 @@ RETURNF "Restores energy."`, "<rows-fixture>");
   }
 });
 
-test("Config submenus adapt native and structured choices without changing their inputs", { skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH" }, async () => {
-  const [source, style] = await Promise.all([
-    readFile(new URL("../web/app.js", import.meta.url), "utf8"),
-    readFile(new URL("../web/generated/style.css", import.meta.url), "utf8"),
+test("Config editors preserve printed choice rows and require explicit full-width list buttons", { skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH" }, async () => {
+  const [source, attributes] = await Promise.all([
+    readFile(new URL("../hotpatch/MAIN_SCREEN_COMMANDS.ERB", import.meta.url), "utf8"),
+    readFile(new URL("../hotpatch/INFO_PALAM.ERB", import.meta.url), "utf8"),
   ]);
-  const adapter = source.slice(source.indexOf("function setupConfigSubmenu("), source.indexOf("function setupMainSidebar("));
-  const html = `<!doctype html><meta charset="utf-8"><style>${style}</style><body><div class="screen is-active">
-    <div class="era-config era-setup era-setup-editor" style="width:1300px"><div class="era-setup-body">
-      <div class="line"><span class="print-cell"><button class="choice has-tooltip" data-value="1" data-tooltip="Inline help">[1] - Native setting：No</button></span>
-        <span><button class="choice" data-value="2">[2] Second choice</button></span></div>
-      <div class="line"><button class="choice" data-value="7">[7] OFF button without a state</button></div>
-      <div class="line"><button class="choice" data-value="8">Command [V][  8]</button></div>
-    </div></div>
-    <div class="era-config era-setup"><div class="era-setup-grid">
-      <div class="line"><span><button class="choice era-setup-choice era-current" data-value="4130">
-        <span class="era-setup-choice-name">Normal</span><span class="era-setup-choice-description">Keep <strong>rich help</strong>.</span></button></span></div>
-      <button class="choice era-setup-step" data-value="9900">37</button>
-    </div></div>
-    <div class="era-setup"><button class="choice era-setup-choice" data-value="9">Startup choice</button></div>
-    </div><script>${commandDecoration}${adapter}
-      const native = document.querySelector("[data-value='1']");
-      let clicked = null;
-      native.addEventListener("click", () => clicked = native.dataset.value);
-      document.querySelectorAll(".era-config").forEach(setupConfigSubmenu);
-      const before = native.innerHTML;
-      document.querySelectorAll(".era-config").forEach(setupConfigSubmenu);
-      native.click();
-      const second = document.querySelector("[data-value='2']");
-      const structured = document.querySelector("[data-value='4130']");
-      document.body.textContent = JSON.stringify({
-        clicked, idempotent:before === native.innerHTML,
-        variant:native.classList.contains("era-button-list"),
-        nativeLabel:native.querySelector(".era-config-label").textContent,
-        state:native.querySelector(".era-config-state").textContent,
-        help:native.querySelector(".era-config-help").textContent,
-        dim:getComputedStyle(native.querySelector(".era-config-label")).opacity,
-        tooltip:native.classList.contains("has-tooltip") || !!native.dataset.tooltip,
-        padding:getComputedStyle(native).padding, border:getComputedStyle(native).borderWidth,
-        rows:second.getBoundingClientRect().top >= native.getBoundingClientRect().bottom,
-        selected:structured.querySelector(".era-config-state").textContent,
-        richHelp:!!structured.querySelector(".era-config-help strong"),
-        specialized:!document.querySelector(".era-setup-step").classList.contains("era-button-list"),
-        startup:!document.querySelector("[data-value='9']").classList.contains("era-button-list"),
-        trailing:document.querySelector("[data-value='8'] .era-config-label").textContent
-      });
-    </script>`;
+  const game = emptyGame();
+  indexScript(game, attributes.slice(attributes.indexOf("@HOTPATCH_ATTRIBUTE(")), "<attributes>");
+  indexScript(game, source.slice(source.indexOf("@HOTPATCH_BUTTON(")), "<buttons>");
+  indexScript(game, `@SYSTEM_TITLE
+HTML_PRINT "<era-open class='era-dialog era-setup era-config era-setup-editor'>"
+HTML_PRINT "<era-open class='era-inventory-body era-setup-body'>"
+CALL PICK_CHARACTER
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-close>"
+INPUT
+@PICK_CHARACTER
+#DIM FIRST_LINE
+FIRST_LINE = LINECOUNT
+$REPRINT
+CLEARLINE LINECOUNT - FIRST_LINE
+FOR LOCAL, 0, 8
+  PRINTFORM [{LOCAL,3}] Character {LOCAL}
+  SIF (LOCAL + 1) % 4 == 0
+    PRINTL
+NEXT
+PRINTBUTTON "[8] Inline button", 8
+PRINTBUTTON "[9] Another button", 9
+PRINTL
+PRINTL [10] Single native choice: No
+HTML_PRINT HOTPATCH_BUTTON("Explicit setting", 11, "", "list", "", "On", "Inline help")
+INPUT
+CALL EDIT_CHARACTER
+GOTO REPRINT
+@EDIT_CHARACTER
+PRINTFORML Chosen {RESULT}
+PRINT [99] Back
+INPUT`, "<config-editor-fixture>");
+  const app = createApp([{ id: "fixture", title: "Config choices", game }], true);
+  const server = createServer((request, response) => {
+    if (request.url !== "/config-probe") { app.emit("request", request, response); return; }
+    response.setHeader("Content-Type", "text/html; charset=utf-8");
+    response.end(`<!doctype html><iframe id="game" src="/?game=fixture" style="width:1280px;height:800px"></iframe>
+      <pre id="result"></pre><script>
+      const frame = document.querySelector("#game");
+      const pause = () => new Promise(resolve => setTimeout(resolve, 100));
+      async function until(read) {
+        for (let i = 0; i < 180; i++) { const value = read(); if (value) return value; await pause(); }
+        throw new Error("Config fixture did not become ready");
+      }
+      (async () => {
+        const doc = await until(() => {
+          const doc = frame.contentDocument;
+          return doc?.querySelector(".era-config button[data-value='0']:enabled")
+            && !doc.body.classList.contains("is-busy") && doc;
+        });
+        await doc.fonts.ready;
+        const button = value => doc.querySelector(".era-config button[data-value='" + value + "']");
+        const rect = value => button(value).getBoundingClientRect();
+        const result = {
+          paddedNumber: button(0).querySelector(".command-number").textContent === "[  0]"
+            && frame.contentWindow.getComputedStyle(button(0).querySelector(".command-number")).whiteSpace === "pre",
+          nativeTextAlign: frame.contentWindow.getComputedStyle(button(10)).textAlign,
+          rows: [0, 4].every(start => [1, 2, 3].every(offset =>
+            Math.abs(rect(start).top - rect(start + offset).top) < 1
+            && rect(start + offset).left > rect(start + offset - 1).left)),
+          newline: rect(4).top >= rect(0).bottom,
+          printButtonsInline: Math.abs(rect(8).top - rect(9).top) < 1 && rect(9).left > rect(8).left,
+          native: [...Array(11).keys()].every(value => !button(value).classList.contains("era-button-list")),
+          singleLabel: button(10).textContent,
+          explicitList: button(11).classList.contains("era-button-list"),
+          fullWidth: Math.abs(rect(11).width - button(11).closest(".line").getBoundingClientRect().width) < 1,
+          help: button(11).querySelector(".era-config-help").textContent
+        };
+        button(2).click();
+        await until(() => !doc.body.classList.contains("is-busy") && doc.querySelector("#terminal").textContent.includes("Chosen 2"));
+        result.clicked = true;
+        const back = await until(() => doc.querySelector(".screen.is-active button[data-value='99']:enabled"));
+        result.editorInDialog = !!back.closest(".era-config");
+        back.click();
+        await until(() => !doc.body.classList.contains("is-busy")
+          && doc.querySelector(".screen.is-active button[data-value='0']:enabled"));
+        const returned = doc.querySelector(".screen.is-active button[data-value='0']");
+        result.returnedInDialog = !!returned.closest(".era-config:popover-open");
+        result.preservesSpaces = frame.contentWindow.getComputedStyle(returned.closest(".line")).whiteSpace === "pre-wrap";
+        result.returnedRows = [1, 2, 3].every(value => {
+          const next = doc.querySelector(".screen.is-active button[data-value='" + value + "']");
+          return Math.abs(next.getBoundingClientRect().top - returned.getBoundingClientRect().top) < 1;
+        });
+        document.querySelector("#result").textContent = JSON.stringify(result);
+      })().catch(error => document.querySelector("#result").textContent = JSON.stringify({error:error.message}));
+      </script>`);
+  });
   const profile = await mkdtemp(join(process.cwd(), ".era-config-submenus-"));
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
   try {
+    const address = server.address();
+    assert.ok(address && typeof address !== "string");
     const { stdout } = await execute(browser!, ["--headless", "--disable-gpu", "--no-first-run", `--user-data-dir=${profile}`,
-      "--window-size=1440,900", "--dump-dom", `data:text/html;base64,${Buffer.from(html).toString("base64")}`],
+      "--window-size=1440,900", "--virtual-time-budget=30000", "--dump-dom", `http://127.0.0.1:${address.port}/config-probe`],
       { maxBuffer: 8 * 1024 * 1024, timeout: 30000 });
-    const match = stdout.match(/<body[^>]*>([\s\S]*?)<\/body>/);
-    assert.ok(match);
-    assert.deepEqual(JSON.parse(match[1]), {
-      clicked: "1", idempotent: true, variant: true, nativeLabel: "Native setting[1]", state: "No",
-      help: "Inline help", dim: "0.5", tooltip: false, padding: "0px", border: "0px", rows: true,
-      selected: "Selected", richHelp: true, specialized: true, startup: true, trailing: "Command [V][8]",
+    const match = stdout.match(/<pre id="result">([^<]+)<\/pre>/);
+    assert.ok(match, stdout.slice(0, 2000));
+    assert.deepEqual(JSON.parse(match[1]!.replaceAll("&quot;", '"').replaceAll("&amp;", "&")), {
+      paddedNumber: true, nativeTextAlign: "left", rows: true, newline: true, printButtonsInline: true, native: true,
+      singleLabel: "[10] Single native choice: No", explicitList: true, fullWidth: true, help: "Inline help", clicked: true,
+      editorInDialog: true, returnedInDialog: true, preservesSpaces: true, returnedRows: true,
     });
   } finally {
+    server.closeAllConnections();
+    await new Promise<void>(resolve => server.close(() => resolve()));
+    app.closeAllConnections();
     await rm(profile, { recursive: true, force: true });
   }
 });

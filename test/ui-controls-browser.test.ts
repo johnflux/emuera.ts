@@ -19,6 +19,109 @@ const browser = [
   process.env.PROGRAMFILES && join(process.env.PROGRAMFILES, "Google/Chrome/Application/chrome.exe"),
 ].find((path): path is string => !!path && existsSync(path));
 
+test("radio controls reject missing, mixed and invalid checked states", async () => {
+  const source = await readFile(new URL("../web/controls.js", import.meta.url), "utf8");
+  const setup = runInNewContext(`${source.replace(/^export /gm, "")}\nsetupRadio`);
+  for (const checked of [null, undefined, "mixed", "yes", ""]) {
+    assert.throws(() => setup({}, checked), /Unsupported radio state/);
+  }
+});
+
+test("home choices keep complete rows at desktop and mobile widths", {
+  skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH",
+}, async () => {
+  const [style, controls] = await Promise.all([
+    readFile(new URL("../web/generated/style.css", import.meta.url), "utf8"),
+    readFile(new URL("../web/controls.js", import.meta.url), "utf8"),
+  ]);
+  const names = ["Hakurei Shrine", "Myouren Temple", "Human Village", "Scarlet Devil Mansion",
+    "Bamboo Forest of the Lost", "Forest of Magic"];
+  const rows = names.map((name, index) => `<div class="line"><span class="output-text"><button
+    class="choice era-radio${index === 0 ? " era-current" : ""}" data-value="${2000 + index}"
+    role="radio" aria-checked="${index === 0}" ${index === 1 ? 'disabled aria-disabled="true"' : ""}>
+    <span class="era-radio-name">${name}</span><span class="era-radio-description"></span>
+    </button></span></div>`).join("");
+  const html = `<!doctype html><meta name="viewport" content="width=device-width"><style>${style}</style>
+    <main id="terminal"><div class="screen is-active">
+      <div class="era-box era-setup era-setup-editor"><div class="era-box era-setup-card">
+        <div class="era-box era-setup-grid era-radio-group" role="radiogroup" aria-label="Home">${rows}</div>
+      </div></div>
+      <div class="era-box era-setup"><div class="era-box era-setup-world"><div class="era-box era-setup-card">
+        <div class="era-box era-setup-grid era-radio-group" role="radiogroup" aria-label="World home">${rows}</div>
+      </div></div></div>
+      <div class="era-radio-group" role="radiogroup" aria-label="Standalone">${rows}</div>
+    </div></main><script>
+      ${controls.replace(/^export /gm, "")}
+      document.querySelectorAll('[role="radio"]').forEach(radio => setupRadio(radio, radio.getAttribute("aria-checked")));
+      syncRadioGroups(document);
+      const result = [...document.querySelectorAll(".era-radio-group")].map(grid => ({
+        width: grid.getBoundingClientRect().width,
+        rows: [...grid.querySelectorAll("button")].map(button => {
+          const name = button.querySelector(".era-radio-name");
+          const range = document.createRange();
+          range.selectNodeContents(name);
+          const rect = button.getBoundingClientRect();
+          const css = getComputedStyle(button);
+          const circle = getComputedStyle(button, "::before");
+          return {width: rect.width, top: rect.top, bottom: rect.bottom,
+            labelOffset: name.getBoundingClientRect().left - rect.left - parseFloat(css.paddingLeft),
+            circleWidth: parseFloat(circle.width) + parseFloat(circle.borderLeftWidth) + parseFloat(circle.borderRightWidth),
+            lines: range.getClientRects().length, fits: button.scrollWidth <= button.clientWidth + 1};
+        })
+      }));
+      for (const [index, grid] of [...document.querySelectorAll(".era-radio-group")].entries()) {
+        const radios = [...grid.querySelectorAll("button")];
+        const commands = [];
+        radios.forEach(radio => radio.addEventListener("click", () => commands.push(radio.dataset.value)));
+        radios[0].focus();
+        radios[0].dispatchEvent(new KeyboardEvent("keydown", {key:"ArrowDown",bubbles:true,cancelable:true}));
+        result[index].keyboard = {command:commands[0], focused:document.activeElement === radios[2],
+          checked:radios[0].getAttribute("aria-checked"), nextChecked:radios[2].getAttribute("aria-checked"),
+          tabs:radios.map(radio => radio.tabIndex)};
+        radios[2].dispatchEvent(new KeyboardEvent("keydown", {key:"End",bubbles:true,cancelable:true}));
+        radios[5].dispatchEvent(new KeyboardEvent("keydown", {key:"ArrowRight",bubbles:true,cancelable:true}));
+        result[index].keyboard.commands = commands;
+      }
+      document.body.innerHTML = "<pre id='result'>" + JSON.stringify(result) + "</pre>";
+    </script>`;
+  const profile = await mkdtemp(join(process.cwd(), ".era-home-layout-"));
+  try {
+    const fixture = join(profile, "home.html");
+    await writeFile(fixture, html);
+    for (const width of [500, 680, 1600]) {
+      const args = ["--headless", "--disable-gpu", "--no-first-run", `--user-data-dir=${profile}`,
+        `--window-size=${width},1000`, "--dump-dom", pathToFileURL(fixture).href];
+      if (process.platform === "linux") args.unshift("--no-sandbox");
+      const { stdout } = await execute(browser!, args, { maxBuffer: 4 * 1024 * 1024, timeout: 30000 });
+      const match = stdout.match(/<pre id="result">([^]*?)<\/pre>/);
+      assert.ok(match?.[1], stdout.slice(-4000));
+      const layouts = JSON.parse(match[1]) as {
+        width: number;
+        rows: { width: number; top: number; bottom: number; labelOffset: number; circleWidth: number; lines: number; fits: boolean }[];
+        keyboard: {command: string; focused: boolean; checked: string; nextChecked: string; tabs: number[]; commands: string[]};
+      }[];
+      assert.equal(layouts.length, 3);
+      for (const layout of layouts) {
+        assert.deepEqual(layout.keyboard, {command:"2002", focused:true, checked:"true", nextChecked:"false",
+          tabs:[0, -1, -1, -1, -1, -1], commands:["2002", "2005", "2000"]},
+        "keyboard navigation skips disabled choices, wraps, and waits for game state before changing checks");
+        assert.ok(layout.width > 250, `usable list width at ${width}px`);
+        assert.equal(layout.rows.length, names.length);
+        for (const [index, row] of layout.rows.entries()) {
+          assert.equal(row.labelOffset, 31, `shared 19px indicator track plus 12px gap at ${width}px`);
+          assert.equal(row.circleWidth, 14, "circle size remains unchanged");
+          assert.ok(Math.abs(row.width - layout.width) <= 1, `${names[index]} spans the list at ${width}px`);
+          assert.ok(row.lines <= 2, `${names[index]} does not wrap letter by letter at ${width}px`);
+          assert.ok(row.fits, `${names[index]} fits its row at ${width}px`);
+          if (index > 0) assert.ok(row.top >= layout.rows[index - 1]!.bottom, "choices occupy separate rows");
+        }
+      }
+    }
+  } finally {
+    await rm(profile, { recursive: true, force: true });
+  }
+});
+
 test("Continue waits keep disabled active portraits bright but still dim history and unavailable choices", {
   skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH",
 }, async () => {

@@ -88,6 +88,20 @@ test("catalog uses production rendering and context-independent buttons at wide 
         result.repeatEmpty = atlasDoc.querySelector(".era-repeat").textContent === "";
         result.continueEnabled = !atlasDoc.querySelector(".era-title-continue").disabled;
         result.noImageErrors = !atlasDoc.querySelector("#terminal").textContent.includes("Unknown sprite:");
+        stage = "radio group";
+        const radioGroup = () => atlasDoc.querySelector('[role="radiogroup"][aria-label="Home example"]');
+        const firstRadio = radioGroup().querySelector('[data-value="9100"]');
+        result.radioInitial = firstRadio.getAttribute("aria-checked") === "true" && firstRadio.tabIndex === 0
+          && !firstRadio.hasAttribute("aria-pressed") && radioGroup().querySelector('[data-value="9102"]').disabled;
+        firstRadio.focus();
+        firstRadio.dispatchEvent(new atlasDoc.defaultView.KeyboardEvent("keydown",
+          {key:"ArrowRight",bubbles:true,cancelable:true}));
+        await until(() => ready(atlasDoc, '[data-value="9101"][aria-checked="true"]'));
+        result.radioChanged = radioGroup().querySelector('[data-value="9101"]').tabIndex === 0
+          && radioGroup().querySelector('[data-value="9100"]').getAttribute("aria-checked") === "false";
+        result.radioLayout = [...radioGroup().querySelectorAll(".era-radio")].every(radio =>
+          radio.getBoundingClientRect().width >= radioGroup().getBoundingClientRect().width - 1
+          && radio.scrollWidth <= radio.clientWidth + 1);
         const toneControls = [...atlasDoc.querySelectorAll("button[class*='era-button-tone-']")];
         const toneStyle = atlasDoc.createElement("style");
         toneStyle.textContent = [...atlasDoc.styleSheets].flatMap(sheet => [...sheet.cssRules].map(rule => rule.cssText))
@@ -321,6 +335,9 @@ test("catalog uses production rendering and context-independent buttons at wide 
     assert.equal(result.repeatEmpty, true);
     assert.equal(result.continueEnabled, true);
     assert.equal(result.noImageErrors, true);
+    assert.equal(result.radioInitial, true);
+    assert.equal(result.radioChanged, true);
+    assert.equal(result.radioLayout, true);
     assert.equal(new Set(result.toneHovers.map(tone => tone.after)).size, 7);
     assert.ok(result.toneHovers.every(tone => tone.before !== tone.after));
     assert.equal(result.reenabled, true);

@@ -1,0 +1,15 @@
+:root { --era-radio-indicator-width: 19px; }
+.era-radio-group { display: flex; flex-direction: column; min-width: 0; gap: 2px; }
+.era-radio-group > .line { grid-column: 1 / -1; min-width: 0; white-space: normal; }
+.era-radio-group > .line > .output-text { display: block; }
+button.choice.era-radio { display: grid; grid-template-columns: var(--era-radio-indicator-width) minmax(0, 1fr); align-items: baseline; gap: 4px 12px; box-sizing: border-box; width: 100%; margin: 0; padding: 2px 8px; border: 0; border-radius: 0; background: transparent; color: #b7cbd7; text-align: left; white-space: normal; overflow-wrap: anywhere; }
+.era-radio::before { content: ""; grid-column: 1; grid-row: 1; align-self: start; width: 12px; height: 12px; margin-top: 3px; border: 1px solid #607988; border-radius: 50%; }
+button.choice.era-radio.era-current { background: #69c9b50c; color: #ceeee1; }
+.era-radio.era-current::before { border-color: #69c9b5; background: #69c9b5; box-shadow: inset 0 0 0 3px #15362f; }
+button.choice.era-radio:enabled:is(:hover, :focus-visible) { background: #8ddaff0c; }
+button.choice.era-radio:enabled:focus-visible { outline: 1px solid #69c9b5; outline-offset: -1px; }
+button.choice.era-radio[aria-disabled="true"] { opacity: .45; }
+.era-radio-name { grid-column: 2; font-weight: bold; }
+.era-radio-description { grid-column: 2; color: #99adba; font-size: .85em; line-height: 1.4; white-space: pre-line; }
+.era-radio-description:empty { display: none; }
+.era-radio-description strong { color: #e0edf3; -webkit-text-stroke: .25px currentColor; }

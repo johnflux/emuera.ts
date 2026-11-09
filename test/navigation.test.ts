@@ -305,7 +305,7 @@ test("compact main and wake-up screens retain their horizontal gutters", () => {
 
 test("render decorates command numbers after buttons have their surrounding labels", () => {
   const app = readFileSync(new URL("../web/app.js", import.meta.url), "utf8");
-  assert.match(app, /outputRoot\.querySelectorAll\("button\.choice"\)\.forEach\(decorateCommandNumbers\);\s*for \(const submenu of outputRoot\.querySelectorAll\("\.screen\.is-active \.era-config"\)\) setupConfigSubmenu\(submenu\);\s*markTarget/);
+  assert.match(app, /outputRoot\.querySelectorAll\("button\.choice"\)\.forEach\(decorateCommandNumbers\);\s*markTarget/);
 });
 
 test("compact room uses content height instead of reserving hidden chat space", () => {

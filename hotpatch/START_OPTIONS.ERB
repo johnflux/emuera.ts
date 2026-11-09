@@ -7,7 +7,7 @@ SIF nIndex == 23 && sFormat == "ExpSh"
 	RETURNF "Train Masturb Exp"
 RETURNF HOTPATCH_ORIGINAL_EXP_TR(nIndex, sFormat)
 
-@HOTPATCH_SETUP_CHOICE(nValue, sName, nSelected, sDescription = "", nEnabled = 1, sRegion = "", nHomeRegion = 0, sEmphasis = "")
+@HOTPATCH_SETUP_CHOICE(nValue, sName, nSelected, sDescription = "", nEnabled = 1, sRegion = "", nHomeRegion = 0, sEmphasis = "", nToggle = 0)
 #FUNCTIONS
 #DIM DYNAMIC nValue
 #DIMS DYNAMIC sName
@@ -17,6 +17,7 @@ RETURNF HOTPATCH_ORIGINAL_EXP_TR(nIndex, sFormat)
 #DIMS DYNAMIC sRegion
 #DIM DYNAMIC nHomeRegion
 #DIMS DYNAMIC sEmphasis
+#DIM DYNAMIC nToggle
 #DIMS DYNAMIC sRegionLabel
 sDescription '= REPLACE(HTML_ESCAPE(sDescription), "&lt;br&gt;", "&#10;")
 SIF sEmphasis != ""
@@ -26,7 +27,7 @@ IF sRegion != ""
 	SIF nHomeRegion
 		sRegionLabel '= " · <strong>" + HTML_ESCAPE(sRegion) + "</strong> (Home region)"
 ENDIF
-RETURNF @"<button value='{nValue}' class='era-setup-choice%(nSelected ? " era-current" # "")%' aria-pressed='%(nSelected ? "true" # "false")%' aria-disabled='%(nEnabled ? "false" # "true")%'><span class='era-setup-choice-name'>%HTML_ESCAPE(sName)%</span><span class='era-setup-choice-description'>%sDescription%%sRegionLabel%</span></button>"
+RETURNF HOTPATCH_CHOICE_MARKUP(nValue, sName, nSelected, sDescription + sRegionLabel, nEnabled, nToggle)
 
 @HOTPATCH_SETUP_CLOTHING(nDefaultClothes = 1)
 #DIM DYNAMIC nIndex
@@ -35,7 +36,7 @@ RETURNF @"<button value='{nValue}' class='era-setup-choice%(nSelected ? " era-cu
 nDefaultSet = FLAG:なりきり ? FLAG:なりきり + 100 # (TALENT:MASTER:性別 & 1 ? 2 # 1)
 HTML_PRINT "<era-open class='era-setup-card era-setup-plain'>"
 HTML_PRINT "<span class='era-launch-eyebrow'>Clothing</span>"
-HTML_PRINT "<era-open class='era-setup-grid'>"
+HTML_PRINT "<era-open class='era-setup-grid era-radio-group' role='radiogroup' aria-label='Clothing'>"
 HTML_PRINT HOTPATCH_SETUP_CHOICE(1199, "Default", nDefaultClothes, MASTER_CLOTHES_NAME(nDefaultSet))
 FOR nIndex, 1, 11
 	SIF nIndex == 7
@@ -216,7 +217,7 @@ FOR nIndex, 0, 200
 	HTML_PRINT @"<span class='era-launch-eyebrow'>%HTML_ESCAPE(TALENT_TR(nIndex))%</span>"
 	SIF nIndex == 100
 		HTML_PRINT "<div class='era-setup-description'>Very small or large bodies cannot use many commands without Forbidden Knowledge. Large differences in body size make insertion harder.</div>"
-	HTML_PRINT "<era-open class='era-setup-grid'>"
+	HTML_PRINT @"<era-open class='era-setup-grid era-radio-group' role='radiogroup' aria-label='%HOTPATCH_ATTRIBUTE(HTML_ESCAPE(TALENT_TR(nIndex)))%'>"
 	FOR nValue, -5, 13
 		sName '= HOTPATCH_SETUP_BODY_VALUE(nIndex, nValue)
 		SIF sName == ""
@@ -285,7 +286,7 @@ HTML_PRINT "<era-open class='era-setup-grid'>"
 FOR nIndex, 0, 200
 	SIF !HOTPATCH_SETUP_IS_RACE(nIndex)
 		CONTINUE
-	HTML_PRINT HOTPATCH_SETUP_CHOICE(130000 + nIndex, TALENT_TR(nIndex), TALENT:MASTER:nIndex != 0, "", !CUSTOM_選べない素質(nIndex, MASTER))
+	HTML_PRINT HOTPATCH_SETUP_CHOICE(130000 + nIndex, TALENT_TR(nIndex), TALENT:MASTER:nIndex != 0, "", !CUSTOM_選べない素質(nIndex, MASTER), "", 0, "", 1)
 	SIF !TALENT:MASTER:nIndex
 		CONTINUE
 	nVariants = 0
@@ -295,7 +296,7 @@ FOR nIndex, 0, 200
 	NEXT
 	SIF nVariants < 2
 		CONTINUE
-	HTML_PRINT "<era-open class='era-setup-race-variants'>"
+	HTML_PRINT @"<era-open class='era-setup-race-variants era-radio-group' role='radiogroup' aria-label='%HOTPATCH_ATTRIBUTE(HTML_ESCAPE(TALENT_TR(nIndex)))%'>"
 	FOR nValue, 1, 13
 		sName '= HOTPATCH_SETUP_BODY_VALUE(nIndex, nValue)
 		SIF sName == ""
@@ -536,7 +537,7 @@ sNames:6 '= "Huge"
 sDescriptions:6 '= "Do you think bigger is always better? A heart can only pump so much blood - if it gets too big it'll get soft. Besides, it's not the size that counts, it's the compatibility. If your sizes are incompatible it'll just hurt."
 HTML_PRINT "<era-open class='era-setup-card era-setup-plain'>"
 HTML_PRINT "<span class='era-launch-eyebrow'>Penis Size</span>"
-HTML_PRINT "<era-open class='era-setup-grid'>"
+HTML_PRINT "<era-open class='era-setup-grid era-radio-group' role='radiogroup' aria-label='Penis Size'>"
 FOR nIndex, 1, 7
 	HTML_PRINT HOTPATCH_SETUP_CHOICE(1200 + nIndex, sNames:nIndex, TALENT:MASTER:形状 == nIndex, sDescriptions:nIndex)
 NEXT
@@ -574,7 +575,7 @@ sNames:11 '= "None"
 sDescriptions:11 '= "No starting bonus."
 HTML_PRINT "<era-open class='era-setup-card'>"
 HTML_PRINT "<div class='era-setup-description'>Select one new game bonus.</div>"
-HTML_PRINT "<era-open class='era-setup-grid'>"
+HTML_PRINT "<era-open class='era-setup-grid era-radio-group' role='radiogroup' aria-label='New game bonus'>"
 FOR nIndex, 0, 12
 	nSelected = ニューゲーム特典 == HOTPATCH_SETUP_BONUS_VALUE(nIndex)
 	SIF nIndex == 0 && ニューゲーム特典 == ""
@@ -588,7 +589,7 @@ HTML_PRINT "<era-close>"
 IF ISNUMERIC(ニューゲーム特典)
 	HTML_PRINT "<era-open class='era-setup-card'>"
 	HTML_PRINT "<span class='era-launch-eyebrow'>Bonus Character</span>"
-	HTML_PRINT "<era-open class='era-setup-grid'>"
+	HTML_PRINT "<era-open class='era-setup-grid era-radio-group' role='radiogroup' aria-label='Bonus Character'>"
 	FOR nIndex, 1, CHARANUM
 		SIF !IS_NAMED(nIndex) || nIndex == FLAG:なりきり
 			CONTINUE
@@ -609,7 +610,7 @@ HTML_PRINT "<era-open class='era-setup-card'>"
 HTML_PRINT "<span class='era-launch-eyebrow'>Lunatic Survival</span>"
 IF MAIN_MAP == 3 && IS_MASTER(0)
 	HTML_PRINT "<era-open class='era-setup-grid'>"
-	HTML_PRINT @"<div class='era-setup-help-row'>%HOTPATCH_SETUP_CHOICE(4120, "Lunatic Survival", QUEST_FLAG(LSScarletAlias, QLSScarletActive))%<div class='era-setup-choice-description'>Scarlet Devil Mansion survival mode. Restricts movement, waking times and character behaviour. <button value='32' class='era-chip-button'>Detailed rules</button></div></div>"
+	HTML_PRINT @"<div class='era-setup-help-row'>%HOTPATCH_SETUP_CHOICE(4120, "Lunatic Survival", QUEST_FLAG(LSScarletAlias, QLSScarletActive), "", 1, "", 0, "", 1)%<div class='era-radio-description'>Scarlet Devil Mansion survival mode. Restricts movement, waking times and character behaviour. <button value='32' class='era-chip-button'>Detailed rules</button></div></div>"
 	HTML_PRINT "<era-close>"
 ELSE
 	HTML_PRINT "<div class='era-setup-description era-setup-indent'>Requires Scarlet Devil Mansion and a custom character.</div>"
@@ -618,25 +619,25 @@ HTML_PRINT "<era-close>"
 
 @HOTPATCH_SETUP_HOME_CHOICES
 #DIM DYNAMIC nIndex
-HTML_PRINT "<era-open class='era-setup-grid'>"
+HTML_PRINT "<era-open class='era-setup-grid era-radio-group' role='radiogroup' aria-label='Home'>"
 FOR nIndex, 0, 11
 	SIF !GET_EXISTMAP(nIndex)
 		CONTINUE
-	HTML_PRINT HOTPATCH_SETUP_CHOICE(2000 + nIndex, GET_MAPNAME(nIndex), MAIN_MAP == nIndex)
+	HTML_PRINT HOTPATCH_RADIO(2000 + nIndex, GET_MAPNAME(nIndex), MAIN_MAP == nIndex)
 NEXT
 HTML_PRINT "<era-close>"
 
 @HOTPATCH_SETUP_WORLD_SETTINGS
 HTML_PRINT "<era-open class='era-setup-card'>"
 HTML_PRINT "<span class='era-launch-eyebrow'>Romance Mode</span>"
-HTML_PRINT "<era-open class='era-setup-grid'>"
+HTML_PRINT "<era-open class='era-setup-grid era-radio-group' role='radiogroup' aria-label='Romance Mode'>"
 HTML_PRINT HOTPATCH_SETUP_CHOICE(4130, "Normal", !FLAG:甲斐性無, "You can confess and initiate romance. No extra assertiveness from other characters.")
 HTML_PRINT HOTPATCH_SETUP_CHOICE(4131, "Let others take the lead", FLAG:甲斐性無 && !FLAG:LUSTMODE, "You cannot confess, and some intimate actions are restricted. Other characters become more assertive.")
 HTML_PRINT HOTPATCH_SETUP_CHOICE(4132, "Play hard to get (Lust mode)", FLAG:甲斐性無 && FLAG:LUSTMODE, "You can still confess and use all actions. Other characters become more assertive, including attempts to pin you down.")
 HTML_PRINT "<era-close>"
 IF FLAG:甲斐性無
 	HTML_PRINT "<span class='era-launch-eyebrow'>Other Characters' Assertiveness</span>"
-	HTML_PRINT "<era-open class='era-setup-grid'>"
+	HTML_PRINT "<era-open class='era-setup-grid era-radio-group' role='radiogroup' aria-label='Assertiveness'>"
 	HTML_PRINT HOTPATCH_SETUP_CHOICE(4141, "Slightly increased", FLAG:甲斐性無 == 1, "A little pushier than normal.")
 	HTML_PRINT HOTPATCH_SETUP_CHOICE(4142, "Greatly increased", FLAG:甲斐性無 == 2, "A lot pushier than normal.")
 	HTML_PRINT HOTPATCH_SETUP_CHOICE(4143, "Extreme", FLAG:甲斐性無 == 3, "Highest setting, with increased risk of forced sexual encounters.")
@@ -646,7 +647,7 @@ HTML_PRINT "<era-close>"
 HTML_PRINT "<era-open class='era-setup-card'>"
 HTML_PRINT "<span class='era-launch-eyebrow'>Pregnancy Restrictions</span>"
 HTML_PRINT "<era-open class='era-setup-grid'>"
-HTML_PRINT HOTPATCH_SETUP_CHOICE(4110, "Allow sex throughout pregnancy", FLAG:STABLEBYPASS, "Off by default: sex is only allowed during the stable (middle) stage of pregnancy. Turn on to also allow it during the early and late stages.")
+HTML_PRINT HOTPATCH_SETUP_CHOICE(4110, "Allow sex throughout pregnancy", FLAG:STABLEBYPASS, "Off by default: sex is only allowed during the stable (middle) stage of pregnancy. Turn on to also allow it during the early and late stages.", 1, "", 0, "", 1)
 HTML_PRINT "<era-close>"
 HTML_PRINT "<era-close>"
 
@@ -718,7 +719,7 @@ ELSE
 	HTML_PRINT "<div class='era-setup-description'>No farming obligations or starting loan without a contract.</div>"
 ENDIF
 HTML_PRINT "<era-close>"
-HTML_PRINT "<era-open class='era-setup-grid'>"
+HTML_PRINT "<era-open class='era-setup-grid era-radio-group' role='radiogroup' aria-label='Farming difficulty'>"
 HTML_PRINT HOTPATCH_SETUP_CHOICE(3101, "Normal Peasant", nDifficulty == 1, "Kind landlord. No interest; buy your own tools.", nLandlord != 0)
 HTML_PRINT HOTPATCH_SETUP_CHOICE(3102, "Hardcore Peasant", nDifficulty == 2, "Strict landlord. " + sHardcoreInterest + "monthly interest; tools lent with monthly fees.", nLandlord != 0, "", 0, REPLACE(sHardcoreInterest, " ", ""))
 HTML_PRINT HOTPATCH_SETUP_CHOICE(3103, "Extreme Peasant", nDifficulty == 3, "Tyrannical landlord. " + sInterest + "monthly interest; tools lent with higher monthly fees.", nLandlord != 0, "", 0, REPLACE(sInterest, " ", ""))
@@ -726,7 +727,7 @@ HTML_PRINT "<era-close>"
 HTML_PRINT "<era-close>"
 HTML_PRINT "<era-open class='era-setup-card'>"
 HTML_PRINT @"<div class='era-setup-farm-heading'><span class='era-launch-eyebrow'>Farming Contract</span><span class='era-setup-description'>Your home region: <strong>%HTML_ESCAPE(GET_MAPNAME(MAIN_MAP))%</strong></span></div>"
-HTML_PRINT "<era-open class='era-setup-grid'>"
+HTML_PRINT "<era-open class='era-setup-grid era-radio-group' role='radiogroup' aria-label='Farming Contract'>"
 HTML_PRINT HOTPATCH_SETUP_CHOICE(3000, "No farming contract", !nLandlord, nCanQuit ? "" # "Cannot quit while in debt.", nCanQuit)
 FOR nIndex, 1, CHARANUM
 	SIF nIndex == FLAG:なりきり || !STRLENS(STR_NOUMIN(nIndex, "説明"))
@@ -746,7 +747,7 @@ FOR nIndex, 1, CHARANUM
 		CONTINUE
 	HTML_PRINT "<era-open class='era-setup-card'>"
 	HTML_PRINT @"<span class='era-launch-eyebrow'>%HTML_ESCAPE(CALLNAME:nIndex)%</span>"
-	HTML_PRINT "<era-open class='era-setup-grid'>"
+	HTML_PRINT @"<era-open class='era-setup-grid era-radio-group' role='radiogroup' aria-label='%HOTPATCH_ATTRIBUTE(HTML_ESCAPE(CALLNAME:nIndex))% dialogue'>"
 	FOR nChoice, 0, 4
 		CALL HOTPATCH_SETUP_DIALOGUE_INFO(nIndex, nChoice)
 		SIF !RESULT
@@ -779,7 +780,7 @@ HTML_PRINT "<span class='era-launch-eyebrow'>Yandere Settings</span><button valu
 CALL HOTPATCH_SETUP_PERCENT(4200, "Subtype change chance", FLAG:YANDERE_EVOLVE_CHANCE)
 CALL HOTPATCH_SETUP_PERCENT(4202, "Subtype skip chance", FLAG:YANDERE_SKIP_CHANCE)
 CALL HOTPATCH_SETUP_PERCENT(4204, "Tier 2 bonus chance", FLAG:YANDERE_TIER_2_CHANCE_BONUS)
-HTML_PRINT HOTPATCH_SETUP_CHOICE(4210, "Random subtype progression", FLAG:YANDERE_RANDOM_EVOLUTION, "Subtypes can change into any other subtype, instead of progressing in order.")
+HTML_PRINT HOTPATCH_SETUP_CHOICE(4210, "Random subtype progression", FLAG:YANDERE_RANDOM_EVOLUTION, "Subtypes can change into any other subtype, instead of progressing in order.", 1, "", 0, "", 1)
 HTML_PRINT "<button value='4211' class='era-chip-button'>Restore yandere defaults</button>"
 HTML_PRINT "<era-close>"
 HTML_PRINT "<era-open class='era-setup-card'>"
@@ -790,7 +791,7 @@ NEXT
 HTML_PRINT "<era-close>"
 HTML_PRINT "<era-open class='era-setup-card'>"
 HTML_PRINT "<span class='era-launch-eyebrow'>Event Frequency</span>"
-HTML_PRINT "<era-open class='era-setup-grid'>"
+HTML_PRINT "<era-open class='era-setup-grid era-radio-group' role='radiogroup' aria-label='Event Frequency'>"
 FOR LOCAL, 1, 7
 	SELECTCASE LOCAL
 	CASE 1, 2, 3
