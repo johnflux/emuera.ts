@@ -1,24 +1,150 @@
-.era-main.era-embrace { --era-heading-color: #ffe5f1; }
-.era-main.era-embrace .era-main-header {
-  border-color: #654357;
-  background: linear-gradient(90deg, #21141d, #0d1014);
+.era-main.era-intimate {
+  --era-heading-color: #ffe0f0;
+  --terminal-foreground: #f4e2ed;
+  --intimate-border: #b77a9e;
+  --intimate-canvas: radial-gradient(ellipse at 15% 5%, #a9538540, transparent 48%),
+    radial-gradient(ellipse at 90% 85%, #b75f9240, transparent 55%),
+    linear-gradient(145deg, #352039, #211b2e 55%, #342339);
+  --intimate-panel: linear-gradient(145deg, #493047, #302638 60%, #34283c);
+  --intimate-header: linear-gradient(110deg, #66405a, #3f2d47 60%, #35283d);
+  --intimate-room: radial-gradient(ellipse at 30% 15%, #ffc6e47a, transparent 55%),
+    radial-gradient(ellipse at 80% 85%, #e39ac65c, transparent 65%),
+    radial-gradient(circle at 75% 20%, #fff0dc29, transparent 30%),
+    linear-gradient(160deg, #76516c, #523c58 60%, #46354d);
+  color: var(--terminal-foreground);
+  background: var(--intimate-canvas);
 }
-.era-main.era-embrace .era-card {
-  border-color: #533146;
-  background: linear-gradient(135deg, #1a101a, #050e16 75%);
+.era-main.era-intimate .era-main-header {
+  border: 0;
+  background: var(--intimate-header);
+  box-shadow: inset 0 -1px 0 #ffb4d450, 0 3px 16px #170b1980;
 }
-.era-main.era-embrace .era-card-title::after { background: linear-gradient(90deg, #b9789a, transparent); }
-.era-main.era-embrace .era-room-stage {
-  background:
-    linear-gradient(125deg, #fff4, #ffe0ee30 28%, transparent 58%),
-    radial-gradient(ellipse at 50% 70%, #c45c8a40, transparent 72%),
-    radial-gradient(ellipse at 50% 95%, #28415166, transparent 70%),
-    linear-gradient(#21141f, #17141e);
+.era-main.era-intimate :is(.era-card, .era-actions-collection) {
+  border: 1px solid var(--intimate-border);
+  border-radius: 10px;
+  background: var(--intimate-panel);
+  box-shadow: inset 0 1px 0 #ffe3f025, inset 0 0 20px #f0a0c00b, 0 3px 15px #10081765;
 }
-.era-main.era-embrace .era-actions-collection {
-  border-color: #533146;
-  background: linear-gradient(135deg, #1a101a, #080d13 75%);
+.era-main.era-intimate :is(.era-character, .era-actions-collection) {
+  border-width: 2px;
+  border-color: #c486aa;
+  box-shadow: inset 0 0 18px #ffb4d50a, 0 0 12px #ed8cb026, 0 4px 16px #12081760;
 }
-.era-main.era-embrace .era-actions-title { color: #f2c5dc; }
-.era-main.era-embrace .era-actions-title::before { border-left-color: #d78bb2; }
-.era-main.era-embrace .era-main-last { color: #e8c6d7; }
+.era-main.era-intimate .era-card-title {
+  color: var(--era-heading-color);
+  text-shadow: 0 0 9px #ff9dcc65;
+}
+.era-main.era-intimate .era-card-title::after {
+  background: linear-gradient(90deg, #ffd8e9b0, #ed9fc4a0 45%, transparent);
+}
+.era-main.era-intimate :is(.era-actions-collection, .era-actions-header) { overflow: visible; }
+.era-main.era-intimate .era-actions-header::after {
+  height: 32px;
+  margin-block: -5px;
+  background: url("/decoration/intimate-heart-divider.png") center / min(200px, 100%) auto no-repeat;
+  pointer-events: none;
+}
+.era-main.era-intimate .era-room-stage {
+  background: var(--intimate-room);
+  box-shadow: inset 0 0 50px #ffe1ee12, inset 0 -25px 45px #2713293b;
+}
+.era-main.era-intimate .era-room-stage::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: url("/decoration/intimate-sakura.png") center / cover no-repeat;
+  opacity: .14;
+  pointer-events: none;
+}
+.era-main.era-intimate .era-actions-title {
+  color: #ffc5df;
+  text-shadow: 0 0 8px #ef91ba55;
+  letter-spacing: .035em;
+}
+.era-main.era-intimate .era-actions-title::before { border-left-color: #ffb5d6; }
+.era-main.era-intimate .era-actions-title::after {
+  content: " \2661";
+  color: #ffb9d8;
+  font-size: 1.1em;
+  text-shadow: 0 0 9px #ff97c9a0;
+}
+.era-main.era-intimate .era-main-last {
+  color: #f6d1e6;
+  text-shadow: 0 0 8px #e493b322;
+}
+.era-main.era-intimate :is(.era-place-name, .era-scene, .era-place-name .era-sub) { color: #fff0f5; }
+.era-main.era-intimate .era-place-name .era-sub {
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: #2b1d32cc;
+  text-shadow: 0 1px 2px #1d1025;
+}
+.era-main.era-intimate :is(.era-player, .era-actions-collection)::after { opacity: .85; }
+.era-main.era-intimate .era-actions-collection::after {
+  width: min(240px, 60%);
+  aspect-ratio: 1206 / 768;
+  background-image: url("/decoration/intimate-rose-corner.png");
+}
+
+.era-main.era-intimate .era-actions-collection :is(button, [role="button"]) {
+  border-radius: 7px;
+  box-shadow: inset 0 1px 0 #fff1, 0 2px 4px #10081740;
+  transition: filter 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+.era-main.era-intimate .era-actions-collection :is(button, [role="button"]):not(:disabled):hover {
+  filter: brightness(1.16);
+  transform: translateY(-1px);
+  box-shadow: inset 0 1px 0 #fff2, 0 0 9px #ff98c45c, 0 3px 7px #10081755;
+}
+.era-main.era-intimate :is(button, [role="button"]):focus-visible {
+  outline: 2px solid #ffd0e5;
+  outline-offset: 2px;
+}
+
+.era-main.era-intimate-nonconsensual {
+  --era-heading-color: #eabac7;
+  --intimate-border: #885364;
+  --intimate-canvas: radial-gradient(ellipse at 20% 0%, #803a4a30, transparent 55%),
+    linear-gradient(145deg, #301e2b, #1d1924 65%, #30202c);
+  --intimate-panel: linear-gradient(145deg, #412b39, #29212d 75%);
+  --intimate-header: linear-gradient(110deg, #4e303e, #2c2532);
+  --intimate-room: radial-gradient(ellipse at 30% 15%, #cc859a36, transparent 60%),
+    linear-gradient(160deg, #593d4b, #352a39);
+}
+.era-main.era-intimate-nonconsensual .era-actions-title { color: #eabac7; }
+.era-main.era-intimate-nonconsensual .era-actions-title::before { border-left-color: #bc7c91; }
+.era-main.era-intimate-nonconsensual .era-actions-title::after { content: ""; }
+.era-main.era-intimate-nonconsensual .era-actions-header::after { background-image: none; }
+.era-main.era-intimate-nonconsensual .era-room-stage::after { opacity: .05; }
+
+.era-main.era-intimate.era-embrace {
+  --era-heading-color: #fff0f7;
+  --intimate-border: #dfa0c0;
+  --intimate-canvas: radial-gradient(ellipse at 25% 5%, #db7eab55, transparent 55%),
+    radial-gradient(ellipse at 85% 90%, #d48bb955, transparent 55%),
+    linear-gradient(145deg, #493048, #30243b 60%, #483046);
+  --intimate-panel: linear-gradient(145deg, #60415b, #392c42 75%);
+  --intimate-header: linear-gradient(110deg, #80536e, #49364f);
+  --intimate-room: radial-gradient(ellipse at 30% 10%, #ffe0eed0, transparent 60%),
+    radial-gradient(ellipse at 70% 90%, #f5b0d18c, transparent 70%),
+    radial-gradient(circle at 85% 20%, #fff1dc55, transparent 35%),
+    linear-gradient(155deg, #a27491, #755773 65%, #654962);
+}
+.era-main.era-intimate.era-embrace :is(.era-character, .era-actions-collection) {
+  border-color: #efb0d1;
+  box-shadow: inset 0 0 22px #ffc1de20, 0 0 18px #ff9ccc48, 0 4px 18px #160a1766;
+}
+.era-main.era-intimate.era-embrace .era-actions-title::after {
+  content: " \2665";
+  color: #ffd2e8;
+  text-shadow: 0 0 11px #ffb1d9;
+}
+.era-main.era-intimate.era-embrace .era-actions-header::after {
+  background-image: url("/decoration/intimate-heart-divider.png");
+}
+.era-main.era-intimate.era-embrace .era-room-stage::after { opacity: .2; }
+
+@media (prefers-reduced-motion: reduce) {
+  .era-main.era-intimate .era-actions-collection :is(button, [role="button"]) { transition: none; }
+}

@@ -535,6 +535,14 @@ test("HTTP UI, isolated sessions, real image bytes, sprite metadata, errors and 
       assert.equal(bytes.subarray(1, 4).toString(), "PNG");
     }
     assert.equal((await fetch(base + "/decoration/deco_corner_flower_unknown.png")).status, 404);
+    for (const name of ["sakura", "heart-divider", "rose-corner"]) {
+      const decoration = await fetch(base + `/decoration/intimate-${name}.png`);
+      assert.equal(decoration.status, 200);
+      assert.equal(decoration.headers.get("content-type"), "image/png");
+      const bytes = Buffer.from(await decoration.arrayBuffer());
+      assert.equal(bytes.subarray(1, 4).toString(), "PNG");
+    }
+    assert.equal((await fetch(base + "/decoration/intimate-unknown.png")).status, 404);
     const font = await fetch(base + "/fonts/BIZUDGothic-Regular.ttf");
     assert.equal(font.status, 200);
     assert.equal(font.headers.get("content-type"), "font/ttf");

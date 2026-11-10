@@ -777,19 +777,37 @@ test("main screen hotpatch opens and closes its panel boxes in balance", {
 test("embrace mode uses selective rose accents", () => {
   const source = readFileSync(new URL("../hotpatch/MAIN_SCREEN.ERB", import.meta.url), "utf8");
   const styles = readFileSync(new URL("../styles/game/_embrace-mode.scss", import.meta.url), "utf8");
-  const start = source.indexOf("IF TFLAG:102 == 3 && TFLAG:抱きつきモード", source.indexOf(";情報表示 (hotpatch"));
+  const start = source.indexOf("IF CFLAG:MASTER:うふふ == 1 && TFLAG:102 == 3 && TFLAG:抱きつきモード",
+    source.indexOf(";情報表示 (hotpatch"));
   const end = source.indexOf("HTML_PRINT \"<era-open class='era-main-header'>\"", start);
   assert.ok(start >= 0 && end > start, "main layout opening is conditional on embrace mode");
   const opening = source.slice(start, end);
   const game = emptyGame();
   game.names.set("TFLAG", new Map([["抱きつきモード", 500]]));
+  game.names.set("CFLAG", new Map([["うふふ", 501]]));
   indexScript(game, `@SYSTEM_TITLE
+ADDVOIDCHARA
+MASTER = 0
 TFLAG:抱きつきモード = 0
+CFLAG:MASTER:うふふ = 0
 ${opening}
 TFLAG:102 = 3
 TFLAG:抱きつきモード = 1
+CFLAG:MASTER:うふふ = 1
 ${opening}
+CFLAG:MASTER:うふふ = 1
 TFLAG:102 = 1
+TFLAG:抱きつきモード = 0
+${opening}
+CFLAG:MASTER:うふふ = 2
+TFLAG:102 = 3
+TFLAG:抱きつきモード = 1
+${opening}
+CFLAG:MASTER:うふふ = 2
+TFLAG:102 = 1
+TFLAG:抱きつきモード = 0
+${opening}
+CFLAG:MASTER:うふふ = 0
 ${opening}
 QUIT`, "<embrace-layout>");
   for (const jit of [false, true]) {
@@ -797,20 +815,33 @@ QUIT`, "<embrace-layout>");
     assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
     const markup = snapshot.output.flatMap(item => item.type === "html" ? [item.text] : []).join("");
     assert.ok(markup.includes("<era-open class='era-layout era-main'>"), "normal mode retains the standard layout");
-    assert.ok(markup.includes("<era-open class='era-layout era-main era-embrace'>"),
-      "embrace mode adds the themed layout class");
+    assert.ok(markup.includes("<era-open class='era-layout era-main era-intimate era-intimate-consensual'>"),
+      "consensual intimate time gets a light-pink theme");
+    assert.ok(markup.includes("<era-open class='era-layout era-main era-intimate era-intimate-consensual era-embrace'>"),
+      "consensual embrace keeps the embrace accent");
+    assert.ok(markup.includes("<era-open class='era-layout era-main era-intimate era-intimate-nonconsensual'>"),
+      "non-consensual intimate time gets its distinct red-pink theme");
+    assert.ok(markup.includes("<era-open class='era-layout era-main era-intimate era-intimate-nonconsensual era-embrace'>"),
+      "non-consensual embrace keeps the embrace accent");
     const layoutMarkers = snapshot.output.flatMap(item => item.type === "html" && item.text.startsWith("<era-open class='era-layout era-main")
       ? [item.text] : []);
     assert.deepEqual(layoutMarkers, [
       "<era-open class='era-layout era-main'>",
-      "<era-open class='era-layout era-main era-embrace'>",
+      "<era-open class='era-layout era-main era-intimate era-intimate-consensual era-embrace'>",
+      "<era-open class='era-layout era-main era-intimate era-intimate-consensual'>",
+      "<era-open class='era-layout era-main era-intimate era-intimate-nonconsensual era-embrace'>",
+      "<era-open class='era-layout era-main era-intimate era-intimate-nonconsensual'>",
       "<era-open class='era-layout era-main'>",
     ], "the leftover embrace flag does not theme a screen after the session ends");
   }
-  assert.match(styles, /\.era-main\.era-embrace \.era-room-stage/);
-  assert.match(styles, /#fff4/);
-  assert.match(styles, /#ffe0ee30/);
-  assert.match(styles, /radial-gradient\(ellipse at 50% 70%, #c45c8a40/);
+  assert.match(styles, /\.era-main\.era-intimate \.era-room-stage/);
+  assert.match(styles, /\.era-main\.era-intimate-nonconsensual \{/);
+  assert.match(styles, /--intimate-panel: linear-gradient\(145deg, #493047, #302638 60%, #34283c\)/);
+  assert.match(styles, /:is\(\.era-player, \.era-actions-collection\)::after \{ opacity: \.85; \}/);
+  assert.match(styles, /\.era-intimate\.era-embrace \{/);
+  assert.doesNotMatch(styles, /era-button-tone|button\.choice/,
+    "intimate styling leaves category-specific button colors to their existing rules");
+  assert.match(styles, /@media \(prefers-reduced-motion: reduce\)/);
   assert.doesNotMatch(styles, /mix-blend-mode|\.era-main\.era-embrace::after/,
     "embrace colors stay selective instead of tinting the whole screen");
 });

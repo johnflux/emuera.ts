@@ -128,9 +128,22 @@ SIF TARGET != MASTER && TARGET >= 0
 ;-------------------------------------------------
 ;情報表示 (hotpatch: the display below is laid out in panels)
 ;-------------------------------------------------
-IF TFLAG:102 == 3 && TFLAG:抱きつきモード
-	HTML_PRINT "<era-open class='era-layout era-main era-embrace'>"
-ELSE
+IF CFLAG:MASTER:うふふ == 1 && TFLAG:102 == 3 && TFLAG:抱きつきモード
+	HTML_PRINT "<era-open class='era-layout era-main era-intimate era-intimate-consensual era-embrace'>"
+ENDIF
+IF CFLAG:MASTER:うふふ == 1 && !(TFLAG:102 == 3 && TFLAG:抱きつきモード)
+	HTML_PRINT "<era-open class='era-layout era-main era-intimate era-intimate-consensual'>"
+ENDIF
+IF CFLAG:MASTER:うふふ == 2 && TFLAG:102 == 3 && TFLAG:抱きつきモード
+	HTML_PRINT "<era-open class='era-layout era-main era-intimate era-intimate-nonconsensual era-embrace'>"
+ENDIF
+IF CFLAG:MASTER:うふふ == 2 && !(TFLAG:102 == 3 && TFLAG:抱きつきモード)
+	HTML_PRINT "<era-open class='era-layout era-main era-intimate era-intimate-nonconsensual'>"
+ENDIF
+IF CFLAG:MASTER:うふふ != 1 && CFLAG:MASTER:うふふ != 2 && TFLAG:102 == 3 && TFLAG:抱きつきモード
+	HTML_PRINT "<era-open class='era-layout era-main era-intimate era-embrace'>"
+ENDIF
+IF CFLAG:MASTER:うふふ != 1 && CFLAG:MASTER:うふふ != 2 && !(TFLAG:102 == 3 && TFLAG:抱きつきモード)
 	HTML_PRINT "<era-open class='era-layout era-main'>"
 ENDIF
 HTML_PRINT "<era-open class='era-main-header'>"

@@ -32,6 +32,159 @@ const browser = [
   process.env.PROGRAMFILES && join(process.env.PROGRAMFILES, "Google/Chrome/Application/chrome.exe"),
 ].find((path): path is string => !!path && existsSync(path));
 
+test("intimate panels use readable dark rose surfaces without button recoloring", {
+  skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH",
+}, async () => {
+  const style = await readFile(new URL("../web/generated/style.css", import.meta.url), "utf8");
+  const html = `<!doctype html><meta charset="utf-8"><style>${style}</style><body>
+    <div class="era-main era-intimate era-intimate-consensual">
+      <div class="era-main-header">Header</div>
+      <div class="era-card era-player">Player</div>
+      <div class="era-card era-actions-collection">
+        <div class="era-card-title era-actions-header"><span>Interact with Mima</span><span class="era-toggles">Petting</span></div>
+        <div class="era-actions-title">Activities</div>
+        <button class="choice era-button era-button-tone-petting">Petting</button>
+        <button class="choice era-button era-button-tone-chores">Cleaning</button>
+        <button class="choice era-button">Conversation</button>
+      </div>
+      <div class="era-card era-character"><div class="era-room-stage">
+        <div class="era-card-title era-place"><span class="era-place-name">Living Room<span class="era-sub">Hakurei Shrine</span></span></div>
+      </div></div>
+    </div><script>
+    const main = document.querySelector(".era-main");
+    const inspect = () => ({
+      background: getComputedStyle(main).backgroundImage,
+      border: getComputedStyle(main).borderWidth,
+      headerBorder: getComputedStyle(main.querySelector(".era-main-header")).borderWidth,
+      roomBorder: getComputedStyle(main.querySelector(".era-character")).borderWidth,
+      actionsBorder: getComputedStyle(main.querySelector(".era-actions-collection")).borderWidth,
+      playerBorder: getComputedStyle(main.querySelector(".era-player")).borderWidth,
+      panels: [...main.querySelectorAll(".era-player, .era-actions-collection")].map(panel => ({
+        background: getComputedStyle(panel).backgroundImage,
+        border: getComputedStyle(panel).borderColor,
+        art: getComputedStyle(panel, "::after").opacity,
+        artImage: getComputedStyle(panel, "::after").backgroundImage,
+        artRatio: getComputedStyle(panel, "::after").aspectRatio,
+      })),
+      room: getComputedStyle(main.querySelector(".era-room-stage")).backgroundImage,
+      foreground: getComputedStyle(main).color,
+      button: getComputedStyle(main.querySelector("button")).backgroundImage,
+      buttons: [...main.querySelectorAll("button")].map(button => ({
+        background: getComputedStyle(button).backgroundImage,
+        color: getComputedStyle(button).color,
+        borderColor: getComputedStyle(button).borderColor,
+      })),
+      buttonRadius: getComputedStyle(main.querySelector("button")).borderRadius,
+      heart: getComputedStyle(main.querySelector(".era-actions-title"), "::after").content,
+      subtitle: getComputedStyle(main.querySelector(".era-sub")).color,
+      subtitleBacking: getComputedStyle(main.querySelector(".era-sub")).backgroundColor,
+      petals: {
+        image: getComputedStyle(main.querySelector(".era-room-stage"), "::after").backgroundImage,
+        opacity: getComputedStyle(main.querySelector(".era-room-stage"), "::after").opacity,
+        layer: getComputedStyle(main.querySelector(".era-room-stage"), "::after").zIndex,
+        pointerEvents: getComputedStyle(main.querySelector(".era-room-stage"), "::after").pointerEvents,
+      },
+      roomDivider: getComputedStyle(main.querySelector(".era-place"), "::after").backgroundImage,
+      divider: getComputedStyle(main.querySelector(".era-actions-header"), "::after").backgroundImage,
+      dividerPosition: getComputedStyle(main.querySelector(".era-actions-header"), "::after").backgroundPosition,
+      headerOverflow: getComputedStyle(main.querySelector(".era-actions-header")).overflow,
+      actionsOverflow: getComputedStyle(main.querySelector(".era-actions-collection")).overflow,
+    });
+    const pastel = inspect();
+    main.classList.remove("era-intimate", "era-intimate-consensual");
+    const normal = inspect();
+    main.classList.add("era-intimate", "era-intimate-nonconsensual");
+    const nonconsensual = inspect();
+    main.classList.add("era-embrace");
+    const embrace = inspect();
+    main.classList.remove("era-intimate-nonconsensual", "era-embrace");
+    const base = inspect();
+    document.body.textContent = JSON.stringify({pastel, normal, nonconsensual, embrace, base});
+    </script>`;
+  const profile = await mkdtemp(join(process.cwd(), ".era-pastel-panels-"));
+  try {
+    const { stdout } = await execute(browser!, ["--headless", "--disable-gpu", "--no-first-run",
+      `--user-data-dir=${profile}`, "--dump-dom",
+      `data:text/html;base64,${Buffer.from(html).toString("base64")}`],
+      { maxBuffer: 8 * 1024 * 1024, timeout: 30000 });
+    const match = stdout.match(/<body[^>]*>([\s\S]*?)<\/body>/);
+    assert.ok(match);
+    const { pastel, normal, nonconsensual, embrace, base } = JSON.parse(match[1]);
+    for (const mode of [pastel, normal, nonconsensual, embrace, base]) {
+      assert.equal(mode.border, "0px", "the outer main layout stays borderless");
+    }
+    for (const mode of [pastel, nonconsensual, embrace, base]) {
+      assert.equal(mode.headerBorder, "0px", "the intimate header stays borderless");
+      assert.equal(mode.roomBorder, "2px");
+      assert.equal(mode.actionsBorder, "2px");
+      assert.equal(mode.playerBorder, "1px");
+      assert.equal(mode.subtitle, "rgb(255, 240, 245)");
+      assert.equal(mode.subtitleBacking, "rgba(43, 29, 50, 0.8)");
+      assert.ok(mode.petals.image.includes("/decoration/intimate-sakura.png"));
+      assert.equal(mode.petals.layer, "-1", "petals sit behind the room contents");
+      assert.equal(mode.petals.pointerEvents, "none");
+      assert.equal(mode.headerOverflow, "visible");
+      assert.equal(mode.actionsOverflow, "visible");
+      assert.ok(mode.panels[1].artImage.includes("/decoration/intimate-rose-corner.png"));
+      assert.equal(mode.panels[1].artRatio, "1206 / 768");
+      assert.equal(mode.panels[0].artImage, normal.panels[0].artImage,
+        "player panel retains its seasonal artwork");
+      assert.equal(mode.dividerPosition, "50% 50%");
+      assert.ok(!mode.roomDivider.includes("intimate-heart-divider"), "room title no longer has the heart artwork");
+    }
+    assert.equal(normal.subtitle, "rgb(136, 136, 136)");
+    assert.ok(!normal.panels[1].artImage.includes("intimate-rose-corner"),
+      "normal interaction panels retain their seasonal artwork");
+    assert.equal(normal.petals.image, "none");
+    assert.equal(normal.divider, "linear-gradient(90deg, rgb(36, 80, 102), rgba(0, 0, 0, 0))");
+    assert.equal(pastel.petals.opacity, "0.14");
+    assert.equal(nonconsensual.petals.opacity, "0.05");
+    assert.equal(embrace.petals.opacity, "0.2");
+    assert.ok(pastel.divider.includes("/decoration/intimate-heart-divider.png"));
+    assert.equal(nonconsensual.divider, "none");
+    assert.equal(embrace.divider, pastel.divider);
+    assert.equal(normal.headerBorder, "1px");
+    assert.equal(normal.roomBorder, "1px");
+    assert.equal(normal.actionsBorder, "1px");
+    assert.ok(pastel.background.includes("rgb(53, 32, 57)"));
+    assert.ok(pastel.room.includes("rgb(118, 81, 108)"));
+    const luminance = (rgb: number[]) => rgb.map(value => {
+      const channel = value / 255;
+      return channel <= .04045 ? channel / 12.92 : ((channel + .055) / 1.055) ** 2.4;
+    }).reduce((sum, channel, index) => sum + channel * [.2126, .7152, .0722][index]!, 0);
+    const foreground = pastel.foreground.match(/\d+/g).map(Number);
+    const subtitle = pastel.subtitle.match(/\d+/g).map(Number);
+    const subtitleBacking = [43, 29, 50].map(channel => channel * .8 + 255 * .2);
+    assert.ok((luminance(subtitle) + .05) / (luminance(subtitleBacking) + .05) >= 4.5,
+      "room subtitle stays readable even when its translucent backing is over white");
+    assert.ok((luminance(foreground) + .05) / (luminance([73, 48, 71]) + .05) >= 7,
+      "default text has at least 7:1 contrast against the lightest panel gradient stop");
+    for (const panel of pastel.panels) {
+      assert.ok(panel.background.includes("rgb(73, 48, 71)"));
+      assert.equal(panel.art, "0.85");
+    }
+    assert.equal(pastel.panels[0].border, "rgb(183, 122, 158)");
+    assert.equal(pastel.panels[1].border, "rgb(196, 134, 170)");
+    for (const mode of [pastel, nonconsensual, embrace, base]) {
+      assert.deepEqual(mode.buttons, normal.buttons, "category colors remain unchanged");
+      assert.equal(mode.buttonRadius, "7px");
+    }
+    assert.equal(pastel.heart, '" \u2661"');
+    assert.equal(nonconsensual.heart, '""');
+    assert.equal(embrace.heart, '" \u2665"');
+    assert.equal(pastel.button, normal.button);
+    assert.equal(pastel.button, nonconsensual.button);
+    assert.equal(normal.background, "none");
+    assert.notEqual(pastel.room, nonconsensual.room);
+    assert.equal(nonconsensual.panels[0].art, "0.85");
+    assert.equal(base.background, pastel.background);
+    assert.deepEqual(base.panels, pastel.panels);
+    assert.notEqual(embrace.background, pastel.background);
+    assert.ok(embrace.room.includes("rgb(162, 116, 145)"));
+    assert.equal(embrace.button, normal.button);
+  } finally { await rm(profile, { recursive: true, force: true }); }
+});
+
 test("layout diagnostics validate real DOM structure and offer a local copyable notice", {
   skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH",
 }, async () => {

@@ -909,6 +909,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
       const page = pages[url.pathname] ?? (/^\/areas\/\d+-[a-z]+\.svg$/.test(url.pathname)
         || /^\/relationship-assets\/[a-z][a-z-]*\.svg$/.test(url.pathname)
         || /^\/decoration\/deco_corner_flower_(spring|summer|autumn|winter)\.png$/.test(url.pathname)
+        || /^\/decoration\/intimate-(sakura|heart-divider|rose-corner)\.png$/.test(url.pathname)
         || /^\/areas\/\d+-[a-z]+\/(spring|summer|autumn|winter|neutral)-(day|night)-(left|middle|right)\.png$/.test(url.pathname)
         || /^\/maps\/[a-z0-9-]+\.(webp|svg|png|jpg)$/.test(url.pathname) ? url.pathname.slice(1) : undefined);
       if (request.method === "GET" && page) {

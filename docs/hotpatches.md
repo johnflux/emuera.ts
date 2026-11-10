@@ -117,9 +117,29 @@ Inline history is also attached only to a completed main layout. The command
 prompt supplies the selected character's history even when the layout began in
 an earlier snapshot, such as before an embrace-event wait.
 
-While `TFLAG:抱きつきモード` is active, the main layout uses restrained rose
-accents on its panels and headings; the scene, text and portraits keep their
-original colors.
+During an intimate session, the main layout uses light pink for the consensual
+state (`CFLAG:MASTER:うふふ == 1`) and red-pink for the non-consensual state
+(`== 2`). Intimate modes share strawberry-pink and lavender surfaces over a
+dark canvas, softly glowing rounded panels, and seasonal corner art at 0.85
+opacity. Action buttons gain rounded corners, a gentle hover lift/glow, and
+pink keyboard-focus outlines while preserving category colors. Reduced-motion
+preferences disable button transitions. All active modes carry the
+shared `era-intimate` base class; consent-state classes and `era-embrace` add
+their specific palette overrides. The room stage is brighter than the panels;
+embrace adds extra rosy lighting and filled heart ornaments to action headings.
+Other romantic sessions use outline hearts; the darker non-consensual modifier
+removes them (unless embrace is also active). Borders belong to the individual
+panels, not the outer main layout or header. The room and interaction panels
+use thicker 2px borders; sidebar panels keep their usual 1px borders.
+User-supplied sakura artwork stays faintly behind the room contents, with a
+pearl-pink heart divider centered between the interaction title and its
+category toggles, replacing the heading's line. The interaction heading and
+panel allow visible overflow for the ornament. The darker non-consensual
+modifier suppresses the divider and reduces the sakura opacity; embrace
+restores both accents. Room subtitles use pale text on a dark translucent
+backing so they remain readable even against the brighter embrace lighting.
+In intimate modes, the interaction panel uses the supplied pixel-art rose
+corner artwork at 0.85 opacity; the player panel retains its seasonal flowers.
 
 The browser checks layout structure after each rendered snapshot. It reports
 unmatched closing markers, abandoned open layouts, misplaced main panels, and
