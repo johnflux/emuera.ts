@@ -32,6 +32,89 @@ const browser = [
   process.env.PROGRAMFILES && join(process.env.PROGRAMFILES, "Google/Chrome/Application/chrome.exe"),
 ].find((path): path is string => !!path && existsSync(path));
 
+test("layout diagnostics validate real DOM structure and offer a local copyable notice", {
+  skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH",
+}, async () => {
+  const [diagnostics, source] = await Promise.all([
+    readFile(new URL("../web/layout-diagnostics.js", import.meta.url), "utf8"),
+    readFile(new URL("../web/app.js", import.meta.url), "utf8"),
+  ]);
+  const notice = source.slice(source.indexOf("let layoutDiagnosticPanel ="), source.indexOf("const componentSample ="));
+  const sidebar = source.slice(source.indexOf("function setupMainSidebar("), source.indexOf("function syncSceneLines("));
+  const html = `<!doctype html><body><main><div id="terminal"><div class="screen is-active">
+    <div class="era-box era-layout era-main"><div class="era-box era-main-header" data-closed="closed"></div></div>
+    </div></div></main><script>
+    ${diagnostics.replace(/^export /gm, "")}
+    ${notice}
+    ${sidebar}
+    const terminal = document.querySelector("#terminal");
+    const layoutDiagnostics = createLayoutDiagnostics();
+    const context = {game:"fixture", title:"Test game", step:42, status:"waiting", input:"wait"};
+    const result = {};
+    let copied = "", messageText = "", failCopy = false, errors = 0;
+    console.error = () => errors++;
+    globalThis.eraDesktop = {writeClipboard: async text => {
+      if (failCopy) throw new Error("Clipboard unavailable");
+      copied = text;
+    }};
+    function message(text) { messageText = text; }
+    (async () => {
+      result.pausedValid = layoutDiagnostics.inspect(terminal, context) === null;
+      const main = terminal.querySelector(".era-main");
+      setupMainSidebar(main);
+      result.pausedSidebarDeferred = !main.querySelector(".era-main-sidebar");
+      for (const name of ["era-main-left", "era-main-center", "era-main-right"]) {
+        const panel = document.createElement("div");
+        panel.className = "era-box " + name;
+        panel.dataset.closed = "closed";
+        main.append(panel);
+      }
+      main.dataset.closed = "closed";
+      result.completedValid = layoutDiagnostics.inspect(terminal, context) === null;
+      setupMainSidebar(main);
+      result.sidebarValid = layoutDiagnostics.inspect(terminal, context) === null
+        && main.querySelector(".era-main-left").parentElement.classList.contains("era-main-sidebar")
+        && main.querySelector(".era-main-right").parentElement.classList.contains("era-main-sidebar");
+      setupMainSidebar(main);
+      result.sidebarOnce = main.querySelectorAll(".era-main-sidebar").length === 1;
+      main.parentElement.append(main.querySelector(".era-main-left"));
+      const report = layoutDiagnostics.inspect(terminal, context);
+      result.detected = report.includes("misplaced-panel") && report.includes("incomplete-main");
+      showLayoutDiagnostic(report + "\\n<svg onload='throw 1'></svg>");
+      const notice = document.querySelector(".layout-diagnostic");
+      result.outsideOutput = !terminal.contains(notice) && notice.parentElement === terminal.parentElement;
+      result.safe = !notice.querySelector("svg") && notice.querySelector("pre").textContent.includes("<svg");
+      notice.querySelector("button").click();
+      await new Promise(resolve => setTimeout(resolve, 0));
+      result.copy = copied.includes("Step: 42") && messageText === "Layout report copied.";
+      failCopy = true;
+      notice.querySelector("button").click();
+      await new Promise(resolve => setTimeout(resolve, 0));
+      result.copyError = messageText === "Could not copy layout report: Clipboard unavailable";
+      notice.querySelectorAll("button")[1].click();
+      result.dismissed = notice.hidden;
+      result.deduplicated = layoutDiagnostics.inspect(terminal, context) === null;
+      showLayoutDiagnostic("Another report");
+      result.reused = document.querySelectorAll(".layout-diagnostic").length === 1 && !notice.hidden && errors === 2;
+      document.body.textContent = JSON.stringify(result);
+    })().catch(error => document.body.textContent = JSON.stringify({error:error.message}));
+    </script>`;
+  const profile = await mkdtemp(join(process.cwd(), ".era-layout-diagnostics-"));
+  try {
+    const { stdout } = await execute(browser!, ["--headless", "--disable-gpu", "--no-first-run",
+      `--user-data-dir=${profile}`, "--virtual-time-budget=3000", "--dump-dom",
+      `data:text/html;base64,${Buffer.from(html).toString("base64")}`],
+      { maxBuffer: 8 * 1024 * 1024, timeout: 30000 });
+    const match = stdout.match(/<body[^>]*>([\s\S]*?)<\/body>/);
+    assert.ok(match);
+    assert.deepEqual(JSON.parse(match[1]), {
+      pausedValid: true, pausedSidebarDeferred: true, completedValid: true, sidebarValid: true, sidebarOnce: true,
+      detected: true, outsideOutput: true, safe: true,
+      copy: true, copyError: true, dismissed: true, deduplicated: true, reused: true,
+    });
+  } finally { await rm(profile, { recursive: true, force: true }); }
+});
+
 test("scene chatter hides empty diamond lines without dropping logical output or non-text content", {
   skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH",
 }, async () => {

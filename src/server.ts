@@ -878,6 +878,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
         "/library.js": "library.js", "/library.css": "generated/library.css", "/cache.js": "cache.js", "/performance.js": "performance.js",
         "/navigation.js": "navigation.js", "/responsive.css": "generated/responsive.css",
         "/controller-menu.js": "controller-menu.js",
+        "/layout-diagnostics.js": "layout-diagnostics.js",
         "/controls.js": "controls.js", "/auto-advance.js": "auto-advance.js",
         "/art-demo.js": "art-demo.js", "/art-demo.css": "generated/art-demo.css", "/sky.js": "sky.js",
         "/title/new-game.webp": "title/new-game.webp", "/title/load-game.webp": "title/load-game.webp",

@@ -120,6 +120,7 @@ test("layout markers apply accessibility attributes without allowing arbitrary H
   };
   const { parseBoxMarker: parse, openBox: open } = runInNewContext(`${parser}\n${opener}\n({ parseBoxMarker, openBox })`, {
     currentLine: null, boxLine() {},
+    layoutDiagnostics: { record() {} },
     container: () => ({ append: (element: typeof box) => assert.equal(element, box) }),
     document: { createElement: () => box },
     DOMParser: class {
@@ -1443,6 +1444,7 @@ test("the main sidebar inserts an actionable Quicksave directly after Config onl
   let sidebar: Element | null = null;
   let label = "", value = "";
   const main = {
+    dataset: {} as { closed?: string },
     querySelector(selector: string) {
       if (selector === ".era-main-sidebar") return sidebar;
       if (selector === ".era-player") return player;
@@ -1461,6 +1463,10 @@ test("the main sidebar inserts an actionable Quicksave directly after Config onl
       return { ...element(), classList: { add() {} } };
     },
   };
+  runInNewContext(`${sidebarSource}\nsetupMainSidebar(main);`, context);
+  assert.equal(sidebar, null, "an input wait before the main layout closes must defer sidebar setup");
+  assert.equal(configRows.length, 0);
+  main.dataset.closed = "closed";
   runInNewContext(`${sidebarSource}\nsetupMainSidebar(main); setupMainSidebar(main);`, context);
   assert.equal(configRows.length, 1);
   assert.equal(configRows[0]!.className, "era-quicksave-row");

@@ -111,6 +111,28 @@ Native input modes and setting routines are unchanged.
 Unfinished main layouts retain their context across input waits, including
 embrace events triggered after the header has printed. Remaining status and
 command panels stay inside the same layout until its closing marker.
+Sidebar assembly is deferred until that marker, so a partially printed status
+screen cannot initialize an empty sidebar.
+
+The browser checks layout structure after each rendered snapshot. It reports
+unmatched closing markers, abandoned open layouts, misplaced main panels, and
+missing or duplicate panels in a completed main layout. Input waits during
+construction and layouts superseded by `RESTART` are allowed. Diagnostics do
+not repair or reparent output. They accept the renderer's completed sidebar
+structure and the shared headers used by shop and sky dialogs.
+
+On failure, a collapsible **Layout problem detected** notice above the terminal
+offers **Copy report** and **Dismiss**. Reports stay local (also in the browser
+console); nothing is uploaded. They contain the game/title, step, input kind,
+failed checks, up to 80 recent renderer operations, and a bounded layout tree.
+Numeric input echoes are included for reproduction; narrative, HTML contents,
+free-text input, and save data are excluded. Repeated failures are suppressed
+with a bounded deduplication history, reset when a fresh run is rendered.
+Transition regression tests in `test/scrollback.test.ts` cover waits, nested
+menus, `CLEARLINE`, `RESTART`, and completed-layout retirement.
+Production catalog scenes in `test/component-demo.test.ts` also check marker
+balance and main-panel nesting.
+
 Open dialogs retain their layout context while native submenus wait for input
 and return via `CLEARLINE`; only a closing marker ends that context. Native
 printed lines preserve padding spaces so character columns remain aligned.

@@ -494,6 +494,9 @@ test("HTTP UI, isolated sessions, real image bytes, sprite metadata, errors and 
     assert.match(page.headers.get("content-security-policy")!, /script-src 'self'/);
     assert.match(page.headers.get("content-security-policy")!, /img-src 'self' data:;/);
     assert.match(page.headers.get("content-security-policy")!, /connect-src 'self';/);
+    const layoutDiagnostics = await fetch(base + "/layout-diagnostics.js");
+    assert.equal(layoutDiagnostics.status, 200);
+    assert.match(await layoutDiagnostics.text(), /export function createLayoutDiagnostics/);
     assert.equal((await fetch(base + "/rooms/shrine.svg")).status, 404);
     for (const name of ["continue", "new-game", "load-game"]) {
       const asset = await fetch(base + `/title/${name}.webp`);

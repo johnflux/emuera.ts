@@ -80,6 +80,22 @@ test("all game catalog scenes render their actual production surfaces", { skip: 
     assert.equal(snapshot.error, null, sample);
     const html = snapshot.output.flatMap((item) => item.type === "html" ? [item.text] : []).join("");
     assert.match(html, expected[sample]!, sample);
+    const boxes: string[] = [];
+    for (const item of snapshot.output) {
+      if (item.type !== "html") continue;
+      if (item.text.startsWith("<era-open ")) {
+        const classes = /class='([^']+)'/.exec(item.text)?.[1];
+        assert.ok(classes, `${sample}: opening marker needs classes`);
+        if (["era-main-header", "era-main-left", "era-main-center", "era-main-right"].includes(classes)
+          && sample !== "sleep")
+          assert.equal(boxes.at(-1), "era-layout era-main", `${sample}: ${classes} must remain inside main`);
+        boxes.push(classes);
+      } else if (item.text === "<era-close>") {
+        assert.ok(boxes.length, `${sample}: closing marker needs an open container`);
+        boxes.pop();
+      }
+    }
+    assert.deepEqual(boxes, [], `${sample}: all production layout containers must close before input`);
   }
   assert.equal(game.routines.get("SYSTEM_TITLE"), originalTitle);
 });

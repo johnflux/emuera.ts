@@ -13,6 +13,41 @@ import { setupArtworkDemo } from "./art-demo.js";
 import { activateControllerAction, setupControllerMenu, syncGameControllerHints, setPreviewControllerHints } from "./controller-menu.js";
 import { createCheckbox, choiceControl, setupRadio, syncRadioGroups } from "./controls.js";
 import { createAutoAdvance, screenTransitionIndex } from "./auto-advance.js";
+import { createLayoutDiagnostics } from "./layout-diagnostics.js";
+
+const layoutDiagnostics = createLayoutDiagnostics();
+let layoutDiagnosticPanel = null;
+function showLayoutDiagnostic(reportText) {
+  console.error(reportText);
+  if (!layoutDiagnosticPanel) {
+    layoutDiagnosticPanel = document.createElement("details");
+    layoutDiagnosticPanel.className = "layout-diagnostic";
+    const summary = document.createElement("summary");
+    summary.textContent = "Layout problem detected";
+    const copy = document.createElement("button");
+    copy.type = "button";
+    copy.className = "ui-button ui-button--small";
+    copy.textContent = "Copy report";
+    copy.addEventListener("click", async () => {
+      try {
+        const text = layoutDiagnosticPanel.querySelector("pre").textContent;
+        if (globalThis.eraDesktop) await globalThis.eraDesktop.writeClipboard(text);
+        else await navigator.clipboard.writeText(text);
+        message("Layout report copied.");
+      } catch (error) { message(`Could not copy layout report: ${error.message}`, true); }
+    });
+    const dismiss = document.createElement("button");
+    dismiss.type = "button";
+    dismiss.className = "ui-button ui-button--small";
+    dismiss.textContent = "Dismiss";
+    dismiss.addEventListener("click", () => { layoutDiagnosticPanel.hidden = true; });
+    const content = document.createElement("pre");
+    layoutDiagnosticPanel.append(summary, copy, dismiss, content);
+    terminal.before(layoutDiagnosticPanel);
+  }
+  layoutDiagnosticPanel.querySelector("pre").textContent = reportText;
+  layoutDiagnosticPanel.hidden = false;
+}
 
 const componentSample = new URLSearchParams(location.search).get("component");
 if (componentSample) document.body.classList.add("is-component-preview");
@@ -1012,6 +1047,7 @@ function boxLine(parent, closing, shared) {
 function openBox(classes, shared, attributes = []) {
   currentLine = null;
   const names = classes.split(/\s+/).filter((name) => /^era-[a-z0-9-]+$/.test(name));
+  layoutDiagnostics.record(`open ${names.join(" ")}`);
   // A layout starts afresh: one left open by a restarted function (RESTART) must not swallow it.
   if (names.includes("era-layout"))
     for (let box = container(); box.classList.contains("era-box"); box = box.parentElement) box.dataset.closed = "forced";
@@ -1024,6 +1060,9 @@ function openBox(classes, shared, attributes = []) {
 function closeBox(shared) {
   currentLine = null;
   const box = container();
+  layoutDiagnostics.record(`close ${box.className}`);
+  if (!box.classList.contains("era-box"))
+    layoutDiagnostics.issue("unmatched-close", "Closing marker has no open layout box");
   boxLine(box, true, shared);
   if (box.classList.contains("era-box")) box.dataset.closed = "closed";
 }
@@ -2071,6 +2110,10 @@ async function revealPendingScreen() {
 async function renderSteps(steps, fresh = false, keepFocus = false, toBottom = fresh) {
   const totalStarted = profileStart();
   let phaseStarted = totalStarted;
+  if (fresh) {
+    layoutDiagnostics.reset();
+    if (layoutDiagnosticPanel) layoutDiagnosticPanel.hidden = true;
+  }
   if (fresh) disposeCharacterChats(terminal);
   const clickingThrough = input?.kind === "wait";
   const setup = terminal.querySelector(".screen.is-active .era-setup:not(.era-setup-editor)");
@@ -2333,6 +2376,7 @@ async function renderSnapshot(snapshot, advanceScreen) {
   }
   const previousScreen = currentScreen;
   const previousLine = currentLine;
+  layoutDiagnostics.record(`snapshot step=${snapshot.step ?? "unknown"} status=${snapshot.status} input=${snapshot.input?.kind ?? "none"} advance=${advanceScreen}`);
   // Dialog submenus and main-screen events can wait for input before their layout boxes close.
   if (advanceScreen && currentScreen?.querySelector(".era-dialog:not([data-closed]), .era-layout:not([data-closed])")) advanceScreen = false;
   if (advanceScreen === "continue") {
@@ -2348,7 +2392,11 @@ async function renderSnapshot(snapshot, advanceScreen) {
     currentScreen = null;
     currentLine = null;
   }
+  if (previousScreen && previousScreen !== currentScreen) layoutDiagnostics.abandon(previousScreen);
   for (const output of snapshot.output) {
+    if (output.type === "input")
+      layoutDiagnostics.record(`input ${/^-?\d{1,12}$/.test(output.text) ? output.text : "(text omitted)"}`);
+    else if (output.type === "clear") layoutDiagnostics.record(`clear ${output.count}`);
     if (output.browserLaunch) {
       const { id, url } = output.browserLaunch;
       const parsed = new URL(url);
@@ -2470,6 +2518,11 @@ async function renderSnapshot(snapshot, advanceScreen) {
     }
   }
   outputRoot.querySelectorAll("button.choice").forEach(decorateCommandNumbers);
+  const layoutReport = layoutDiagnostics.inspect(outputRoot, {
+    game: runGame ?? runMode, title: snapshot.title, step: snapshot.step,
+    input: snapshot.input?.kind, status: snapshot.status,
+  });
+  if (layoutReport) showLayoutDiagnostic(layoutReport);
   markTarget(snapshot.target);
   for (const main of outputRoot.querySelectorAll(".screen.is-active .era-main")) setupMainSidebar(main);
   for (const scene of outputRoot.querySelectorAll(".screen.is-active .era-scene")) syncSceneLines(scene);
@@ -2754,7 +2807,7 @@ function staleTab(error) {
   return true;
 }
 function setupMainSidebar(main) {
-  if (main.querySelector(".era-main-sidebar")) return;
+  if (main.dataset.closed !== "closed" || main.querySelector(".era-main-sidebar")) return;
   const sidebar = document.createElement("div");
   sidebar.className = "era-main-sidebar";
   const player = main.querySelector(".era-player");

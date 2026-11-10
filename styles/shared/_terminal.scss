@@ -56,6 +56,10 @@
 /* With line-height 0 an inline span still paints its background over a font-height box centred on the baseline,
    half a line above the image, covering the previous line. The title strip has no text, so drop the font box. */
 .title-image .output-text { font-size: 0; }
+.layout-diagnostic { flex: none; max-height: 25dvh; overflow: auto; padding: 8px 12px; border: 1px solid #ba8f56; background: #241d14; color: #efd4ad; font: 13px/1.4 var(--ui-font-family); }
+.layout-diagnostic[hidden] { display: none; }
+.layout-diagnostic summary { cursor: pointer; }
+.layout-diagnostic pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 button.choice { display: inline-block; font: inherit; background: transparent; color: inherit; border: 0; border-radius: 0; padding: 0; vertical-align: baseline; text-align: left; text-decoration: none; }
 .choice .command-number { flex: 0 0 auto; white-space: pre; overflow-wrap: normal; color: inherit; opacity: .65; }
 .command-number.has-text-color, .has-text-color[style*="--output-color"] .command-number,

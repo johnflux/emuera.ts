@@ -99,22 +99,29 @@ async function fixture() {
 
 async function screenFixture() {
   const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
+  const diagnostics = (await readFile(new URL("../web/layout-diagnostics.js", import.meta.url), "utf8")).replace(/^export /gm, "");
   const root = element("");
   const screen = source.slice(source.indexOf("function screen()"), source.indexOf("function lastOutputLine()"));
   const lineStart = source.indexOf("function line()");
   const line = source.slice(lineStart, source.indexOf("/**", lineStart));
   const retire = source.slice(source.indexOf("function retireScreen("), source.indexOf("// Undo retireScreen"));
   const boxes = source.slice(source.indexOf("function container()"), source.indexOf("/** Removes a line"));
+  const removeLine = source.slice(source.indexOf("function removeLine("), source.indexOf("const colorContext ="));
+  const history = source.slice(source.indexOf("function reviveScreen("), source.indexOf("// Once a revived screen"));
   const render = source.slice(source.indexOf("  const previousScreen = currentScreen;"),
     source.indexOf('  outputRoot.querySelectorAll("button.choice").forEach(decorateCommandNumbers);'));
   const api = runInNewContext(`
     let currentScreen = null, currentLine = null, continuedScreens = [];
+    ${diagnostics}
+    const layoutDiagnostics = createLayoutDiagnostics();
     ${screen}
     ${boxes}
     ${line}
     ${retire}
+    ${removeLine}
+    ${history}
     async function render(snapshot, advanceScreen = false) { ${render} }
-    ({ render, openBox, closeBox });
+    ({ render, openBox, closeBox, layoutDiagnostics });
   `, {
     outputRoot: root,
     document: { createElement: (tag: string) => new Element(tag) },
@@ -127,10 +134,17 @@ async function screenFixture() {
     render(snapshot: {
       status: string;
       input?: { kind: string };
-      output: { type: string; text: string; newline?: boolean; plain?: boolean }[];
+      output: { type: string; text: string; newline?: boolean; plain?: boolean; count?: number }[];
     }, advanceScreen?: boolean | "continue"): Promise<void>;
     openBox(classes: string): void;
     closeBox(): void;
+    layoutDiagnostics: {
+      record(operation: string): void;
+      issue(code: string, detail: string): void;
+      abandon(screen: Element): void;
+      inspect(root: Element, context: { game: string; title: string; step: number; status: string; input?: string }): string | null;
+      reset(): void;
+    };
   };
   return { root, ...api };
 }
@@ -194,6 +208,100 @@ test("main layout survives embrace-event waits after the header until its closin
   assert.equal(root.children.length, 2, "a completed layout must still retire on the next command");
   assert.ok(root.children[0]!.classList.contains("is-history"));
   assert.equal(root.lastElementChild!.textContent, "Next command result");
+});
+
+const diagnosticContext = { game: "fixture", title: "Test game v1", step: 7, status: "waiting", input: "wait" };
+
+test("layout diagnostics allow paused construction and validate completed main panels", async () => {
+  const { root, openBox, closeBox, layoutDiagnostics } = await screenFixture();
+  openBox("era-layout era-main");
+  openBox("era-main-header");
+  assert.equal(layoutDiagnostics.inspect(root, diagnosticContext), null, "an input wait inside the header is valid");
+  closeBox();
+  assert.equal(layoutDiagnostics.inspect(root, diagnosticContext), null, "panels are not required until the layout closes");
+  for (const name of ["era-main-left", "era-main-center", "era-main-right"]) {
+    openBox(name);
+    closeBox();
+  }
+  closeBox();
+  assert.equal(layoutDiagnostics.inspect(root, diagnosticContext), null);
+  const main = root.querySelector(".era-main")!;
+  root.lastElementChild!.append(main.querySelector(".era-main-left")!);
+  const report = layoutDiagnostics.inspect(root, diagnosticContext)!;
+  assert.match(report, /misplaced-panel.*era-main-left/);
+  assert.match(report, /incomplete-main.*0 era-main-left/);
+  assert.match(report, /Game: fixture.*Test game v1/);
+  assert.match(report, /Step: 7.*Input: wait/);
+  assert.match(report, /Layout tree/);
+  assert.equal(layoutDiagnostics.inspect(root, diagnosticContext), null, "repeated faults do not spam reports");
+});
+
+test("layout diagnostics allow shared shop and sky headers but still reject detached main headers", async () => {
+  for (const classes of ["era-layout era-shop", "era-dialog era-sky-dialog"]) {
+    const { root, openBox, closeBox, layoutDiagnostics } = await screenFixture();
+    openBox(classes);
+    openBox("era-main-header");
+    closeBox();
+    closeBox();
+    assert.equal(layoutDiagnostics.inspect(root, diagnosticContext), null, classes);
+    root.lastElementChild!.append(root.querySelector(".era-main-header")!);
+    assert.match(layoutDiagnostics.inspect(root, diagnosticContext)!, /misplaced-panel.*era-main-header/);
+  }
+});
+
+test("layout diagnostics catch unmatched closes and abandoned layouts without hiding either", async () => {
+  const { root, openBox, closeBox, layoutDiagnostics } = await screenFixture();
+  closeBox();
+  assert.match(layoutDiagnostics.inspect(root, diagnosticContext)!, /unmatched-close/);
+  assert.ok(root.querySelector(".era-close-line"), "diagnostics do not mutate renderer output");
+  openBox("era-layout era-main");
+  layoutDiagnostics.abandon(root.lastElementChild!);
+  assert.match(layoutDiagnostics.inspect(root, diagnosticContext)!, /abandoned-layout/);
+  assert.equal(root.querySelector(".era-main")!.dataset.closed, undefined);
+});
+
+test("layout transitions preserve nesting through nested menus, CLEARLINE and RESTART", async () => {
+  const { root, openBox, closeBox, render, layoutDiagnostics } = await screenFixture();
+  openBox("era-layout era-main");
+  openBox("era-main-header");
+  closeBox();
+  openBox("era-dialog era-setup");
+  await render({ status: "waiting", input: { kind: "integer" }, output: [] });
+  await render({ status: "waiting", input: { kind: "wait" },
+    output: [{ type: "input", text: "0", newline: true }] }, true);
+  await render({ status: "waiting", input: { kind: "wait" },
+    output: [{ type: "text", text: "Private narrative", newline: true, plain: true }] }, "continue");
+  assert.equal(root.children.length, 1);
+  assert.equal(layoutDiagnostics.inspect(root, diagnosticContext), null);
+  closeBox();
+  await render({ status: "waiting", input: { kind: "integer" },
+    output: [{ type: "clear", text: "", count: 1 }] });
+  assert.equal(root.querySelector(".era-dialog")!.dataset.closed, undefined, "clearing a close marker reopens the dialog");
+  assert.equal(layoutDiagnostics.inspect(root, diagnosticContext), null);
+  openBox("era-layout era-main");
+  assert.equal(root.querySelector(".era-main")!.dataset.closed, "forced", "RESTART intentionally supersedes the old layout");
+  assert.equal(layoutDiagnostics.inspect(root, diagnosticContext), null);
+  closeBox();
+  const report = layoutDiagnostics.inspect(root, diagnosticContext)!;
+  assert.match(report, /incomplete-main/);
+  assert.doesNotMatch(report, /Private narrative/);
+});
+
+test("layout reports have bounded operation history and reset deduplication for a fresh run", async () => {
+  const { root, layoutDiagnostics } = await screenFixture();
+  for (let i = 0; i < 200; i++) layoutDiagnostics.record(`operation-${i}`);
+  layoutDiagnostics.issue("test", "bounded report");
+  const report = layoutDiagnostics.inspect(root, diagnosticContext)!;
+  assert.doesNotMatch(report, /operation-119\b/);
+  assert.match(report, /operation-120\b/);
+  assert.match(report, /operation-199\b/);
+  layoutDiagnostics.issue("test", "bounded report");
+  assert.equal(layoutDiagnostics.inspect(root, diagnosticContext), null);
+  layoutDiagnostics.reset();
+  layoutDiagnostics.issue("test", "bounded report");
+  const next = layoutDiagnostics.inspect(root, diagnosticContext)!;
+  assert.match(next, /bounded report/);
+  assert.doesNotMatch(next, /operation-/);
 });
 
 test("retired GUI is detached while narrative and echoed input become plain text", async () => {
