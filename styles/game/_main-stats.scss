@@ -2,6 +2,7 @@
 .era-bar.era-buffed .era-bar-value { color: #0ff; }
 .era-bar.era-debuffed .era-bar-value { color: #ff0; }
 .era-empty { color: #777; font-style: italic; }
+.era-stats { min-height: 150px; }
 .era-stats .era-section-title { display: none; }
 .era-stats .era-palam-grid { grid-template-columns: minmax(0, 1fr); }
 /* Values and gem gains take only their content width; the meter uses the remaining room. */

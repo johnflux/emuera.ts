@@ -163,16 +163,30 @@ changing saved game preferences.
   `.era-actions-header` supplies its own flex layout; group titles use the same
   accented marker in every screen. Standalone header, collection, and compact
   panel examples are available in the `/components` button catalog.
-  Player summaries use inherited body sizing for identity, metadata, status,
-  and text actions. Special effects reuse the baseline-aligned status row
+  The main grid grows with the sidebar when player controls need more height;
+  its columns stay aligned and the terminal handles page overflow. Compact
+  viewport sizing is a minimum, not a fixed height. Stats retain their 150px
+  minimum and scroll independently rather than expanding for every stat row.
+  Secondary text uses `--era-font-size-small` (14px), defined once in
+  `styles/game/_shared.scss`: facts, palam grids, character/player identity
+  metadata, and player status rows. Change that variable to try 13px without
+  compounding nested font sizes. Card headings use `--era-heading-color`;
+  linked names inherit it, including intentional time-stop heading changes.
+  Other secondary captions, action titles, command numbers, help text, and
+  metadata use the same small-text token rather than individual 0.8–0.9em sizes.
+  Special effects reuse the baseline-aligned status row
   rather than smaller uppercase labels or separate pill styling.
   The player name opens the character sheet using the shared
   `.era-text-button-link` variant (dotted underline and optional suffix);
   identity metadata belongs on the following line. Special effects include
   explanatory tooltips.
+  Name tooltips can include an `.era-tooltip-avatar` child: it stays hidden
+  inside the control and is copied into the shared tooltip beside its text.
+  The player uses the existing character-face resolver with its initial-letter
+  fallback when no sprite is available.
   Reuse `.era-actions-panel` for compact collections of action groups, optional
-  auto-toggles, and settings. Within its groups, the first two printed tiles in
-  each line share a row and subsequent tiles are full-width. The player screen's
+  auto-toggles, and settings. Buttons and printed tiles wrap at their natural
+  widths, sharing spare space instead of forcing full-width rows. The player screen's
   bottom anchoring is separate from this reusable panel layout.
 - Use compact 4–6px radii for controls and smaller elements; use 8–12px for
   cards and larger panels. Avoid mixing rounded pills, sharp corners, and

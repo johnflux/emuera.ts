@@ -201,7 +201,8 @@ HTML_PRINT "<era-close>"
 HTML_PRINT "<era-open class='era-main-right'>"
 HTML_PRINT "<era-open class='era-card era-player'>"
 LOCALS '= "Funds" + COND_STR(@"&#10;Charisma: %DIGIT_GROUP(MONEY:2)% CM", MONEY:2) + COND_STR(@"&#10;Bullet Money: %DIGIT_GROUP(MONEY:弾貨)% BM", MONEY:弾貨)
-HTML_PRINT @"<div class='era-card-title'><button value='803' class='era-text-button era-text-button-link' data-suffix='›' title='Abilities, experience, personal info and more, for you and everyone here'>%HTML_ESCAPE(CALLNAME:MASTER)%</button><span class='era-funds' title='%LOCALS%'>%HTML_ESCAPE(金額表示(MONEY))%</span></div>"
+CALL HOTPATCH_FACE(MASTER, 74)
+HTML_PRINT @"<div class='era-card-title'><button value='803' class='era-text-button era-text-button-link' data-suffix='›' title='Click to see more: abilities, experience, personal info and more, for you and everyone here'>%HTML_ESCAPE(CALLNAME:MASTER)%<span class='era-tooltip-avatar'>%RESULTS%</span></button><span class='era-funds' title='%LOCALS%'>%HTML_ESCAPE(金額表示(MONEY))%</span></div>"
 HTML_PRINT HOTPATCH_PLAYER_KIND()
 CALL HOTPATCH_BASE(MASTER)
 CALL HOTPATCH_PLAYER_STATUS
@@ -743,8 +744,8 @@ IF FLAG:CHEATMENU
 	ENDIF
 ENDIF
 ;hypnosis patch
-IF FLAG:催眠on && MAXBASE:MASTER:TSP && TARGET
-	IF FLAG:70 || !SHIRAHU(TARGET) ;custom code, drunk/sleeping people can't be hypnotized
+IF FLAG:催眠on && MAXBASE:MASTER:TSP && TARGET && !FLAG:70
+	IF !SHIRAHU(TARGET) ;custom code, drunk/sleeping people can't be hypnotized
 		sHtml += "<span class='era-chip-button era-unavailable'>Hypnosis not possible</span>"
 	ELSEIF NON_HYPNOTIZED_EYEWITNESSES() ;custom code
 		sHtml += "<span class='era-chip-button era-unavailable'>Hypnosis not possible (eyewitnesses nearby)</span>"

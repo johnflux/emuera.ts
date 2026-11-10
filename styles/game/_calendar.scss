@@ -15,9 +15,9 @@
 .era-calendar-tribute-dot { display: inline-block; flex: none; width: 6px; height: 6px; background: #e4c57c; transform: rotate(45deg); }
 .era-calendar-month-date .era-calendar-tribute-dot { position: absolute; bottom: 4px; left: 5px; }
 .era-calendar-tribute, .era-calendar-tribute-notice { color: #efda9d; white-space: normal; }
-.era-calendar-tribute { padding: 3px 8px; border: 1px solid #b6a17070; border-radius: 4px; background: #b6a17012; font-size: .85em; }
+.era-calendar-tribute { padding: 3px 8px; border: 1px solid #b6a17070; border-radius: 4px; background: #b6a17012; font-size: var(--era-font-size-small); }
 .era-calendar-tribute-notice { margin-bottom: 16px; padding: 10px 14px; border-left: 3px solid #e4c57c; background: #b6a17012; }
-.era-calendar-month-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-top: 16px; color: #a4b9bf; font-size: .8em; }
+.era-calendar-month-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-top: 16px; color: #a4b9bf; font-size: var(--era-font-size-small); }
 .era-calendar-month-footer > span { display: inline-flex; align-items: center; gap: 6px; }
 .era-calendar-agenda { min-width: 0; }
 .era-calendar-week { --calendar-day-width: 64px; border: 1px solid #5b8895; border-radius: 10px; overflow: hidden; background: #0c151d; }
@@ -32,7 +32,7 @@
 .era-calendar-day > .line:has(.era-calendar-date) { align-self: stretch; background: #ffffff05; border-right: 1px solid #708793; }
 .era-calendar-date { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 64px; height: 100%; padding: 6px; color: #e3eaef; }
 .era-calendar-number { font-size: 1.5em; line-height: 1; font-variant-numeric: tabular-nums; }
-.era-calendar-weekday { font-size: .9em; line-height: 1.1; }
+.era-calendar-weekday { font-size: var(--era-font-size-small); line-height: 1.1; }
 .era-calendar-today .era-calendar-number { color: #80dfb5; }
 .era-calendar-day-content { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 5px; min-width: 0; padding: 6px 9px; }
 .era-calendar :is(.era-calendar-events, .era-calendar-people) { white-space: normal; overflow-wrap: anywhere; }
@@ -47,7 +47,7 @@
 @media (max-width: 600px) {
   .era-calendar .era-inventory-body { padding: 12px; }
   .era-calendar-events, .era-calendar-people { flex-basis: 100%; }
-  .era-calendar-table-heading > span { padding: 8px; font-size: .8em; }
+  .era-calendar-table-heading > span { padding: 8px; font-size: var(--era-font-size-small); }
 }
 @media (max-width: 1000px) {
   .era-calendar-layout { grid-template-columns: minmax(0, 1fr); }

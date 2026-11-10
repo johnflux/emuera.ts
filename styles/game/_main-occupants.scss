@@ -26,7 +26,7 @@
 .era-occupant.era-mood-drunk .era-occupant-name { color: #ffa500; }
 .era-occupant.era-mood-happy .era-occupant-name { color: #66ffff; }
 .era-occupant.era-mood-sullen .era-occupant-name { color: #ff0000; }
-.era-occupant-state { color: #8a949c; font-size: .85em; }
+.era-occupant-state { color: #8a949c; font-size: var(--era-font-size-small); }
 /* HOTPATCH_FEELINGS: relationship, hate mark, mad/sullen/happy (colours from the game's character list and SHOW_EQUIP_2). */
 .era-feel { white-space: nowrap; }
 .era-occupant-state .era-feel::before { content: " · "; color: #8a949c; }
@@ -48,7 +48,7 @@
 .era-room-stage .era-place { margin-bottom: 8px; }
 .era-room-stage .era-place-name { font-size: 1.15em; letter-spacing: 0; }
 .era-room-stage .era-place-name .era-sub { margin-left: 1.5ch; }
-.era-room-stage .era-scene { position: absolute; top: 2em; left: 8px; right: 8px; z-index: 2; margin: 0; padding: 6px 9px; border-left: 2px solid #41829b; font-size: .9em; font-style: normal; pointer-events: none; text-shadow: 0 1px 3px #000; }
+.era-room-stage .era-scene { position: absolute; top: 2em; left: 8px; right: 8px; z-index: 2; margin: 0; padding: 6px 9px; border-left: 2px solid #41829b; font-size: var(--era-font-size-small); font-style: normal; pointer-events: none; text-shadow: 0 1px 3px #000; }
 .era-room-stage > .era-occupants { display: flex; flex: none; flex-direction: column; margin-top: auto; }
 .era-room-stage .era-occupant-list { flex: none; height: var(--era-occupant-height); align-items: flex-end; padding: 0 4px; overflow-y: hidden; }
 .era-room-stage .era-occupant-list:has(.era-portrait) { height: auto; }
@@ -59,7 +59,7 @@
 .era-room-stage .era-occupant-state { color: #c1ccd3; }
 .era-room-stage .era-occupant .era-occupant-text .era-occupant-name { color: #fff; }
 .era-room-stage .era-occupant:has(.era-portrait) { flex-basis: auto; min-width: 180px; width: max-content; }
-.era-room-stage .era-occupant-caged { flex-basis: 110px; gap: 6px; padding-bottom: 5px; font-size: .85em; }
+.era-room-stage .era-occupant-caged { flex-basis: 110px; gap: 6px; padding-bottom: 5px; font-size: var(--era-font-size-small); }
 .era-room-stage .era-occupant-caged > .era-occupant-text { position: static; }
 /* Nobody to show: a placeholder silhouette in the middle of the card, the room's look text under it. */
 .era-character.era-alone { display: flex; flex-direction: column; align-items: stretch; }
@@ -69,13 +69,13 @@
 .era-alone-mark::before { top: 16px; width: 26px; height: 26px; margin-left: -13px; border-radius: 50%; }
 .era-alone-mark::after { top: 46px; width: 52px; height: 44px; margin-left: -26px; border-radius: 26px 26px 0 0; }
 .era-alone-title { color: #9fb3c2; font-size: 1.2em; font-weight: bold; }
-.era-alone-hint { color: #6c7780; font-size: .9em; }
+.era-alone-hint { color: #6c7780; font-size: var(--era-font-size-small); }
 .era-character-name { font-size: 1.25em; color: #66ffff; }
 /* The place as the character card's title, with its furniture and cleanliness. */
 .era-place { flex-wrap: wrap; align-items: center; row-gap: 4px; }
 .era-place-name { color: #e6f2ff; font-size: 1.3em; letter-spacing: .02em; }
 .era-place-name::before { content: ""; display: inline-block; width: .55em; height: .55em; margin-right: .5em; border: 2px solid #66ffff; border-radius: 50% 50% 50% 0; transform: rotate(-45deg) translateY(-.1em); }
-.era-place-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-left: auto; font-size: .8em; font-weight: normal; }
+.era-place-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-left: auto; font-size: var(--era-font-size-small); font-weight: normal; }
 /* Each portrait's effect layers share one cell, with its label below. */
 .era-portrait { min-width: 0; align-self: center; }
 .era-portrait .sprite { height: auto; vertical-align: bottom; }
@@ -112,5 +112,5 @@
 .era-llm-composer { flex-shrink: 0; padding: 8px 0 0; border-top: 1px solid #28485b; }
 .era-llm-composer-row { display: flex; gap: 8px; align-items: stretch; }
 .era-llm-composer textarea { flex: 1; resize: vertical; min-height: 2.6em; max-height: 30vh; padding: 5px 8px; border: 1px solid #3c9bb7; border-radius: 4px; background: #06131c; color: #d7eff8; font: inherit; }
-.era-llm-composer-actions { display: flex; gap: 8px; align-items: center; margin-top: 6px; font-size: .85em; }
+.era-llm-composer-actions { display: flex; gap: 8px; align-items: center; margin-top: 6px; font-size: var(--era-font-size-small); }
 .era-llm-state { flex: 1; color: #9ab3c3; }

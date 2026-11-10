@@ -4,7 +4,7 @@
 .era-proposal-header > div { min-width: 0; flex: 1; }
 .era-proposal .era-info-face { flex: none; width: 99px; height: 90px; border: 0; background: transparent; }
 .era-proposal .era-info-face .sprite-clip { transform-origin: left bottom; }
-.era-proposal-header .era-sub { margin: 0; color: #c4a8ba; font-size: .8em; }
+.era-proposal-header .era-sub { margin: 0; color: #c4a8ba; font-size: var(--era-font-size-small); }
 .era-proposal-header h2 { margin: 4px 0; color: #ffe0ed; font: 600 1.3em ui-sans-serif, system-ui, sans-serif; overflow-wrap: anywhere; }
 .era-proposal-body { position: relative; flex: none; padding: 20px 28px 24px; }
 .era-proposal-moment { text-align: center; padding-bottom: 22px; white-space: normal; }
@@ -15,7 +15,7 @@
 .era-relationship-ending .era-proposal-jewel { background-image: url("/relationship-assets/icon-divorced.svg"); }
 .era-relationship-ending-5 .era-proposal-jewel { background-image: url("/relationship-assets/icon-engaged.svg"); }
 .era-relationship-ending-7 .era-proposal-jewel { background-image: url("/relationship-assets/icon-fwb.svg"); }
-.era-ending-details { color: #b6a7b3; text-align: center; white-space: normal; line-height: 1.6; font-size: .85em; }
+.era-ending-details { color: #b6a7b3; text-align: center; white-space: normal; line-height: 1.6; font-size: var(--era-font-size-small); }
 .era-proposal-pending,
 .era-proposal:not([data-proposal-step]) :is(.era-proposal-check, .era-proposal-formula, .era-proposal-response, .era-proposal-moment) { visibility: hidden; }
 .era-proposal[data-proposal-step="5"] .era-proposal-verdict { animation: era-proposal-reveal 180ms ease-out both; }
@@ -28,10 +28,10 @@
 .era-proposal-caption { color: #c9a9be; font: italic 1em ui-serif, Georgia, serif; }
 .era-proposal-moment h3 { margin: 8px 0 12px; color: #ffe6bf; font: 650 1.9em ui-sans-serif, system-ui, sans-serif; text-shadow: 0 0 22px #ffc58577; }
 .era-proposal-verdict { display: inline-block; padding: 4px 16px; border: 1px solid #d5ac7780; border-radius: 999px; background: #d5ac7714; color: #f5d6a5; }
-.era-proposal-check-heading { margin-bottom: 8px; color: #c1a8bc; font-size: .8em; letter-spacing: .08em; text-transform: uppercase; }
-.era-proposal-check { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 12px; padding: 12px; margin-top: 6px; border: 1px solid #aeb8bf26; border-radius: 8px; background: #ffffff04; white-space: normal; font-size: .9em; }
+.era-proposal-check-heading { margin-bottom: 8px; color: #c1a8bc; font-size: var(--era-font-size-small); letter-spacing: .08em; text-transform: uppercase; }
+.era-proposal-check { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 12px; padding: 12px; margin-top: 6px; border: 1px solid #aeb8bf26; border-radius: 8px; background: #ffffff04; white-space: normal; font-size: var(--era-font-size-small); }
 .era-proposal-check strong { font-weight: normal; color: #e7dce5; }
-.era-proposal-check b { font-size: .8em; letter-spacing: .06em; }
+.era-proposal-check b { font-size: var(--era-font-size-small); letter-spacing: .06em; }
 .era-proposal-check :is(strong, b):not(.era-proposal-pending) { animation: era-proposal-reveal 180ms ease-out both; }
 .era-check-pass b { color: #a9ddbd; }
 .era-check-fail b { color: #f0abab; }
@@ -40,7 +40,7 @@
 .era-proposal-love-exp { color: #a9ddbd; }
 .era-proposal-trait { color: #f0abab; }
 .era-proposal-response { margin-top: 20px; padding: 16px 18px; border-left: 2px solid #d3a6bf; background: #d3a6bf0a; color: #ead9e4; white-space: normal; line-height: 1.7; }
-.era-proposal-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 28px; border-top: 1px solid #79536766; color: #a899aa; font-size: .8em; }
+.era-proposal-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 28px; border-top: 1px solid #79536766; color: #a899aa; font-size: var(--era-font-size-small); }
 .era-proposal:not([data-proposal-step="5"]) .era-proposal-footer { visibility: hidden; }
 .era-proposal[data-proposal-step="5"] .era-proposal-footer { animation: era-proposal-footer-in 400ms 3650ms ease-out both; }
 .era-proposal-declined[data-proposal-step="5"] .era-proposal-footer { animation-delay: 1680ms; }

@@ -37,12 +37,12 @@
 .era-move-side > .line:has(:is(.era-move-current, .era-move-places-title, .era-move-more-title)[hidden]) { display: none; }
 
 .era-move-place-name { min-width: 0; overflow-wrap: anywhere; }
-.era-move-place-note { display: block; color: #9fb0a2; font-size: .82em; font-weight: normal; }
+.era-move-place-note { display: block; color: #9fb0a2; font-size: var(--era-font-size-small); font-weight: normal; }
 
-.era-move-subtitle { margin-top: 6px; color: #8a98a3; font-size: .8em; text-transform: uppercase; letter-spacing: .05em; }
+.era-move-subtitle { margin-top: 6px; color: #8a98a3; font-size: var(--era-font-size-small); text-transform: uppercase; letter-spacing: .05em; }
 .era-move-places-title { border-top: 1px solid #2a3138; padding-top: 8px; }
 .era-move-more-title { border-top: 1px solid #2a3138; padding-top: 8px; }
-.era-move-num { display: inline-block; flex-shrink: 0; min-width: 2ch; box-sizing: content-box; padding: 0 3px; border-radius: 4px; background: #222b31; color: #9fb0bc; font-size: .85em; font-weight: normal; text-align: center; }
+.era-move-num { display: inline-block; flex-shrink: 0; min-width: 2ch; box-sizing: content-box; padding: 0 3px; border-radius: 4px; background: #222b31; color: #9fb0bc; font-size: var(--era-font-size-small); font-weight: normal; text-align: center; }
 
 .era-move-dests, .era-move-more-list { min-height: 0; }
 .era-move-place-list { display: flex; flex-direction: column; gap: 2px; }
@@ -59,7 +59,7 @@
 .era-move-key { flex-shrink: 0; align-self: flex-end; max-width: 100%; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 3px 12px; margin-bottom: 8px; font-size: 12px; line-height: 1.3; color: #9fb0bc; white-space: normal; }
 .era-move-key > .line { display: contents; }
 .era-move-key-item { display: inline-block; white-space: nowrap; }
-.era-move-legend { margin-top: 8px; padding-top: 6px; border-top: 1px solid #2a3138; font-size: .9em; }
+.era-move-legend { margin-top: 8px; padding-top: 6px; border-top: 1px solid #2a3138; font-size: var(--era-font-size-small); }
 .era-move-legend > .line { display: flex; flex-wrap: wrap; gap: 2px 14px; white-space: normal; }
 .era-move-legend > .line + .line:not(.era-marker) { margin-top: 3px; }
 .era-move-legend > .line:not(.era-marker):empty { display: none; }
@@ -78,7 +78,7 @@
   .era-move-header .era-move-back { grid-column: 2; grid-row: 1; margin-bottom: 6px; }
 }
 /* Going out (GO_OUT_MAP.ERB): the region map and Stroll, whose maps are smaller than the home maps. */
-.era-move-area { color: #8a98a3; font-size: .9em; }
-.era-travel-time { margin-left: auto; padding-left: 16px; color: #8a98a3; font-size: .9em; white-space: nowrap; }
+.era-move-area { color: #8a98a3; font-size: var(--era-font-size-small); }
+.era-travel-time { margin-left: auto; padding-left: 16px; color: #8a98a3; font-size: var(--era-font-size-small); white-space: nowrap; }
 .era-travel-time.era-travel-faster { color: #7ee08a; }
 .era-travel-time.era-travel-slower { color: #7c98e8; }

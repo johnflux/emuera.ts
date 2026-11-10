@@ -14,7 +14,7 @@ div.era-inventory-item:is(:hover, :focus-visible) { background: #ffffff05; }
 .era-inventory-name { min-width: 0; color: #b5c5ce; overflow-wrap: anywhere; }
 .era-inventory-quantity { flex: 0 0 auto; margin-left: auto; color: #8a9ba6; font-variant-numeric: tabular-nums; white-space: nowrap; overflow-wrap: normal; }
 .era-inventory-empty { padding: 32px 12px; color: #92a7b5; text-align: center; white-space: normal; }
-.era-inventory-footer { justify-content: space-between; padding: 10px 20px; border-top: 1px solid #245066; color: #92a7b5; font-size: .85em; white-space: normal; }
+.era-inventory-footer { justify-content: space-between; padding: 10px 20px; border-top: 1px solid #245066; color: #92a7b5; font-size: var(--era-font-size-small); white-space: normal; }
 .era-inventory-filter { flex: 1 1 180px; max-width: 320px; min-width: 0; }
 .era-inventory-search { width: 100%; min-width: 0; padding: 5px 8px; border: 1px solid #2a3943; border-radius: 4px; background: #0b1117; color: #c5d3dc; font: inherit; }
 .era-inventory-search::placeholder { color: #768894; }

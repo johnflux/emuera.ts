@@ -28,5 +28,5 @@
 }
 .era-shop-place { position: relative; display: block; padding-left: 1.05em; margin: 8px 0 14px; font-size: 1.1em; font-weight: bold; }
 .era-shop-place::before { position: absolute; left: 0; top: .25em; margin-right: 0; }
-.era-shop-place .era-sub { display: block; margin: 6px 0 0; font-size: .85em; font-weight: normal; }
+.era-shop-place .era-sub { display: block; margin: 6px 0 0; font-size: var(--era-font-size-small); font-weight: normal; }
 .era-shop :is(.era-shop-wake, .era-shop-chips, .era-main-header) .interactive-label { text-decoration-line: none; }

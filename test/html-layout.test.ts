@@ -1422,7 +1422,7 @@ test("quicksave controls live in the quick menu and below Config, not the burger
   assert.match(sidebar, /choice\("Quicksave", "quicksave"\)/);
   assert.match(sidebar, /config\.after\(row\)/);
   const css = styleSource("style");
-  assert.match(css, /\.era-actions-panel \{[\s\S]*?\.era-settings \{[\s\S]*?\.era-quicksave-row \{ flex-basis: 100%; \}/);
+  assert.match(css, /\.era-actions-panel \{[\s\S]*?\.era-settings \{[\s\S]*?\.era-quicksave-row \{ display: contents; \}/);
   const save = source.slice(source.indexOf("async function saveMidday("), source.indexOf("async function loadMidday("));
   assert.doesNotMatch(save, /confirmAction/);
 });
@@ -1582,8 +1582,8 @@ test("room overlays reserve no layout height and chat follows every responsive m
   assert.match(css, /\.era-main-sidebar > \.era-main-right \{ flex: 1; \}/);
   assert.match(css, /\.era-main-sidebar > \.era-main-left \{ display: contents; \}/);
   assert.match(css, /\.era-main-left > \.era-stats \{ flex: none; max-height: fit-content; \}/);
-  assert.match(css, /\.era-main-sidebar \{ min-height: 0; contain: size; \}/);
-  assert.match(css, /\.era-main-sidebar \.era-stats \{ flex: 0 1 auto; min-height: 0; overflow-y: auto; \}/);
+  assert.doesNotMatch(css, /\.era-main-sidebar \{[^}]*contain: size;/);
+  assert.match(css, /\.era-main-sidebar \.era-stats \{ flex: 1 1 0; overflow-y: auto; \}/);
   assert.match(css, /\.era-player > \.era-actions-panel > \.line:has\(\.era-auto-toggles\) \{ margin-top: auto;/);
   assert.match(css, /button\.choice\.era-button \{[^}]*padding: 4px 9px;/);
   assert.match(css, /\.checkbox-control\.era-toggle \{ padding: 3px 7px; gap: 6px;/);

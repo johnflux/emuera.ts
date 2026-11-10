@@ -16,10 +16,10 @@
 .era-counters { grid-area: counters; }
 .era-main-last { grid-area: last; color: #888; }
 @container (min-width: 761px) {
-  /* The sidebar spans grid rows; its content must not force those rows taller than the screen. */
-  .era-main-sidebar { min-height: 0; contain: size; }
+  /* Let the spanning sidebar enlarge both columns when its controls need more room. */
   .era-main-sidebar > .era-main-right { flex: 1 0 auto; }
-  .era-main-sidebar .era-stats { flex: 0 1 auto; min-height: 0; overflow-y: auto; }
+  /* Start at the stats minimum, then share spare space without sizing to every stat row. */
+  .era-main-sidebar .era-stats { flex: 1 1 0; overflow-y: auto; }
   .era-main-sidebar .era-stats:focus-visible { outline: 2px solid #7ccce3; outline-offset: -2px; }
   .era-main:not(:has(.era-counters)) {
     grid-template-rows: auto auto 1fr auto;
@@ -34,9 +34,8 @@
 }
 .era-card { padding: 8px 10px; border: 1px solid #2a3138; border-radius: 10px; background: #111518; }
 .line .era-card { display: block; }
-.era-card-title { display: flex; align-items: baseline; gap: 1ch; margin-bottom: 6px; color: #8fc8ff; font-weight: bold; }
+.era-card-title { display: flex; align-items: baseline; gap: 1ch; margin-bottom: 6px; color: var(--era-heading-color); font-weight: bold; }
 .era-main .era-card { border-color: #20506a; border-radius: 6px; background: linear-gradient(135deg, #091923, #050e16 75%); }
-.era-main .era-card-title { color: #63d3f6; }
 .era-main .era-card-title::after { content: ""; flex: 1; align-self: center; height: 1px; background: linear-gradient(90deg, #245066, transparent); }
 .era-main .era-player .era-card-title::after { display: none; }
 .era-main:has(.era-season-spring) { --corner-decoration: url("/decoration/deco_corner_flower_spring.png"); }
@@ -47,5 +46,5 @@
 .era-main :is(.era-player, .era-actions-collection)::after { content: ""; position: absolute; right: 0; bottom: 0; z-index: -1;
   width: min(180px, 60%); aspect-ratio: 1; border-bottom-right-radius: inherit; background: var(--corner-decoration) right bottom / contain no-repeat;
   opacity: .14; pointer-events: none; }
-.era-sub { margin-left: 1.75ch; color: #888; font-weight: normal; font-size: .85em; }
+.era-sub { margin-left: 1.75ch; color: #888; font-weight: normal; font-size: var(--era-font-size-small); }
 .era-funds { margin-left: auto; color: #ffd866; font-weight: normal; font-variant-numeric: tabular-nums; white-space: nowrap; cursor: help; }

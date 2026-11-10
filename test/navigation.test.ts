@@ -310,6 +310,8 @@ test("render decorates command numbers after buttons have their surrounding labe
 
 test("compact room uses content height instead of reserving hidden chat space", () => {
   const css = styleSource("responsive");
+  assert.match(css, /\.screen\.is-active \.era-main \{ min-height: max\(540px, calc\(100cqh - 8px\)\);/);
+  assert.doesNotMatch(css, /\.screen\.is-active \.era-main \{ height:/);
   assert.match(css, /\.screen\.is-active \.era-main \{[^}]*grid-template-rows: auto minmax\(0, max-content\) minmax\(min-content, 1fr\) auto auto;/);
   assert.match(css, /\.era-character:has\(\.era-main-chat\) \{ grid-template-rows: auto; \}/);
 });

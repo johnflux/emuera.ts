@@ -8,7 +8,8 @@
     repeating-linear-gradient(60deg, #ffffff06 0 1px, transparent 1px 13px), repeating-linear-gradient(-60deg, #ffffff05 0 1px, transparent 1px 17px); }
 .era-main :is(.era-card, .era-main-header) { position: relative; }
 .era-main :is(.era-card, .era-main-header) > * { position: relative; z-index: 1; }
-.era-main:has(.era-stopped) .era-card-title { color: #bfe6ff; text-shadow: 0 0 6px #9fd8ff66; }
+.era-main:has(.era-stopped) { --era-heading-color: #bfe6ff; }
+.era-main:has(.era-stopped) .era-card-title { text-shadow: 0 0 6px #9fd8ff66; }
 .era-main :is(.era-character, .era-stats, .era-occupants) .era-meter > span { filter: saturate(calc(1 - .7 * var(--era-freeze))) brightness(calc(1 + .15 * var(--era-freeze))); }
 .era-main:has(.era-stopped) .era-clock { --clock-face: #e2f2fc; --clock-rim: #bfe6ff; --clock-ink: #40677f; --clock-tick: #8cb4ce; --clock-accent: #3288b8; }
 .era-main .era-clock::before, .era-main .era-clock::after { filter: grayscale(calc(.7 * var(--era-freeze))) sepia(calc(.4 * var(--era-freeze))) hue-rotate(calc(170deg * var(--era-freeze))) drop-shadow(0 2px 3px #0006) drop-shadow(0 0 6px rgb(159 216 255 / calc(.6 * var(--era-freeze)))); }

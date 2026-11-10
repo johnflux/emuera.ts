@@ -6,11 +6,11 @@
 .era-auto-toggles { margin-top: 2px; }
 .era-settings { margin-top: 8px; padding-top: 8px; border-top: 1px solid #ffffff14; }
 .era-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
-.era-chip { padding: 0 8px; border-radius: 999px; background: #222; color: #ddd; font-size: .9em; }
+.era-chip { padding: 0 8px; border-radius: 999px; background: #222; color: #ddd; font-size: var(--era-font-size-small); }
 .era-chip.era-drunk { background: #3a2410; color: #ffb060; }
 .era-chip.era-erect { background: #3a1430; color: #ff9ad8; }
 .era-chip.era-afterglow { background: #3a1430; color: #ff9ad8; }
-.era-chip-label { margin-right: .6ch; opacity: .7; font-size: .8em; text-transform: uppercase; letter-spacing: .05em; }
+.era-chip-label { margin-right: .6ch; opacity: .7; font-size: var(--era-font-size-small); text-transform: uppercase; letter-spacing: .05em; }
 .era-player-status { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 0; margin-top: 6px; }
 .era-status-label { margin-right: 1ch; color: #8a949c; font-weight: normal; }
 .era-status + .era-status::before { content: "·"; margin: 0 .8ch; color: #5a646c; }

@@ -651,9 +651,12 @@ function describe(element, description) {
       tooltip.replaceChildren(canvas);
     } else {
       // Each line is translated on its own so line breaks survive translation.
+      const avatar = element.querySelector(".era-tooltip-avatar");
+      const text = document.createElement("span");
       const lines = description.split("\n");
-      const translated = () => lines.map((line) => translation.text(line, () => { if (tooltipTarget === element) tooltip.textContent = translated(); })).join("\n");
-      tooltip.textContent = translated();
+      const translated = () => lines.map((line) => translation.text(line, () => { if (tooltipTarget === element) text.textContent = translated(); })).join("\n");
+      text.textContent = translated();
+      tooltip.replaceChildren(...(avatar ? [avatar.cloneNode(true), text] : [text]));
     }
     tooltip.hidden = false;
     // In the top layer, so it shows above an open dialog.
@@ -1963,6 +1966,7 @@ async function renderHtml(markup, parent, sprites) {
       element.dataset.htmlPosition = String(sizeAttribute(position, 0, scale ?? imageScale()));
     }
     applyClasses(element, node);
+    if (element.matches(".era-tooltip-avatar")) element.setAttribute("aria-hidden", "true");
     if (element.matches(".choice")) syncGameControllerHints(element);
     if (node.tagName === "DIV" && element.classList.contains("era-sky") && node.hasAttribute("data-minutes")) sky(node, element);
     if (element.matches(".era-occupant-label, .era-chip-button")

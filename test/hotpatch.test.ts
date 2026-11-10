@@ -646,6 +646,37 @@ WAIT`, "<cage-test>");
   }
 });
 
+test("frozen time omits unavailable hypnosis without hiding the normal-time reason", {
+  skip: !existsSync(GAME_ROOT),
+}, async () => {
+  const game = await loadGame();
+  await applyHotpatches(game);
+  for (const frozen of [false, true]) {
+    const stub = emptyGame(game.root);
+    indexScript(stub, `@SYSTEM_TITLE
+ADDCHARA 0
+ADDCHARA 1
+MASTER = 0
+TARGET = 1
+FLAG:催眠on = 1
+FLAG:70 = ${Number(frozen)}
+MAXBASE:0:TSP = 100
+BASE:0:TSP = 100
+BASE:0:気力 = 100
+CALL HOTPATCH_TIMESTOP
+QUIT
+@SHIRAHU(ARG)
+#FUNCTION
+RETURNF 0`, "<hypnosis-visibility>");
+    for (const [name, routines] of stub.routines) game.routines.set(name, routines);
+    const snapshot = new Runtime(game, GAME_INSTRUCTION_LIMIT).start();
+    assert.equal(snapshot.error, null);
+    const html = snapshot.output.flatMap(item => item.type === "html" ? [item.text] : []).join("");
+    assert.equal(html.includes("Hypnosis not possible"), !frozen);
+    if (frozen) assert.doesNotMatch(html, /Hypnosis/);
+  }
+});
+
 test("main screen hotpatch opens and closes its panel boxes in balance", {
   skip: !existsSync(GAME_ROOT),
 }, async () => {
@@ -697,7 +728,7 @@ test("main screen hotpatch opens and closes its panel boxes in balance", {
     assert.ok(screen.some((text) => text.includes("era-timestop-button")), `screen ${index} has the time stop control`);
     const html = screen.join("");
     if (index === 0) {
-      assert.match(html, /value='995' class='era-toggle[^']*' role='checkbox' aria-checked='(?:true|false)'[^>]*>Auto-TSP Movement<\/button>/);
+      assert.match(html, /value='995' class='era-toggle[^']*' role='checkbox' aria-checked='(?:true|false)'[^>]*>Auto-TSP Move<\/button>/);
       assert.match(html, /value='996' class='era-toggle[^']*' role='checkbox' aria-checked='(?:true|false)'[^>]*>Auto-Clean<\/button>/);
     }
     assert.match(html, /<div class='era-clock' data-minutes='\d+'><\/div>/);
@@ -714,6 +745,7 @@ test("main screen hotpatch opens and closes its panel boxes in balance", {
     if (index === 1) {
       assert.match(html, /value='999' class='era-timestop-button era-stopped' title='Resume time'>Resume<span class='era-timestop-gauge'>/);
       assert.doesNotMatch(html, /Time is stopped/);
+      assert.doesNotMatch(html, /Hypnosis not possible/, "frozen time does not show the unavailable hypnosis notice");
     }
     assert.doesNotMatch(html, /<div class='era-clock'><img/);
     assert.equal((html.match(/value='805'/g) ?? []).length, 1, "inventory has exactly one entry point");

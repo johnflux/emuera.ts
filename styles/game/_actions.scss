@@ -31,7 +31,7 @@
   /* Text-only group heading with a shared accent marker in every context. */
   .era-actions-title {
     color: #7dd8ed;
-    font-size: .85em;
+    font-size: var(--era-font-size-small);
     text-transform: uppercase;
     letter-spacing: .06em;
 
@@ -60,19 +60,14 @@
    enclosing settings layout instead of treating output spans as layout items. */
 .era-settings > .line > .output-text:has(> .era-button) { display: contents; }
 
-/* Compact control panel: expects .era-actions-group sections, optional
-   .era-auto-toggles, then .era-settings. The first two PRINTC tiles in each
-   line share a row; remaining tiles and an optional quicksave row span it.
+/* Compact control panel: groups, toggles, and settings wrap at their natural
+   widths. Controls share spare row space rather than forcing full-width rows.
    This is layout only: controls retain their shared component appearance. */
 .era-actions-panel {
   margin-top: var(--era-actions-gap);
 
   .era-actions-group {
-    .print-cell {
-      display: block;
-      flex: 1 1 100%;
-      &:nth-child(-n+2) { flex-basis: calc((100% - var(--era-actions-gap)) / 2); }
-    }
+    .print-cell, button.choice.era-button-block { width: auto; flex: 1 1 auto; min-width: 0; }
   }
 
   .era-auto-toggles { margin: 0 0 var(--era-actions-gap); }
@@ -85,7 +80,8 @@
     border-top: 0;
 
     > .line { display: contents; }
-    .era-quicksave-row { flex-basis: 100%; }
+    .era-quicksave-row { display: contents; }
+    button.choice.era-button-block { width: auto; flex: 1 1 auto; }
   }
 }
 

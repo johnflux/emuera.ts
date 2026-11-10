@@ -82,12 +82,17 @@ PRINTFORMLC [9301] Go Out
 PRINTFORMLC [9302] Lock The Door
 PRINTL
 HTML_PRINT "<era-close>"
+HTML_PRINT "<div class='era-toggles era-auto-toggles'><button value='9303' class='era-toggle' role='checkbox' aria-checked='true'>Auto-TSP Move</button><button value='9304' class='era-toggle' role='checkbox' aria-checked='true'>Auto-Clean</button></div>"
+HTML_PRINT "<era-open class='era-settings'>"
+HTML_PRINT HOTPATCH_BUTTON("Config", 9305, "", "block")
+HTML_PRINT HOTPATCH_BUTTON("Quicksave", 9306, "", "block")
+HTML_PRINT "<era-close>"
 HTML_PRINT "<era-close>"
 HTML_PRINT "<era-close>"
 HTML_PRINT "<era-open class='era-section era-button-sample'>"
 PRINTL Player summary
 HTML_PRINT "<era-open class='era-card era-player'>"
-HTML_PRINT "<div class='era-card-title'><button value='9500' class='era-text-button era-text-button-link' data-suffix='›' title='Abilities, experience, personal info and more'>Aesprika</button><span class='era-funds'>¥3,764,954</span></div>"
+HTML_PRINT "<div class='era-card-title'><button value='9500' class='era-text-button era-text-button-link' data-suffix='›' title='Click to see more: abilities, experience, personal info and more'>Aesprika<span class='era-tooltip-avatar'><span class='era-face-letter'>A</span></span></button><span class='era-funds'>¥3,764,954</span></div>"
 HTML_PRINT "<div class='era-player-kind'>You · Outsider · <span class='era-size era-unusual'>Tall</span></div>"
 HTML_PRINT "<div class='era-player-status'><span class='era-status-label'>Status:</span><span class='era-status'>Can eat</span><span class='era-status'>Can bathe</span></div>"
 HTML_PRINT "<div class='era-player-status era-player-effects'><span class='era-status-label'>Special:</span><span class='era-status' title='Positive luck modifier; improves luck-dependent activities such as gathering and fishing.'>Fortune</span></div>"

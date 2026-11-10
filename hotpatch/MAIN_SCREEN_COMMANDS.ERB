@@ -425,7 +425,7 @@ SIF FLAG:パンツ輸送
 	HTML_PRINT HOTPATCH_BUTTON("Check Pilfered Panties", 994, "", "block")
 sAutoToggles '= ""
 IF !GETBIT(FLAG:USERCOMフィルタ, 13)
-	sAutoToggles += @"<button value='995' class='era-toggle%(GETBIT(FLAG:瞬間移動, AT_HOME(MASTER)) ? " era-on" # "")%' role='checkbox' aria-checked='%(GETBIT(FLAG:瞬間移動, AT_HOME(MASTER)) ? "true" # "false")%' title='Travel with TSP automatically whenever you have enough'>Auto-TSP Movement</button>"
+	sAutoToggles += @"<button value='995' class='era-toggle%(GETBIT(FLAG:瞬間移動, AT_HOME(MASTER)) ? " era-on" # "")%' role='checkbox' aria-checked='%(GETBIT(FLAG:瞬間移動, AT_HOME(MASTER)) ? "true" # "false")%' title='Travel with TSP automatically whenever you have enough'>Auto-TSP Move</button>"
 ENDIF
 ;自動掃除
 IF !GETBIT(FLAG:USERCOMフィルタ, 14) & AT_HOME(MASTER) && !CFLAG:うふふ && !CFLAG:添い寝中 && !CFLAG:MASTER:イタズラ ;bug fix

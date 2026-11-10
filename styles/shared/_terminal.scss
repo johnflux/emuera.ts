@@ -91,6 +91,11 @@ a { color: #8ddaff; }
 #game-tooltip { position: fixed; z-index: 10; inset: auto; margin: 0; max-width: min(480px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow: auto; padding: 10px 12px; border: 1px solid #777; background: #181818; color: #fff; font-size: 14px; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; pointer-events: none; box-shadow: 0 3px 12px #000; }
 #game-tooltip:has(> canvas) { padding: 0; border: 0; }
 #game-tooltip > canvas { display: block; }
+.era-tooltip-avatar { display: none; }
+#game-tooltip:has(> .era-tooltip-avatar) { display: flex; align-items: center; gap: 12px; }
+#game-tooltip > .era-tooltip-avatar { display: flex; flex: none; align-items: center; justify-content: center; width: 74px; height: 74px; overflow: hidden; }
+#game-tooltip .era-tooltip-avatar .sprite { height: auto; }
+#game-tooltip .era-tooltip-avatar .sprite-clip { position: relative; display: block; }
 /* Emuera images don't size their line: the holder is zero-height at the line top and the picture overflows below. */
 .sprite { display: inline-block; position: relative; height: 0; vertical-align: top; }
 .sprite-clip { position: absolute; left: 0; overflow: hidden; }

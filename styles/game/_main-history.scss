@@ -8,11 +8,11 @@
   .era-character-info { max-width: none; }
 }
 
-.era-llm-debug { padding: 0 10px 8px; font-size: .85em; }
+.era-llm-debug { padding: 0 10px 8px; font-size: var(--era-font-size-small); }
 .era-llm-debug-entry { margin: 6px 0; padding: 4px 8px; border: 1px solid #28485b; border-radius: 4px; }
 .era-llm-debug-entry > summary { cursor: pointer; }
 .era-llm-debug h3 { margin: 10px 0 4px; font-size: 1em; color: #b7dbea; }
-.era-llm-debug-role { margin: 6px 0 2px; color: #91adbd; text-transform: uppercase; font-size: .85em; }
+.era-llm-debug-role { margin: 6px 0 2px; color: #91adbd; text-transform: uppercase; font-size: var(--era-font-size-small); }
 .era-llm-debug-text { margin: 0; padding: 6px 8px; max-height: 40vh; overflow: auto; background: #06131c; border-radius: 4px; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
 .era-llm-debug-text.is-tool { color: #c9b98d; }
 .era-llm-debug-raw { margin: 4px 0; }
@@ -45,10 +45,10 @@
 .era-info-body .era-race { margin-left: 0; }
 .era-info-body .era-character-state > .line:not(.era-marker) > :first-child:not(:has(.era-character-kind)) { font-size: 1.15em; }
 .era-info-body .era-bars { margin: 0; }
-.era-info-body .era-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px 8px; margin: 6px 0 0; font-size: .85em; }
+.era-info-body .era-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px 8px; margin: 6px 0 0; }
 .era-info-body .era-fact { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: .5ch; }
 .era-info-body .era-fact-label { margin-right: 0; }
-.era-character-blurb { margin: 8px 0 12px; color: #a7bbc8; font-size: .9em; line-height: 1.35; }
+.era-character-blurb { margin: 8px 0 12px; color: #a7bbc8; font-size: var(--era-font-size-small); line-height: 1.35; }
 /* Target description stays expanded; suppress the native [Look] toggle. */
 .era-look {
   margin-top: var(--era-actions-gap);
@@ -77,10 +77,10 @@
 /* The target's name (SHOW_EQUIP_2) in the card-title blue, unless the game colours it for their mood; species after it. */
 .era-character-state > .line:not(.era-marker) > .text-color-neutral:first-child:not(:has(.era-character-kind)) { color: #8fc8ff; font-weight: bold; }
 .era-player-kind { margin: -4px 0 6px; color: #8a8a8a; }
-.era-character-kind { color: #8a8a8a; font-size: .8em; font-weight: normal; line-height: normal; }
+.era-character-kind { color: #8a8a8a; font-weight: normal; line-height: normal; }
 .era-character-kind .era-race { font-size: inherit; }
 .era-player-kind .era-size.era-unusual, .era-character-state .era-size.era-unusual { color: #ffd27f; }
-.era-race { margin-left: 1ch; color: #8a8a8a; font-size: .8em; font-weight: normal; }
+.era-race { margin-left: 1ch; color: #8a8a8a; font-size: var(--era-font-size-small); font-weight: normal; }
 .era-facts { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 4px 0; }
 .era-fact-label { margin-right: .75ch; color: #8a949c; }
 .era-rank { font-weight: bold; }

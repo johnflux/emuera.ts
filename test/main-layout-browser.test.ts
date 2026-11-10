@@ -521,7 +521,7 @@ BINPUT`, "<button-fixture>");
       }
       for (const button of results) {
         assert.equal(button.textAlign, "left");
-        assert.equal(button.numberFont / button.font, .8);
+        assert.equal(button.numberFont, 14, "command numbers use the shared secondary size");
         assert.equal(button.numberColor, "rgb(183, 213, 226)");
         assert.equal(button.numberDisplay === "none", hidden, `${mode} ${size}: ${button.text}`);
         if (!hidden) assert.equal(button.numberAfterLabel, true, button.text);
@@ -1021,7 +1021,7 @@ test("main screen distributes space and spaces player controls consistently", { 
           <div class="era-actions-panel"><div class="era-actions-group">
             <div class="line"><button class="choice era-button era-button-block era-travel-button">Move</button><button class="choice era-button era-button-block era-travel-button">Go Out</button><button class="choice era-button era-button-block">Lock The Door</button></div>
           </div>
-            <div class="line"><span><div class="era-toggles era-auto-toggles"><label class="checkbox-control era-toggle"><input type="checkbox">Auto-TSP Movement</label><label class="checkbox-control era-toggle"><input type="checkbox">Auto-Clean</label><label class="checkbox-control era-toggle"><input type="checkbox">Pushdown Guard</label></div></span></div>
+            <div class="line"><span><div class="era-toggles era-auto-toggles"><label class="checkbox-control era-toggle"><input type="checkbox">Auto-TSP Move</label><label class="checkbox-control era-toggle"><input type="checkbox">Auto-Clean</label><label class="checkbox-control era-toggle"><input type="checkbox">Pushdown Guard</label></div></span></div>
           <div class="era-settings"><div class="line"><button class="choice era-button era-button-block">Config</button></div></div></div>
         </div></div></div>
         ${counters ? '<div class="era-card era-counters" style="height:35px">Counters</div>' : ""}
@@ -1106,13 +1106,13 @@ test("main screen distributes space and spaces player controls consistently", { 
         if (!crowded)
           assert.ok(Math.abs(result.room - 216) < 1, `${label}: room should reach portrait height: ${JSON.stringify(result)}`);
         if (mode === "compact" && crowded) {
-          if (occupied)
-            assert.ok(result.roomScroll > result.roomVisible, `${label}: occupied room should scroll rather than crush actions`);
-          else
-            assert.ok(result.room < 216, `${label}: empty room should yield space to actions`);
+          assert.ok(result.room >= 216, `${label}: growing the grid preserves room height: ${JSON.stringify(result)}`);
+          assert.ok(result.roomScroll <= result.roomVisible + 1, `${label}: terminal scrolling replaces a cramped room scrollbar`);
         }
         for (const [gapIndex, gap] of result.gaps.entries()) {
-          if (gapIndex === 2)
+          if (gapIndex === 1)
+            assert.ok(gap < 0 || Math.abs(gap - 6) < 1, `${label}: controls share a row or wrap with the shared gap`);
+          else if (gapIndex === 2)
             assert.ok(gap >= 6, `${label}: bottom-anchored toggles retain at least the shared gap, got ${gap}`);
           else
             assert.ok(Math.abs(gap - 6) < 1, `${label}: expected 6px at player control gap ${gapIndex}, got ${gap}`);
@@ -1190,7 +1190,7 @@ test("stats scroll when constrained while sidebar overflow belongs to the termin
           <div class="era-main-right"><div class="era-card era-player"><div style="height:${playerHeight}px">Player information</div>
             <div class="line"><button class="choice era-button-block">Inventory</button></div>
             <div class="era-actions-panel"><div class="era-actions-group"><div class="line"><button class="choice era-button era-button-block">Move</button></div></div>
-              <div class="line"><span class="output-text"><div class="era-auto-toggles"><button class="choice era-toggle">Auto-TSP Movement</button></div></span></div>
+              <div class="line"><span class="output-text"><div class="era-auto-toggles"><button class="choice era-toggle">Auto-TSP Move</button></div></span></div>
               <div class="era-settings"><div class="line"><button class="choice era-chip-button">Config</button></div></div></div>
           </div></div>
         </div>
@@ -1216,12 +1216,18 @@ test("stats scroll when constrained while sidebar overflow belongs to the termin
         const configBottomBefore = config.getBoundingClientRect().bottom - sidebar.getBoundingClientRect().top;
         sidebar.scrollTop = sidebar.scrollHeight;
         const terminal = f.querySelector("#terminal");
+        const main = f.querySelector(".era-main"), actions = f.querySelector(".era-actions-collection");
+        const sidebarBottom = sidebar.getBoundingClientRect().bottom;
+        const mainBottom = main.getBoundingClientRect().bottom;
+        const actionsBottom = actions.getBoundingClientRect().bottom;
         terminal.scrollTop = terminal.scrollHeight;
         return { name: f.dataset.case, sidebarClient: sidebar.clientHeight, sidebarScroll: sidebar.scrollHeight,
           sidebarBefore: before, sidebarAfterStats, sidebarScrolled: sidebar.scrollTop,
           sidebarOverflow: getComputedStyle(sidebar).overflowY, terminalScrolled: terminal.scrollTop,
+          sidebarBottom, mainBottom, actionsBottom,
           playerHeight: player.getBoundingClientRect().height, statsFocused, configBottomBefore,
           configBottom: config.getBoundingClientRect().bottom - sidebar.getBoundingClientRect().top,
+          statsHeight: stats?.getBoundingClientRect().height,
           statsClient: stats?.clientHeight, statsScroll: stats?.scrollHeight, statsTop: stats?.scrollTop,
           statsOverflow: stats && getComputedStyle(stats).overflowY,
           leftDisplay: getComputedStyle(f.querySelector(".era-main-left")).display,
@@ -1243,8 +1249,9 @@ test("stats scroll when constrained while sidebar overflow belongs to the termin
       const results = JSON.parse(match[1]) as Array<{
         name: string; sidebarClient: number; sidebarScroll: number; sidebarBefore: number; sidebarAfterStats: number;
         sidebarScrolled: number; sidebarOverflow: string; terminalScrolled: number;
+        sidebarBottom: number; mainBottom: number; actionsBottom: number;
         playerHeight: number; configBottom: number; configBottomBefore: number; statsFocused: boolean;
-        statsClient?: number; statsScroll?: number; statsTop?: number; statsOverflow?: string; leftDisplay: string; scrollChain: string; toggleGap: number;
+        statsHeight?: number; statsClient?: number; statsScroll?: number; statsTop?: number; statsOverflow?: string; leftDisplay: string; scrollChain: string; toggleGap: number;
       }>;
       const wide = results.find(result => result.name === "wide")!;
       for (const result of results) {
@@ -1260,11 +1267,15 @@ test("stats scroll when constrained while sidebar overflow belongs to the termin
       assert.equal(wide.sidebarBefore, wide.sidebarAfterStats, `${mode}: scrolling stats does not scroll player`);
       const short = results.find(result => result.name === "short-stats")!;
       assert.equal(short.statsScroll, short.statsClient, `${mode}: short stats do not overflow`);
-      assert.ok(short.statsClient! < wide.statsClient!, `${mode}: short stats take less space`);
+      assert.ok(short.statsClient! <= wide.statsClient!, `${mode}: short stats take no more space than tall stats`);
+      assert.ok(results.filter(result => result.statsHeight !== undefined).every(result => result.statsHeight! >= 150),
+        `${mode}: stats preserve the 150px minimum even with oversized player controls`);
       assert.ok(short.playerHeight >= wide.playerHeight, `${mode}: spare space expands player`);
-      assert.ok(short.toggleGap > wide.toggleGap, `${mode}: extra player height goes above Auto-TSP`);
+      assert.ok(short.toggleGap >= wide.toggleGap, `${mode}: any extra player height goes above Auto-TSP`);
       const large = results.find(result => result.name === "large-player")!;
-      assert.ok(large.sidebarScroll > large.sidebarClient, `${mode}: oversized player overflows the sidebar`);
+      assert.ok(large.sidebarScroll <= large.sidebarClient + 1, `${mode}: sidebar contains oversized player`);
+      assert.ok(large.mainBottom + 1 >= large.sidebarBottom, `${mode}: main grid contains its sidebar (${large.mainBottom} vs ${large.sidebarBottom})`);
+      assert.ok(Math.abs(large.actionsBottom - large.sidebarBottom) < 1, `${mode}: actions stretch to the sidebar bottom`);
       assert.ok(large.terminalScrolled > 0, `${mode}: terminal scrolling reaches oversized player`);
       const noStats = results.find(result => result.name === "no-stats")!;
       assert.ok(noStats.configBottomBefore <= noStats.sidebarClient + 1, `${mode}: player is visible without stats`);

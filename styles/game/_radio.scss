@@ -10,6 +10,6 @@ button.choice.era-radio:enabled:is(:hover, :focus-visible) { background: #8ddaff
 button.choice.era-radio:enabled:focus-visible { outline: 1px solid #69c9b5; outline-offset: -1px; }
 button.choice.era-radio[aria-disabled="true"] { opacity: .45; }
 .era-radio-name { grid-column: 2; font-weight: bold; }
-.era-radio-description { grid-column: 2; color: #99adba; font-size: .85em; line-height: 1.4; white-space: pre-line; }
+.era-radio-description { grid-column: 2; color: #99adba; font-size: var(--era-font-size-small); line-height: 1.4; white-space: pre-line; }
 .era-radio-description:empty { display: none; }
 .era-radio-description strong { color: #e0edf3; -webkit-text-stroke: .25px currentColor; }

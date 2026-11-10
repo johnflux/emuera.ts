@@ -1,3 +1,7 @@
+:root { --era-font-size-small: 14px; --era-heading-color: #63d3f6; }
+
+.era-facts, .era-palam-grid, .era-character-kind, .era-player-kind, .era-player-status { font-size: var(--era-font-size-small); }
+
 /* Hotpatch sections (hotpatch/*.ERB): one HTML_PRINT, so one logical line, laid out as a block. */
 /* Lines are at least the game's logical width; sections wrap to the visible terminal instead. */
 .line .era-section { display: block; max-width: 100cqi; white-space: normal; margin: 2px 0 4px; }

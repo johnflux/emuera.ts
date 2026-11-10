@@ -100,6 +100,15 @@ test("catalog uses production rendering and context-independent buttons at wide 
         const summary = atlasDoc.querySelector(".era-player");
         const summaryText = [...summary.querySelectorAll(".era-card-title, .era-card-title > *, .era-player-kind, .era-player-status > *")];
         result.summaryFontSizes = [...new Set(summaryText.map(element => getComputedStyle(element).fontSize))];
+        result.summaryHeadingColor = getComputedStyle(summary.querySelector(".era-card-title")).color
+          === getComputedStyle(summary.querySelector(".era-text-button-link")).color;
+        const smallProbe = atlasDoc.createElement("div");
+        smallProbe.innerHTML = "<div class='era-facts'></div><div class='era-palam-grid'></div><div class='era-character-kind'></div><div class='era-player-kind'></div><div class='era-player-status'></div>";
+        summary.append(smallProbe);
+        result.smallTextDefault = [...smallProbe.children].every(element => getComputedStyle(element).fontSize === "14px");
+        smallProbe.style.setProperty("--era-font-size-small", "13px");
+        result.smallTextCustom = [...smallProbe.children].every(element => getComputedStyle(element).fontSize === "13px");
+        smallProbe.remove();
         const special = summary.querySelector(".era-player-effects");
         result.specialAligned = getComputedStyle(special).alignItems === "baseline"
           && getComputedStyle(special.firstElementChild).textTransform === "none"
@@ -107,17 +116,40 @@ test("catalog uses production rendering and context-independent buttons at wide 
         const nameLink = summary.querySelector(".era-text-button-link");
         result.summaryNameLink = !!nameLink && nameLink.textContent.includes("Aesprika")
           && getComputedStyle(nameLink).textDecorationStyle === "dotted"
-          && nameLink.querySelector('[aria-hidden="true"]').textContent === "›"
+          && nameLink.querySelector('.era-button-suffix[aria-hidden="true"]').textContent === "›"
           && !summary.querySelector(".era-card-title").textContent.includes("See more");
         result.summaryIdentity = summary.querySelector(".era-player-kind").textContent.startsWith("You · ");
         result.specialTooltip = !!special.querySelector(".era-status[data-tooltip]")?.dataset.tooltip;
         result.fundsUnbroken = getComputedStyle(summary.querySelector(".era-funds")).whiteSpace === "nowrap";
+        nameLink.focus();
+        await until(() => !atlasDoc.querySelector("#game-tooltip").hidden);
+        const nameTooltip = atlasDoc.querySelector("#game-tooltip");
+        result.nameTooltip = nameTooltip.textContent.includes("Click to see more")
+          && !!nameTooltip.querySelector(".era-tooltip-avatar .era-face-letter")
+          && getComputedStyle(nameTooltip.querySelector(".era-tooltip-avatar")).display === "flex"
+          && getComputedStyle(nameLink.querySelector(".era-tooltip-avatar")).display === "none";
+        nameLink.blur();
         const collection = atlasDoc.querySelector(".era-actions-collection");
         const header = atlasDoc.querySelector(".era-actions-header");
         result.actionLayouts = !!collection && !!header && !!atlasDoc.querySelector(".era-actions-panel")
           && !collection.closest(".era-main") && !header.closest(".era-main")
           && getComputedStyle(header).display === "flex"
           && collection.querySelectorAll(".era-actions-group").length === 2;
+        const compactPanel = atlasDoc.querySelector(".era-actions-panel");
+        compactPanel.style.width = "320px";
+        const sameRow = controls => {
+          const rects = [...controls].map(element => element.getBoundingClientRect());
+          return rects.length >= 2 && Math.abs(rects[0].top - rects[1].top) < 1
+            && rects[1].left >= rects[0].right;
+        };
+        result.compactPanelFlow = sameRow(compactPanel.querySelectorAll(".print-cell"))
+          && sameRow(compactPanel.querySelectorAll(".era-auto-toggles .checkbox-control"))
+          && sameRow(compactPanel.querySelectorAll(".era-settings button"));
+        result.compactPanelMeasurements = [...compactPanel.querySelectorAll(".print-cell, .era-auto-toggles .checkbox-control, .era-settings button")].map(element => ({
+          text: element.textContent, top: element.getBoundingClientRect().top, left: element.getBoundingClientRect().left,
+          width: element.getBoundingClientRect().width, flex: getComputedStyle(element).flex,
+        }));
+        compactPanel.style.width = "";
         const heading = collection.querySelector(".era-actions-title");
         const headingStyle = element => {
           const css = getComputedStyle(element), marker = getComputedStyle(element, "::before");
@@ -382,13 +414,18 @@ test("catalog uses production rendering and context-independent buttons at wide 
     assert.equal(result.repeatEmpty, true);
     assert.equal(result.continueEnabled, true);
     assert.equal(result.noImageErrors, true);
-    assert.equal(result.summaryFontSizes.length, 1, "summary labels, values, and text actions use one inherited size");
+    assert.equal(result.summaryFontSizes.length, 2, "summary uses body and secondary text sizes");
+    assert.equal(result.summaryHeadingColor, true, "linked name inherits the shared heading color");
+    assert.equal(result.smallTextDefault, true, "all secondary text components use 14px");
+    assert.equal(result.smallTextCustom, true, "one variable switches all secondary text components to 13px");
     assert.equal(result.specialAligned, true, "Special and its effects share a baseline without uppercase styling");
     assert.equal(result.summaryNameLink, true, "the name replaces See more with a dotted link and decorative chevron");
     assert.equal(result.summaryIdentity, true, "You is on the identity line");
     assert.equal(result.specialTooltip, true, "Special effects expose tooltips in the catalog");
     assert.equal(result.fundsUnbroken, true, "funds never wrap within the number");
+    assert.equal(result.nameTooltip, true, "name tooltip includes the avatar and click instruction without showing the avatar in the heading");
     assert.equal(result.actionLayouts, true, "action layouts are catalogued without a main-screen wrapper");
+    assert.equal(result.compactPanelFlow, true, `tiles, shortened auto-toggles, and settings share rows in a 320px panel: ${JSON.stringify(result.compactPanelMeasurements)}`);
     assert.equal(result.sharedActionHeading, true, "action headings share their appearance across contexts");
     assert.equal(result.radioInitial, true);
     assert.equal(result.radioChanged, true);
