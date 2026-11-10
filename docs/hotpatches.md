@@ -113,6 +113,13 @@ embrace events triggered after the header has printed. Remaining status and
 command panels stay inside the same layout until its closing marker.
 Sidebar assembly is deferred until that marker, so a partially printed status
 screen cannot initialize an empty sidebar.
+Inline history is also attached only to a completed main layout. The command
+prompt supplies the selected character's history even when the layout began in
+an earlier snapshot, such as before an embrace-event wait.
+
+While `TFLAG:抱きつきモード` is active, the main layout uses restrained rose
+accents on its panels and headings; the scene, text and portraits keep their
+original colors.
 
 The browser checks layout structure after each rendered snapshot. It reports
 unmatched closing markers, abandoned open layouts, misplaced main panels, and

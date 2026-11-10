@@ -2590,7 +2590,7 @@ function showCharacterHistory(history) {
     return;
   }
   if (history) {
-    for (const parent of outputRoot.querySelectorAll(".screen.is-active .era-main:not(:has(.era-main-chat))"))
+    for (const parent of outputRoot.querySelectorAll(".screen.is-active .era-main[data-closed='closed']:not(:has(.era-main-chat))"))
       setupInlineChat(parent, history, () => api("/api/character-history", {
         session, step, character: history.character.id,
       }), { input: command, gameId: runGame ?? runMode, gameTitle: gameTitle(runGame),

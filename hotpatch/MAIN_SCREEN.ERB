@@ -128,7 +128,11 @@ SIF TARGET != MASTER && TARGET >= 0
 ;-------------------------------------------------
 ;情報表示 (hotpatch: the display below is laid out in panels)
 ;-------------------------------------------------
-HTML_PRINT "<era-open class='era-layout era-main'>"
+IF TFLAG:102 == 3 && TFLAG:抱きつきモード
+	HTML_PRINT "<era-open class='era-layout era-main era-embrace'>"
+ELSE
+	HTML_PRINT "<era-open class='era-layout era-main'>"
+ENDIF
 HTML_PRINT "<era-open class='era-main-header'>"
 CALL HOTPATCH_SKY
 HTML_PRINT "<era-open class='era-main-when'>"

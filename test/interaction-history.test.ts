@@ -332,6 +332,46 @@ function history(snapshot: Snapshot) {
   return check(snapshot).characterHistory!;
 }
 
+for (const jit of [false, true]) {
+  test(`main-screen history is supplied again after embrace waits finish (JIT ${jit})`, () => {
+    const game = fixture(), stub = emptyGame();
+    indexScript(stub, `@LOOP
+BEGIN TRAIN
+@SHOW_STATUS
+HTML_PRINT "<era-open class='era-layout era-main'>"
+HTML_PRINT "<era-open class='era-main-header'>"
+PRINTL Clock and date
+HTML_PRINT "<era-close>"
+PRINTW You are embraced by Alice!
+PRINTW Alice holds you close.
+HTML_PRINT "<era-open class='era-main-center'>"
+HTML_PRINT "<era-open class='era-card era-character'>"
+PRINTL Character details
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-close>"
+@SHOW_USERCOM
+HTML_PRINT "<era-open class='era-card era-actions-collection'>"
+PRINTL Interact with Alice
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-close>"`, "<paused-main-history>");
+    for (const [name, routines] of stub.routines) game.routines.set(name, routines);
+    const runtime = new Runtime(game, undefined, { jit, saves: new MemorySaveStore() });
+    const first = check(runtime.start());
+    assert.equal(first.input?.kind, "wait");
+    const selected = history(first);
+    assert.ok(selected);
+    const second = check(runtime.input(""));
+    assert.equal(second.input?.kind, "wait");
+    const finished = check(runtime.input(""));
+    assert.equal(finished.input?.kind, "integer");
+    assert.ok(!finished.output.some(item => item.type === "html" && item.text.includes("era-layout era-main")),
+      "the final snapshot only contains the remaining panels, not another layout opener");
+    assert.equal(history(finished).character.id, selected.character.id,
+      "the command prompt must supply history even when the layout opener was in an earlier snapshot");
+    assert.deepEqual(history(finished).entries, selected.entries, "pausing the display does not erase stored history");
+  });
+}
+
 test("HTML history colors inherit and restore across nested tags without retaining markup", () => {
   const html = "base<font color='#ff0000'>red<font color='blue'>blue<br>line</font>red</font>base &amp; text";
   const runs = coloredHtml(html, "#cccccc");

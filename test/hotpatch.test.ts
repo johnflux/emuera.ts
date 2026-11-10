@@ -774,6 +774,47 @@ test("main screen hotpatch opens and closes its panel boxes in balance", {
   assert.ok(markup.some(text => text.includes("era-player-actions")), "closing calendar returns to the player panel");
 });
 
+test("embrace mode uses selective rose accents", () => {
+  const source = readFileSync(new URL("../hotpatch/MAIN_SCREEN.ERB", import.meta.url), "utf8");
+  const styles = readFileSync(new URL("../styles/game/_embrace-mode.scss", import.meta.url), "utf8");
+  const start = source.indexOf("IF TFLAG:102 == 3 && TFLAG:抱きつきモード", source.indexOf(";情報表示 (hotpatch"));
+  const end = source.indexOf("HTML_PRINT \"<era-open class='era-main-header'>\"", start);
+  assert.ok(start >= 0 && end > start, "main layout opening is conditional on embrace mode");
+  const opening = source.slice(start, end);
+  const game = emptyGame();
+  game.names.set("TFLAG", new Map([["抱きつきモード", 500]]));
+  indexScript(game, `@SYSTEM_TITLE
+TFLAG:抱きつきモード = 0
+${opening}
+TFLAG:102 = 3
+TFLAG:抱きつきモード = 1
+${opening}
+TFLAG:102 = 1
+${opening}
+QUIT`, "<embrace-layout>");
+  for (const jit of [false, true]) {
+    const snapshot = new Runtime(game, undefined, { jit }).start();
+    assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
+    const markup = snapshot.output.flatMap(item => item.type === "html" ? [item.text] : []).join("");
+    assert.ok(markup.includes("<era-open class='era-layout era-main'>"), "normal mode retains the standard layout");
+    assert.ok(markup.includes("<era-open class='era-layout era-main era-embrace'>"),
+      "embrace mode adds the themed layout class");
+    const layoutMarkers = snapshot.output.flatMap(item => item.type === "html" && item.text.startsWith("<era-open class='era-layout era-main")
+      ? [item.text] : []);
+    assert.deepEqual(layoutMarkers, [
+      "<era-open class='era-layout era-main'>",
+      "<era-open class='era-layout era-main era-embrace'>",
+      "<era-open class='era-layout era-main'>",
+    ], "the leftover embrace flag does not theme a screen after the session ends");
+  }
+  assert.match(styles, /\.era-main\.era-embrace \.era-room-stage/);
+  assert.match(styles, /#fff4/);
+  assert.match(styles, /#ffe0ee30/);
+  assert.match(styles, /radial-gradient\(ellipse at 50% 70%, #c45c8a40/);
+  assert.doesNotMatch(styles, /mix-blend-mode|\.era-main\.era-embrace::after/,
+    "embrace colors stay selective instead of tinting the whole screen");
+});
+
 test("calendar popup preserves dates and work fields across views, details and season rollover", {
   skip: !existsSync(GAME_ROOT),
 }, async () => {
@@ -986,6 +1027,8 @@ CFLAG:1:奉仕アンフィルタ = ${on}
 CFLAG:1:RevServiceFilter = ${on}
 PREVCOM = ${previous}
 ADD_PREVCUSTOMCOM = ${custom}
+CALL HOTPATCH_PRINT_COM(360)
+CALL HOTPATCH_PRINT_COM(361)
 CALL HOTPATCH_FILTERS(63)
 PRINTFORML Kinds: %HOTPATCH_ACTION_KIND(3)%,%HOTPATCH_ACTION_KIND(5)%,%HOTPATCH_ACTION_KIND(100)%,%HOTPATCH_ACTION_KIND(81)%
 QUIT`, "<filter-colors-test>");
@@ -995,6 +1038,10 @@ QUIT`, "<filter-colors-test>");
     const html = snapshot.output.flatMap((item) => item.type === "html" ? [item.text] : []).join("");
     for (const [id, kind] of [[831, "vaginal"], [832, "anal"], [836, "sm"], [835, "service"], [-9120, "service"]]) {
       assert.match(html, new RegExp(`value='${id}' class='era-toggle era-kind-${kind}${on ? " era-on" : ""}' role='checkbox' aria-checked='${on ? "true" : "false"}'`));
+    }
+    for (const id of [360, 361]) {
+      assert.match(html, new RegExp(`<button value='${id}' class='era-button era-button-tone-petting'`),
+        `command ${id} shares the Petting pink`);
     }
     if (repeat !== null) assert.match(html, new RegExp(`<button value='${repeat}' class='era-repeat' title='Repeat last action' aria-label='Repeat last action'></button></span></div>$`));
     else assert.doesNotMatch(html, /era-repeat|🔁/);

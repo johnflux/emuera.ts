@@ -515,7 +515,11 @@ IF nCom == 352
 	HTML_PRINT HOTPATCH_BUTTON("Relationship...", 352)
 	RETURN 0
 ENDIF
-sButtonClass '= "era-button-tone-" + HOTPATCH_ACTION_KIND(nCom)
+IF GROUPMATCH(nCom, 360, 361)
+	sButtonClass '= "era-button-tone-petting"
+ELSE
+	sButtonClass '= "era-button-tone-" + HOTPATCH_ACTION_KIND(nCom)
+ENDIF
 VARSET COM_DISPLAY_COLOR
 VARSET COM_DISPLAY_BEHAVIOR
 CALL COM_DISPLAY_TR(nCom) ;Custom code, control alternative command names.

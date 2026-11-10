@@ -115,6 +115,69 @@ test("layout diagnostics validate real DOM structure and offer a local copyable 
   } finally { await rm(profile, { recursive: true, force: true }); }
 });
 
+test("inline history waits for main construction and fills the room above interactions after an embrace", {
+  skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH",
+}, async () => {
+  const [source, style] = await Promise.all([
+    readFile(new URL("../web/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../web/generated/style.css", import.meta.url), "utf8"),
+  ]);
+  const showHistory = source.slice(source.indexOf("function showCharacterHistory("), source.indexOf("function showReport("));
+  const html = `<!doctype html><meta charset="utf-8"><style>${style}</style><body>
+    <div id="terminal" style="width:1180px;height:1000px"><div class="screen is-active">
+      <div class="era-box era-layout era-main"><div class="era-main-header" style="height:100px"></div></div>
+    </div></div><script>
+    const terminal = document.querySelector("#terminal"), outputRoot = terminal;
+    const main = terminal.querySelector(".era-main"), command = null;
+    const runGame = null, runMode = "fixture", session = "fixture", step = 3;
+    const history = {character:{id:"alice",name:"Alice"}};
+    let attached = 0;
+    function characterHistoryEnabled() { return true; }
+    function gameTitle() { return "Fixture"; }
+    function refreshScreen() {}
+    function setupInlineChat(parent, selected) {
+      attached++;
+      const host = document.createElement("section");
+      host.className = "era-main-chat";
+      host.innerHTML = '<div class="era-history-pane"><div class="era-history-body"><p>Earlier conversation with Alice</p></div></div>';
+      parent.querySelector(".era-character").append(host);
+    }
+    ${showHistory}
+    showCharacterHistory(history);
+    const paused = attached === 0;
+    main.insertAdjacentHTML("beforeend", '<div class="era-main-center"><div class="era-card era-character"><div class="era-room-stage" style="height:180px"></div></div></div>');
+    showCharacterHistory(history);
+    const stillConstructing = attached === 0;
+    main.insertAdjacentHTML("beforeend", '<div class="era-card era-actions-collection" style="height:80px">Interact with Alice</div><div class="era-main-sidebar" style="height:400px"></div><div class="era-card era-counters">Alice brushes your cheek.</div>');
+    main.dataset.closed = "closed";
+    showCharacterHistory(history);
+    showCharacterHistory(history);
+    const pane = main.querySelector(".era-history-pane");
+    const actions = main.querySelector(".era-actions-collection");
+    const counters = main.querySelector(".era-counters");
+    document.body.textContent = JSON.stringify({
+      paused, stillConstructing, attached,
+      restored: pane.textContent.includes("Earlier conversation with Alice"),
+      historyAboveActions: pane.getBoundingClientRect().bottom <= actions.getBoundingClientRect().top,
+      historyHasSpace: pane.getBoundingClientRect().height > actions.getBoundingClientRect().height,
+      countersBelowActions: counters.getBoundingClientRect().top >= actions.getBoundingClientRect().bottom,
+    });
+    </script>`;
+  const profile = await mkdtemp(join(process.cwd(), ".era-paused-history-"));
+  try {
+    const { stdout } = await execute(browser!, ["--headless", "--disable-gpu", "--no-first-run",
+      `--user-data-dir=${profile}`, "--window-size=1440,1200", "--dump-dom",
+      `data:text/html;base64,${Buffer.from(html).toString("base64")}`],
+      { maxBuffer: 8 * 1024 * 1024, timeout: 30000 });
+    const match = stdout.match(/<body[^>]*>([\s\S]*?)<\/body>/);
+    assert.ok(match);
+    assert.deepEqual(JSON.parse(match[1]), {
+      paused: true, stillConstructing: true, attached: 1, restored: true,
+      historyAboveActions: true, historyHasSpace: true, countersBelowActions: true,
+    });
+  } finally { await rm(profile, { recursive: true, force: true }); }
+});
+
 test("scene chatter hides empty diamond lines without dropping logical output or non-text content", {
   skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH",
 }, async () => {

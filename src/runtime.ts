@@ -3372,7 +3372,8 @@ export class Runtime {
     }
     if (snapshot.status === "halted") this.interactionHistory?.finish();
     if (snapshot.status === "error") this.interactionHistory?.cancel();
-    const history = snapshot.output.some((item) => item.type === "html" && item.text === "<era-open class='era-layout era-main'>")
+    const history = (snapshot.input && snapshot.input === this.trainRequest)
+      || snapshot.output.some((item) => item.type === "html" && item.text === "<era-open class='era-layout era-main'>")
       ? this.interactionHistory?.selected() : undefined;
     if (history) snapshot.characterHistory = history;
     if (this.encounters?.length && snapshot.input && snapshot.input === this.trainRequest) snapshot.encounters = this.encounters;

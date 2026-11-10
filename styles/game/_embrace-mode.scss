@@ -1,0 +1,24 @@
+.era-main.era-embrace { --era-heading-color: #ffe5f1; }
+.era-main.era-embrace .era-main-header {
+  border-color: #654357;
+  background: linear-gradient(90deg, #21141d, #0d1014);
+}
+.era-main.era-embrace .era-card {
+  border-color: #533146;
+  background: linear-gradient(135deg, #1a101a, #050e16 75%);
+}
+.era-main.era-embrace .era-card-title::after { background: linear-gradient(90deg, #b9789a, transparent); }
+.era-main.era-embrace .era-room-stage {
+  background:
+    linear-gradient(125deg, #fff4, #ffe0ee30 28%, transparent 58%),
+    radial-gradient(ellipse at 50% 70%, #c45c8a40, transparent 72%),
+    radial-gradient(ellipse at 50% 95%, #28415166, transparent 70%),
+    linear-gradient(#21141f, #17141e);
+}
+.era-main.era-embrace .era-actions-collection {
+  border-color: #533146;
+  background: linear-gradient(135deg, #1a101a, #080d13 75%);
+}
+.era-main.era-embrace .era-actions-title { color: #f2c5dc; }
+.era-main.era-embrace .era-actions-title::before { border-left-color: #d78bb2; }
+.era-main.era-embrace .era-main-last { color: #e8c6d7; }
