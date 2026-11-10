@@ -472,7 +472,7 @@ BINPUT`, "<button-fixture>");
   }).join("");
   const html = `<!doctype html><meta charset="utf-8"><style>${style}\n${responsive}</style>
     <body class="MODE"><div class="screen is-active"><div class="era-main"><div class="era-player">
-    <div class="era-player-management" style="width:360px;font-size:20px">${markup}</div>
+    <div class="era-actions-panel" style="width:360px;font-size:20px">${markup}</div>
     </div></div></div><script>${decorateButtons}
       const results = [...document.querySelectorAll(".era-button")].map(button => {
         const number = button.querySelector(".command-number"), rect = button.getBoundingClientRect();
@@ -693,6 +693,8 @@ test("compact button sizes share tokens without changing desktop or sprite contr
   const html = `<!doctype html><meta charset="utf-8"><style>${style}\n${responsive}</style>
     <body class="MODE">
       <div class="screen is-active" style="font: 12px/1.25 sans-serif">
+        <div class="line"><span class="era-command-tile" id="inline-first">First</span><span class="era-command-tile" id="inline-next">Next</span></div>
+        <div style="--era-actions-gap: 11px"><div class="line"><span class="era-command-tile">First</span><span class="era-command-tile" id="inline-custom">Next</span></div></div>
         <div class="era-actions-group"><div class="line">
           <span class="print-cell era-command-tile" id="tile">Move<button class="choice command-number-only"><span class="command-number">400</span></button></span>
           <span class="print-cell era-command-tile" id="number-guard">Guard<button class="choice command-number-only"><span class="command-number">1</span></button></span>
@@ -724,10 +726,16 @@ test("compact button sizes share tokens without changing desktop or sprite contr
         number.focus();
         const focus = { control: getComputedStyle(number).outlineStyle,
           tile: getComputedStyle(document.getElementById("tile")).outlineStyle };
-        document.body.textContent = JSON.stringify({ initial, updated, overlay, focus });
+        const spacing = Object.fromEntries(["inline-first", "inline-next", "inline-custom", "number-guard"].map(id =>
+          [id, getComputedStyle(document.getElementById(id)).marginLeft]));
+        const group = document.querySelector(".era-actions-group");
+        spacing["group-gap"] = getComputedStyle(group).gap;
+        group.style.setProperty("--era-actions-gap", "11px");
+        spacing["custom-group-gap"] = getComputedStyle(group).gap;
+        document.body.textContent = JSON.stringify({ initial, updated, overlay, focus, spacing });
       </script>`;
   type Item = { minHeight: string; height: number; display: string; position: string };
-  type Result = { initial: Record<string, Item>; updated: Record<string, Item>; overlay: { position: string; marginLeft: string; covers: boolean; numberDisplay: string }; focus: { control: string; tile: string } };
+  type Result = { initial: Record<string, Item>; updated: Record<string, Item>; overlay: { position: string; marginLeft: string; covers: boolean; numberDisplay: string }; focus: { control: string; tile: string }; spacing: Record<string, string> };
   const profile = await mkdtemp(join(process.cwd(), ".era-buttons-"));
   try {
     for (const [mode, size] of [["desktop", "1440,1000"], ["compact", "1200,700"]] as const) {
@@ -737,7 +745,10 @@ test("compact button sizes share tokens without changing desktop or sprite contr
       const { stdout } = await execute(browser!, args, { maxBuffer: 8 * 1024 * 1024, timeout: 30000 });
       const match = stdout.match(/<body[^>]*>([\s\S]*?)<\/body>/);
       assert.ok(match, `${mode}: browser returned button measurements`);
-      const { initial, updated, overlay, focus } = JSON.parse(match[1]) as Result;
+      const { initial, updated, overlay, focus, spacing } = JSON.parse(match[1]) as Result;
+      assert.deepEqual(spacing, { "inline-first": "0px", "inline-next": "6px", "inline-custom": "11px", "number-guard": "0px",
+        "group-gap": "6px", "custom-group-gap": "11px" },
+        `${mode}: inline tiles share the spacing token without doubling action-group gaps`);
       assert.equal(focus.control, "none", `${mode}: controller focus does not add a second tile outline`);
       assert.equal(focus.tile, "solid", `${mode}: the complete action tile retains its focus outline`);
       const compact = mode !== "desktop";
@@ -826,7 +837,7 @@ test("repeat button fits the action card corner and displays an X hint", { skip:
   const html = `<!doctype html><meta charset="utf-8"><style>${style}\n${responsive}
     .fixture { width: 900px; margin: 20px; }
     </style><body class="MODE has-controller"><div class="screen is-active"><div class="era-main fixture">
-    <div class="era-card era-main-actions"><div class="line"><div class="era-card-title era-actions-header">
+    <div class="era-card era-actions-collection"><div class="line"><div class="era-card-title era-actions-header">
     <span>Interact with Kana</span><span class="era-toggles"><label class="checkbox-control era-toggle">Petting</label>
     <label class="checkbox-control era-toggle">Housekeeping</label>
     <button class="choice era-repeat has-controller-hint" data-controller-hint="X" aria-label="Repeat last action"></button></span>
@@ -940,7 +951,7 @@ test("history takes remaining height after actions at each layout width", { skip
               ${"<p>History line</p>".repeat(50)}
             </div></div></section>
           </div></div>
-          <div class="era-card era-main-actions"><div class="line" style="height:80px"></div></div>
+          <div class="era-card era-actions-collection"><div class="line" style="height:80px"></div></div>
           <div class="era-main-sidebar"><div style="height:100px"></div></div>
           ${counters ? '<div class="era-card era-counters" style="height:30px"></div>' : ""}
         </div></div>
@@ -948,7 +959,7 @@ test("history takes remaining height after actions at each layout width", { skip
     </div>`)).join("");
   const html = `<!doctype html><meta charset="utf-8"><style>${style}\n${responsive}</style><body>${fixtures}<script>
     const results = [...document.querySelectorAll(".fixture")].map(fixture => {
-      const pane = fixture.querySelector(".era-history-pane"), actions = fixture.querySelector(".era-main-actions");
+      const pane = fixture.querySelector(".era-history-pane"), actions = fixture.querySelector(".era-actions-collection");
       const terminal = fixture.querySelector("#terminal"), line = actions.firstElementChild;
       const measure = () => ({ history: pane.getBoundingClientRect().height, actions: actions.getBoundingClientRect().height });
       const initial = measure();
@@ -1001,16 +1012,17 @@ test("main screen distributes space and spaces player controls consistently", { 
           ${occupied ? '<div class="era-character-info"><div class="era-info-body">Character information</div></div>' : ""}
           ${history ? '<section class="era-main-chat"><div class="era-history-pane"><div class="era-history-body"><p>Interaction history</p><p>Second line</p><p>Third line</p><p>Fourth line</p></div></div></section>' : ""}
         </div></div>
-        <div class="era-card era-main-actions"><div class="line">Interact</div>
+        <div class="era-card era-actions-collection"><div class="line">Interact</div>
           ${Array.from({ length: crowded ? 8 : 2 }, () => '<div class="line" style="height:45px">Action row</div>').join("")}
         </div>
         <div class="era-main-sidebar"><div class="era-main-right"><div class="era-card era-player">
           <div class="line">Player</div>
           <div class="line"><div class="era-player-actions"><button class="choice era-button era-button-block">Inventory</button></div></div>
-          <div class="era-player-management"><div class="era-actions-group">
+          <div class="era-actions-panel"><div class="era-actions-group">
             <div class="line"><button class="choice era-button era-button-block era-travel-button">Move</button><button class="choice era-button era-button-block era-travel-button">Go Out</button><button class="choice era-button era-button-block">Lock The Door</button></div>
+          </div>
             <div class="line"><span><div class="era-toggles era-auto-toggles"><label class="checkbox-control era-toggle"><input type="checkbox">Auto-TSP Movement</label><label class="checkbox-control era-toggle"><input type="checkbox">Auto-Clean</label><label class="checkbox-control era-toggle"><input type="checkbox">Pushdown Guard</label></div></span></div>
-          </div><div class="era-settings"><div class="line"><button class="choice era-button era-button-block">Config</button></div></div></div>
+          <div class="era-settings"><div class="line"><button class="choice era-button era-button-block">Config</button></div></div></div>
         </div></div></div>
         ${counters ? '<div class="era-card era-counters" style="height:35px">Counters</div>' : ""}
       </div></div>
@@ -1025,9 +1037,9 @@ test("main screen distributes space and spaces player controls consistently", { 
       const results = [...document.querySelectorAll(".fixture")].map(fixture => {
         const get = selector => fixture.querySelector(selector);
         const rect = selector => get(selector).getBoundingClientRect();
-        const actions = get(".era-main-actions"), center = get(".era-main-center");
+        const actions = get(".era-actions-collection"), center = get(".era-main-center");
         const inventory = rect(".era-button-block");
-        const tiles = [...fixture.querySelectorAll(".era-player-management .era-button-block")].map(e => e.getBoundingClientRect());
+        const tiles = [...fixture.querySelectorAll(".era-actions-panel .era-button-block")].map(e => e.getBoundingClientRect());
         const toggles = [...fixture.querySelectorAll(".era-auto-toggles .era-toggle")].map(e => e.getBoundingClientRect());
         const config = rect(".era-settings .era-button-block");
         const result = {
@@ -1099,8 +1111,12 @@ test("main screen distributes space and spaces player controls consistently", { 
           else
             assert.ok(result.room < 216, `${label}: empty room should yield space to actions`);
         }
-        for (const gap of result.gaps)
-          assert.ok(Math.abs(gap - 6) < 1, `${label}: expected 6px between player controls, got ${gap}`);
+        for (const [gapIndex, gap] of result.gaps.entries()) {
+          if (gapIndex === 2)
+            assert.ok(gap >= 6, `${label}: bottom-anchored toggles retain at least the shared gap, got ${gap}`);
+          else
+            assert.ok(Math.abs(gap - 6) < 1, `${label}: expected 6px at player control gap ${gapIndex}, got ${gap}`);
+        }
       }
     }
   } finally {
@@ -1165,7 +1181,7 @@ test("stats scroll when constrained while sidebar overflow belongs to the termin
       <div class="screen is-active"><div class="era-main">
         <div class="era-main-header" style="height:130px">Header</div>
         <div class="era-main-center"><div class="era-card" style="height:200px">Room</div></div>
-        <div class="era-main-actions era-card"><div class="line">Actions</div></div>
+        <div class="era-actions-collection era-card"><div class="line">Actions</div></div>
         <div class="era-main-sidebar">
           <div class="era-main-left">${stats ? `<div class="era-card era-stats" tabindex="0">
             <div class="line"><div class="era-card-title">Character's Stats</div></div>
@@ -1173,7 +1189,7 @@ test("stats scroll when constrained while sidebar overflow belongs to the termin
               `<div class="era-palam-item">Stat ${i + 1}</div>`).join("")}</div></div></div>` : ""}</div>
           <div class="era-main-right"><div class="era-card era-player"><div style="height:${playerHeight}px">Player information</div>
             <div class="line"><button class="choice era-button-block">Inventory</button></div>
-            <div class="era-player-management"><div class="era-actions-group"><div class="line"><button class="choice era-button era-button-block">Move</button></div></div>
+            <div class="era-actions-panel"><div class="era-actions-group"><div class="line"><button class="choice era-button era-button-block">Move</button></div></div>
               <div class="line"><span class="output-text"><div class="era-auto-toggles"><button class="choice era-toggle">Auto-TSP Movement</button></div></span></div>
               <div class="era-settings"><div class="line"><button class="choice era-chip-button">Config</button></div></div></div>
           </div></div>
@@ -1211,7 +1227,7 @@ test("stats scroll when constrained while sidebar overflow belongs to the termin
           leftDisplay: getComputedStyle(f.querySelector(".era-main-left")).display,
           scrollChain: getComputedStyle(sidebar).overscrollBehaviorY,
           toggleGap: f.querySelector(".era-auto-toggles").getBoundingClientRect().top -
-            f.querySelector(".era-player-management .era-actions-group").getBoundingClientRect().bottom };
+            f.querySelector(".era-actions-panel .era-actions-group").getBoundingClientRect().bottom };
       });
       document.body.textContent = JSON.stringify(results);
     </script>`;

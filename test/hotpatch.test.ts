@@ -709,7 +709,7 @@ test("main screen hotpatch opens and closes its panel boxes in balance", {
     assert.equal((html.match(/value='993'/g) ?? []).length, 1, "calendar has exactly one entry point");
     assert.ok(when.some(text => /value='993' class='era-chip-button era-calendar-button'/.test(text)),
       "calendar is an icon button in the date panel");
-    assert.doesNotMatch(html.slice(html.indexOf("era-player-management")), /value='993'|Calendar\[993\]/,
+    assert.doesNotMatch(html.slice(html.indexOf("era-actions-panel")), /value='993'|Calendar\[993\]/,
       "calendar is not a player management control");
     if (index === 1) {
       assert.match(html, /value='999' class='era-timestop-button era-stopped' title='Resume time'>Resume<span class='era-timestop-gauge'>/);

@@ -48,7 +48,7 @@ ELSEIF TCVAR:MASTER:112 == 2
 ENDIF
 
 
-HTML_PRINT "<era-open class='era-card era-main-actions'>"
+HTML_PRINT "<era-open class='era-card era-actions-collection'>"
 nAbleCount = 0
 
 ;コマンド表示 (the usable commands first, so the filters can leave out toggles that would change nothing)
@@ -295,7 +295,7 @@ HTML_PRINT "<era-close>"
 ;自動実行中なら下記表示をスキップ
 SIF !TFLAG:100
 	GOTO SKIP
-HTML_PRINT "<era-open class='era-player-management'>"
+HTML_PRINT "<era-open class='era-actions-panel'>"
 IF nSelfCareCount
 	HTML_PRINT "<era-open class='era-actions-group era-self-care'>"
 	HTML_PRINT "<div class='era-actions-title'>Look after yourself</div>"

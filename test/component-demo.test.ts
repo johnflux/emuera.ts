@@ -61,9 +61,9 @@ test("all game catalog scenes render their actual production surfaces", { skip: 
   const originalTitle = game.routines.get("SYSTEM_TITLE");
   const expected: Record<string, RegExp> = {
     buttons: /era-button-block/,
-    main: /era-main-actions/,
-    alone: /era-main-actions/,
-    "time-stopped": /era-main-actions/,
+    main: /era-actions-collection/,
+    alone: /era-actions-collection/,
+    "time-stopped": /era-actions-collection/,
     sleep: /era-layout era-shop/,
     inventory: /era-dialog era-inventory/,
     sheet: /era-dialog era-sheet/,

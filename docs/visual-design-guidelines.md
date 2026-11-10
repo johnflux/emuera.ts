@@ -155,6 +155,15 @@ changing saved game preferences.
   terminal's character grid requires them.
 - Group related information closely and leave larger gaps between sections.
   Keep card padding and grid gaps consistent within the same view.
+  Game action groups, toggles, and adjacent inline command tiles share
+  `--era-actions-gap` (6px); avoid screen-specific spacing overrides.
+  Use `.era-actions-collection` to arrange multiple `.era-actions-group`
+  sections side by side with wrapping; screen-specific grid placement belongs
+  to the containing screen, not the collection.
+  Reuse `.era-actions-panel` for compact collections of action groups, optional
+  auto-toggles, and settings. Within its groups, the first two printed tiles in
+  each line share a row and subsequent tiles are full-width. The player screen's
+  bottom anchoring is separate from this reusable panel layout.
 - Use compact 4–6px radii for controls and smaller elements; use 8–12px for
   cards and larger panels. Avoid mixing rounded pills, sharp corners, and
   decorative frames without a clear hierarchy.

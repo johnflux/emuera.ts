@@ -1,46 +1,113 @@
-/* Actions: each group's PRINTC items flow as chips; the whole chip is clickable. */
-.era-actions-header { flex-wrap: wrap; justify-content: space-between; align-items: center; min-height: max(22px, calc(1lh + 6px)); }
-.era-main .era-actions-header::after { order: 1; min-width: 2ch; }
-.era-actions-header > .era-toggles { order: 2; justify-content: flex-end; margin-left: auto; }
+/* Shared spacing for action groups, toggle rows, panels, and inline command tiles. */
+:root { --era-actions-gap: 6px; }
 
-.era-actions-group { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin: 6px 0 2px; }
-.era-main-actions { display: flex; flex-wrap: wrap; align-content: flex-start; align-items: flex-start; gap: 0 16px; }
-.era-main-actions > .line { flex-basis: 100%; }
-.era-main-actions > .era-actions-group { flex: 0 1 auto; width: max-content; min-width: 0; max-width: 100%; }
-.era-actions-group > .line { display: contents; }
-.era-actions-group .output-text:has(> .era-button),
+/* Heading row: expects a title and optional direct .era-toggles child.
+   The containing heading component supplies display: flex. */
+.era-actions-header {
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  min-height: max(22px, calc(1lh + var(--era-actions-gap)));
+
+  .era-main &::after { order: 1; min-width: 2ch; }
+  > .era-toggles { order: 2; justify-content: flex-end; margin-left: auto; }
+}
+
+/* Wrapping row of button.choice controls or PRINTC .print-cell tiles.
+   Renderer .line/.output-text and optional .era-kind wrappers are flattened;
+   an .era-actions-title takes a full row. Groups without choices are hidden. */
+.era-actions-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--era-actions-gap);
+  margin: 0 0 var(--era-actions-gap);
+
+  > .line, > .era-kind { display: contents; }
+  .output-text:has(> .era-button) { display: contents; }
+  .output-text.is-empty, &:not(:has(button.choice)) { display: none; }
+  > .line > span:has(> .era-actions-title) { flex-basis: 100%; }
+
+  /* Text-only group heading; the main screen adds its existing accent marker. */
+  .era-actions-title {
+    color: #8a949c;
+    font-size: .85em;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+
+    .era-main & {
+      color: #7dd8ed;
+      &::before { content: ""; display: inline-block; margin-right: 1ch; border: 4px solid transparent; border-left-color: #65bddb; }
+    }
+  }
+
+  /* Optional filter wrapper: its renderer lines join the same flex row. */
+  .era-kind > .line { display: contents; }
+}
+
+/* Reusable collection of action groups: groups wrap side by side;
+   direct .line children are full-width introductory/status rows.
+   This is a parent of .era-actions-group, not a variant of that control row. */
+.era-actions-collection {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  align-items: flex-start;
+  column-gap: var(--era-actions-gap);
+
+  > .line { flex-basis: 100%; }
+  > .era-actions-group { flex: 0 1 auto; width: max-content; min-width: 0; max-width: 100%; }
+}
+
+/* Settings emitted through renderer lines: expose enhanced buttons to the
+   enclosing settings layout instead of treating output spans as layout items. */
 .era-settings > .line > .output-text:has(> .era-button) { display: contents; }
-.era-actions-group .output-text.is-empty { display: none; }
-.era-actions-group:not(:has(button.choice)) { display: none; }
-.era-actions-group > .line > span:has(> .era-actions-title) { flex-basis: 100%; }
-.era-actions-title { color: #8a949c; font-size: .85em; text-transform: uppercase; letter-spacing: .06em; }
-.era-player-management .era-actions-group { margin-top: 0; }
-.era-main .era-actions-group { gap: 7px 9px; margin-top: 10px; }
-.era-main .era-actions-title { color: #7dd8ed; letter-spacing: .08em; }
-.era-main .era-actions-title::before { content: ""; display: inline-block; margin-right: 1ch; border: 4px solid transparent; border-left-color: #65bddb; }
 
-.era-player-management { --era-player-control-gap: 6px; margin-top: var(--era-player-control-gap); }
-.era-main .era-player-management .era-actions-group { gap: var(--era-player-control-gap); margin: 0 0 var(--era-player-control-gap); }
-.era-player-management .era-actions-group .print-cell { display: block; flex: 1 1 100%; }
-.era-player-management .era-actions-group .print-cell:nth-child(-n+2) { flex-basis: calc(50% - 9px); }
+/* Compact control panel: expects .era-actions-group sections, optional
+   .era-auto-toggles, then .era-settings. The first two PRINTC tiles in each
+   line share a row; remaining tiles and an optional quicksave row span it.
+   This is layout only: controls retain their shared component appearance. */
+.era-actions-panel {
+  margin-top: var(--era-actions-gap);
 
-.era-player-management .era-auto-toggles { gap: var(--era-player-control-gap); margin-top: 0; margin-bottom: var(--era-player-control-gap); }
-.era-player-management .era-settings { display: flex; flex-wrap: wrap; gap: var(--era-player-control-gap); margin-top: 0; padding-top: 0; border-top: 0; }
-.era-player-management .era-settings > .line { display: contents; }
-.era-player-management .era-settings .era-quicksave-row { flex-basis: 100%; }
+  .era-actions-group {
+    .print-cell {
+      display: block;
+      flex: 1 1 100%;
+      &:nth-child(-n+2) { flex-basis: calc((100% - var(--era-actions-gap)) / 2); }
+    }
+  }
 
-/* Filter kinds (HOTPATCH_ACTION_KIND): a filter toggle and the actions it shows share a tint. */
-.era-actions-group > .era-kind, .era-kind > .line { display: contents; }
-.checkbox-control.era-kind-petting { --checkbox-accent: #c0609a; }
-.checkbox-control.era-kind-chores { --checkbox-accent: #4fa064; }
-.checkbox-control.era-kind-dialogue { --checkbox-accent: #5a86c8; }
-.checkbox-control.era-kind-vaginal { --checkbox-accent: #ffb8dc; }
-.checkbox-control.era-kind-anal { --checkbox-accent: #cda47d; }
-.checkbox-control.era-kind-sm { --checkbox-accent: #e87980; }
-.checkbox-control.era-kind-service { --checkbox-accent: #fff09a; }
-/* The look text (clothes and what is happening) under the target's meters: no image toggles, no spacer lines. */
-.era-look { margin-top: 8px; }
-/* The room's chatter (others' talk, the radio, room descriptions) under the place title; gone when there is none. */
-.era-scene { margin: -2px 0 8px; color: #b8c4cc; font-style: italic; }
-.era-scene:not(:has(.line:not(.era-marker, [hidden]))) { display: none; }
-.era-look .line:has(button.choice[data-value="3003"]) { display: none; }
+  .era-auto-toggles { margin: 0 0 var(--era-actions-gap); }
+  .era-settings {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--era-actions-gap);
+    margin-top: 0;
+    padding-top: 0;
+    border-top: 0;
+
+    > .line { display: contents; }
+    .era-quicksave-row { flex-basis: 100%; }
+  }
+}
+
+/* Filter kinds (HOTPATCH_ACTION_KIND): reusable checkbox accents, independent
+   of whether the checkbox is rendered inside an action group. */
+@each $kind, $color in (petting: #c0609a, chores: #4fa064, dialogue: #5a86c8, vaginal: #ffb8dc, anal: #cda47d, sm: #e87980, service: #fff09a) {
+  .checkbox-control.era-kind-#{$kind} { --checkbox-accent: #{$color}; }
+}
+/* Main-screen description below target meters: expects native text lines.
+   Hide the legacy [Look] collapse control; the description stays expanded. */
+.era-look {
+  margin-top: var(--era-actions-gap);
+  .line:has(button.choice[data-value="3003"]) { display: none; }
+}
+/* Room narration: expects renderer .line children for chatter, radio, or room
+   descriptions. Hidden/marker-only contents do not keep the section visible. */
+.era-scene {
+  margin: 0 0 var(--era-actions-gap);
+  color: #b8c4cc;
+  font-style: italic;
+  &:not(:has(.line:not(.era-marker, [hidden]))) { display: none; }
+}

@@ -315,7 +315,7 @@ test("fallback double-line map glyphs occupy Emuera's single-column cells in HTM
 
 test("shared action buttons participate directly in the action flex row without tile wrappers", async () => {
   const css = styleSource("style");
-  assert.match(css, /\.era-actions-group \.output-text:has\(> \.era-button\),/);
+  assert.match(css, /\.era-actions-group \{[\s\S]*?\.output-text:has\(> \.era-button\) \{ display: contents; \}/);
   assert.doesNotMatch(css, /era-guard-control/);
 });
 
@@ -1298,7 +1298,7 @@ test("action headers reserve filter-row height without preventing wrapping", asy
   const css = styleSource("style");
   assert.match(css, /\.era-actions-header \{[^}]*flex-wrap: wrap;/);
   assert.match(css, /\.era-actions-header \{[^}]*align-items: center;/);
-  assert.match(css, /\.era-actions-header \{[^}]*min-height: max\(22px, calc\(1lh \+ 6px\)\);/);
+  assert.match(css, /\.era-actions-header \{[^}]*min-height: max\(22px, calc\(1lh \+ var\(--era-actions-gap\)\)\);/);
 });
 
 test("last command is a placeholder, never input data, and defaults and waits take precedence", async () => {
@@ -1422,7 +1422,7 @@ test("quicksave controls live in the quick menu and below Config, not the burger
   assert.match(sidebar, /choice\("Quicksave", "quicksave"\)/);
   assert.match(sidebar, /config\.after\(row\)/);
   const css = styleSource("style");
-  assert.match(css, /\.era-settings \.era-quicksave-row \{ flex-basis: 100%; \}/);
+  assert.match(css, /\.era-actions-panel \{[\s\S]*?\.era-settings \{[\s\S]*?\.era-quicksave-row \{ flex-basis: 100%; \}/);
   const save = source.slice(source.indexOf("async function saveMidday("), source.indexOf("async function loadMidday("));
   assert.doesNotMatch(save, /confirmAction/);
 });
@@ -1440,7 +1440,7 @@ test("the main sidebar inserts an actionable Quicksave directly after Config onl
     querySelector(selector: string) {
       if (selector === ".era-main-sidebar") return sidebar;
       if (selector === ".era-player") return player;
-      if (selector === ".era-player-management") return management;
+      if (selector === ".era-player > .era-actions-panel") return management;
       if (selector === ".era-settings button[data-value='809']") return { after: (row: Element) => configRows.push(row) };
       return null;
     },
@@ -1570,9 +1570,9 @@ test("room overlays reserve no layout height and chat follows every responsive m
   assert.doesNotMatch(chromeButtons, /\.ui-button(?:--[\w-]+)? \{[^}]*position: absolute;/);
   assert.match(css, /\.era-history-more-overlay \{[^}]*display: flex;[^}]*justify-content: flex-end;/);
   assert.match(css, /\.era-main-chat > \.era-history-pane \{[^}]*contain: size; overflow: auto;/);
-  assert.match(css, /\.era-main-actions \{ display: flex; flex-wrap: wrap;/);
-  assert.match(css, /\.era-main-actions > \.era-actions-group \{ flex: 0 1 auto;/);
-  assert.match(css, /\.era-main > \.era-main-actions \{ align-self: stretch; \}/);
+  assert.match(css, /\.era-actions-collection \{\s*display: flex;\s*flex-wrap: wrap;/);
+  assert.match(css, /\.era-actions-collection \{[\s\S]*?> \.era-actions-group \{ flex: 0 1 auto;/);
+  assert.match(css, /\.era-main > \.era-actions-collection \{ grid-area: actions; align-self: stretch; \}/);
   assert.match(css, /\.era-main:has\(\.era-main-chat\) \{ grid-template-rows: auto 1fr auto auto auto; \}/);
   assert.match(css, /\.era-main:has\(\.era-main-chat\):not\(:has\(\.era-counters\)\) \{ grid-template-rows: auto 1fr auto auto; \}/);
   assert.match(css, /\.era-main:has\(\.era-main-chat\) \{ grid-template-rows: auto 1fr auto auto auto auto; \}/);
@@ -1584,7 +1584,7 @@ test("room overlays reserve no layout height and chat follows every responsive m
   assert.match(css, /\.era-main-left > \.era-stats \{ flex: none; max-height: fit-content; \}/);
   assert.match(css, /\.era-main-sidebar \{ min-height: 0; contain: size; \}/);
   assert.match(css, /\.era-main-sidebar \.era-stats \{ flex: 0 1 auto; min-height: 0; overflow-y: auto; \}/);
-  assert.match(css, /\.era-player-management > \.line:has\(\.era-auto-toggles\) \{ margin-top: auto;/);
+  assert.match(css, /\.era-player > \.era-actions-panel > \.line:has\(\.era-auto-toggles\) \{ margin-top: auto;/);
   assert.match(css, /button\.choice\.era-button \{[^}]*padding: 4px 9px;/);
   assert.match(css, /\.checkbox-control\.era-toggle \{ padding: 3px 7px; gap: 6px;/);
   assert.match(css, /\.checkbox-control \{[^}]*display: inline-flex; align-items: center;/);

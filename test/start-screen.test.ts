@@ -433,7 +433,7 @@ QUIT`, "TEST_BODY_BULK_FEEDBACK.ERB");
     }
   }
   assert.ok(resultShown, "the original time result is printed");
-  assert.match(markup(afterSky), /era-main-actions/, "finishing the weather narration returns to the main screen");
+  assert.match(markup(afterSky), /era-actions-collection/, "finishing the weather narration returns to the main screen");
 
   const saved = saves.read("save99.sav");
   assert.ok(Buffer.isBuffer(saved), "new game produces a native autosave");

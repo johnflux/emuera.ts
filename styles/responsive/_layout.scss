@@ -3,7 +3,7 @@
   .screen.is-active .era-main:not(:has(.era-counters)) { grid-template-rows: auto minmax(0, max-content) minmax(min-content, 1fr) auto; }
   .screen.is-active .era-shop { height: max(540px, calc(100cqh - 8px)); min-height: 0; grid-template-rows: auto auto minmax(0, 1fr) auto; }
   .era-shop > :is(.era-shop-home, .era-shop-menu, .era-shop-system) { min-height: 0; overflow: auto; overscroll-behavior: contain; }
-  .era-main > :is(.era-main-center, .era-main-actions) { min-height: 0; overflow: auto; overscroll-behavior: contain; }
+  .era-main > :is(.era-main-center, .era-actions-collection) { min-height: 0; overflow: auto; overscroll-behavior: contain; }
   .era-main-center:has(.era-alone) > .era-character { flex: 1 1 auto; min-height: 0; }
   .era-alone .era-room-stage { flex: 1 1 auto; min-height: 0; overflow: visible; }
   .era-alone .era-room-stage > .era-occupants { flex: 1 1 var(--era-occupant-height); min-height: 120px; }

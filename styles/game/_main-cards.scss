@@ -12,8 +12,7 @@
 :is(.era-main-center, .era-main-right) > .era-card { flex: 1 0 auto; }
 .era-main-center { grid-area: center; }
 .era-main-right { grid-area: right; }
-.era-main-actions { grid-area: actions; }
-.era-main > .era-main-actions { align-self: stretch; }
+.era-main > .era-actions-collection { grid-area: actions; align-self: stretch; }
 .era-counters { grid-area: counters; }
 .era-main-last { grid-area: last; color: #888; }
 @container (min-width: 761px) {
@@ -44,8 +43,8 @@
 .era-main:has(.era-season-summer) { --corner-decoration: url("/decoration/deco_corner_flower_summer.png"); }
 .era-main:has(.era-season-autumn) { --corner-decoration: url("/decoration/deco_corner_flower_autumn.png"); }
 .era-main:has(.era-season-winter) { --corner-decoration: url("/decoration/deco_corner_flower_winter.png"); }
-.era-main :is(.era-player, .era-main-actions) { position: relative; isolation: isolate; }
-.era-main :is(.era-player, .era-main-actions)::after { content: ""; position: absolute; right: 0; bottom: 0; z-index: -1;
+.era-main :is(.era-player, .era-actions-collection) { position: relative; isolation: isolate; }
+.era-main :is(.era-player, .era-actions-collection)::after { content: ""; position: absolute; right: 0; bottom: 0; z-index: -1;
   width: min(180px, 60%); aspect-ratio: 1; border-bottom-right-radius: inherit; background: var(--corner-decoration) right bottom / contain no-repeat;
   opacity: .14; pointer-events: none; }
 .era-sub { margin-left: 1.75ch; color: #888; font-weight: normal; font-size: .85em; }

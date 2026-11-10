@@ -200,6 +200,8 @@ button.choice.era-move-dest.era-travel-danger, .era-travel-danger .era-travel-ti
 .era-command-tile:has(.choice:enabled:is(:hover, :focus-visible)) { border-color: #78bdd6; background: #193744; }
 .era-command-tile:has(.choice:enabled:is(:focus-visible, .controller-focus)) { outline: 2px solid #7ccce3; outline-offset: 2px; }
 .era-command-tile { display: inline-block; }
+.line > .era-command-tile + .era-command-tile { margin-left: var(--era-actions-gap); }
+.era-actions-group .line > .era-command-tile + .era-command-tile { margin-left: 0; }
 .era-occupant-label[aria-pressed="true"] .era-occupant-name { color: #8fc8ff; }
 .era-occupant-text, .era-occupant-label { text-shadow: -1px -1px 0 #000, 0 -1px 0 #000, 1px -1px 0 #000, -1px 0 0 #000, 1px 0 0 #000, -1px 1px 0 #000, 0 1px 0 #000, 1px 1px 0 #000, 0 2px 3px #000; }
 .era-command-tile .choice:focus-visible { outline: none; }

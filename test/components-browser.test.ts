@@ -45,7 +45,7 @@ test("catalog uses production rendering and context-independent buttons at wide 
       (async () => {
         const catalog = await until(() => document.querySelector("#catalog").contentDocument?.querySelector("#game-preview"));
         stage = "catalog main";
-        const preview = await until(() => ready(catalog.contentDocument, ".era-main-actions button.era-button"));
+        const preview = await until(() => ready(catalog.contentDocument, ".era-actions-collection button.era-button"));
         const gameFrame = document.querySelector("#game");
         stage = "normal demo menu";
         const menu = await until(() => ready(gameFrame.contentDocument, "button.choice[data-value='8']"));
@@ -57,7 +57,7 @@ test("catalog uses production rendering and context-independent buttons at wide 
         const normal = await until(() => {
           const doc = gameFrame.contentDocument;
           if (doc.querySelector("#terminal.is-waiting")) doc.querySelector("#terminal").click();
-          return ready(doc, ".screen.is-active .era-main-actions button.era-button");
+          return ready(doc, ".screen.is-active .era-actions-collection button.era-button");
         });
         await catalog.contentDocument.fonts.ready;
         await gameFrame.contentDocument.fonts.ready;
@@ -261,7 +261,7 @@ test("catalog uses production rendering and context-independent buttons at wide 
               .map(control => [control.dataset.value, control.disabled, control.textContent]),
             status: mapDoc.querySelector("#status").textContent,
           };
-          return ready(mapDoc, ".screen.is-active .era-main-actions button.era-button");
+          return ready(mapDoc, ".screen.is-active .era-actions-collection button.era-button");
         });
         host.querySelector("a[data-sample='chrome']").click();
         await until(() => !host.querySelector("#chrome-buttons").hidden);

@@ -72,6 +72,18 @@ FOR LOCAL, 0, 8
 NEXT
 HTML_PRINT "<era-close>"
 HTML_PRINT "<era-close>"
+HTML_PRINT "<era-open class='era-section era-button-sample'>"
+PRINTL Compact action panel
+HTML_PRINT "${classHeading("<div class='era-actions-panel'></div>")}"
+HTML_PRINT "<era-open class='era-actions-panel'>"
+HTML_PRINT "<era-open class='era-actions-group'>"
+PRINTFORMLC [9300] Move
+PRINTFORMLC [9301] Go Out
+PRINTFORMLC [9302] Lock The Door
+PRINTL
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-close>"
 BINPUT
 SIF RESULT >= 9100 && RESULT <= 9101
   RADIO_SELECTION = RESULT - 9100
