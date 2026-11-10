@@ -3072,6 +3072,12 @@ terminal.addEventListener("click", (event) => {
   }
   if (event.target instanceof Element) {
     if (event.target.closest("button, a[href]")) return;
+    const portrait = event.target.closest(".screen.is-active .era-occupant .era-portrait");
+    const occupantLabel = portrait?.closest(".era-occupant").querySelector("button.era-occupant-label");
+    if (occupantLabel && !occupantLabel.disabled) {
+      if (!dragged(event) && !settling()) occupantLabel.click();
+      return;
+    }
     const checkbox = event.target.closest(".checkbox-control");
     if (checkbox && !choiceControl(checkbox).disabled) return;
   }

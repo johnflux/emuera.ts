@@ -141,6 +141,11 @@ backing so they remain readable even against the brighter embrace lighting.
 In intimate modes, the interaction panel uses the supplied pixel-art rose
 corner artwork at 0.85 opacity; the player panel retains its seasonal flowers.
 
+Clicking a room avatar uses the same action as its name label: selecting another
+character or toggling the selected character's body/face view. The label remains
+the keyboard control. Existing image buttons keep their own actions; dragging,
+disabled controls and portraits on previous screens do not trigger selection.
+
 The browser checks layout structure after each rendered snapshot. It reports
 unmatched closing markers, abandoned open layouts, misplaced main panels, and
 missing or duplicate panels in a completed main layout. Input waits during

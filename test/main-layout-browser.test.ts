@@ -32,6 +32,56 @@ const browser = [
   process.env.PROGRAMFILES && join(process.env.PROGRAMFILES, "Google/Chrome/Application/chrome.exe"),
 ].find((path): path is string => !!path && existsSync(path));
 
+test("room avatar clicks use the label action without duplicating buttons or activating stale portraits", {
+  skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH",
+}, async () => {
+  const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
+  const start = source.indexOf('terminal.addEventListener("click", (event) => {');
+  const end = source.indexOf('terminal.addEventListener("pointermove"', start);
+  assert.ok(start >= 0 && end > start);
+  const html = `<!doctype html><body><div id="terminal">
+    <div class="screen is-active"><div class="era-occupant">
+      <div class="era-portrait"><span class="sprite"><canvas></canvas></span><button id="native">Image button</button></div>
+      <button class="era-occupant-label"><span>Name</span></button>
+    </div></div>
+    <div class="screen"><div class="era-occupant"><div class="era-portrait"><canvas id="old"></canvas></div>
+      <button class="era-occupant-label">Old name</button></div></div>
+    </div><script>
+    const terminal = document.querySelector("#terminal"), labelButtons = new WeakMap();
+    let dragging = false, pending = false, continued = 0, selected = 0, native = 0, stale = 0;
+    const dragged = () => dragging, settling = () => pending, choiceControl = element => element;
+    const clickToContinue = () => continued++;
+    const busy = false, expiring = false, input = {kind: "integer"};
+    ${source.slice(start, end)}
+    const label = document.querySelector(".is-active .era-occupant-label");
+    label.addEventListener("click", () => selected++);
+    document.querySelector("#native").addEventListener("click", () => native++);
+    document.querySelector(".screen:not(.is-active) button").addEventListener("click", () => stale++);
+    const canvas = document.querySelector("canvas");
+    canvas.click();
+    label.querySelector("span").click();
+    document.querySelector("#native").click();
+    const initial = {selected, native, continued};
+    dragging = true; canvas.click(); dragging = false;
+    pending = true; canvas.click(); pending = false;
+    label.disabled = true; canvas.click();
+    document.querySelector("#old").click();
+    document.body.textContent = JSON.stringify({initial, selected, native, stale});
+    </script>`;
+  const profile = await mkdtemp(join(process.cwd(), ".era-avatar-click-"));
+  try {
+    const { stdout } = await execute(browser!, ["--headless", "--disable-gpu", "--no-first-run",
+      `--user-data-dir=${profile}`, "--dump-dom",
+      `data:text/html;base64,${Buffer.from(html).toString("base64")}`],
+      { maxBuffer: 8 * 1024 * 1024, timeout: 30000 });
+    const match = stdout.match(/<body[^>]*>([\s\S]*?)<\/body>/);
+    assert.ok(match);
+    assert.deepEqual(JSON.parse(match[1]), {
+      initial: { selected: 2, native: 1, continued: 0 }, selected: 2, native: 1, stale: 0,
+    });
+  } finally { await rm(profile, { recursive: true, force: true }); }
+});
+
 test("intimate panels use readable dark rose surfaces without button recoloring", {
   skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH",
 }, async () => {

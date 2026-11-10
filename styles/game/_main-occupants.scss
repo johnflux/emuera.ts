@@ -78,6 +78,7 @@
 .era-place-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-left: auto; font-size: var(--era-font-size-small); font-weight: normal; }
 /* Each portrait's effect layers share one cell, with its label below. */
 .era-portrait { min-width: 0; align-self: center; }
+.screen.is-active .era-occupant:has(.era-occupant-label:not(:disabled)) .era-portrait { cursor: pointer; }
 .era-portrait .sprite { height: auto; vertical-align: bottom; }
 /* The picture takes its own height here, so the blank lines the game prints to make room for it are dropped. */
 .era-portrait .sprite-clip:first-child { position: relative; display: block; }
