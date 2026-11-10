@@ -14,7 +14,9 @@ class Element {
   constructor(readonly tag = "div") {}
   classList = {
     contains: (name: string) => this.className.split(/\s+/).includes(name),
-    add: (name: string) => { if (!this.classList.contains(name)) this.className += ` ${name}`; },
+    add: (...names: string[]) => {
+      for (const name of names) if (!this.classList.contains(name)) this.className += ` ${name}`;
+    },
     remove: (name: string) => { this.className = this.className.split(/\s+/).filter((part) => part !== name).join(" "); },
     replace: (before: string, after: string) => {
       if (this.classList.contains(before)) {
@@ -49,9 +51,11 @@ class Element {
   }
   matches(selector: string): boolean {
     return selector.split(",").some((part) => {
-      const name = part.trim();
+      const openOnly = part.includes(":not([data-closed])");
+      const name = part.trim().replace(":not([data-closed])", "");
       const [tag, ...classes] = name.split(".");
-      return (!tag || this.tag === tag) && classes.every((token) => this.classList.contains(token));
+      return (!openOnly || this.dataset.closed === undefined)
+        && (!tag || this.tag === tag) && classes.every((token) => this.classList.contains(token));
     });
   }
   closest(selector: string): Element | null {
@@ -100,16 +104,17 @@ async function screenFixture() {
   const lineStart = source.indexOf("function line()");
   const line = source.slice(lineStart, source.indexOf("/**", lineStart));
   const retire = source.slice(source.indexOf("function retireScreen("), source.indexOf("// Undo retireScreen"));
+  const boxes = source.slice(source.indexOf("function container()"), source.indexOf("/** Removes a line"));
   const render = source.slice(source.indexOf("  const previousScreen = currentScreen;"),
     source.indexOf('  outputRoot.querySelectorAll("button.choice").forEach(decorateCommandNumbers);'));
   const api = runInNewContext(`
     let currentScreen = null, currentLine = null, continuedScreens = [];
     ${screen}
-    function container() { return screen(); }
+    ${boxes}
     ${line}
     ${retire}
     async function render(snapshot, advanceScreen = false) { ${render} }
-    ({ render });
+    ({ render, openBox, closeBox });
   `, {
     outputRoot: root,
     document: { createElement: (tag: string) => new Element(tag) },
@@ -124,6 +129,8 @@ async function screenFixture() {
       input?: { kind: string };
       output: { type: string; text: string; newline?: boolean; plain?: boolean }[];
     }, advanceScreen?: boolean | "continue"): Promise<void>;
+    openBox(classes: string): void;
+    closeBox(): void;
   };
   return { root, ...api };
 }
@@ -159,6 +166,34 @@ test("continuing an unfinished line or reaching the end does not retire dialogue
   await render({ status: "done", output: [{ type: "text", text: "End", newline: true, plain: true }] }, "continue");
   assert.equal(root.querySelectorAll(".is-history").length, 0);
   assert.equal(root.querySelectorAll(".is-active").length, 2);
+});
+
+test("main layout survives embrace-event waits after the header until its closing marker", async () => {
+  const { root, render, openBox, closeBox } = await screenFixture();
+  const text = (text: string) => ({ type: "text", text, newline: true, plain: true });
+  openBox("era-layout era-main");
+  openBox("era-main-header");
+  await render({ status: "waiting", output: [text("Clock and date")] });
+  closeBox();
+  await render({ status: "waiting", input: { kind: "wait" }, output: [text("You are embraced by Mima!")] });
+  await render({ status: "waiting", input: { kind: "wait" }, output: [text("Mima holds you close.")] }, "continue");
+  assert.equal(root.children.length, 1, "continuing an event must not split an unfinished main layout");
+  for (const panel of ["era-main-left", "era-main-center", "era-main-right"]) {
+    openBox(panel);
+    await render({ status: "waiting", output: [text(panel)] });
+    closeBox();
+  }
+  await render({ status: "waiting", input: { kind: "integer" }, output: [text("Commands")] }, true);
+  assert.equal(root.children.length, 1, "integer inputs also retain an unfinished layout");
+  const main = root.querySelector(".era-main")!;
+  assert.equal(main.querySelector(".era-main-header")!.parentElement, main);
+  for (const panel of ["era-main-left", "era-main-center", "era-main-right"])
+    assert.equal(main.querySelector(`.${panel}`)!.parentElement, main);
+  closeBox();
+  await render({ status: "waiting", input: { kind: "wait" }, output: [text("Next command result")] }, true);
+  assert.equal(root.children.length, 2, "a completed layout must still retire on the next command");
+  assert.ok(root.children[0]!.classList.contains("is-history"));
+  assert.equal(root.lastElementChild!.textContent, "Next command result");
 });
 
 test("retired GUI is detached while narrative and echoed input become plain text", async () => {

@@ -108,6 +108,9 @@ inline until the game prints a newline. This preserves multi-column character
 pickers, native labels, colors and tooltips in Config submenus. Explicit radios,
 number inputs, steppers, checkboxes and artwork controls retain their components.
 Native input modes and setting routines are unchanged.
+Unfinished main layouts retain their context across input waits, including
+embrace events triggered after the header has printed. Remaining status and
+command panels stay inside the same layout until its closing marker.
 Open dialogs retain their layout context while native submenus wait for input
 and return via `CLEARLINE`; only a closing marker ends that context. Native
 printed lines preserve padding spaces so character columns remain aligned.

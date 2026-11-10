@@ -324,7 +324,7 @@ test("sky narration keeps its dialog open across waits and continues through its
   assert.match(app, /const skyContinue = button\.matches\("\.era-sky-dialog \.era-wait-continue"\);/);
   assert.match(app, /skyContinue && !waitContinue/);
   assert.match(app, /submit\(input\?\.kind === "wait" && button\.matches\("\.era-sky-dialog \.era-wait-continue"\) \? "" : value, button\)/);
-  assert.match(app, /advanceScreen && currentScreen\?\.querySelector\("\.era-dialog:not\(\[data-closed\]\)"\)\) advanceScreen = false/);
+  assert.match(app, /advanceScreen && currentScreen\?\.querySelector\("\.era-dialog:not\(\[data-closed\]\), \.era-layout:not\(\[data-closed\]\)"\)\) advanceScreen = false/);
   assert.match(app, /dialog\.matches\("\.era-sky-dialog"\) && dialog\.dataset\.closed && input\?\.kind !== "wait"/);
   assert.match(app, /pageTranslated\(\) \|\| !!terminal\.querySelector\("\.screen\.is-active \.era-sky-dialog:popover-open"\)/);
 });

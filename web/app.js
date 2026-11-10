@@ -2333,8 +2333,8 @@ async function renderSnapshot(snapshot, advanceScreen) {
   }
   const previousScreen = currentScreen;
   const previousLine = currentLine;
-  // Dialogs can call native submenus across inputs; keep printing inside their open boxes until they close.
-  if (advanceScreen && currentScreen?.querySelector(".era-dialog:not([data-closed])")) advanceScreen = false;
+  // Dialog submenus and main-screen events can wait for input before their layout boxes close.
+  if (advanceScreen && currentScreen?.querySelector(".era-dialog:not([data-closed]), .era-layout:not([data-closed])")) advanceScreen = false;
   if (advanceScreen === "continue") {
     // An unfinished line keeps printing into its screen; otherwise the continued output starts a new screen.
     if (currentScreen && !currentLine) {
