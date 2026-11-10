@@ -48,4 +48,4 @@
   width: min(180px, 60%); aspect-ratio: 1; border-bottom-right-radius: inherit; background: var(--corner-decoration) right bottom / contain no-repeat;
   opacity: .14; pointer-events: none; }
 .era-sub { margin-left: 1.75ch; color: #888; font-weight: normal; font-size: .85em; }
-.era-funds { margin-left: auto; color: #ffd866; font-weight: normal; font-variant-numeric: tabular-nums; cursor: help; }
+.era-funds { margin-left: auto; color: #ffd866; font-weight: normal; font-variant-numeric: tabular-nums; white-space: nowrap; cursor: help; }

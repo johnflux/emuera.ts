@@ -160,6 +160,16 @@ changing saved game preferences.
   Use `.era-actions-collection` to arrange multiple `.era-actions-group`
   sections side by side with wrapping; screen-specific grid placement belongs
   to the containing screen, not the collection.
+  `.era-actions-header` supplies its own flex layout; group titles use the same
+  accented marker in every screen. Standalone header, collection, and compact
+  panel examples are available in the `/components` button catalog.
+  Player summaries use inherited body sizing for identity, metadata, status,
+  and text actions. Special effects reuse the baseline-aligned status row
+  rather than smaller uppercase labels or separate pill styling.
+  The player name opens the character sheet using the shared
+  `.era-text-button-link` variant (dotted underline and optional suffix);
+  identity metadata belongs on the following line. Special effects include
+  explanatory tooltips.
   Reuse `.era-actions-panel` for compact collections of action groups, optional
   auto-toggles, and settings. Within its groups, the first two printed tiles in
   each line share a row and subsequent tiles are full-width. The player screen's

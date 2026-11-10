@@ -1440,7 +1440,7 @@ test("the main sidebar inserts an actionable Quicksave directly after Config onl
     querySelector(selector: string) {
       if (selector === ".era-main-sidebar") return sidebar;
       if (selector === ".era-player") return player;
-      if (selector === ".era-player > .era-actions-panel") return management;
+      if (selector === ".era-actions-panel") return management;
       if (selector === ".era-settings button[data-value='809']") return { after: (row: Element) => configRows.push(row) };
       return null;
     },
@@ -1460,7 +1460,7 @@ test("the main sidebar inserts an actionable Quicksave directly after Config onl
   assert.equal(configRows[0]!.className, "era-quicksave-row");
   assert.equal(label, "Quicksave");
   assert.equal(value, "quicksave");
-  assert.equal(player.children[0], management);
+  assert.equal(player.children[0], management, "the initially separate actions panel is moved into the player card");
 });
 
 test("Continue stays pending throughout its request and view restoration, and clears on failure", async () => {

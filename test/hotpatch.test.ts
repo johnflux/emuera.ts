@@ -1005,19 +1005,41 @@ TCVAR:0:祝福 = 1
 TCVAR:0:LARGE_LOADS = 2
 TFLAG:幸運補正 = -1
 FLAG:自室施錠 = 1
+TFLAG:仙香玉兎 = 120
+TCVAR:0:国士無双の薬 = 2
+TFLAG:ポイズンボディ = 120
+TFLAG:GG設置位置 = 9
+TFLAG:FORTUNE_REVERSED = 120
+GatheringSeason = 1
+TFLAG:SEASON_STONE_USES_REMAINING = 3
+TFLAG:ANYWHERE_DOOR_USES_REMAINING = 4
+TCVAR:0:エンチャント = 1
+TCVAR:0:加護 = 1
+TCVAR:0:豊穣 = 1
+TEQUIP:0:SWIMMING = 1
+TCVAR:0:LIMITLESS_ACTIVE = 1
+TCVAR:0:PURIFICATION_DRUG_ACTIVE = 1
+TCVAR:0:SENSITIVITY_NUMBED = 1
+TCVAR:0:PERPETUAL_ERECTION = 1
+TCVAR:0:INFINITE_VIG = 1
 CALL HOTPATCH_PLAYER_SPECIAL
 CALL HOTPATCH_PLAYER_GAUGES
 PRINTFORML State: {BASE:0:精力},{BASE:1:精力},{MAXBASE:0:射精},{MAXBASE:1:射精},{MAXBASE:2:射精}
 QUIT
 @IS_WISEMAN
 #FUNCTION
-RETURNF 0`, "<special-test>");
+RETURNF FLAG:自室施錠`, "<special-test>");
     for (const [name, routines] of stub.routines) game.routines.set(name, routines);
     const snapshot = new Runtime(game, GAME_INSTRUCTION_LIMIT).start();
     assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
     const html = snapshot.output.flatMap((item) => item.type === "html" ? [item.text] : []).join("");
     assert.equal((html.match(/era-player-effects/g) ?? []).length, 1, "empty Special is omitted");
     for (const effect of ["Blessing", "Extreme Loads", "Misfortune", "Door Locked"]) assert.ok(html.includes(effect));
+    const special = html.match(/<div class='era-player-status era-player-effects'>(.*?)<\/div>/)?.[1];
+    assert.ok(special);
+    const effects = [...special.matchAll(/<span class='era-status'[^>]* title='([^']*)'>(.*?)<\/span>/g)];
+    assert.equal(effects.length, 21, "every active Special effect is rendered");
+    assert.ok(effects.every(([, title]) => title!.length > 10), "every effect has an explanatory tooltip");
     assert.equal(html.includes("era-special-gauges"), phase !== 0);
     if (phase) {
       assert.match(html, /meter value='2500' max='(?:5000|7500)'/);

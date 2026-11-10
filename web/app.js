@@ -2754,7 +2754,7 @@ function setupMainSidebar(main) {
   const sidebar = document.createElement("div");
   sidebar.className = "era-main-sidebar";
   const player = main.querySelector(".era-player");
-  const management = main.querySelector(".era-player > .era-actions-panel");
+  const management = main.querySelector(".era-actions-panel");
   const stats = main.querySelector(".era-stats");
   if (stats) stats.tabIndex = 0;
   if (player && management) player.append(management);

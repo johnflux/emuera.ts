@@ -1,4 +1,11 @@
 /* The room is a row of full portraits, not a tab rail. Crowds scroll without shrinking the sprites. */
+/* Room narration contains renderer lines; marker-only or hidden text is empty. */
+.era-scene {
+  margin: 0 0 var(--era-actions-gap);
+  color: #b8c4cc;
+  font-style: italic;
+  &:not(:has(.line:not(.era-marker, [hidden]))) { display: none; }
+}
 .era-occupants { min-width: 0; }
 .era-occupant-list { display: flex; align-items: stretch; justify-content: safe center; gap: 8px; overflow-x: auto; padding: 2px 2px 8px; }
 .era-occupant { display: flex; flex: 0 0 180px; flex-direction: column; align-items: center; justify-content: flex-end; gap: 6px; min-width: 0; padding: 6px; text-align: center; }

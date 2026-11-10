@@ -6,11 +6,6 @@
 
 .era-player-control .interactive-label { text-decoration: none; }
 .era-control-arrow { margin-left: auto; color: #71b8cd; font-size: 1.3em; line-height: .8; }
-.era-player-effects { display: flex; flex-wrap: wrap; gap: 4px 8px; margin-top: 10px; font-size: .8em; line-height: 1.4; }
-.era-player-effects > .era-status-label { font-size: .85em; letter-spacing: .06em; text-transform: uppercase; }
-.era-player-effects > div { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
-.era-player-effects .era-status { padding: 1px 7px; border-radius: 4px; background: #8cbedc0d; }
-.era-player-effects .era-status + .era-status::before { content: none; }
 .era-special-gauges { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; font-size: .8em; }
 .era-special-gauge { padding: 8px 10px; border: 1px solid #87bbd318; border-radius: 6px; background: #8cbedc08; }
 .era-special-gauges .era-bar { grid-template-columns: 4ch minmax(0, 1fr) auto; gap: 8px; }

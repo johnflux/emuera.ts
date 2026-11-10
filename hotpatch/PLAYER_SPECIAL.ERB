@@ -3,55 +3,55 @@
 @HOTPATCH_PLAYER_SPECIAL
 #DIMS DYNAMIC sHtml
 SIF IS_WISEMAN()
-	sHtml += HOTPATCH_STATUS_ITEM("Sage Mode", C_WHITE)
+	sHtml += HOTPATCH_STATUS_ITEM("Sage Mode", C_WHITE, "Post-climax recovery state.")
 SIF TFLAG:仙香玉兎
-	sHtml += HOTPATCH_STATUS_ITEM("Lunar Incense", (TFLAG:仙香玉兎 >= 120 ? C_PINK # C_D_PINK))
+	sHtml += HOTPATCH_STATUS_ITEM("Lunar Incense", (TFLAG:仙香玉兎 >= 120 ? C_PINK # C_D_PINK), "Incense that increases desire while active.")
 SIF TCVAR:MASTER:国士無双の薬
-	sHtml += HOTPATCH_STATUS_ITEM(@"Peerless Patriot's Elixir x{TCVAR:MASTER:国士無双の薬}", GETDEFCOLOR())
+	sHtml += HOTPATCH_STATUS_ITEM(@"Peerless Patriot's Elixir x{TCVAR:MASTER:国士無双の薬}", GETDEFCOLOR(), "Enhances your Danmaku dice rolls. The number shows the active dose count.")
 SIF TFLAG:ポイズンボディ
-	sHtml += HOTPATCH_STATUS_ITEM("Poison Body", C_D_PINK)
+	sHtml += HOTPATCH_STATUS_ITEM("Poison Body", C_D_PINK, "Drug effect that makes your bodily fluids carry an aphrodisiac.")
 SIF CFLAG:MASTER:現在位置 == TFLAG:GG設置位置
-	sHtml += HOTPATCH_STATUS_ITEM("Gassing Garden Spot", C_PINK)
+	sHtml += HOTPATCH_STATUS_ITEM("Gassing Garden Spot", C_PINK, "A Gassing Garden is deployed at your current location.")
 SIF FLAG:自室施錠
-	sHtml += HOTPATCH_STATUS_ITEM("Door Locked", C_RED)
+	sHtml += HOTPATCH_STATUS_ITEM("Door Locked", C_RED, "Your room door is locked.")
 IF TFLAG:幸運補正 > 0
-	sHtml += HOTPATCH_STATUS_ITEM("Fortune", GETDEFCOLOR())
+	sHtml += HOTPATCH_STATUS_ITEM("Fortune", GETDEFCOLOR(), "Positive luck modifier; improves luck-dependent activities such as gathering and fishing.")
 ELSEIF TFLAG:幸運補正 < 0
-	sHtml += HOTPATCH_STATUS_ITEM("Misfortune", GETDEFCOLOR())
+	sHtml += HOTPATCH_STATUS_ITEM("Misfortune", GETDEFCOLOR(), "Negative luck modifier; worsens luck-dependent activities such as gathering and fishing.")
 ENDIF
 SIF TFLAG:FORTUNE_REVERSED
-	sHtml += HOTPATCH_STATUS_ITEM("Fortune Reversed", GETDEFCOLOR())
+	sHtml += HOTPATCH_STATUS_ITEM("Fortune Reversed", GETDEFCOLOR(), "Your daily fortune is temporarily inverted: high becomes low and low becomes high.")
 SIF TFLAG:SEASON_STONE_USES_REMAINING
-	sHtml += HOTPATCH_STATUS_ITEM(SEASON_NAME(GatheringSeason) + " Stone", GETDEFCOLOR())
+	sHtml += HOTPATCH_STATUS_ITEM(SEASON_NAME(GatheringSeason) + " Stone", GETDEFCOLOR(), @"Gathering uses %SEASON_NAME(GatheringSeason)% instead of the natural season. {TFLAG:SEASON_STONE_USES_REMAINING} uses remaining.")
 SIF TFLAG:ANYWHERE_DOOR_USES_REMAINING
-	sHtml += HOTPATCH_STATUS_ITEM(@"Anywhere Door ({TFLAG:ANYWHERE_DOOR_USES_REMAINING})", GETDEFCOLOR())
+	sHtml += HOTPATCH_STATUS_ITEM(@"Anywhere Door ({TFLAG:ANYWHERE_DOOR_USES_REMAINING})", GETDEFCOLOR(), @"An Anywhere Door is available for travel. {TFLAG:ANYWHERE_DOOR_USES_REMAINING} uses remaining.")
 SIF TCVAR:MASTER:祝福
-	sHtml += HOTPATCH_STATUS_ITEM("Blessing", GETDEFCOLOR())
+	sHtml += HOTPATCH_STATUS_ITEM("Blessing", GETDEFCOLOR(), "Increases pregnancy chances.")
 SIF TCVAR:MASTER:エンチャント
-	sHtml += HOTPATCH_STATUS_ITEM("Power Up", GETDEFCOLOR())
+	sHtml += HOTPATCH_STATUS_ITEM("Power Up", GETDEFCOLOR(), "Enchantment that increases your Danmaku dice modifier.")
 SIF TCVAR:MASTER:加護
-	sHtml += HOTPATCH_STATUS_ITEM("Divine Protection", GETDEFCOLOR())
+	sHtml += HOTPATCH_STATUS_ITEM("Divine Protection", GETDEFCOLOR(), "Reduces opposing dice rolls in Danmaku.")
 SIF TCVAR:MASTER:豊穣
-	sHtml += HOTPATCH_STATUS_ITEM("Good Harvest", GETDEFCOLOR())
+	sHtml += HOTPATCH_STATUS_ITEM("Good Harvest", GETDEFCOLOR(), "Increases gardening harvest yield.")
 SIF TEQUIP:MASTER:SWIMMING
-	sHtml += HOTPATCH_STATUS_ITEM("Swimming", GETDEFCOLOR())
+	sHtml += HOTPATCH_STATUS_ITEM("Swimming", GETDEFCOLOR(), "You are currently swimming.")
 SIF TCVAR:MASTER:LIMITLESS_ACTIVE
-	sHtml += HOTPATCH_STATUS_ITEM("Limitless", GETDEFCOLOR())
+	sHtml += HOTPATCH_STATUS_ITEM("Limitless", GETDEFCOLOR(), "Keeps stamina, energy, and vigor at their maximum while active.")
 SIF TCVAR:MASTER:PURIFICATION_DRUG_ACTIVE
-	sHtml += HOTPATCH_STATUS_ITEM("Purified", GETDEFCOLOR())
+	sHtml += HOTPATCH_STATUS_ITEM("Purified", GETDEFCOLOR(), "The purification drug temporarily grants the Rich Semen trait.")
 IF TCVAR:MASTER:LARGE_LOADS == 2
-	sHtml += HOTPATCH_STATUS_ITEM("Extreme Loads", GETDEFCOLOR())
+	sHtml += HOTPATCH_STATUS_ITEM("Extreme Loads", GETDEFCOLOR(), "Greatly increases the amount produced at climax.")
 ELSEIF TCVAR:MASTER:LARGE_LOADS == 1
-	sHtml += HOTPATCH_STATUS_ITEM("Large Loads", GETDEFCOLOR())
+	sHtml += HOTPATCH_STATUS_ITEM("Large Loads", GETDEFCOLOR(), "Increases the amount produced at climax.")
 ENDIF
 SIF TCVAR:MASTER:SENSITIVITY_NUMBED
-	sHtml += HOTPATCH_STATUS_ITEM("Numb", GETDEFCOLOR())
+	sHtml += HOTPATCH_STATUS_ITEM("Numb", GETDEFCOLOR(), "Greatly reduces sensitivity while active.")
 SIF TCVAR:MASTER:PERPETUAL_ERECTION
-	sHtml += HOTPATCH_STATUS_ITEM("Perpetual Erection", GETDEFCOLOR())
+	sHtml += HOTPATCH_STATUS_ITEM("Perpetual Erection", GETDEFCOLOR(), "Maintains arousal while active.")
 SIF TCVAR:MASTER:INFINITE_VIG
-	sHtml += HOTPATCH_STATUS_ITEM("Infinite Vigor", GETDEFCOLOR())
+	sHtml += HOTPATCH_STATUS_ITEM("Infinite Vigor", GETDEFCOLOR(), "Keeps vigor at its maximum while active.")
 SIF STRLENS(sHtml)
-	HTML_PRINT @"<div class='era-player-effects'><span class='era-status-label'>Special</span><div>%sHtml%</div></div>"
+	HTML_PRINT @"<div class='era-player-status era-player-effects'><span class='era-status-label'>Special:</span>%sHtml%</div>"
 
 @HOTPATCH_PLAYER_GAUGES
 ; INFO_GAUGEGROUP also repairs vigor and initializes maxima, even when gauges are hidden.

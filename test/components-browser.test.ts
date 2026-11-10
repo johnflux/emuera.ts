@@ -62,6 +62,15 @@ test("catalog uses production rendering and context-independent buttons at wide 
         await catalog.contentDocument.fonts.ready;
         await gameFrame.contentDocument.fonts.ready;
         result = {preview:style(preview),normal:style(normal),
+          playerActionsContained: [catalog.contentDocument, gameFrame.contentDocument].every(doc => {
+            const panel = doc.querySelector(".screen.is-active .era-actions-panel");
+            return !!panel && panel.parentElement.matches(".era-player")
+              && !!panel.querySelector("button[data-value='400']")
+              && !!panel.querySelector(".era-quicksave");
+          }),
+          playerNameCommand: [catalog.contentDocument, gameFrame.contentDocument].every(doc =>
+            !!doc.querySelector(".era-player .era-card-title button.era-text-button-link[data-value='803']")
+            && !doc.querySelector(".era-player .era-card-title").textContent.includes("See more")),
           renderer:catalog.contentDocument.querySelector("script[src='/app.js']") !== null,
           bizFont:catalog.contentDocument.fonts.check('16px "BIZ UD Gothic"'),
           active:preview.closest(".screen").classList.contains("is-active"),
@@ -88,6 +97,42 @@ test("catalog uses production rendering and context-independent buttons at wide 
         result.repeatEmpty = atlasDoc.querySelector(".era-repeat").textContent === "";
         result.continueEnabled = !atlasDoc.querySelector(".era-title-continue").disabled;
         result.noImageErrors = !atlasDoc.querySelector("#terminal").textContent.includes("Unknown sprite:");
+        const summary = atlasDoc.querySelector(".era-player");
+        const summaryText = [...summary.querySelectorAll(".era-card-title, .era-card-title > *, .era-player-kind, .era-player-status > *")];
+        result.summaryFontSizes = [...new Set(summaryText.map(element => getComputedStyle(element).fontSize))];
+        const special = summary.querySelector(".era-player-effects");
+        result.specialAligned = getComputedStyle(special).alignItems === "baseline"
+          && getComputedStyle(special.firstElementChild).textTransform === "none"
+          && Math.abs(special.firstElementChild.getBoundingClientRect().top - special.lastElementChild.getBoundingClientRect().top) < 1;
+        const nameLink = summary.querySelector(".era-text-button-link");
+        result.summaryNameLink = !!nameLink && nameLink.textContent.includes("Aesprika")
+          && getComputedStyle(nameLink).textDecorationStyle === "dotted"
+          && nameLink.querySelector('[aria-hidden="true"]').textContent === "›"
+          && !summary.querySelector(".era-card-title").textContent.includes("See more");
+        result.summaryIdentity = summary.querySelector(".era-player-kind").textContent.startsWith("You · ");
+        result.specialTooltip = !!special.querySelector(".era-status[data-tooltip]")?.dataset.tooltip;
+        result.fundsUnbroken = getComputedStyle(summary.querySelector(".era-funds")).whiteSpace === "nowrap";
+        const collection = atlasDoc.querySelector(".era-actions-collection");
+        const header = atlasDoc.querySelector(".era-actions-header");
+        result.actionLayouts = !!collection && !!header && !!atlasDoc.querySelector(".era-actions-panel")
+          && !collection.closest(".era-main") && !header.closest(".era-main")
+          && getComputedStyle(header).display === "flex"
+          && collection.querySelectorAll(".era-actions-group").length === 2;
+        const heading = collection.querySelector(".era-actions-title");
+        const headingStyle = element => {
+          const css = getComputedStyle(element), marker = getComputedStyle(element, "::before");
+          return JSON.stringify([css.color, css.fontSize, css.letterSpacing, marker.content, marker.borderLeft]);
+        };
+        const mainContext = atlasDoc.createElement("div");
+        mainContext.className = "era-main";
+        const headingGroup = atlasDoc.createElement("div");
+        headingGroup.className = "era-actions-group";
+        headingGroup.append(heading.cloneNode(true));
+        mainContext.append(headingGroup);
+        atlasDoc.querySelector(".screen.is-active").append(mainContext);
+        result.sharedActionHeading = headingStyle(heading) === headingStyle(headingGroup.firstElementChild)
+          && getComputedStyle(heading, "::before").content === '""';
+        mainContext.remove();
         stage = "radio group";
         const radioGroup = () => atlasDoc.querySelector('[role="radiogroup"][aria-label="Home example"]');
         const firstRadio = radioGroup().querySelector('[data-value="9100"]');
@@ -323,6 +368,8 @@ test("catalog uses production rendering and context-independent buttons at wide 
     assert.match(result.preview.font, /BIZ UD Gothic.*monospace/);
     assert.equal(result.variantFont, result.preview.font);
     assert.equal(result.renderer, true);
+    assert.equal(result.playerActionsContained, true, "Move and the remaining player controls stay inside the player card");
+    assert.equal(result.playerNameCommand, true, "the player name retains the character-sheet command");
     assert.equal(result.bizFont, true);
     assert.equal(result.active, true);
     assert.ok(result.cards > 0);
@@ -335,6 +382,14 @@ test("catalog uses production rendering and context-independent buttons at wide 
     assert.equal(result.repeatEmpty, true);
     assert.equal(result.continueEnabled, true);
     assert.equal(result.noImageErrors, true);
+    assert.equal(result.summaryFontSizes.length, 1, "summary labels, values, and text actions use one inherited size");
+    assert.equal(result.specialAligned, true, "Special and its effects share a baseline without uppercase styling");
+    assert.equal(result.summaryNameLink, true, "the name replaces See more with a dotted link and decorative chevron");
+    assert.equal(result.summaryIdentity, true, "You is on the identity line");
+    assert.equal(result.specialTooltip, true, "Special effects expose tooltips in the catalog");
+    assert.equal(result.fundsUnbroken, true, "funds never wrap within the number");
+    assert.equal(result.actionLayouts, true, "action layouts are catalogued without a main-screen wrapper");
+    assert.equal(result.sharedActionHeading, true, "action headings share their appearance across contexts");
     assert.equal(result.radioInitial, true);
     assert.equal(result.radioChanged, true);
     assert.equal(result.radioLayout, true);

@@ -84,6 +84,36 @@ PRINTL
 HTML_PRINT "<era-close>"
 HTML_PRINT "<era-close>"
 HTML_PRINT "<era-close>"
+HTML_PRINT "<era-open class='era-section era-button-sample'>"
+PRINTL Player summary
+HTML_PRINT "<era-open class='era-card era-player'>"
+HTML_PRINT "<div class='era-card-title'><button value='9500' class='era-text-button era-text-button-link' data-suffix='›' title='Abilities, experience, personal info and more'>Aesprika</button><span class='era-funds'>¥3,764,954</span></div>"
+HTML_PRINT "<div class='era-player-kind'>You · Outsider · <span class='era-size era-unusual'>Tall</span></div>"
+HTML_PRINT "<div class='era-player-status'><span class='era-status-label'>Status:</span><span class='era-status'>Can eat</span><span class='era-status'>Can bathe</span></div>"
+HTML_PRINT "<div class='era-player-status era-player-effects'><span class='era-status-label'>Special:</span><span class='era-status' title='Positive luck modifier; improves luck-dependent activities such as gathering and fishing.'>Fortune</span></div>"
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-open class='era-section era-button-sample'>"
+PRINTL Action header
+HTML_PRINT "${classHeading("<div class='era-actions-header'></div>")}"
+HTML_PRINT "<div class='era-actions-header'><span>Actions</span><span class='era-toggles'><button value='9400' class='era-button'>Filter</button></span></div>"
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-open class='era-section era-button-sample'>"
+PRINTL Action collection
+HTML_PRINT "${classHeading("<div class='era-actions-collection'></div>")}"
+HTML_PRINT "<era-open class='era-actions-collection'>"
+HTML_PRINT "<era-open class='era-actions-group'>"
+HTML_PRINT "<div class='era-actions-title'>Travel</div>"
+HTML_PRINT HOTPATCH_BUTTON("Move", 9401)
+HTML_PRINT HOTPATCH_BUTTON("Go Out", 9402)
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-open class='era-actions-group'>"
+HTML_PRINT "<div class='era-actions-title'>Rest</div>"
+HTML_PRINT HOTPATCH_BUTTON("Wait", 9403)
+HTML_PRINT HOTPATCH_BUTTON("Sleep", 9404)
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-close>"
 BINPUT
 SIF RESULT >= 9100 && RESULT <= 9101
   RADIO_SELECTION = RESULT - 9100

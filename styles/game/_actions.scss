@@ -1,15 +1,15 @@
 /* Shared spacing for action groups, toggle rows, panels, and inline command tiles. */
 :root { --era-actions-gap: 6px; }
 
-/* Heading row: expects a title and optional direct .era-toggles child.
-   The containing heading component supplies display: flex. */
+/* Heading row: expects a title and optional direct .era-toggles child. */
 .era-actions-header {
+  display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   min-height: max(22px, calc(1lh + var(--era-actions-gap)));
 
-  .era-main &::after { order: 1; min-width: 2ch; }
+  &::after { order: 1; min-width: 2ch; }
   > .era-toggles { order: 2; justify-content: flex-end; margin-left: auto; }
 }
 
@@ -28,17 +28,14 @@
   .output-text.is-empty, &:not(:has(button.choice)) { display: none; }
   > .line > span:has(> .era-actions-title) { flex-basis: 100%; }
 
-  /* Text-only group heading; the main screen adds its existing accent marker. */
+  /* Text-only group heading with a shared accent marker in every context. */
   .era-actions-title {
-    color: #8a949c;
+    color: #7dd8ed;
     font-size: .85em;
     text-transform: uppercase;
     letter-spacing: .06em;
 
-    .era-main & {
-      color: #7dd8ed;
-      &::before { content: ""; display: inline-block; margin-right: 1ch; border: 4px solid transparent; border-left-color: #65bddb; }
-    }
+    &::before { content: ""; display: inline-block; margin-right: 1ch; border: 4px solid transparent; border-left-color: #65bddb; }
   }
 
   /* Optional filter wrapper: its renderer lines join the same flex row. */
@@ -96,18 +93,4 @@
    of whether the checkbox is rendered inside an action group. */
 @each $kind, $color in (petting: #c0609a, chores: #4fa064, dialogue: #5a86c8, vaginal: #ffb8dc, anal: #cda47d, sm: #e87980, service: #fff09a) {
   .checkbox-control.era-kind-#{$kind} { --checkbox-accent: #{$color}; }
-}
-/* Main-screen description below target meters: expects native text lines.
-   Hide the legacy [Look] collapse control; the description stays expanded. */
-.era-look {
-  margin-top: var(--era-actions-gap);
-  .line:has(button.choice[data-value="3003"]) { display: none; }
-}
-/* Room narration: expects renderer .line children for chatter, radio, or room
-   descriptions. Hidden/marker-only contents do not keep the section visible. */
-.era-scene {
-  margin: 0 0 var(--era-actions-gap);
-  color: #b8c4cc;
-  font-style: italic;
-  &:not(:has(.line:not(.era-marker, [hidden]))) { display: none; }
 }

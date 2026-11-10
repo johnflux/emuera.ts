@@ -12,6 +12,6 @@
 .era-chip.era-afterglow { background: #3a1430; color: #ff9ad8; }
 .era-chip-label { margin-right: .6ch; opacity: .7; font-size: .8em; text-transform: uppercase; letter-spacing: .05em; }
 .era-player-status { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 0; margin-top: 6px; }
-.era-status-label { margin-right: 1ch; color: #8a949c; }
+.era-status-label { margin-right: 1ch; color: #8a949c; font-weight: normal; }
 .era-status + .era-status::before { content: "·"; margin: 0 .8ch; color: #5a646c; }
 .era-strong { font-weight: bold; }

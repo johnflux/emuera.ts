@@ -39,6 +39,9 @@ PRINTL Original title`, "<original>");
   assert.match(html, /role='radiogroup' aria-label='Home example'/);
   assert.match(html, /value='9102'[^>]*aria-disabled='true'/);
   assert.match(html, /<code>\.choice<\/code>/);
+  for (const component of ["era-actions-header", "era-actions-collection", "era-actions-panel"])
+    assert.match(html, new RegExp(`<code>\\.${component}</code>`));
+  assert.doesNotMatch(html, /class='era-main'/);
   const nativeChoices = snapshot.output.filter(item => item.type === "text" && item.text.includes("Choice "));
   assert.equal(nativeChoices.length, 8);
   assert.ok(nativeChoices.every(item => "newline" in item && !item.newline));
