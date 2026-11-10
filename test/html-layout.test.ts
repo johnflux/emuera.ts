@@ -1400,15 +1400,21 @@ test("active title fills the terminal below the visible interpreter header", asy
 
 test("title choices highlight the focused or hovered button without an outline", async () => {
   const css = styleSource("style");
-  assert.match(css, /button\.choice:is\(\.era-title-new, \.era-title-load, \.era-title-continue\):is\(:enabled:hover, :enabled:focus-visible, \.is-pending, \.is-selected\)::before \{[^}]*brightness\(1\.35\)/);
-  assert.match(css, /button\.choice:is\(\.era-title-new, \.era-title-load, \.era-title-continue\):enabled:focus-visible[^}]*outline: none;/);
-  assert.doesNotMatch(css, /\.era-launch-actions[^{}]+button\.choice[^{}]*::before \{/);
+  assert.match(css, /#terminal button:is\(\.era-title-new, \.era-title-load, \.era-title-continue\):is\(:enabled:hover, :enabled:focus-visible, \.is-pending, \.is-selected\)::before \{[^}]*brightness\(1\.35\)/);
+  assert.match(css, /#terminal button:is\(\.era-title-new, \.era-title-load, \.era-title-continue\):is\(:enabled:hover, :enabled:focus-visible, \.is-pending, \.is-selected\) \.era-title-label \{ filter: brightness\(1\.35\) saturate\(1\.25\) drop-shadow\(0 0 2px var\(--era-button-glow\)\) drop-shadow\(0 0 7px #34e9ff80\); \}/);
+  assert.match(css, /#terminal button:is\(\.era-title-new, \.era-title-load, \.era-title-continue\):enabled:focus-visible[^}]*outline: none;/);
+  assert.doesNotMatch(css, /button\.choice:is\(\.era-title-(new|load|continue)/);
+  assert.match(css, /#terminal \.screen\.is-active button:is\(\.era-title-new, \.era-title-load, \.era-title-continue\):enabled:is\(:hover, :focus-visible\),\s*#terminal \.screen\.is-active button:is\(\.era-title-new, \.era-title-load, \.era-title-continue\):enabled:is\(:hover, :focus-visible\) \* \{ color: #eaffff !important; \}/);
+  assert.match(css, /\.era-launch-actions:has\(> button:is\(\.era-title-new, \.era-title-load, \.era-title-continue\):hover\) > button:is\(\.era-title-new, \.era-title-load, \.era-title-continue\):not\(:hover\),\s*\.era-launch-actions:has\(> button:is\(\.era-title-new, \.era-title-load, \.era-title-continue\):focus-visible\) > button:is\(\.era-title-new, \.era-title-load, \.era-title-continue\):not\(:hover, :focus-visible\) \{ filter: grayscale\(\.85\) brightness\(\.6\); transform: scale\(\.92\); \}/);
 });
 
 test("Continue uses its supplied artwork and has a visibly disabled state", () => {
   const css = styleSource("style");
-  assert.match(css, /\.era-title-continue::before \{ background-image: url\("\/title\/continue\.webp"\); \}/);
-  assert.match(css, /\.era-title-continue:disabled:not\(\.is-pending, \.is-selected\)::before \{ opacity: \.35; filter: grayscale\(\.8\); \}/);
+  assert.match(css, /#terminal button\.era-title-continue::before \{ background-image: url\("\/title\/continue\.webp"\); \}/);
+  assert.match(css, /#terminal button\.era-title-continue:disabled:not\(\.is-pending, \.is-selected\)::before \{ opacity: \.35; filter: grayscale\(\.8\); \}/);
+  assert.match(css, /#terminal button:is\(\.era-title-new, \.era-title-load, \.era-title-continue\) \{[^}]*font: 600 clamp\(24px, min\(2\.6vw, 4\.5dvh\), 36px\)\/1\.1 var\(--ui-font-family\); letter-spacing: 3px;/);
+  assert.match(css, /#terminal button:is\(\.era-title-new, \.era-title-load, \.era-title-continue\)::after \{/);
+  assert.match(css, /#terminal button:is\(\.era-title-new, \.era-title-load, \.era-title-continue\) \.era-title-label \{ position: relative; z-index: 2; transition: filter 180ms cubic-bezier\(\.34, 1\.56, \.64, 1\); \}/);
 });
 
 test("quicksave controls live in the quick menu and below Config, not the burger menu", async () => {

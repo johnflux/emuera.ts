@@ -17,7 +17,7 @@ DO
 		HTML_PRINT "<p align='center'><img src='TW_title" + TOSTR(LOCAL, "000") + "'></p>"
 	NEXT
 	HTML_PRINT "<era-close>"
-	HTML_PRINT "<div class='era-launch-actions'><button value='2' class='era-title-continue' aria-disabled='true'>Continue</button><button value='0' class='era-title-new'>New game</button><button value='1' class='era-title-load'>Load game</button></div>"
+	HTML_PRINT "<div class='era-launch-actions'><button value='2' class='era-title-continue' aria-disabled='true'><span class='era-title-label'>Continue</span></button><button value='0' class='era-title-new'><span class='era-title-label'>New game</span></button><button value='1' class='era-title-load'><span class='era-title-label'>Load game</span></button></div>"
 	[IF_DEBUG]
 	HTML_PRINT "<div class='era-launch-debug'><button value='99'>Dev Quicktest</button><button value='3'>Quicktest settings</button></div>"
 	[ENDIF]
