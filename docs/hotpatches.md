@@ -108,8 +108,12 @@ Container sizing removes the
 overlap and shadow when the tray stacks on narrow layouts.
 The Intimate card theme preserves the tray's floating shadow rather than
 overriding it with the standard card shadow.
-Button suffixes have a 1ch left margin. All browser choice buttons use a single
-line, with native CSS `text-fit: shrink` when their content exceeds the available
+Button suffixes have a 1ch left margin.
+The shared small chrome button has a 26px minimum height. Send dims to 0.3
+when waiting for input with an empty command, but Continue remains undimmed.
+The opacity transition delays dimming by 120ms to avoid flicker and restores
+brightness without that delay when text is entered.
+All browser choice buttons use a single line, with native CSS `text-fit: shrink` when their content exceeds the available
 width. Direct text labels have a shrinkable wrapper so flex buttons can fit the
 label alongside their command number. This requires browser `text-fit` support.
 Trailing command numbers use a frontend-inserted flex spacer with a preferred
@@ -1163,14 +1167,22 @@ as borderless, layered sprites with names and status text overlaid at their feet
 without nameplate borders or backgrounds. Favor, requests and other useful status
 text remain visible without adding height below the images. Click a sprite
 or name to select them; only the sprite has the existing cyan bottom highlight
-and soft glow (no second highlight around the occupant), while the selected
-name is tinted blue. Other sprites are slightly muted. The cage entry is
+and soft glow (no second highlight around the occupant). The highlight has
+square corners and stays visible on hover and keyboard focus, including when
+the hover sprite replaces the normal sprite. The selected
+name is tinted blue. Other sprites are slightly muted. Hovering a selectable
+portrait or its name (or focusing its controls) restores its color, adds a
+light-blue underline to an unselected portrait, and enlarges its layered image
+by 10% without moving names or neighboring portraits. The selected underline
+stays cyan. Scaling leaves the lineup's spacing unchanged; reduced-motion
+settings disable the animation. The cage entry is
 smaller than a standing character, with its picture above (not behind) its text.
 Crowds scroll horizontally, keeping the selected person visible. The lineup
-stays exactly 216px high, including when empty, and bottom-aligns its occupants.
-The room stage stretches to match the Character Info column without reserving
-an additional minimum height; any spare space goes above the bottom-aligned
-lineup.
+prefers 216px high. When Character Info forces a taller room, the lineup fills
+the extra height and portraits scale uniformly, growing their widths too.
+The renderer records each loaded portrait's base height; CSS container units
+and zoom handle resizing and keep its hover/effect layers aligned. Labels
+remain unscaled, and crowds still scroll horizontally.
 Room chatter is absolutely positioned near the top of the scene so it does not
 push the sprites down or intercept clicks. Blank and diamond-only chatter lines
 are hidden, and the panel disappears when no visible lines remain. Hidden lines

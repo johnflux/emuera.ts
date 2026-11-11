@@ -6,13 +6,14 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
+import { runInNewContext } from "node:vm";
 import test from "node:test";
 import { parseFragment } from "parse5";
 // @ts-ignore Browser fixture module is also consumed by the catalog.
 import { chromeButtonSamples } from "../web/chrome-button-samples.js";
 
 const buttonVariants = [
-  "primary", "danger", "quiet", "small", "large", "tab", "menu-item", "icon", "continue",
+  "primary", "danger", "quiet", "small", "large", "tab", "menu-item", "icon", "continue", "send",
 ].map(name => `ui-button--${name}`);
 const productionSamples = readdirSync("web").filter(name => /\.(?:html|js)$/.test(name) && name !== "chrome-button-samples.js")
   .flatMap(name => {
@@ -33,6 +34,26 @@ test("production chrome buttons only compose the shared variants", () => {
   }
   const styles = readFileSync("styles/shared/_chrome-buttons.scss", "utf8");
   assert.deepEqual([...new Set(styles.match(/ui-button--[\w-]+/g))].sort(), [...buttonVariants].sort());
+});
+
+test("Send dims only while waiting for non-wait input with an empty command", () => {
+  const source = readFileSync("web/app.js", "utf8");
+  const helper = source.slice(source.indexOf("function updateSendAppearance("), source.indexOf("function updateControls("));
+  for (const [kind, value, busy, expected] of [
+    ["integer", "", false, true], ["string", "", false, true],
+    ["integer", "4", false, false], ["string", " ", false, false],
+    ["wait", "", false, false], ["integer", "", true, false],
+    [null, "", false, false],
+  ] as const) {
+    const send = { dataset: { empty: "" } };
+    runInNewContext(`${helper}\nupdateSendAppearance();`, {
+      send, command: { value }, busy, input: kind ? { kind } : null,
+    });
+    assert.equal(send.dataset.empty, String(expected));
+  }
+  const styles = readFileSync("styles/shared/_chrome-buttons.scss", "utf8");
+  assert.match(styles, /\.ui-button--small \{[^}]*min-height: 26px/);
+  assert.match(styles, /\.ui-button--send\[data-empty="true"\] \{ opacity: \.3; transition-delay: 0s, 0s, 0s, 120ms/);
 });
 
 test("every chrome button variant has a self-contained catalog fixture", () => {

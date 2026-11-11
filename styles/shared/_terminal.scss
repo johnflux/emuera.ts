@@ -108,11 +108,11 @@ a { color: #8ddaff; }
 .sprite-clip { position: absolute; left: 0; overflow: hidden; }
 .sprite img, .sprite canvas { position: absolute; max-width: none; }
 /* The selected character's picture (TARGET): a soft aqua glow behind it and a bar beneath, matching the game's aqua name. */
-.screen.is-active button.choice.is-target .sprite-clip:not(.sprite-hover) { background: radial-gradient(ellipse 60% 55% at 50% 60%, #66ffff2e, #66ffff0a 70%, transparent); box-shadow: inset 0 -3px 0 #66ffffb0; border-radius: 6px; }
-.screen.is-active button.choice.is-target:enabled:is(:hover, :focus-visible) .sprite-clip:not(.sprite-hover) { background-color: #ffffff12; }
+.screen.is-active button.choice.is-target .sprite-clip { background: radial-gradient(ellipse 60% 55% at 50% 60%, #66ffff2e, #66ffff0a 70%, transparent); box-shadow: inset 0 -3px 0 #66ffffb0; border-radius: 0; }
+.screen.is-active button.choice.is-target:enabled:is(:hover, :focus-visible) .sprite-clip { background-color: #ffffff12; }
 /* The other characters' pictures are slightly faded and desaturated; hovering one restores it. */
-.screen.is-active button.choice.is-not-target .sprite-clip { opacity: .8; filter: grayscale(.45); transition: opacity 180ms ease, filter 180ms ease; }
-.screen.is-active button.choice.is-not-target:enabled:is(:hover, :focus-visible) .sprite-clip { opacity: 1; filter: none; }
+.screen.is-active button.choice.is-not-target .sprite-clip { opacity: var(--portrait-opacity, .8); filter: var(--portrait-filter, grayscale(.45)); box-shadow: var(--portrait-hover-shadow, none); transition: opacity 180ms ease, filter 180ms ease; }
+.screen.is-active button.choice.is-not-target:enabled:is(:hover, :focus-visible) .sprite-clip { opacity: 1; filter: none; box-shadow: inset 0 -3px 0 #9bd5ff; }
 @media (prefers-reduced-motion: reduce) { .screen.is-active button.choice.is-not-target .sprite-clip { transition: none; } }
 .sprite-hover { visibility: hidden; }
 .screen.is-active :is(.has-tooltip, button.choice):not(:disabled):not([aria-disabled="true"]):is(:hover, :focus-visible) .sprite-hover { visibility: visible; }

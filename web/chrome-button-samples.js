@@ -5,6 +5,8 @@ export const chromeButtonSamples = [
   { name: "Danger", html: '<button class="ui-button ui-button--danger" type="button">Delete</button>' },
   { name: "Quiet", html: '<button class="ui-button ui-button--quiet" type="button">Cancel</button>' },
   { name: "Small", html: '<button class="ui-button ui-button--small" type="button">Copy</button>' },
+  { name: "Send", html: '<button class="ui-button ui-button--primary ui-button--small ui-button--send" type="button">Send</button>' },
+  { name: "Empty Send", html: '<button class="ui-button ui-button--primary ui-button--small ui-button--send" data-empty="true" type="button">Send</button>' },
   { name: "Large", html: '<button class="ui-button ui-button--large" type="button">Continue</button>' },
   { name: "Navigation link", html: '<a class="ui-button" href="#components">UI components</a>' },
   { name: "Tab", html: '<button class="ui-button ui-button--tab" type="button" role="tab" aria-selected="false">History</button>' },

@@ -102,6 +102,7 @@ const status = document.querySelector("#status");
 if (componentSample) terminal.before(status);
 const command = document.querySelector("#command");
 const send = document.querySelector("#submit");
+send.classList.add("ui-button--send");
 const report = document.querySelector("#compatibility");
 const tooltip = document.querySelector("#game-tooltip");
 let tooltipTarget = null;
@@ -424,6 +425,10 @@ function endActivity() {
   activityChip.textContent = seconds(total);
   activityChip.title = `Last step took ${seconds(total)}: script ${seconds(script)}, render ${seconds(total - script)}`;
 }
+function updateSendAppearance() {
+  send.dataset.empty = String(!busy && !!input && input.kind !== "wait" && command.value === "");
+}
+
 function updateControls() {
   for (const button of terminal.querySelectorAll(".screen.is-active .era-title-continue")) {
     if (componentSample === "buttons") continue;
@@ -451,6 +456,7 @@ function updateControls() {
   send.disabled = !input;
   send.setAttribute("aria-disabled", String(busy || !input));
   send.textContent = input?.kind === "wait" ? "Continue" : "Send";
+  updateSendAppearance();
   command.title = !input ? "Not waiting for input" : input.singleCharacter
     ? input.kind === "integer" ? "Type one digit (no Enter needed)" : "Type one character (no Enter needed)"
     : chatting ? "Enter a command number, or text to speak to the selected character"
@@ -2169,6 +2175,15 @@ async function renderSteps(steps, fresh = false, keepFocus = false, toBottom = f
     profileEnd("render.snapshots", phaseStarted);
     phaseStarted = profileStart();
     await Promise.all(pendingImages);
+    for (const portrait of outputRoot.querySelectorAll(".era-room-stage .era-portrait:not([data-portrait-height])")) {
+      const clip = portrait.querySelector(".sprite-clip");
+      if (!clip) continue;
+      const height = parseFloat(clip.style.height);
+      if (!Number.isFinite(height) || height <= 0)
+        throw new Error("Portrait has an invalid rendered height");
+      portrait.dataset.portraitHeight = String(height);
+      portrait.style.setProperty("--portrait-height", `${height}px`);
+    }
     profileEnd("render.images", phaseStarted);
   } finally {
     phaseStarted = profileStart();
@@ -3306,6 +3321,7 @@ let commandDraft = "";
 const commandHint = document.querySelector("#command-hint");
 const commandHintPrefix = document.querySelector("#command-hint-prefix");
 function showCommandHint(label = "") {
+  updateSendAppearance();
   commandHintPrefix.textContent = label ? command.value : "";
   commandHintPrefix.style.marginLeft = `${-command.scrollLeft}px`;
   commandHint.textContent = label ? ` [${label}]` : "";

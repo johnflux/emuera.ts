@@ -1468,6 +1468,104 @@ test("repeat button fits the action card corner and displays an X hint", { skip:
   }
 });
 
+test("portrait hover scales images in place and distinguishes hover from selection", {
+  skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH",
+}, async () => {
+  const style = (await readFile(new URL("../web/generated/style.css", import.meta.url), "utf8"))
+    .replaceAll(":hover", ".test-hover").replaceAll(":focus-visible", ".test-focus")
+    .replaceAll(":focus-within", ".test-focus-within");
+  const html = `<!doctype html><style>${style}
+    .era-portrait > .line, .sprite-clip { transition: none !important; }
+    </style><body>
+    <div class="screen is-active"><div class="era-occupant-list"><div class="era-occupant"><div class="era-portrait">
+      <div class="line">
+      <button class="choice is-target"><span class="sprite">
+        <span class="sprite-clip sprite-normal" style="width:216px;height:216px"></span>
+        <span class="sprite-clip sprite-hover" style="width:216px;height:216px"></span>
+      </span></button>
+      </div>
+    </div><button class="choice era-occupant-label">Name</button></div>
+    <div class="era-occupant" id="neighbor">Neighbor</div></div></div><script>
+      const button = document.querySelector("button"), portrait = document.querySelector(".era-portrait");
+      const label = document.querySelector(".era-occupant-label");
+      const occupant = portrait.closest(".era-occupant");
+      const rect = element => {
+        const r = element.getBoundingClientRect();
+        return {left:r.left, top:r.top, width:r.width, height:r.height};
+      };
+      const layout = () => ({image:rect(portrait.querySelector(".sprite-clip")), label:rect(label),
+        neighbor:rect(document.querySelector("#neighbor")), occupant:rect(occupant)});
+      const initialLayout = layout();
+      const measure = () => [...document.querySelectorAll(".sprite-clip")].map(clip => {
+        const css = getComputedStyle(clip);
+        return { visibility: css.visibility, shadow: css.boxShadow,
+          radius: css.borderRadius, glow: css.backgroundImage };
+      });
+      const states = [measure()];
+      for (const [element, state] of [[button, "test-hover"], [button, "test-focus"],
+        [portrait, "test-hover"], [portrait, "test-focus-within"]]) {
+        element.classList.add(state);
+        states.push(measure());
+        element.classList.remove(state);
+      }
+      button.classList.replace("is-target", "is-not-target");
+      const unselected = measure();
+      const hoverStates = [];
+      for (const [element, state] of [[button, "test-hover"], [button, "test-focus"],
+        [portrait, "test-hover"], [portrait, "test-focus-within"],
+        [occupant, "test-hover"], [occupant, "test-focus-within"]]) {
+        element.classList.add(state);
+        hoverStates.push({layers:measure(), layout:layout()});
+        element.classList.remove(state);
+      }
+      label.disabled = true;
+      button.disabled = true;
+      occupant.classList.add("test-hover");
+      const disabled = {layers:measure(), layout:layout()};
+      document.querySelector(".screen").classList.remove("is-active");
+      const inactive = layout();
+      document.body.textContent = JSON.stringify({states, unselected, hoverStates,
+        initialLayout, disabled, inactive});
+    </script>`;
+  const profile = await mkdtemp(join(process.cwd(), ".era-portrait-highlight-"));
+  try {
+    const args = ["--headless", "--disable-gpu", "--no-first-run",
+      `--user-data-dir=${profile}`, "--dump-dom"];
+    if (process.platform === "linux" && process.getuid?.() === 0) args.push("--no-sandbox");
+    args.push(`data:text/html;base64,${Buffer.from(html).toString("base64")}`);
+    const { stdout } = await execute(browser!, args, { maxBuffer: 8 * 1024 * 1024, timeout: 30000 });
+    const match = stdout.match(/<body[^>]*>([\s\S]*?)<\/body>/);
+    assert.ok(match);
+    type Layer = { visibility: string; shadow: string; radius: string; glow: string };
+    type Rect = { left: number; top: number; width: number; height: number };
+    type Layout = { image: Rect; label: Rect; neighbor: Rect; occupant: Rect };
+    const result = JSON.parse(match[1]) as { states: Layer[][]; unselected: Layer[];
+      hoverStates: Array<{layers:Layer[]; layout:Layout}>; initialLayout:Layout;
+      disabled:{layers:Layer[]; layout:Layout}; inactive:Layout };
+    assert.equal(result.states.length, 5);
+    for (const [index, layers] of result.states.entries()) {
+      assert.deepEqual(layers.map(layer => layer.visibility),
+        index === 0 ? ["visible", "hidden"] : ["hidden", "visible"]);
+      for (const layer of layers) {
+        assert.equal(layer.radius, "0px");
+        assert.equal(layer.shadow, "rgba(102, 255, 255, 0.69) 0px -3px 0px 0px inset");
+        assert.match(layer.glow, /^radial-gradient/);
+      }
+    }
+    assert.ok(result.unselected.every(layer => layer.shadow === "none" && layer.glow === "none"));
+    for (const state of result.hoverStates) {
+      assert.ok(state.layers.every(layer => layer.shadow === "rgb(155, 213, 255) 0px -3px 0px 0px inset"));
+      assert.ok(Math.abs(state.layout.image.width / result.initialLayout.image.width - 1.1) < .001);
+      assert.ok(Math.abs(state.layout.image.height / result.initialLayout.image.height - 1.1) < .001);
+      for (const part of ["label", "neighbor", "occupant"] as const)
+        assert.deepEqual(state.layout[part], result.initialLayout[part], `${part} stays stationary`);
+    }
+    assert.deepEqual(result.disabled.layout, result.initialLayout);
+    assert.ok(result.disabled.layers.every(layer => layer.shadow === "none"));
+    assert.deepEqual(result.inactive, result.initialLayout);
+  } finally { await rm(profile, { recursive: true, force: true }); }
+});
+
 test("room height follows rendered portraits without clipping", { skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH" }, async () => {
   const [style, responsive] = await Promise.all([
     readFile(new URL("../web/generated/style.css", import.meta.url), "utf8"),
@@ -1479,13 +1577,24 @@ test("room height follows rendered portraits without clipping", { skip: browser 
       <div class="era-room-stage"><div class="era-occupants"><div class="era-occupant-list">
         ${sizes.length ? sizes.map(portrait).join("") : '<div class="era-alone-message">Nobody here</div>'}
       </div></div></div>
-    </div>`).join("");
+    </div>`).join("") + `
+    <div class="fixture" data-case="growing">
+      <div class="era-room-stage" style="height:400px;box-sizing:content-box">
+        <div class="era-occupants"><div class="era-occupant-list">
+          ${portrait(216).replace('class="era-portrait"', 'class="era-portrait" data-portrait-height="216" style="--portrait-height:216px"')}
+        </div></div>
+      </div>
+    </div>`;
   const html = `<!doctype html><meta charset="utf-8"><style>${style}\n${responsive}</style><body class="MODE">
     <div class="screen is-active">${fixtures}</div><script>
       const results = [...document.querySelectorAll(".fixture")].map(f => {
         const list = f.querySelector(".era-occupant-list").getBoundingClientRect();
         const portraits = [...f.querySelectorAll(".sprite-clip")].map(e => e.getBoundingClientRect());
-        return { name: f.dataset.case, height: list.height,
+        const square = portraits.every(r => Math.abs(r.width - r.height) < 1);
+        const grows = portraits.every(r => r.height >= 395);
+        if (f.dataset.case === "growing") f.querySelector(".era-room-stage").style.height = "216px";
+        const resets = f.dataset.case !== "growing" || Math.abs(f.querySelector(".sprite-clip").getBoundingClientRect().height - 216) < 1;
+        return { name: f.dataset.case, height: list.height, square, grows, resets,
           fits: portraits.every(r => r.top >= list.top - 1 && r.bottom <= list.bottom + 1) };
       });
       document.body.textContent = JSON.stringify(results);
@@ -1499,8 +1608,12 @@ test("room height follows rendered portraits without clipping", { skip: browser 
       const { stdout } = await execute(browser!, args, { maxBuffer: 8 * 1024 * 1024, timeout: 30000 });
       const match = stdout.match(/<body[^>]*>([\s\S]*?)<\/body>/);
       assert.ok(match);
-      const results = JSON.parse(match[1]) as Array<{ name: string; height: number; fits: boolean }>;
+      const results = JSON.parse(match[1]) as Array<{ name: string; height: number; fits: boolean; square: boolean; grows: boolean; resets: boolean }>;
       for (const result of results) {
+        if (result.name === "growing") {
+          assert.ok(result.square && result.grows && result.resets, JSON.stringify(result));
+          continue;
+        }
         const expected = result.name === "empty" ? 216 : Math.max(...result.name.split(",").map(Number));
         assert.ok(result.fits, `${mode} ${result.name}: full portrait fits`);
         assert.ok(Math.abs(result.height - expected) < 4, `${mode} ${result.name}: room height follows portrait: ${JSON.stringify(result)}`);

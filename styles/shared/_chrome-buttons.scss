@@ -24,7 +24,9 @@
 .ui-button--primary { --button-background: var(--ui-color-accent-strong, #b5d5c5); --button-border: var(--ui-color-accent-strong, #b5d5c5); --button-color: #162b25; --button-hover-background: #d1e6da; --button-hover-border: #d1e6da; }
 .ui-button--danger { --button-background: #3a2024; --button-border: #a65c60; --button-color: #ffe4e2; --button-hover-background: #522a30; --button-hover-border: #e08083; }
 .ui-button--quiet { --button-background: transparent; --button-border: transparent; --button-color: var(--ui-color-muted, #9ba7b8); --button-hover-background: #ffffff0d; --button-hover-border: #ffffff24; }
-.ui-button--small { --button-padding: 4px 8px; min-height: 28px; }
+.ui-button--small { --button-padding: 4px 8px; min-height: 26px; }
+.ui-button--send { transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease, opacity 160ms ease; }
+.ui-button--send[data-empty="true"] { opacity: .3; transition-delay: 0s, 0s, 0s, 120ms; }
 .ui-button--large { --button-padding: 12px 16px; min-height: 48px; }
 .ui-button[aria-busy="true"] { cursor: progress; }
 .ui-button[aria-busy="true"]::before { content: ""; width: 1em; height: 1em; flex-shrink: 0; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: ui-button-spin .8s linear infinite; }
