@@ -32,6 +32,109 @@ const browser = [
   process.env.PROGRAMFILES && join(process.env.PROGRAMFILES, "Google/Chrome/Application/chrome.exe"),
 ].find((path): path is string => !!path && existsSync(path));
 
+test("direction arrows and local filters preserve category tones, numbers, mutual actions and redraw state", {
+  skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH",
+}, async () => {
+  const [style, source] = await Promise.all([
+    readFile(new URL("../web/generated/style.css", import.meta.url), "utf8"),
+    readFile(new URL("../web/action-directions.js", import.meta.url), "utf8"),
+  ]);
+  const markup = `<div class="era-card era-actions-collection">
+    <div class="era-actions-header"><span>Actions</span><span class="era-toggles">
+      <button class="choice era-chip-button" id="category">Service</button></span></div>
+    <div class="era-actions-group" id="giving"><div class="era-actions-title">Give</div>
+      <button id="give" class="choice era-button era-button-tone-service era-action-give" data-command-number="2">Give Blowjob</button></div>
+    <div class="era-actions-group" id="receiving"><div class="era-actions-title">Receive</div>
+      <button id="receive" class="choice era-button era-button-tone-service era-action-receive" data-command-number="81">Blowjob</button></div>
+    <div class="era-actions-group" id="shared"><div class="era-actions-title">Touch</div>
+      <button id="both" class="choice era-button era-action-both" data-command-number="311">Embrace</button>
+      <button id="unknown" class="choice era-button" data-command-number="21">Do Nothing</button></div>
+  </div>`;
+  const html = `<!doctype html><meta charset="utf-8"><style>${style}</style><body>
+    <div class="screen is-active"><div class="era-main" data-closed="closed">${markup}</div></div><script>
+    ${source.replace(/^export /gm, "")}
+    ${decorateButtons}
+    const main = document.querySelector(".era-main"), state = {give:true, receive:true};
+    let busy = false, submissions = 0;
+    main.addEventListener("click", event => { if (event.target.id === "category") submissions++; });
+    const canActivate = button => !busy && !button.disabled && !!button.closest(".screen.is-active");
+    const setup = () => setupActionDirectionFilters(main, state, canActivate);
+    const filter = direction => main.querySelector('[data-direction="' + direction + '"]');
+    const visible = () => Object.fromEntries(["give", "receive", "both", "unknown"].map(id =>
+      [id, main.querySelector("#" + id).getClientRects().length > 0]));
+    setup(); setup();
+    const give = main.querySelector("#give");
+    describeActionDirection(give, (button, description) => button.dataset.tooltip = description);
+    const result = {
+      controls: main.querySelectorAll(".era-action-direction-filter").length,
+      arrows: ["give","receive","both"].map(id => {
+        const button = main.querySelector("#" + id), css = getComputedStyle(button, "::before");
+        return {content:css.content, color:css.color, text:button.textContent};
+      }),
+      tones: ["give","receive"].map(id => getComputedStyle(main.querySelector("#" + id)).backgroundImage),
+      accessible: give.getAttribute("aria-description"),
+      tooltip: give.dataset.tooltip,
+      all: visible(),
+    };
+    filter("give").click();
+    result.receiveOnly = visible();
+    result.hiddenGroup = getComputedStyle(main.querySelector("#giving")).display;
+    result.pressed = filter("give").getAttribute("aria-pressed");
+    result.noCommandValue = !filter("give").hasAttribute("data-value");
+    filter("receive").click();
+    result.neither = visible();
+    filter("give").click();
+    result.giveOnly = visible();
+    main.innerHTML = ${JSON.stringify(markup)};
+    setup();
+    result.redraw = visible();
+    main.querySelector("#category").click();
+    result.categorySubmissions = submissions;
+    busy = true; filter("give").click(); busy = false;
+    result.busy = visible();
+    filter("give").disabled = true; filter("give").click(); filter("give").disabled = false;
+    result.disabled = visible();
+    main.closest(".screen").classList.remove("is-active");
+    filter("give").click();
+    result.stale = visible();
+    const invalid = document.createElement("button");
+    invalid.className = "era-action-give era-action-receive";
+    try { describeActionDirection(invalid, () => {}); }
+    catch (error) { result.invalid = error.message; }
+    document.body.textContent = JSON.stringify(result);
+    </script>`;
+  const profile = await mkdtemp(join(process.cwd(), ".era-direction-filter-"));
+  try {
+    const { stdout } = await execute(browser!, ["--headless", "--disable-gpu", "--no-first-run",
+      `--user-data-dir=${profile}`, "--dump-dom",
+      `data:text/html;base64,${Buffer.from(html).toString("base64")}`],
+      { maxBuffer: 8 * 1024 * 1024, timeout: 30000 });
+    const match = stdout.match(/<body[^>]*>([\s\S]*?)<\/body>/);
+    assert.ok(match);
+    const result = JSON.parse(match[1]);
+    assert.equal(result.controls, 2);
+    assert.deepEqual(result.arrows, [
+      { content: '"→" / ""', color: "rgb(88, 189, 99)", text: "Give Blowjob[2]" },
+      { content: '"←" / ""', color: "rgb(87, 159, 255)", text: "Blowjob[81]" },
+      { content: '"↔" / ""', color: "rgb(222, 222, 222)", text: "Embrace[311]" },
+    ]);
+    assert.equal(result.tones[0], result.tones[1]);
+    assert.equal(result.accessible, "Give: You to your partner");
+    assert.equal(result.tooltip, result.accessible);
+    assert.deepEqual(result.all, {give:true, receive:true, both:true, unknown:true});
+    assert.deepEqual(result.receiveOnly, {give:false, receive:true, both:true, unknown:true});
+    assert.equal(result.hiddenGroup, "none");
+    assert.equal(result.pressed, "false");
+    assert.equal(result.noCommandValue, true);
+    assert.deepEqual(result.neither, {give:false, receive:false, both:false, unknown:true});
+    const giving = {give:true, receive:false, both:true, unknown:true};
+    for (const key of ["giveOnly", "redraw", "busy", "disabled", "stale"])
+      assert.deepEqual(result[key], giving, key);
+    assert.equal(result.categorySubmissions, 1);
+    assert.match(result.invalid, /only one direction class/);
+  } finally { await rm(profile, { recursive: true, force: true }); }
+});
+
 test("room avatar clicks use the label action without duplicating buttons or activating stale portraits", {
   skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH",
 }, async () => {

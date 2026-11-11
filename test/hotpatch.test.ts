@@ -59,6 +59,46 @@ HTML_PRINT HOTPATCH_BUTTON("Bad", 0, "", "invented")`, "<button-test>");
   }
 });
 
+test("action direction is player-relative, independent of category and aware of frozen or sleeping contact", () => {
+  const source = readFileSync(new URL("../hotpatch/MAIN_SCREEN_COMMANDS.ERB", import.meta.url), "utf8");
+  const game = emptyGame();
+  game.names.set("CFLAG", new Map([["イタズラ", 1]]));
+  indexScript(game, source.slice(source.indexOf("@HOTPATCH_ACTION_DIRECTION("),
+    source.indexOf("@HOTPATCH_ACTION_KIND(")), "<direction-helper>");
+  const cases = [
+    [0, "give"], [1, "give"], [2, "give"], [40, "give"], [60, "give"], [65, "give"],
+    [96, "give"], [100, "give"], [123, "give"], [124, "give"], [310, "give"],
+    [22, "receive"], [64, "receive"], [80, "receive"], [81, "receive"], [92, "receive"],
+    [99, "receive"], [120, "receive"], [125, "receive"], [130, "receive"], [305, "receive"],
+    [19, "both"], [20, "both"], [121, "both"], [126, "both"], [311, "both"], [312, "both"],
+    [9, ""], [21, ""], [24, ""], [300, ""], [352, ""], [490, ""], [809, ""], [9000, ""],
+  ] as const;
+  indexScript(game, `@SYSTEM_TITLE
+ADDVOIDCHARA
+ADDVOIDCHARA
+MASTER = 0
+TARGET = 1
+${cases.map(([command]) => `PRINTFORML ${command}:%HOTPATCH_ACTION_DIRECTION(${command})%`).join("\n")}
+FLAG:70 = 1
+PRINTFORML Frozen:%HOTPATCH_ACTION_DIRECTION(311)%,%HOTPATCH_ACTION_DIRECTION(20)%
+FLAG:70 = 0
+CFLAG:0:イタズラ = 2
+PRINTFORML Sleeping:%HOTPATCH_ACTION_DIRECTION(311)%,%HOTPATCH_ACTION_DIRECTION(20)%
+TARGET = MASTER
+PRINTFORML Self:%HOTPATCH_ACTION_DIRECTION(0)%
+TARGET = -1
+PRINTFORML Alone:%HOTPATCH_ACTION_DIRECTION(125)%
+QUIT`, "<direction-test>");
+  for (const jit of [false, true]) {
+    const snapshot = new Runtime(game, undefined, { jit }).start();
+    assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
+    assert.deepEqual(snapshot.output.flatMap(item => item.type === "text" ? [item.text] : []), [
+      ...cases.map(([command, direction]) => `${command}:${direction}`),
+      "Frozen:give,give", "Sleeping:give,give", "Self:", "Alone:",
+    ]);
+  }
+});
+
 test("custom commands use shared action buttons and retain availability and highlighted labels", () => {
   const source = readFileSync(new URL("../hotpatch/MAIN_SCREEN_COMMANDS.ERB", import.meta.url), "utf8");
   const attributes = readFileSync(new URL("../hotpatch/INFO_PALAM.ERB", import.meta.url), "utf8");
@@ -1060,6 +1100,9 @@ PREVCOM = ${previous}
 ADD_PREVCUSTOMCOM = ${custom}
 CALL HOTPATCH_PRINT_COM(360)
 CALL HOTPATCH_PRINT_COM(361)
+CALL HOTPATCH_PRINT_COM(0)
+CALL HOTPATCH_PRINT_COM(125)
+CALL HOTPATCH_PRINT_COM(311)
 CALL HOTPATCH_FILTERS(63)
 PRINTFORML Kinds: %HOTPATCH_ACTION_KIND(3)%,%HOTPATCH_ACTION_KIND(5)%,%HOTPATCH_ACTION_KIND(100)%,%HOTPATCH_ACTION_KIND(81)%
 QUIT`, "<filter-colors-test>");
@@ -1074,6 +1117,9 @@ QUIT`, "<filter-colors-test>");
       assert.match(html, new RegExp(`<button value='${id}' class='era-button era-button-tone-petting'`),
         `command ${id} shares the Petting pink`);
     }
+    for (const [id, direction] of [[0, "give"], [125, "receive"], [311, "both"]])
+      assert.match(html, new RegExp(`<button value='${id}' class='era-button [^']*era-action-${direction}'[^>]*data-command-number='${id}'`));
+    assert.doesNotMatch(html, /[←→↔]/, "direction arrows are CSS-only");
     if (repeat !== null) assert.match(html, new RegExp(`<button value='${repeat}' class='era-repeat' title='Repeat last action' aria-label='Repeat last action'></button></span></div>$`));
     else assert.doesNotMatch(html, /era-repeat|🔁/);
     assert.ok(snapshot.output.some((item) => item.type === "text" && item.text === "Kinds: vaginal,anal,sm,service"));

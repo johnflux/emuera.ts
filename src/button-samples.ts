@@ -6,6 +6,14 @@ const place = (classes: string, note = "") => button(`era-move-place ${classes}`
 
 /** Every game button variant is explicit on the control, not inferred from its enclosing screen. */
 export const GAME_BUTTON_SAMPLES = [
+  ...(["give", "receive", "both"] as const).map((direction, i) => ({
+    name: `Action direction / ${direction}`,
+    html: `<button value='${[0, 125, 311][i]}' class='era-button era-action-${direction}' data-command-number='${[0, 125, 311][i]}' aria-description='${direction}'>${["Caress", "Be Caressed", "Embrace"][i]}</button>`,
+  })),
+  ...["true", "false"].map(pressed => ({
+    name: `Action direction filter / ${pressed}`,
+    html: `<button value='101' class='era-chip-button era-action-direction-filter${pressed === "true" ? " era-current" : ""}' aria-pressed='${pressed}'>Give</button>`,
+  })),
   ...["chores", "petting", "dialogue", "vaginal", "anal", "sm", "service"].map(tone => ({
     name: `Action / ${tone}`, html: `<button value='101' class='era-button era-button-tone-${tone}' data-command-number='101'>Example action</button>`,
   })),

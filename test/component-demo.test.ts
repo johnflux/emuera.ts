@@ -28,6 +28,8 @@ PRINTL Original title`, "<original>");
   for (const value of [100, 102, 103])
     assert.equal((html.match(new RegExp(`value='${value}'`, "g")) ?? []).length, 1, "helper variants are not repeated for disabled states");
   assert.match(html, /data-command-number='100'/);
+  for (const direction of ["give", "receive", "both"])
+    assert.match(html, new RegExp(`era-button era-action-${direction}`));
   assert.doesNotMatch(html, /title='Production HOTPATCH_BUTTON'/);
   assert.match(html, /era-component-path/);
   assert.match(html, /<code>\.era-button<\/code>/);

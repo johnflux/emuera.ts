@@ -41,6 +41,28 @@ own category-tone classes; containers only arrange them.
 Hover and keyboard focus highlight only the command number in selection yellow;
 the label keeps its normal or game-supplied highlight color.
 
+### Action direction
+
+`HOTPATCH_ACTION_DIRECTION` centrally classifies standard main-screen actions
+from the player's perspective. `HOTPATCH_PRINT_COM` adds `era-action-give`,
+`era-action-receive` or `era-action-both` alongside the existing category tone.
+Unclassified, self-directed, management and custom actions remain unmarked.
+Kissing and embracing are mutual normally and giving during stopped time or
+sleeping mischief. Penetration direction describes who penetrates whom, not
+who leads a position.
+
+Shared button CSS supplies the leading arrows only: green right arrow for Give,
+blue left arrow for Receive and neutral double arrow for Both. The renderer
+adds direction to tooltips and accessible descriptions without changing labels,
+command numbers or availability. Controller hints retain their `::after`.
+
+`web/action-directions.js` adds independent Give / Receive pressed chips to
+the action header, using these classes rather than a second command map.
+Both matches either enabled direction; unmarked actions remain visible.
+Empty groups are hidden. Existing game-category filters still determine which
+commands the game emits. Direction selections survive redraws within a browser
+run and reset on a new/resumed run; no game flags, saves or sidecars are changed.
+
 `era-guard-control` is removed. Native `PRINTC` menus still use the renderer's
 `print-cell` compatibility path; hotpatched main commands no longer need it.
 Remaining footer, tab, grid and card containers group content rather than

@@ -146,6 +146,13 @@ button.choice.era-button-tone-vaginal { --action-tone: #432c3c; }
 button.choice.era-button-tone-anal { --action-tone: #33291f; }
 button.choice.era-button-tone-sm { --action-tone: #381c21; }
 button.choice.era-button-tone-service { --action-tone: #36351f; }
+button.choice.era-button:is(.era-action-give, .era-action-receive, .era-action-both)::before {
+  flex: none; margin-right: .3em; font: bold 1.1em/1 system-ui, sans-serif; pointer-events: none;
+}
+button.choice.era-button.era-action-give::before { content: "\2192" / ""; color: #58bd63; }
+button.choice.era-button.era-action-receive::before { content: "\2190" / ""; color: #579fff; }
+button.choice.era-button.era-action-both::before { content: "\2194" / ""; color: #dedede; }
+button.choice.era-button[hidden] { display: none; }
 .era-button .interactive-label { text-decoration: none; }
 .era-button .command-number { margin-left: .75ch; font-size: var(--era-font-size-small); }
 .era-button-suffix { margin-left: auto; }

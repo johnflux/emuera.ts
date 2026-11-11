@@ -511,6 +511,7 @@ RETURNF 6
 #DIM DYNAMIC nKojo
 #DIMS DYNAMIC COM_NAME
 #DIMS DYNAMIC sButtonClass
+#DIMS DYNAMIC sDirection
 IF nCom == 352
 	HTML_PRINT HOTPATCH_BUTTON("Relationship...", 352)
 	RETURN 0
@@ -520,6 +521,9 @@ IF GROUPMATCH(nCom, 360, 361)
 ELSE
 	sButtonClass '= "era-button-tone-" + HOTPATCH_ACTION_KIND(nCom)
 ENDIF
+sDirection '= HOTPATCH_ACTION_DIRECTION(nCom)
+SIF STRLENS(sDirection)
+	sButtonClass += " era-action-" + sDirection
 VARSET COM_DISPLAY_COLOR
 VARSET COM_DISPLAY_BEHAVIOR
 CALL COM_DISPLAY_TR(nCom) ;Custom code, control alternative command names.
@@ -566,6 +570,26 @@ ELSEIF STRLENS(TRAINNAME_TR(nCom))
 	RESETCOLOR
 ENDIF
 RETURN nKojo
+
+; Direction is from the player's perspective, not the command's category or initiative.
+; Unlisted, self-directed and custom commands have no direction marker.
+@HOTPATCH_ACTION_DIRECTION(nCommand)
+#FUNCTIONS
+#DIM DYNAMIC nCommand
+SIF TARGET <= 0 || TARGET == MASTER
+	RETURNF ""
+IF GROUPMATCH(nCommand, 19, 20, 311, 312)
+	SIF FLAG:70 || CFLAG:MASTER:イタズラ == 2
+		RETURNF "give"
+	RETURNF "both"
+ENDIF
+SIF GROUPMATCH(nCommand, 121, 126)
+	RETURNF "both"
+SIF GROUPMATCH(nCommand, 22, 64, 80, 81, 82, 83, 84, 85, 88, 90, 91, 92, 93, 94, 99, 120, 125, 127, 130, 131, 132, 133, 140, 305)
+	RETURNF "receive"
+SIF GROUPMATCH(nCommand, 0, 1, 2, 3, 4, 5, 6, 7, 11, 12, 15, 25, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 60, 61, 62, 63, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 79, 96, 100, 104, 105, 107, 108, 123, 124, 150, 301, 306, 307, 308, 309, 310, 313, 314, 315, 316)
+	RETURNF "give"
+RETURNF ""
 
 ; Match QUICKFILTER's categories so filter chips and their actions share a tint.
 ; For overlapping tags, location takes priority, then SM, service and everyday categories.

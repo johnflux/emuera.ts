@@ -25,7 +25,7 @@
 
   > .line, > .era-kind { display: contents; }
   .output-text:has(> .era-button) { display: contents; }
-  .output-text.is-empty, &:not(:has(button.choice)) { display: none; }
+  .output-text.is-empty, &[hidden], &:not(:has(button.choice)) { display: none; }
   > .line > span:has(> .era-actions-title) { flex-basis: 100%; }
 
   /* Text-only group heading with a shared accent marker in every context. */

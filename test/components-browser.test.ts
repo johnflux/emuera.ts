@@ -78,6 +78,19 @@ test("catalog uses production rendering and context-independent buttons at wide 
           cards:catalog.contentDocument.querySelectorAll(".era-main .era-card").length,
           statusHeight:catalog.contentDocument.querySelector("#status").getBoundingClientRect().height,
           terminalHeight:catalog.contentDocument.querySelector("#terminal").getBoundingClientRect().height};
+        const directionDoc = catalog.contentDocument;
+        const directionMain = preview.closest(".era-main");
+        const givingFilter = directionMain.querySelector('.era-action-direction-filter[data-direction="give"]');
+        result.directionFiltersEnabled = directionMain.querySelectorAll(".era-action-direction-filter").length === 2
+          && [...directionMain.querySelectorAll(".era-action-direction-filter")].every(control => !control.disabled);
+        const originalStep = directionDoc.querySelector("#terminal").textContent;
+        givingFilter.click();
+        result.directionFilteringLocal = !directionMain.querySelector(".era-action-give:not([hidden])")
+          && givingFilter.getAttribute("aria-pressed") === "false"
+          && directionDoc.querySelector("#terminal").textContent === originalStep;
+        givingFilter.click();
+        result.directionFilteringRestored = !!directionMain.querySelector(".era-action-give:not([hidden])")
+          && givingFilter.getAttribute("aria-pressed") === "true";
         const host = catalog.ownerDocument;
         host.querySelector("#preview-size").value = "narrow";
         host.querySelector("#preview-size").dispatchEvent(new Event("change"));
@@ -97,6 +110,8 @@ test("catalog uses production rendering and context-independent buttons at wide 
         result.repeatEmpty = atlasDoc.querySelector(".era-repeat").textContent === "";
         result.continueEnabled = !atlasDoc.querySelector(".era-title-continue").disabled;
         result.noImageErrors = !atlasDoc.querySelector("#terminal").textContent.includes("Unknown sprite:");
+        result.directionDescriptions = ["give", "receive", "both"].map(direction =>
+          atlasDoc.querySelector(".era-button.era-action-" + direction).getAttribute("aria-description"));
         const summary = atlasDoc.querySelector(".era-player");
         const summaryText = [...summary.querySelectorAll(".era-card-title, .era-card-title > *, .era-player-kind, .era-player-status > *")];
         result.summaryFontSizes = [...new Set(summaryText.map(element => getComputedStyle(element).fontSize))];
@@ -400,6 +415,12 @@ test("catalog uses production rendering and context-independent buttons at wide 
     assert.match(result.preview.font, /BIZ UD Gothic.*monospace/);
     assert.equal(result.variantFont, result.preview.font);
     assert.equal(result.renderer, true);
+    assert.equal(result.directionFiltersEnabled, true, "local filters are not disabled by game button-value restrictions");
+    assert.equal(result.directionFilteringLocal, true, "filtering changes visibility without submitting a game command");
+    assert.equal(result.directionFilteringRestored, true);
+    assert.deepEqual(result.directionDescriptions, [
+      "Give: You to your partner", "Receive: Your partner to you", "Both: You and your partner",
+    ]);
     assert.equal(result.playerActionsContained, true, "Move and the remaining player controls stay inside the player card");
     assert.equal(result.playerNameCommand, true, "the player name retains the character-sheet command");
     assert.equal(result.bizFont, true);
