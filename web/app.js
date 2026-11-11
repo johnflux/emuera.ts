@@ -2175,6 +2175,7 @@ async function renderSteps(steps, fresh = false, keepFocus = false, toBottom = f
     protectMapTranslation(staged);
     if (!live) terminal.replaceChildren(...staged.childNodes);
     outputRoot = terminal;
+    syncMainSidebarSizing();
     pendingImages = [];
     syncDialogs();
     const updatedSky = terminal.querySelector(".screen.is-active .era-sky-dialog:popover-open .era-sky-narration");
@@ -2808,6 +2809,47 @@ function staleTab(error) {
   setTimeout(() => { void resume(id).then((ok) => { if (ok) message("This run was continued in another tab; caught up with it."); }); });
   return true;
 }
+function sizeMainSidebar(sidebar) {
+  const stats = sidebar.querySelector(".era-stats");
+  const right = sidebar.querySelector(".era-main-right");
+  if (!stats || !right) return;
+  sidebar.style.removeProperty("--player-preferred-height");
+  if (getComputedStyle(stats).overflowY !== "auto") return;
+  const naturalHeight = right.getBoundingClientRect().height;
+  // A content-height cap leaves spare space outside Stats, not in its scroll area.
+  const gap = parseFloat(getComputedStyle(sidebar).rowGap);
+  const available = sidebar.clientHeight - naturalHeight - gap;
+  const extra = available - stats.getBoundingClientRect().height;
+  sidebar.style.setProperty("--player-preferred-height", `${naturalHeight + Math.max(0, extra)}px`);
+}
+
+const sidebarSizingObservers = new Map();
+function syncMainSidebarSizing() {
+  const active = new Set(terminal.querySelectorAll(".screen.is-active .era-main-sidebar"));
+  for (const [sidebar, observer] of sidebarSizingObservers) {
+    if (active.has(sidebar)) continue;
+    observer.disconnect();
+    sidebarSizingObservers.delete(sidebar);
+  }
+  for (const sidebar of active) {
+    const stats = sidebar.querySelector(".era-stats");
+    const player = sidebar.querySelector(".era-player");
+    if (!stats || !player) continue;
+    if (!sidebarSizingObservers.has(sidebar)) {
+      const observer = new ResizeObserver(() => {
+        if (sidebar.isConnected) sizeMainSidebar(sidebar);
+      });
+      observer.observe(sidebar);
+      observer.observe(stats);
+      observer.observe(player);
+      for (const content of [...player.children, ...stats.querySelectorAll(".era-palam-grid")])
+        observer.observe(content);
+      sidebarSizingObservers.set(sidebar, observer);
+    }
+    sizeMainSidebar(sidebar);
+  }
+}
+
 function setupMainSidebar(main) {
   if (main.dataset.closed !== "closed" || main.querySelector(".era-main-sidebar")) return;
   const sidebar = document.createElement("div");

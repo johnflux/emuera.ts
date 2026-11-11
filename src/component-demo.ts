@@ -132,7 +132,7 @@ HTML_PRINT "<era-close>"
 HTML_PRINT "<era-close>"
 HTML_PRINT "<era-close>"
 HTML_PRINT "<era-open class='era-section era-button-sample'>"
-PRINTL In play panel
+PRINTL Active panel
 HTML_PRINT "${classHeading("<div class='era-actions-body'></div>")}"
 HTML_PRINT "${classHeading("<div class='era-card era-in-play'></div>")}"
 HTML_PRINT "<era-open class='era-actions-collection'>"
@@ -143,7 +143,7 @@ HTML_PRINT HOTPATCH_BUTTON("Caress", 0)
 HTML_PRINT "<era-close>"
 HTML_PRINT "<era-close>"
 HTML_PRINT "<era-open class='era-card era-in-play'>"
-HTML_PRINT "<div class='era-card-title'>In play</div>"
+HTML_PRINT "<div class='era-card-title' title='Ongoing actions and effects. Click an available action to stop it or use it again.'>Active</div>"
 HTML_PRINT "<era-open class='era-in-play-item'>"
 HTML_PRINT HOTPATCH_BUTTON("Remove Blindfold", 104, "", "block", "era-button-tone-sm")
 HTML_PRINT "<era-close>"

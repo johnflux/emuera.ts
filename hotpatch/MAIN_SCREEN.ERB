@@ -194,7 +194,7 @@ IF TARGET > 0
 	SIF STRLENS(LOCALS)
 		HTML_PRINT @"<div class='era-player-status era-stains'><span class='era-status-label'>Stains:</span>%LOCALS%</div>"
 	CALL HOTPATCH_TARGET_STATUS
-	CALL SHOW_EQUIP_1
+	CALL HOTPATCH_OTHER_EFFECTS
 	HTML_PRINT "<era-open class='era-look'>"
 	CALL HOTPATCH_LOOK
 	HTML_PRINT "<era-close>"
@@ -209,7 +209,7 @@ ELSE
 	CALL HOTPATCH_SCENE
 	HTML_PRINT "<era-close>"
 	CALL HOTPATCH_OCCUPANTS
-	CALL SHOW_EQUIP_1
+	CALL HOTPATCH_OTHER_EFFECTS
 	HTML_PRINT "<era-close>"
 	HTML_PRINT "<era-close>"
 ENDIF
@@ -449,6 +449,62 @@ isModifier = nSize
 ;-------------------------------------------------------------------------------
 ; INFO_TARGET_SITUATION: the target's state (SHOW_EQUIP_2), relationship and anger or sleep.
 ;-------------------------------------------------------------------------------
+@HOTPATCH_SLEEP_RESISTANCE(sLevel)
+#FUNCTIONS
+#DIMS DYNAMIC sLevel
+RETURNF @"<span title='Sleep resistance temporarily delays sleepiness. Lots, Strong, Middle and Weak indicate the strength of the effect.'>&lt;Sleep Res・%sLevel%&gt;</span>"
+
+; Native equipment/effects not represented by the Active tray.
+@HOTPATCH_OTHER_EFFECTS
+#DIMS DYNAMIC sEffects
+SIF TEQUIP:TARGET:ボールギャグ
+	sEffects += "&lt;Ball Gag&gt;"
+SIF TEQUIP:TARGET:浣腸
+	sEffects += "&lt;Enema + Butt Plug&gt;"
+SIF TEQUIP:TARGET:拡張バルーン
+	sEffects += "&lt;Expansion Balloon&gt;"
+SIF TEQUIP:TARGET:アナル電極
+	sEffects += "&lt;Anal Electrode&gt;"
+SIF TCVAR:TARGET:ポイズンゲージ
+	sEffects += "&lt;Aphrodisiac Poisoning&gt;"
+SIF TEQUIP:TARGET:ビデオ撮影
+	sEffects += @"&lt;Video Shooting({TEQUIP:TARGET:ビデオ撮影})&gt;"
+SIF TEQUIP:TARGET:野外プレイ
+	sEffects += "&lt;Outdoors Play&gt;"
+SIF TEQUIP:TARGET:羞恥プレイ == 1
+	sEffects += "&lt;Shame Play&gt;"
+SIF TEQUIP:TARGET:お風呂場プレイ
+	sEffects += "&lt;Bathroom Play&gt;"
+SIF TEQUIP:TARGET:シャワー
+	sEffects += "&lt;Shower&gt;"
+SIF TEQUIP:TARGET:挿入禁止
+	sEffects += "&lt;Insertion Prohibition&gt;"
+SIF TEQUIP:TARGET:コンドーム
+	sEffects += "&lt;Condom&gt;"
+SIF TEQUIP:TARGET:ゴムに穴
+	sEffects += "&lt;Condom?&gt;"
+SIF TCVAR:TARGET:惚れ薬
+	sEffects += "&lt;Love Potion&gt;"
+SIF TCVAR:TARGET:LIMITLESS_ACTIVE
+	sEffects += "&lt;Limitless&gt;"
+SIF TCVAR:TARGET:PURIFICATION_DRUG_ACTIVE
+	sEffects += "&lt;Purified&gt;"
+IF TCVAR:TARGET:LARGE_LOADS == 2
+	sEffects += "&lt;Extreme Loads&gt;"
+ELSEIF TCVAR:TARGET:LARGE_LOADS == 1
+	sEffects += "&lt;Large Loads&gt;"
+ENDIF
+SIF TCVAR:TARGET:SENSITIVITY_NUMBED
+	sEffects += "&lt;Numb&gt;"
+SIF TCVAR:TARGET:PERPETUAL_ERECTION
+	sEffects += "&lt;Perpetual Erection&gt;"
+SIF TCVAR:TARGET:INFINITE_VIG
+	sEffects += "&lt;Infinite Vigor&gt;"
+SIF TEQUIP:TARGET:SWIMMING
+	sEffects += "&lt;Swimming&gt;"
+SIF STRLENS(sEffects)
+	HTML_PRINT @"<div class='era-other-effects'>%sEffects%</div>"
+
 @HOTPATCH_TARGET_SITUATION(情報表示MODE = 0)
 #DIM 情報表示MODE ;0 = 全部ON, 1 = 簡易
 #DIMS DYNAMIC sHtml
@@ -547,13 +603,13 @@ ELSE
 			PRINTFORM   %"　" * (5 - LOCAL)%
 		SELECTCASE CFLAG:TARGET:眠気覚まし
 			CASE IS > 240
-				PRINT <Sleep Res・Lots>
+				HTML_PRINT HOTPATCH_SLEEP_RESISTANCE("Lots")
 			CASE IS > 180
-				PRINT <Sleep Res・Strong>
+				HTML_PRINT HOTPATCH_SLEEP_RESISTANCE("Strong")
 			CASE IS > 120
-				PRINT <Sleep Res・Middle>
+				HTML_PRINT HOTPATCH_SLEEP_RESISTANCE("Middle")
 			CASE IS > 0
-				PRINT <Sleep Res・Weak>
+				HTML_PRINT HOTPATCH_SLEEP_RESISTANCE("Weak")
 			CASEELSE
 				SIF !LOCAL
 					LOCAL:1 = 0
@@ -906,7 +962,7 @@ IF CFLAG:MASTER:眠気覚まし
 		CASEELSE
 			sText '= "Weak"
 	ENDSELECT
-	sHtml += HOTPATCH_STATUS_ITEM("Sleep resistance: " + sText, GETDEFCOLOR(), "Keeps sleepiness away for a while")
+	sHtml += HOTPATCH_STATUS_ITEM("Sleep resistance: " + sText, GETDEFCOLOR(), "Sleep resistance temporarily delays sleepiness. Lots, Strong, Middle and Weak indicate the strength of the effect.")
 ENDIF
 sHtml += HOTPATCH_STAINS(MASTER)
 HTML_PRINT @"<div class='era-player-status'><span class='era-status-label'>Status:</span>%sHtml%</div>"

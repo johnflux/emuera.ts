@@ -18,7 +18,8 @@
 @container (min-width: 761px) {
   /* Let the spanning sidebar enlarge both columns when its controls need more room. */
   .era-main-sidebar > .era-main-right { flex: 1 0 auto; }
-  /* Start at the stats minimum, then share spare space without sizing to every stat row. */
+  .era-main-sidebar:has(.era-stats) > .era-main-right { flex: 0 0 var(--player-preferred-height, auto); }
+  /* Stats claim available height before Player absorbs any surplus. */
   .era-main-sidebar .era-stats { flex: 1 1 0; overflow-y: auto; }
   .era-main-sidebar .era-stats:focus-visible { outline: 2px solid #7ccce3; outline-offset: -2px; }
   .era-main:not(:has(.era-counters)) {

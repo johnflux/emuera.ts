@@ -72,7 +72,7 @@ command tags or saved variable meanings.
 The native SM filter is labeled BDSM in the browser; its command, tags and
 saved flag remain unchanged.
 
-### In play
+### Active
 
 The actions card pairs its wrapping `.era-actions-body` with a compact
 `.era-in-play` card on the right, stacking below on narrow screens. It is omitted
@@ -98,8 +98,10 @@ translation's Apron Play refers to its required apron item. Its active toggle
 offers End Newlywed Play. Ball Sucking uses custom command [9017]
 and its native availability check; its active action is omitted from More.
 Unavailable actions remain disabled without a generic explanation row; specific
-restrictions still retain their reasons. In play buttons retain the same category
+restrictions still retain their reasons. The visible heading is Active, with a
+tooltip explaining ongoing actions/effects and the available controls. Active buttons retain the same category
 tones as the action list, including BDSM red for bondage.
+Active buttons use solid borders while retaining their category colors.
 The In play tray retains rounded corners and a strong two-layer dark shadow, extending
 to the actions card's right edge on wide layouts with a -12px right margin.
 Container sizing removes the
@@ -274,9 +276,11 @@ The two config pages use `BINPUT`; native secondary editors keep their original
 input mode and expose the command bar for text or numeric entry.
 
 The main sidebar keeps Stats at content height (`max-height: fit-content`);
-its left container uses `display: contents`. Spare height goes to the Player
-card, above Auto-TSP Movement rather than above Inventory. On wide layouts Stats
-shrinks and scrolls when space is limited. The sidebar itself never scrolls;
+its left container uses `display: contents`. With Stats present, Player keeps
+its natural content height until Stats fits fully. Any surplus then expands
+Player; frontend resize measurement reserves that surplus without competing
+with Stats for needed height. Without Stats, Player fills the sidebar. On wide layouts Stats
+shrinks and scrolls only when space is limited. The sidebar itself never scrolls;
 wheel input outside Stats scrolls the terminal, including compact layouts.
 
 Choice-only title/load/save/delete, predefined-character, Inventory, Calendar, character-sheet,
@@ -1180,7 +1184,12 @@ The portrait and summary use a top-aligned two-column header. The face frame
 remains 76px square, with its picture scaled up 10% from the bottom center so it
 escapes the top of the frame. Empty status lines and extra spacing above clothing
 are hidden. Clothing uses the surrounding font, sits at the bottom of the info
-body, and truncates long rows with an ellipsis; hovering shows the full text.
+body, and wraps long descriptions rather than truncating them.
+The native In Use heading and effects duplicated in Active are omitted from
+the main character card. Effects not covered by Active (including poisoning,
+ball gags and other drug effects) remain visible without that heading.
+Sleep Res tags have tooltips explaining temporary resistance to sleepiness
+and the Lots/Strong/Middle/Weak strength levels.
 Body size appears
 beside the selected character's race, using the same labels and unusual-size
 highlight as the player panel. An unlabeled size is shown as "Adult"; only the
@@ -1196,8 +1205,8 @@ Portrait hover expressions, effect layers, time-stop fading and the game's
 image settings are preserved. The target's Stats and Player form
 one right-hand column, with Stats above Player beside the room and actions. On narrow screens
 this sidebar stacks below the main content.
-On wider screens Player keeps its content height, while Stats uses the remaining
-sidebar space and scrolls independently when needed. If Player is too tall to
+On wider screens Stats gets priority for its content height, and Player absorbs
+any remaining space. Stats scrolls independently when needed. If Player is too tall to
 fit, it overflows into the terminal's scrollable area rather than making the
 sidebar scroll. On narrow screens the cards keep their
 natural heights in the stacked layout.

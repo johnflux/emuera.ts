@@ -190,7 +190,7 @@ test("In play shares the actions card without covering choices and stacks below 
         </div>
       </div>
       <div class="era-card era-in-play">
-        <div class="line"><span class="output-text"><div class="era-card-title">In play</div></span></div>
+        <div class="line"><span class="output-text"><div class="era-card-title">Active</div></span></div>
         <div class="era-in-play-item">
           <div class="line"><span class="output-text"><button class="choice era-button era-button-block">Remove Blindfold</button></span></div>
         </div>
@@ -199,14 +199,19 @@ test("In play shares the actions card without covering choices and stacks below 
           <div class="line"><span class="output-text"><span class="era-sub">Cannot untie now.</span></span></div>
         </div>
       </div>
+    </div><div class="era-info-body" style="width:180px">
+      <div class="era-look"><div class="line">Clothing description with enough words to wrap across several lines.</div></div>
     </div><script>
     const collection = document.querySelector(".era-actions-collection");
     const body = document.querySelector(".era-actions-body"), panel = document.querySelector(".era-in-play");
+    const lookRange = document.createRange();
+    lookRange.selectNodeContents(document.querySelector(".era-look .line"));
     const fits = () => [...collection.querySelectorAll("button")].every(button => {
       const rect = button.getBoundingClientRect(), parent = collection.getBoundingClientRect();
       return rect.left >= parent.left && rect.right <= parent.right;
     });
     const result = {
+      lookWraps: new Set([...lookRange.getClientRects()].map(rect => rect.top)).size > 1,
       sideBySide: panel.getBoundingClientRect().left >= body.getBoundingClientRect().right,
       aligned: Math.abs(panel.getBoundingClientRect().top - body.getBoundingClientRect().top) < 1,
       wideFits: fits(), position: getComputedStyle(panel).position,
@@ -215,6 +220,7 @@ test("In play shares the actions card without covering choices and stacks below 
       rounded: parseFloat(getComputedStyle(panel).borderTopRightRadius) > 0
         && parseFloat(getComputedStyle(panel).borderBottomRightRadius) > 0,
       disabled: panel.querySelector("button:disabled").disabled,
+      solid: [...panel.querySelectorAll("button")].every(button => getComputedStyle(button).borderTopStyle === "solid"),
       reasonVisible: panel.querySelector(".era-sub").getClientRects().length > 0,
     };
     collection.style.width = "360px";
@@ -245,10 +251,11 @@ test("In play shares the actions card without covering choices and stacks below 
     assert.ok(match);
     assert.deepEqual(JSON.parse(match[1]), {
       sideBySide: true, aligned: true, wideFits: true, position: "relative",
+      lookWraps: true,
       overlap: true, shadow: true, rounded: true,
       noNarrowOverlap: true, noNarrowShadow: true,
       intimateShadow: true, noIntimateFloatingShadow: true,
-      disabled: true, reasonVisible: true, stacked: true, narrowFits: true, noItemHeadings: true,
+      disabled: true, solid: true, reasonVisible: true, stacked: true, narrowFits: true, noItemHeadings: true,
     });
   } finally { await rm(profile, { recursive: true, force: true }); }
 });
@@ -464,7 +471,7 @@ test("layout diagnostics validate real DOM structure and offer a local copyable 
     readFile(new URL("../web/app.js", import.meta.url), "utf8"),
   ]);
   const notice = source.slice(source.indexOf("let layoutDiagnosticPanel ="), source.indexOf("const componentSample ="));
-  const sidebar = source.slice(source.indexOf("function setupMainSidebar("), source.indexOf("function syncSceneLines("));
+  const sidebar = source.slice(source.indexOf("function sizeMainSidebar("), source.indexOf("function syncSceneLines("));
   const html = `<!doctype html><body><main><div id="terminal"><div class="screen is-active">
     <div class="era-box era-layout era-main"><div class="era-box era-main-header" data-closed="closed"></div></div>
     </div></div></main><script>
@@ -1746,8 +1753,10 @@ test("stats scroll when constrained while sidebar overflow belongs to the termin
     readFile(new URL("../web/generated/style.css", import.meta.url), "utf8"),
     readFile(new URL("../web/generated/responsive.css", import.meta.url), "utf8"),
   ]);
+  const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
+  const sizing = source.slice(source.indexOf("function sizeMainSidebar("), source.indexOf("function setupMainSidebar("));
   const fixture = (name: string, width: number, stats: boolean, playerHeight: number) => `
-    <div class="fixture" data-case="${name}"><div id="terminal" style="width:${width}px;height:650px;font-size:20px;line-height:1.25">
+    <div class="fixture" data-case="${name}"><div id="terminal" style="width:${width}px;height:${name === "comfortable" ? 900 : 650}px;font-size:20px;line-height:1.25">
       <div class="screen is-active"><div class="era-main">
         <div class="era-main-header" style="height:130px">Header</div>
         <div class="era-main-center"><div class="era-card" style="height:200px">Room</div></div>
@@ -1755,7 +1764,7 @@ test("stats scroll when constrained while sidebar overflow belongs to the termin
         <div class="era-main-sidebar">
           <div class="era-main-left">${stats ? `<div class="era-card era-stats" tabindex="0">
             <div class="line"><div class="era-card-title">Character's Stats</div></div>
-            <div class="line"><div class="era-palam-grid">${Array.from({ length: name === "short-stats" ? 2 : 28 }, (_, i) =>
+            <div class="line"><div class="era-palam-grid">${Array.from({ length: name === "short-stats" ? 2 : name === "comfortable" ? 12 : 28 }, (_, i) =>
               `<div class="era-palam-item">Stat ${i + 1}</div>`).join("")}</div></div></div>` : ""}</div>
           <div class="era-main-right"><div class="era-card era-player"><div style="height:${playerHeight}px">Player information</div>
             <div class="line"><button class="choice era-button-block">Inventory</button></div>
@@ -1769,6 +1778,7 @@ test("stats scroll when constrained while sidebar overflow belongs to the termin
   const cases = [
     { name: "wide", width: 1180, stats: true, playerHeight: 180 },
     { name: "short-stats", width: 1180, stats: true, playerHeight: 180 },
+    { name: "comfortable", width: 1180, stats: true, playerHeight: 180 },
     { name: "large-player", width: 1180, stats: true, playerHeight: 700 },
     { name: "no-stats", width: 1180, stats: false, playerHeight: 180 },
     { name: "stacked", width: 650, stats: true, playerHeight: 180 },
@@ -1776,6 +1786,13 @@ test("stats scroll when constrained while sidebar overflow belongs to the termin
   const html = `<!doctype html><meta charset="utf-8"><style>${style}\n${responsive}</style><body class="MODE">
     ${cases.map(({ name, width, stats, playerHeight }) => fixture(name, width, stats, playerHeight)).join("")}
     <script>
+      ${sizing}
+      document.querySelectorAll(".era-main-sidebar").forEach(sizeMainSidebar);
+      const initialHeights = [...document.querySelectorAll(".era-player")].map(player => player.getBoundingClientRect().height);
+      document.querySelectorAll(".era-main-sidebar").forEach(sizeMainSidebar);
+      if ([...document.querySelectorAll(".era-player")].some((player, index) =>
+        Math.abs(player.getBoundingClientRect().height - initialHeights[index]) > 1))
+        throw new Error("Sidebar sizing must be stable on repeated measurement");
       const results = [...document.querySelectorAll(".fixture")].map(f => {
         const sidebar = f.querySelector(".era-main-sidebar"), player = f.querySelector(".era-player");
         const stats = f.querySelector(".era-stats"), config = f.querySelector(".era-chip-button");
@@ -1840,8 +1857,14 @@ test("stats scroll when constrained while sidebar overflow belongs to the termin
       assert.ok(short.statsClient! <= wide.statsClient!, `${mode}: short stats take no more space than tall stats`);
       assert.ok(results.filter(result => result.statsHeight !== undefined).every(result => result.statsHeight! >= 150),
         `${mode}: stats preserve the 150px minimum even with oversized player controls`);
-      assert.ok(short.playerHeight >= wide.playerHeight, `${mode}: spare space expands player`);
-      assert.ok(short.toggleGap >= wide.toggleGap, `${mode}: any extra player height goes above Auto-TSP`);
+      const comfortable = results.find(result => result.name === "comfortable")!;
+      assert.equal(comfortable.statsScroll, comfortable.statsClient, `${mode}: stats fit when space is available`);
+      assert.ok(comfortable.playerHeight > wide.playerHeight,
+        `${mode}: player grows once stats fit completely`);
+      assert.ok(short.playerHeight >= wide.playerHeight,
+        `${mode}: shorter stats release spare space to Player`);
+      assert.ok(short.toggleGap >= wide.toggleGap,
+        `${mode}: surplus Player height stays above Auto-TSP`);
       const large = results.find(result => result.name === "large-player")!;
       assert.ok(large.sidebarScroll <= large.sidebarClient + 1, `${mode}: sidebar contains oversized player`);
       assert.ok(large.mainBottom + 1 >= large.sidebarBottom, `${mode}: main grid contains its sidebar (${large.mainBottom} vs ${large.sidebarBottom})`);

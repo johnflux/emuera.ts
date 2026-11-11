@@ -55,7 +55,6 @@
   .line:has(button.choice[data-value="3003"]) { display: none; }
 }
 .era-info-body .era-look { margin-top: auto; font: inherit; }
-.era-info-body .era-look .line:not(.era-marker) { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .era-info-body .era-look .output-text { font: inherit; }
 .era-info-body > .line:has(> .output-text.is-empty:only-child) { display: none; }
 /* Keep headings, notes, speech and narration at the same size. */

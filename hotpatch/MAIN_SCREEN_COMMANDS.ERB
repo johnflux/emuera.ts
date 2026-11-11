@@ -773,7 +773,7 @@ FOR nIndex, 0, 20
 		CONTINUE
 	IF !nOpen
 		HTML_PRINT "<era-open class='era-card era-in-play'>"
-		HTML_PRINT "<div class='era-card-title'>In play</div>"
+		HTML_PRINT "<div class='era-card-title' title='Ongoing actions and effects. Click an available action to stop it or use it again.'>Active</div>"
 		nOpen = 1
 	ENDIF
 	nEnabled = 0

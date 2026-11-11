@@ -1261,6 +1261,7 @@ RETURNF !GROUPMATCH(ARG, 51, 104, 181, 182, 189)`, "<in-play-fixture>");
     assert.doesNotMatch(empty!, /era-in-play/);
     assert.match(empty!, />Blindfold<\/button>/);
     assert.match(active!, /class='era-card era-in-play'/);
+    assert.match(active!, /title='Ongoing actions and effects\.[^']*'>Active<\/div>/);
     assert.equal((active!.match(/class='era-in-play-item'/g) ?? []).length, 20);
     assert.doesNotMatch(active!, /era-in-play-label/);
     assert.match(active!, /value='51'[^>]*aria-disabled='true'[^>]*>Birth Control/);
@@ -1295,6 +1296,50 @@ RETURNF !GROUPMATCH(ARG, 51, 104, 181, 182, 189)`, "<in-play-fixture>");
     assert.match(nativeOff!, />Blindfold<\/button>/);
     assert.doesNotMatch(nativeOff!, /era-in-play/);
     assert.ok(snapshot.output.some(item => item.type === "text" && item.text === "State: 1,1,1"));
+  }
+});
+
+test("target effects omit Active duplicates without hiding untracked native effects", {
+  skip: !existsSync(GAME_ROOT),
+}, async () => {
+  const game = await loadGame();
+  await applyHotpatches(game);
+  const fixture = emptyGame(game.root);
+  indexScript(fixture, `@SYSTEM_TITLE
+ADDCHARA 0
+ADDCHARA 1
+MASTER = 0
+PLAYER = 0
+TARGET = 1
+TCVAR:1:ピル = 1
+TCVAR:1:媚薬 = 180
+TCVAR:1:利尿剤 = 180
+TEQUIP:1:アイマスク = 1
+TEQUIP:1:縄 = 1
+TEQUIP:1:新妻プレイ = 1
+HTML_PRINT "<div class='phase-covered'></div>"
+CALL HOTPATCH_OTHER_EFFECTS
+HTML_PRINT "<div class='phase-other'></div>"
+TCVAR:1:ポイズンゲージ = 1
+TEQUIP:1:ボールギャグ = 1
+TEQUIP:1:ゴムに穴 = 1
+TCVAR:1:LIMITLESS_ACTIVE = 1
+CALL HOTPATCH_OTHER_EFFECTS
+HTML_PRINT "<div class='phase-target'></div>"
+TARGET = 0
+CALL HOTPATCH_OTHER_EFFECTS
+QUIT`, "<other-effects-test>");
+  game.routines.set("SYSTEM_TITLE", fixture.routines.get("SYSTEM_TITLE")!);
+  for (const jit of [false, true]) {
+    const snapshot = new Runtime(game, GAME_INSTRUCTION_LIMIT, { jit }).start();
+    assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
+    const html = snapshot.output.flatMap(item => item.type === "html" ? [item.text] : []).join("");
+    const [, covered, other, target] = html.split(/<div class='phase-[a-z]+'><\/div>/);
+    assert.equal(covered, "");
+    for (const label of ["Aphrodisiac Poisoning", "Ball Gag", "Condom?", "Limitless"])
+      assert.ok(other!.includes(`&lt;${label}&gt;`), label);
+    assert.doesNotMatch(other!, /In Use|Birth Control|Blindfold|Rope Bondage|Newlywed Play/);
+    assert.equal(target, "");
   }
 });
 
@@ -1652,6 +1697,10 @@ test("character titles fill quiet info panels without hiding relationship or moo
     { name: "sullen", setup: "TALENT:1:機嫌 = -1", blurb: false },
     { name: "angry", setup: "BASE:1:怒り = 200", blurb: false },
     { name: "asleep", setup: "CFLAG:1:睡眠 = 1", blurb: false },
+    ...([1, 120, 121, 180, 181, 240, 241] as const).map(value => ({
+      name: `sleep resistance ${value}`, setup: `CFLAG:1:眠気覚まし = ${value}`, blurb: true,
+      sleepResistance: value > 240 ? "Lots" : value > 180 ? "Strong" : value > 120 ? "Middle" : "Weak",
+    })),
   ];
   for (const scenario of scenarios) {
     const stub = emptyGame(game.root);
@@ -1680,6 +1729,10 @@ WAIT`, "<info-title-test>");
     if (scenario.name === "quiet") assert.doesNotMatch(html, /era-relationship-open|era-relationship-icon-none/);
     assert.doesNotMatch(html, /Discuss relationship/);
     assert.doesNotMatch(html, /●Race:|●Ability:/, "redundant race and ability fields are not part of the title");
+    if ("sleepResistance" in scenario) {
+      assert.match(html, /title='Sleep resistance temporarily delays sleepiness\./);
+      assert.ok(html.includes(`&lt;Sleep Res・${scenario.sleepResistance}&gt;`));
+    }
   }
 });
 
