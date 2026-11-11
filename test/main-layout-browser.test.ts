@@ -1588,7 +1588,7 @@ test("portrait hover scales images in place and distinguishes hover from selecti
       for (const layer of layers) {
         assert.equal(layer.radius, "0px");
         assert.equal(layer.shadow, "rgba(102, 255, 255, 0.69) 0px -3px 0px 0px inset");
-        assert.match(layer.glow, /^radial-gradient/);
+        assert.equal(layer.glow, "linear-gradient(to top, rgb(102, 255, 255), rgba(102, 255, 255, 0.094) 3%, rgba(0, 0, 0, 0) 7%)");
       }
     }
     assert.ok(result.unselected.every(layer => layer.shadow === "none" && layer.glow === "none"));

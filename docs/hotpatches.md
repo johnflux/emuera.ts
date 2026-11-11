@@ -1168,7 +1168,10 @@ as borderless, layered sprites with names and status text overlaid at their feet
 without nameplate borders or backgrounds. Favor, requests and other useful status
 text remain visible without adding height below the images. Click a sprite
 or name to select them; only the sprite has the existing cyan bottom highlight
-and soft glow (no second highlight around the occupant). The highlight has
+and soft glow (no second highlight around the occupant). A cyan gradient rises
+from the underline, drops to 9.4% opacity at 3% height, and fades to transparent
+at 7% height, without a wider background glow.
+The highlight has
 square corners and stays visible on hover and keyboard focus, including when
 the hover sprite replaces the normal sprite. The selected
 name is tinted blue. Other sprites are slightly muted. Hovering a selectable
