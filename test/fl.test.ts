@@ -491,10 +491,22 @@ RETURN`);
     assert.deepEqual(second.audio, { ...first.audio, soundVolume: 60, bgmVolume: 25, sounds: [], stopSounds: false });
     const third = runtime.input("");
     assert.equal(text(third), "42");
-    assert.deepEqual(third.audio, { soundVolume: 60, bgmVolume: 25, bgm: null, sounds: [], stopSounds: true });
+    assert.ok(third.audio?.bgmStopId);
+    assert.deepEqual(third.audio, { soundVolume: 60, bgmVolume: 25, bgm: null, bgmStopId: third.audio.bgmStopId, sounds: [], stopSounds: true });
     for (const command of ["SETBGMVOLUME", "SETSOUNDVOLUME 1, 2", 'PLAYBGM "../escape.wav"', "STOPSOUND 1"]) {
       const bad = new Runtime(game(`@SYSTEM_TITLE\n${command}`)).start();
       assert.equal(bad.status, "error", command);
     }
   } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test("each STOPBGM is distinguishable even when the game already has no background track", () => {
+  const runtime = new Runtime(game("@SYSTEM_TITLE\nSTOPBGM\nWAIT\nSTOPBGM\nWAIT\nRETURN"));
+  const first = runtime.start();
+  const second = runtime.input("");
+  assert.ok(first.audio?.bgmStopId);
+  assert.ok(second.audio?.bgmStopId);
+  assert.notEqual(first.audio.bgmStopId, second.audio.bgmStopId);
+  assert.equal(first.audio.bgm, null);
+  assert.equal(second.audio.bgm, null);
 });

@@ -107,6 +107,7 @@ export interface TooltipSettings { custom: boolean; font: string; fontSize: numb
 export interface AudioSettings {
   soundVolume: number; bgmVolume: number;
   bgm: { id: string; url: string } | null;
+  bgmStopId?: string;
   sounds: { id: string; url: string; repeat: number }[];
   stopSounds: boolean;
 }
@@ -4880,7 +4881,7 @@ export class Runtime {
             if (op === "SETBGMVOLUME" || op === "SETSOUNDVOLUME") {
               const volume = Number(num(parts[0]!));
               audio[op === "SETBGMVOLUME" ? "bgmVolume" : "soundVolume"] = Math.min(100, Math.max(0, volume));
-            } else if (op === "STOPBGM") audio.bgm = null;
+            } else if (op === "STOPBGM") { audio.bgm = null; audio.bgmStopId = randomUUID(); }
             else if (op === "STOPSOUND") { audio.sounds = []; audio.stopSounds = true; }
             else {
               const filename = text(ev(parts[0]!));

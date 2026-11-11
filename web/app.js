@@ -2310,6 +2310,10 @@ function revealSelectedOccupants() {
   }
 }
 let backgroundAudio = null;
+let musicLibrary = [];
+let musicLibraryGeneration = 0;
+let bgmVolume = 100;
+let bgmStopId;
 const soundAudio = new Set();
 const blockedAudio = new Set();
 const bgmToggle = document.querySelector("#bgm-toggle");
@@ -2324,7 +2328,7 @@ const mediaTrackActions = [
 function syncBgmToggle() {
   const active = !!backgroundAudio;
   const paused = !active || backgroundAudio.element.paused;
-  bgmControls.hidden = !active;
+  bgmControls.hidden = !active && !musicLibrary.length;
   const enableNavigation = active && backgroundAudio.tracks.length >= 2;
   bgmPrevious.hidden = bgmNext.hidden = !enableNavigation;
   for (const action of mediaTrackActions) {
@@ -2367,16 +2371,33 @@ function retryAudio(event) {
 document.addEventListener("pointerdown", retryAudio);
 document.addEventListener("keydown", retryAudio);
 const audioTypes = { mp3: "audio/mpeg", wav: "audio/wav", ogg: "audio/ogg", flac: "audio/flac", m4a: "audio/mp4", aac: "audio/aac" };
+function playableTracks(tracks, audio = new Audio()) {
+  return tracks.filter((url) => {
+    const extension = url.split(".").pop().toLowerCase();
+    return audioTypes[extension] && audio.canPlayType(audioTypes[extension]);
+  });
+}
+async function loadMusicLibrary(game) {
+  const generation = ++musicLibraryGeneration;
+  try {
+    const data = await api(`/api/music-library?game=${encodeURIComponent(game)}`);
+    if (generation !== musicLibraryGeneration) return;
+    if (![data.local, data.fallback].every((list) => Array.isArray(list) && list.every((url) => typeof url === "string")))
+      throw new Error("Invalid music library");
+    const local = playableTracks(data.local);
+    musicLibrary = local.length ? local : playableTracks(data.fallback);
+    syncBgmToggle();
+  } catch (error) {
+    if (generation === musicLibraryGeneration) message(`Could not list music: ${error.message}`, true);
+  }
+}
 async function loadBgmTracks(track) {
   try {
     const data = await api(`/api/bgm-tracks?url=${encodeURIComponent(track.url)}`);
     if (backgroundAudio !== track) return;
     if (!Array.isArray(data.tracks) || data.tracks.some((url) => typeof url !== "string"))
       throw new Error("Invalid track list");
-    track.tracks = data.tracks.filter((url) => {
-      const extension = url.split(".").pop().toLowerCase();
-      return audioTypes[extension] && track.element.canPlayType(audioTypes[extension]);
-    });
+    track.tracks = playableTracks(data.tracks, track.element);
     syncBgmToggle();
   } catch (error) {
     if (backgroundAudio === track) message(`Could not list music tracks: ${error.message}`, true);
@@ -2400,6 +2421,10 @@ function setBgmTrack(track, url) {
   playAudio(element);
 }
 function resetAudio() {
+  musicLibraryGeneration++;
+  musicLibrary = [];
+  bgmVolume = 100;
+  bgmStopId = undefined;
   if (backgroundAudio) stopAudio(backgroundAudio.element);
   backgroundAudio = null;
   for (const element of soundAudio) stopAudio(element);
@@ -2407,7 +2432,10 @@ function resetAudio() {
 }
 function useAudioSettings(settings) {
   if (settings.stopSounds) for (const element of soundAudio) stopAudio(element);
-  if (backgroundAudio?.id !== settings.bgm?.id) {
+  bgmVolume = settings.bgmVolume;
+  const stopped = settings.bgmStopId !== undefined && settings.bgmStopId !== bgmStopId;
+  bgmStopId = settings.bgmStopId;
+  if (settings.bgm ? backgroundAudio?.id !== settings.bgm.id : backgroundAudio && (backgroundAudio.id !== null || stopped)) {
     if (backgroundAudio) stopAudio(backgroundAudio.element);
     backgroundAudio = null;
     if (settings.bgm) {
@@ -2441,6 +2469,13 @@ function useAudioSettings(settings) {
   }
 }
 bgmToggle.addEventListener("click", () => {
+  if (!backgroundAudio && musicLibrary.length) {
+    const url = musicLibrary[Math.floor(Math.random() * musicLibrary.length)];
+    backgroundAudio = { id: null, url, currentUrl: url, element: null, volume: bgmVolume / 100, tracks: musicLibrary };
+    setBgmTrack(backgroundAudio, url);
+    syncBgmToggle();
+    return;
+  }
   const element = backgroundAudio?.element;
   if (!element) return;
   if (element.paused) playAudio(element);
@@ -2858,6 +2893,7 @@ async function start(mode, game = runGame, debug = debugPreferred()) {
       ...(componentSample ? { component: componentSample } : {}) });
     activityResponded();
     await render(snapshot, false, true);
+    if (runGame) void loadMusicLibrary(runGame);
   }
   catch (error) { message(error.message, true); }
   finally { busy = false; endActivity(); updateControls(); if (input) keyboardNavigation.focusInput(); runQueuedContinue(); }
@@ -2890,6 +2926,7 @@ async function resume(id) {
     await Promise.all([showBackground(data.cbg ?? []), showBackgroundMap(data.cbgMap ?? null), showIslands(data.islands ?? [])]);
     useTooltipSettings(data.tooltip ?? null);
     if (data.audio) useAudioSettings(data.audio);
+    if (runGame) void loadMusicLibrary(runGame);
     command.value = data.textbox ?? "";
     showCommandHint();
     step = data.step;

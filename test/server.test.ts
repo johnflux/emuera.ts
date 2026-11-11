@@ -383,6 +383,44 @@ INPUT`, "audio.ERB");
   }
 });
 
+test("music library searches game and sibling pops-tw trees and confines track routes", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "era-music-library-"));
+  const gameRoot = path.join(root, "game"), pops = path.join(root, "pops-tw");
+  const game = emptyGame(gameRoot);
+  const app = createApp([{ id: "music", title: "Music", game }]);
+  try {
+    await mkdir(path.join(gameRoot, "sound", "music", "album"), { recursive: true });
+    await mkdir(path.join(pops, "sound", "music", "score"), { recursive: true });
+    await writeFile(path.join(gameRoot, "sound", "music", "album", "first.ogg"), "local");
+    await writeFile(path.join(pops, "sound", "music", "score", "two.m4a"), "fallback");
+    await writeFile(path.join(pops, "sound", "music", "score", "unsupported.mid"), "midi");
+    await writeFile(path.join(root, "outside.ogg"), "private");
+    await symlink(path.join(root, "outside.ogg"), path.join(gameRoot, "sound", "music", "escape.ogg"));
+    await symlink(root, path.join(pops, "sound", "music", "cycle"));
+    app.listen(0, "127.0.0.1");
+    await once(app, "listening");
+    const address = app.address();
+    assert.ok(address && typeof address !== "string");
+    const base = `http://127.0.0.1:${address.port}`;
+    const library = await (await fetch(base + "/api/music-library?game=music")).json();
+    assert.deepEqual(library, {
+      local: ["/music-library/music/local/album/first.ogg"],
+      fallback: ["/music-library/music/fallback/score/two.m4a"],
+    });
+    assert.equal(await (await fetch(base + library.local[0])).text(), "local");
+    assert.equal(await (await fetch(base + library.fallback[0])).text(), "fallback");
+    assert.equal((await fetch(base + "/music-library/music/local/escape.ogg")).status, 403);
+    assert.equal((await fetch(base + "/music-library/music/local/..%2f..%2f..%2foutside.ogg")).status, 403);
+    assert.equal((await fetch(base + "/music-library/music/fallback/score/unsupported.mid")).status, 403);
+    assert.equal((await fetch(base + "/api/music-library?game=missing")).status, 404);
+    await rm(path.join(pops, "sound", "music"), { recursive: true });
+    assert.deepEqual((await (await fetch(base + "/api/music-library?game=music")).json()).fallback, []);
+  } finally {
+    if (app.listening) await new Promise<void>((resolve, reject) => app.close((error) => error ? reject(error) : resolve()));
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("games are discovered in GAMES folders directly or one level down, after the known ones", async () => {
   const dir = await mkdtemp(path.join(tmpdir(), "era-games-"));
   try {

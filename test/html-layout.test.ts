@@ -2911,6 +2911,89 @@ test("BGM track navigation resumes playback while preserving game control and ig
   assert.deepEqual(messages, []);
 });
 
+test("manual music starts randomly, prefers local tracks and gives way to game BGM", async () => {
+  const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
+  const start = source.indexOf("let backgroundAudio ="), end = source.indexOf("/** advanceScreen:", start);
+  const controls = { hidden: true };
+  function button() {
+    return { hidden: true, attrs: new Map<string, string>(),
+      addEventListener(_name: string, handler: () => void) { this.click = handler; },
+      setAttribute(name: string, value: string) { this.attrs.set(name, value); },
+      querySelector: () => ({ setAttribute() {} }), click() {} };
+  }
+  const toggle = button(), next = button(), previous = button();
+  const instances: AudioMock[] = [];
+  class AudioMock {
+    paused = true; volume = 1; loop = false;
+    listeners = new Map<string, () => void>();
+    constructor(public url?: string) { if (url) instances.push(this); }
+    play() { this.paused = false; this.listeners.get("play")?.(); return Promise.resolve(); }
+    pause() { this.paused = true; this.listeners.get("pause")?.(); }
+    removeAttribute() {} load() {}
+    canPlayType(type: string) { return type === "audio/flac" ? "" : "probably"; }
+    addEventListener(name: string, callback: () => void) { this.listeners.set(name, callback); }
+  }
+  const pending: { url: string; resolve: (value: object) => void }[] = [];
+  const messages: string[] = [];
+  const random = Object.create(Math) as Math;
+  random.random = () => 0.75;
+  const browser = runInNewContext(`${source.slice(start, end)}\n({ loadMusicLibrary, useAudioSettings, resetAudio })`, {
+    Audio: AudioMock, Math: random,
+    document: { addEventListener() {}, querySelector: (selector: string) =>
+      selector === "#bgm-toggle" ? toggle : selector === "#bgm-next" ? next : selector === "#bgm-previous" ? previous : controls },
+    navigator: {},
+    api: (url: string) => new Promise(resolve => pending.push({ url, resolve })),
+    message: (value: string) => messages.push(value),
+  });
+  const settings = { soundVolume: 100, bgmVolume: 35, bgm: null, sounds: [], stopSounds: false };
+  browser.useAudioSettings(settings);
+  const loading = browser.loadMusicLibrary("game");
+  pending[0]!.resolve({ local: ["/local/a.ogg", "/local/b.ogg"], fallback: ["/fallback/c.ogg"] });
+  await loading;
+  assert.equal(controls.hidden, false);
+  assert.equal(toggle.attrs.get("aria-label"), "Play music");
+  assert.equal(next.hidden, true);
+  toggle.click();
+  assert.equal(instances.at(-1)?.url, "/local/b.ogg");
+  assert.equal(instances.at(-1)?.volume, 0.35);
+  assert.equal(instances.at(-1)?.paused, false);
+  assert.equal(next.hidden, false);
+  browser.useAudioSettings(settings);
+  assert.equal(instances.length, 1, "null game BGM snapshots do not stop manually selected music");
+  browser.useAudioSettings({ ...settings, bgmStopId: "stop-1" });
+  assert.equal(instances[0]!.paused, true, "an explicit game STOPBGM stops manual playback");
+  toggle.click();
+  browser.useAudioSettings({ ...settings, bgmStopId: "stop-1" });
+  assert.equal(instances.at(-1)?.paused, false, "repeated snapshots do not replay STOPBGM");
+  previous.click();
+  assert.equal(instances.at(-1)?.url, "/local/a.ogg");
+  browser.useAudioSettings({ ...settings, bgm: { id: "game-bgm", url: "/sound/scene.ogg" } });
+  assert.equal(instances.at(-1)?.url, "/sound/scene.ogg", "game-selected BGM replaces manual playback");
+  browser.useAudioSettings(settings);
+  assert.equal(instances.at(-1)?.paused, true);
+  assert.equal(controls.hidden, false, "manual playback remains available after game BGM stops");
+  browser.resetAudio();
+  assert.equal(controls.hidden, true);
+
+  const fallback = browser.loadMusicLibrary("other");
+  pending.at(-1)!.resolve({ local: ["/local/unsupported.flac"], fallback: ["/fallback/c.ogg"] });
+  await fallback;
+  toggle.click();
+  assert.equal(instances.at(-1)?.url, "/fallback/c.ogg");
+  assert.equal(next.hidden, true);
+  browser.resetAudio();
+  const stale = browser.loadMusicLibrary("old");
+  browser.resetAudio();
+  pending.at(-1)!.resolve({ local: ["/local/a.ogg"], fallback: [] });
+  await stale;
+  assert.equal(controls.hidden, true, "late library responses cannot restore a previous run");
+  const empty = browser.loadMusicLibrary("empty");
+  pending.at(-1)!.resolve({ local: [], fallback: [] });
+  await empty;
+  assert.equal(controls.hidden, true, "no playable music leaves controls hidden");
+  assert.deepEqual(messages, []);
+});
+
 test("tooltip alignment follows TOOLTIP_FORMAT and resets with custom styling", async () => {
   const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
   const start = source.indexOf("function useTooltipSettings(");

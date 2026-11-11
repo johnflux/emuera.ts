@@ -204,6 +204,33 @@ async function resourceFile(root: string, relative: string, audio = false): Prom
   if (!(await stat(resolved)).isFile()) throw new HttpError(404, "Image file not found");
   return resolved;
 }
+async function musicDirectory(gameRoot: string): Promise<string | undefined> {
+  const missing = (error: unknown) => error instanceof Error && "code" in error && (error.code === "ENOENT" || error.code === "ENOTDIR");
+  try {
+    const root = await realpath(gameRoot);
+    const sound = gameDirectory(root, "sound");
+    const music = await realpath(gameDirectory(sound, "music"));
+    if (!music.startsWith(root + path.sep)) throw new HttpError(403, "Music directory outside game");
+    if (!(await stat(music)).isDirectory()) throw new HttpError(403, "Music path is not a directory");
+    return music;
+  } catch (error) {
+    if (missing(error)) return undefined;
+    throw error;
+  }
+}
+async function musicFiles(root: string, prefix: string): Promise<string[]> {
+  const files: string[] = [];
+  async function visit(directory: string): Promise<void> {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const file = path.join(directory, entry.name);
+      if (entry.isDirectory()) await visit(file);
+      else if (entry.isFile() && audioExtensions.has(path.extname(entry.name).toLowerCase()))
+        files.push(prefix + path.relative(root, file).split(path.sep).map(encodeURIComponent).join("/"));
+    }
+  }
+  await visit(root);
+  return files.sort();
+}
 function displaySettings(value: unknown): Partial<DisplaySettings> | undefined {
   if (value === undefined) return undefined;
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw new HttpError(400, "display must be an object");
@@ -839,6 +866,31 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
         // Validate before handing metadata to the browser.
         await resourceFile(gameDirectory(game.root, "resources"), sprite.file);
         json(response, { ...sprite, url: `${game.resourceBase}${sprite.file.split(path.sep).map(encodeURIComponent).join("/")}` });
+        return;
+      }
+      if (request.method === "GET" && url.pathname === "/api/music-library") {
+        const entry = entryFor(url.searchParams.get("game"));
+        const roots = [entry.game.root, path.join(path.dirname(entry.game.root), "pops-tw")];
+        const tracks = await Promise.all(roots.map(async (root, index) => {
+          const music = await musicDirectory(root);
+          return music ? musicFiles(music, `/music-library/${entry.id}/${index ? "fallback" : "local"}/`) : [];
+        }));
+        json(response, { local: tracks[0], fallback: tracks[1] });
+        return;
+      }
+      const libraryTrack = /^\/music-library\/([a-z0-9-]+)\/(local|fallback)\/(.+)$/.exec(url.pathname);
+      if (request.method === "GET" && libraryTrack) {
+        const entry = entryFor(libraryTrack[1]);
+        const root = libraryTrack[2] === "local" ? entry.game.root : path.join(path.dirname(entry.game.root), "pops-tw");
+        const music = await musicDirectory(root);
+        if (!music) throw new HttpError(404, "Music directory not found");
+        let relative: string;
+        try { relative = decodeURIComponent(libraryTrack[3]!); }
+        catch (error) {
+          if (!(error instanceof URIError)) throw error;
+          throw new HttpError(400, "Invalid music path encoding");
+        }
+        await serveFile(request, response, await resourceFile(music, relative, true), development);
         return;
       }
       if (request.method === "GET" && url.pathname === "/api/bgm-tracks") {
