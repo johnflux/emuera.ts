@@ -46,22 +46,93 @@ the label keeps its normal or game-supplied highlight color.
 `HOTPATCH_ACTION_DIRECTION` centrally classifies standard main-screen actions
 from the player's perspective. `HOTPATCH_PRINT_COM` adds `era-action-give`,
 `era-action-receive` or `era-action-both` alongside the existing category tone.
-Unclassified, self-directed, management and custom actions remain unmarked.
-Kissing and embracing are mutual normally and giving during stopped time or
-sleeping mischief. Penetration direction describes who penetrates whom, not
-who leads a position.
+Unclassified, self-directed and management actions remain unmarked.
+Lotion [180], Aphrodisiac [181], Diuretic [182] and Apron Play [189] are
+giving actions. Armpitjob (custom command 228, button [9228]) is receiving;
+it uses its original availability/filter and highlighted-name checks, but appears
+once under Intimate / Receive rather than More. Other custom actions stay unmarked.
+Intimate kissing and Tribadism are grouped as Give; Breast Press is Receive.
+These are UI conventions for mutual actions. Talk & Touch embracing and kissing
+remain mutual normally and giving during stopped time or sleeping mischief.
+Penetration direction describes who penetrates whom, not who leads a position.
 
-Shared button CSS supplies the leading arrows only: green right arrow for Give,
-blue left arrow for Receive and neutral double arrow for Both. The renderer
-adds direction to tooltips and accessible descriptions without changing labels,
-command numbers or availability. Controller hints retain their `::after`.
+Within Intimate only, actions are grouped in Give, Receive order,
+followed by an unlabeled group for unclassified actions. Each
+`.era-action-direction-group` is a wrapping flex row with its
+`.era-action-group-label` as an ordinary inline item, not a full-width heading.
+Direction labels match the category heading color and have a trailing colon.
+There are no per-button arrows. Original command order is preserved within each
+direction. Talk & Touch and the other categories retain their original order
+without direction subheadings. The renderer adds direction to tooltips and accessible descriptions
+without changing button labels, command numbers or availability.
+All Intimate Receive actions use the yellow Service tone and additionally obey
+the existing Service filter. Native V/A, SM, reverse-sex and other applicable
+filters still apply; this presentation-layer membership does not modify native
+command tags or saved variable meanings.
+The native SM filter is labeled BDSM in the browser; its command, tags and
+saved flag remain unchanged.
 
-`web/action-directions.js` adds independent Give / Receive pressed chips to
-the action header, using these classes rather than a second command map.
-Both matches either enabled direction; unmarked actions remain visible.
-Empty groups are hidden. Existing game-category filters still determine which
-commands the game emits. Direction selections survive redraws within a browser
-run and reset on a new/resumed run; no game flags, saves or sidecars are changed.
+### In play
+
+The actions card pairs its wrapping `.era-actions-body` with a compact
+`.era-in-play` card on the right, stacking below on narrow screens. It is omitted
+when nothing tracked is active. `HOTPATCH_ACTION_ACTIVE` reads current
+per-character TEQUIP state for ongoing kissing/touching, equipped toys, condom,
+blindfold, bondage, restraints and denial mode; recent one-shot commands do not
+count. State is never inferred from the last action or stored in browser flags.
+
+Active action labels describe removal/stopping rather than equipping again.
+Active actions appear only in the panel, without repeated item headings,
+even when category filters hide the original action, using the precomputed
+availability list and native denial-mode checks.
+Unavailable removals are disabled with a visible reason; forced bondage's
+favor/trust restriction is retained. Existing game commands execute removal,
+so rejected actions never optimistically clear the panel. Native save state and
+layout are unchanged.
+Birth Control reads real/fake pill state and is disabled once taken, with no
+explanatory row. Drug buttons retain their short names. Active
+Aphrodisiac and Diuretic effects offer another dose subject to native command
+availability; neither is a removal action. Command [189] is labelled Newlywed
+Play, matching its native status and the meaning of 新妻プレイ; the native
+translation's Apron Play refers to its required apron item. Its active toggle
+offers End Newlywed Play. Ball Sucking uses custom command [9017]
+and its native availability check; its active action is omitted from More.
+Unavailable actions remain disabled without a generic explanation row; specific
+restrictions still retain their reasons. In play buttons retain the same category
+tones as the action list, including BDSM red for bondage.
+The In play tray retains rounded corners and a strong two-layer dark shadow, extending
+to the actions card's right edge on wide layouts with a -12px right margin.
+Container sizing removes the
+overlap and shadow when the tray stacks on narrow layouts.
+The Intimate card theme preserves the tray's floating shadow rather than
+overriding it with the standard card shadow.
+Button suffixes have a 1ch left margin. All browser choice buttons use a single
+line, with native CSS `text-fit: shrink` when their content exceeds the available
+width. Direct text labels have a shrinkable wrapper so flex buttons can fit the
+label alongside their command number. This requires browser `text-fit` support.
+Trailing command numbers use a frontend-inserted flex spacer with a preferred
+width of 0.75ch: it expands into spare space and shrinks under pressure. List
+buttons keep their leading-number layout; controller hints hide the spacer.
+Do Nothing [21], Pass Initiative [24], Use Condom [50] and Use Contraceptive [51]
+appear once in Right now (While time is stopped during frozen time), without
+direction membership. Availability remains controlled by the original command
+checks.
+
+`HOTPATCH_ACTION_IS_ANAL` and `HOTPATCH_ACTION_IS_VAGINAL` combine native
+location tags with verified missing memberships. A adds Spread Anus [13],
+Get Anal Caress [90], Get Rimjob [91], receiving anal positions [92–94] and
+receiving Anal Beads [127]. V adds Cunnilingus [1], Spread Labia [8],
+Clit Caress [15/315], Clit Cap [42], Reverse Rape [64], Inchling Onahole [79],
+Get Cunnilingus [120], Tribadism [121] and receiving V positions [130–133].
+These shared predicates drive location filtering, tone selection and explicit
+`era-action-category-anal` / `era-action-category-vaginal` button classes.
+Receive remains yellow Service even when it also belongs to A or V.
+Both location filters apply to native dual-location actions. Native gameplay
+tags are unchanged, and state-dependent native memberships are retained.
+
+`web/action-directions.js` supplies accessible direction descriptions.
+There are no separate Give / Receive filters; the game-category filters
+determine which commands are emitted. No save layout or sidecars are changed.
 
 `era-guard-control` is removed. Native `PRINTC` menus still use the renderer's
 `print-cell` compatibility path; hotpatched main commands no longer need it.

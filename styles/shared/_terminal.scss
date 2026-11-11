@@ -60,7 +60,10 @@
 .layout-diagnostic[hidden] { display: none; }
 .layout-diagnostic summary { cursor: pointer; }
 .layout-diagnostic pre { white-space: pre-wrap; overflow-wrap: anywhere; }
-button.choice { display: inline-block; font: inherit; background: transparent; color: inherit; border: 0; border-radius: 0; padding: 0; vertical-align: baseline; text-align: left; text-decoration: none; }
+button.choice { display: inline-block; font: inherit; background: transparent; color: inherit; border: 0; border-radius: 0; padding: 0; vertical-align: baseline; text-align: left; text-decoration: none; max-width: 100%; min-width: 0; }
+button.choice, button.choice * { white-space: nowrap !important; overflow-wrap: normal; text-fit: shrink; }
+button.choice > :not(.command-number, .era-button-suffix) { min-width: 0; }
+.choice-text { display: block; flex: 0 1 auto; }
 .choice .command-number { flex: 0 0 auto; white-space: pre; overflow-wrap: normal; color: inherit; opacity: .65; }
 .command-number.has-text-color, .has-text-color[style*="--output-color"] .command-number,
 .screen.is-active button.choice:enabled:is(:hover, :focus-visible) .command-number { opacity: 1; }

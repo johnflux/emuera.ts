@@ -42,10 +42,31 @@
   .era-kind > .line { display: contents; }
 }
 
+.era-action-direction-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--era-actions-gap);
+  min-width: 0;
+  max-width: 100%;
+
+  > .line { display: contents; }
+  .output-text:has(> .era-action-group-label) { display: contents; }
+  &[hidden] { display: none; }
+}
+.era-action-group-label {
+  flex: 0 0 auto;
+  color: #7dd8ed;
+  font-size: var(--era-font-size-small);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  &::after { content: ":"; }
+}
+
 /* Reusable collection of action groups: groups wrap side by side;
    direct .line children are full-width introductory/status rows.
    This is a parent of .era-actions-group, not a variant of that control row. */
-.era-actions-collection {
+.era-actions-collection, .era-actions-body {
   display: flex;
   flex-wrap: wrap;
   align-content: flex-start;
@@ -54,6 +75,33 @@
 
   > .line { flex-basis: 100%; }
   > .era-actions-group { flex: 0 1 auto; width: max-content; min-width: 0; max-width: 100%; }
+}
+.era-actions-body { flex: 1 1 28rem; min-width: 0; }
+.era-actions-collection { container: action-collection / inline-size; }
+.era-in-play {
+  flex: 0 0 12rem;
+  min-width: 0;
+  margin-left: auto;
+  box-shadow: var(--in-play-shadow, none);
+  > .line, .output-text:has(> .era-card-title) { display: contents; }
+}
+@container action-collection (min-width: 42rem) {
+  .era-in-play {
+    position: relative;
+    z-index: 1;
+    margin-right: -12px;
+    --in-play-shadow: 0 3px 6px #000b, 0 12px 28px 4px #0009;
+  }
+}
+.era-in-play-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--era-actions-gap);
+  margin-bottom: var(--era-actions-gap);
+  > .line, > .line > .output-text { display: contents; }
+}
+@media (max-width: 760px) {
+  .era-in-play { --in-play-shadow: none; flex-basis: 100%; margin-left: 0; margin-right: 0; box-shadow: none; }
 }
 
 /* Settings emitted through renderer lines: expose enhanced buttons to the

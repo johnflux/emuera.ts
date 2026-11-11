@@ -14,10 +14,9 @@ import { activateControllerAction, setupControllerMenu, syncGameControllerHints,
 import { createCheckbox, choiceControl, setupRadio, syncRadioGroups } from "./controls.js";
 import { createAutoAdvance, screenTransitionIndex } from "./auto-advance.js";
 import { createLayoutDiagnostics } from "./layout-diagnostics.js";
-import { describeActionDirection, setupActionDirectionFilters } from "./action-directions.js";
+import { describeActionDirection } from "./action-directions.js";
 
 const layoutDiagnostics = createLayoutDiagnostics();
-const actionDirectionFilters = { give: true, receive: true };
 let layoutDiagnosticPanel = null;
 function showLayoutDiagnostic(reportText) {
   console.error(reportText);
@@ -469,7 +468,7 @@ function updateControls() {
       || (skyContinue && !waitContinue)
       || button.getAttribute("aria-disabled") === "true"
       || previewDisabled
-      || !!input.buttonValues && !button.matches(".era-action-direction-filter") && !input.buttonValues.includes(value);
+      || !!input.buttonValues && !input.buttonValues.includes(value);
   });
   syncRadioGroups(terminal);
   syncRadioGroups(islandRoot);
@@ -2527,12 +2526,7 @@ async function renderSnapshot(snapshot, advanceScreen) {
   });
   if (layoutReport) showLayoutDiagnostic(layoutReport);
   markTarget(snapshot.target);
-  for (const main of outputRoot.querySelectorAll(".screen.is-active .era-main")) {
-    setupMainSidebar(main);
-    setupActionDirectionFilters(main, actionDirectionFilters, (button, event) =>
-      !button.disabled && !!button.closest(".screen.is-active") && !busy
-      && !(event.detail > 0 && settling()));
-  }
+  for (const main of outputRoot.querySelectorAll(".screen.is-active .era-main")) setupMainSidebar(main);
   for (const scene of outputRoot.querySelectorAll(".screen.is-active .era-scene")) syncSceneLines(scene);
   lastCharacterHistory = snapshot.characterHistory ?? null;
   showCharacterHistory(lastCharacterHistory);
@@ -2706,8 +2700,6 @@ async function terminalReady() {
 }
 /** Clears the run's client state before a new or resumed run is shown. */
 function resetRun() {
-  actionDirectionFilters.give = true;
-  actionDirectionFilters.receive = true;
   pendingScreen = null;
   midday = null;
   autoAdvance.reset();

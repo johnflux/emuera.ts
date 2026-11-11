@@ -146,16 +146,14 @@ button.choice.era-button-tone-vaginal { --action-tone: #432c3c; }
 button.choice.era-button-tone-anal { --action-tone: #33291f; }
 button.choice.era-button-tone-sm { --action-tone: #381c21; }
 button.choice.era-button-tone-service { --action-tone: #36351f; }
-button.choice.era-button:is(.era-action-give, .era-action-receive, .era-action-both)::before {
-  flex: none; margin-right: .3em; font: bold 1.1em/1 system-ui, sans-serif; pointer-events: none;
-}
-button.choice.era-button.era-action-give::before { content: "\2192" / ""; color: #58bd63; }
-button.choice.era-button.era-action-receive::before { content: "\2190" / ""; color: #579fff; }
-button.choice.era-button.era-action-both::before { content: "\2194" / ""; color: #dedede; }
 button.choice.era-button[hidden] { display: none; }
 .era-button .interactive-label { text-decoration: none; }
 .era-button .command-number { margin-left: .75ch; font-size: var(--era-font-size-small); }
-.era-button-suffix { margin-left: auto; }
+button.choice.era-button:has(> .choice-gap) { column-gap: 0; }
+.era-button > .choice-gap { flex: 1 1 .75ch; min-width: 0; font-size: var(--era-font-size-small); }
+.era-button > .choice-gap + .command-number { margin-left: 0; }
+button.choice.has-controller-hint > .choice-gap { display: none; }
+.era-button-suffix { margin-left: 1ch; }
 button.choice.era-button-list { display: grid; align-items: baseline; gap: 6px 16px; width: 100%; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; text-align: left; white-space: normal; overflow-wrap: anywhere; }
 button.choice.era-button-list:enabled:is(:hover, :focus-visible) { background: transparent; }
 .era-button-list .command-number { order: -1; min-width: 5ch; margin-left: 0; margin-right: 1ch; text-align: right; }

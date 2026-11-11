@@ -78,19 +78,8 @@ test("catalog uses production rendering and context-independent buttons at wide 
           cards:catalog.contentDocument.querySelectorAll(".era-main .era-card").length,
           statusHeight:catalog.contentDocument.querySelector("#status").getBoundingClientRect().height,
           terminalHeight:catalog.contentDocument.querySelector("#terminal").getBoundingClientRect().height};
-        const directionDoc = catalog.contentDocument;
         const directionMain = preview.closest(".era-main");
-        const givingFilter = directionMain.querySelector('.era-action-direction-filter[data-direction="give"]');
-        result.directionFiltersEnabled = directionMain.querySelectorAll(".era-action-direction-filter").length === 2
-          && [...directionMain.querySelectorAll(".era-action-direction-filter")].every(control => !control.disabled);
-        const originalStep = directionDoc.querySelector("#terminal").textContent;
-        givingFilter.click();
-        result.directionFilteringLocal = !directionMain.querySelector(".era-action-give:not([hidden])")
-          && givingFilter.getAttribute("aria-pressed") === "false"
-          && directionDoc.querySelector("#terminal").textContent === originalStep;
-        givingFilter.click();
-        result.directionFilteringRestored = !!directionMain.querySelector(".era-action-give:not([hidden])")
-          && givingFilter.getAttribute("aria-pressed") === "true";
+        result.noDirectionFilters = !directionMain.querySelector(".era-action-direction-filter");
         const host = catalog.ownerDocument;
         host.querySelector("#preview-size").value = "narrow";
         host.querySelector("#preview-size").dispatchEvent(new Event("change"));
@@ -110,6 +99,9 @@ test("catalog uses production rendering and context-independent buttons at wide 
         result.repeatEmpty = atlasDoc.querySelector(".era-repeat").textContent === "";
         result.continueEnabled = !atlasDoc.querySelector(".era-title-continue").disabled;
         result.noImageErrors = !atlasDoc.querySelector("#terminal").textContent.includes("Unknown sprite:");
+        result.inPlayCatalog = !!atlasDoc.querySelector(".era-actions-collection > .era-actions-body")
+          && !!atlasDoc.querySelector(".era-actions-collection > .era-in-play button")
+          && atlasDoc.querySelector(".era-in-play button").textContent.includes("Remove Blindfold");
         result.directionDescriptions = ["give", "receive", "both"].map(direction =>
           atlasDoc.querySelector(".era-button.era-action-" + direction).getAttribute("aria-description"));
         const summary = atlasDoc.querySelector(".era-player");
@@ -415,9 +407,7 @@ test("catalog uses production rendering and context-independent buttons at wide 
     assert.match(result.preview.font, /BIZ UD Gothic.*monospace/);
     assert.equal(result.variantFont, result.preview.font);
     assert.equal(result.renderer, true);
-    assert.equal(result.directionFiltersEnabled, true, "local filters are not disabled by game button-value restrictions");
-    assert.equal(result.directionFilteringLocal, true, "filtering changes visibility without submitting a game command");
-    assert.equal(result.directionFilteringRestored, true);
+    assert.equal(result.noDirectionFilters, true);
     assert.deepEqual(result.directionDescriptions, [
       "Give: You to your partner", "Receive: Your partner to you", "Both: You and your partner",
     ]);
@@ -435,6 +425,7 @@ test("catalog uses production rendering and context-independent buttons at wide 
     assert.equal(result.repeatEmpty, true);
     assert.equal(result.continueEnabled, true);
     assert.equal(result.noImageErrors, true);
+    assert.equal(result.inPlayCatalog, true);
     assert.equal(result.summaryFontSizes.length, 2, "summary uses body and secondary text sizes");
     assert.equal(result.summaryHeadingColor, true, "linked name inherits the shared heading color");
     assert.equal(result.smallTextDefault, true, "all secondary text components use 14px");

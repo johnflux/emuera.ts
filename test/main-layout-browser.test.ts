@@ -32,7 +32,7 @@ const browser = [
   process.env.PROGRAMFILES && join(process.env.PROGRAMFILES, "Google/Chrome/Application/chrome.exe"),
 ].find((path): path is string => !!path && existsSync(path));
 
-test("direction arrows and local filters preserve category tones, numbers, mutual actions and redraw state", {
+test("inline direction groups preserve category tones, numbers and accessible descriptions without extra filters", {
   skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH",
 }, async () => {
   const [style, source] = await Promise.all([
@@ -42,61 +42,43 @@ test("direction arrows and local filters preserve category tones, numbers, mutua
   const markup = `<div class="era-card era-actions-collection">
     <div class="era-actions-header"><span>Actions</span><span class="era-toggles">
       <button class="choice era-chip-button" id="category">Service</button></span></div>
-    <div class="era-actions-group" id="giving"><div class="era-actions-title">Give</div>
+    <div class="era-actions-group"><div class="era-actions-title">Intimate</div>
+    <div class="era-action-direction-group" id="giving"><span class="era-action-group-label">Give</span>
       <button id="give" class="choice era-button era-button-tone-service era-action-give" data-command-number="2">Give Blowjob</button></div>
-    <div class="era-actions-group" id="receiving"><div class="era-actions-title">Receive</div>
+    <div class="era-action-direction-group" id="receiving"><span class="era-action-group-label">Receive</span>
       <button id="receive" class="choice era-button era-button-tone-service era-action-receive" data-command-number="81">Blowjob</button></div>
-    <div class="era-actions-group" id="shared"><div class="era-actions-title">Touch</div>
+    <div class="era-action-direction-group" id="shared"><span class="era-action-group-label">Both</span>
       <button id="both" class="choice era-button era-action-both" data-command-number="311">Embrace</button>
       <button id="unknown" class="choice era-button" data-command-number="21">Do Nothing</button></div>
-  </div>`;
+  </div></div>`;
   const html = `<!doctype html><meta charset="utf-8"><style>${style}</style><body>
-    <div class="screen is-active"><div class="era-main" data-closed="closed">${markup}</div></div><script>
+    <div class="screen is-active"><div class="era-main era-intimate era-embrace" data-closed="closed">${markup}</div></div><script>
     ${source.replace(/^export /gm, "")}
     ${decorateButtons}
-    const main = document.querySelector(".era-main"), state = {give:true, receive:true};
-    let busy = false, submissions = 0;
-    main.addEventListener("click", event => { if (event.target.id === "category") submissions++; });
-    const canActivate = button => !busy && !button.disabled && !!button.closest(".screen.is-active");
-    const setup = () => setupActionDirectionFilters(main, state, canActivate);
-    const filter = direction => main.querySelector('[data-direction="' + direction + '"]');
+    const main = document.querySelector(".era-main");
     const visible = () => Object.fromEntries(["give", "receive", "both", "unknown"].map(id =>
       [id, main.querySelector("#" + id).getClientRects().length > 0]));
-    setup(); setup();
     const give = main.querySelector("#give");
     describeActionDirection(give, (button, description) => button.dataset.tooltip = description);
     const result = {
       controls: main.querySelectorAll(".era-action-direction-filter").length,
       arrows: ["give","receive","both"].map(id => {
         const button = main.querySelector("#" + id), css = getComputedStyle(button, "::before");
-        return {content:css.content, color:css.color, text:button.textContent};
+        return css.content;
       }),
+      inlineLabels: [...main.querySelectorAll(".era-action-group-label")].every(label => {
+        const button = label.nextElementSibling;
+        return Math.abs(label.getBoundingClientRect().top - button.getBoundingClientRect().top) < 10
+          && label.getBoundingClientRect().right <= button.getBoundingClientRect().left;
+      }),
+      labelColors: [...main.querySelectorAll(".era-action-group-label")].map(label => getComputedStyle(label).color),
+      headingColor: getComputedStyle(main.querySelector(".era-actions-title")).color,
+      colons: [...main.querySelectorAll(".era-action-group-label")].map(label => getComputedStyle(label, "::after").content),
       tones: ["give","receive"].map(id => getComputedStyle(main.querySelector("#" + id)).backgroundImage),
       accessible: give.getAttribute("aria-description"),
       tooltip: give.dataset.tooltip,
       all: visible(),
     };
-    filter("give").click();
-    result.receiveOnly = visible();
-    result.hiddenGroup = getComputedStyle(main.querySelector("#giving")).display;
-    result.pressed = filter("give").getAttribute("aria-pressed");
-    result.noCommandValue = !filter("give").hasAttribute("data-value");
-    filter("receive").click();
-    result.neither = visible();
-    filter("give").click();
-    result.giveOnly = visible();
-    main.innerHTML = ${JSON.stringify(markup)};
-    setup();
-    result.redraw = visible();
-    main.querySelector("#category").click();
-    result.categorySubmissions = submissions;
-    busy = true; filter("give").click(); busy = false;
-    result.busy = visible();
-    filter("give").disabled = true; filter("give").click(); filter("give").disabled = false;
-    result.disabled = visible();
-    main.closest(".screen").classList.remove("is-active");
-    filter("give").click();
-    result.stale = visible();
     const invalid = document.createElement("button");
     invalid.className = "era-action-give era-action-receive";
     try { describeActionDirection(invalid, () => {}); }
@@ -112,26 +94,162 @@ test("direction arrows and local filters preserve category tones, numbers, mutua
     const match = stdout.match(/<body[^>]*>([\s\S]*?)<\/body>/);
     assert.ok(match);
     const result = JSON.parse(match[1]);
-    assert.equal(result.controls, 2);
-    assert.deepEqual(result.arrows, [
-      { content: '"→" / ""', color: "rgb(88, 189, 99)", text: "Give Blowjob[2]" },
-      { content: '"←" / ""', color: "rgb(87, 159, 255)", text: "Blowjob[81]" },
-      { content: '"↔" / ""', color: "rgb(222, 222, 222)", text: "Embrace[311]" },
-    ]);
+    assert.equal(result.controls, 0);
+    assert.deepEqual(result.arrows, ["none", "none", "none"]);
+    assert.equal(result.inlineLabels, true, "direction labels share a row with their first action");
+    assert.ok(result.labelColors.every((color: string) => color === result.headingColor));
+    assert.deepEqual(result.colons, ['":"', '":"', '":"']);
     assert.equal(result.tones[0], result.tones[1]);
     assert.equal(result.accessible, "Give: You to your partner");
     assert.equal(result.tooltip, result.accessible);
     assert.deepEqual(result.all, {give:true, receive:true, both:true, unknown:true});
-    assert.deepEqual(result.receiveOnly, {give:false, receive:true, both:true, unknown:true});
-    assert.equal(result.hiddenGroup, "none");
-    assert.equal(result.pressed, "false");
-    assert.equal(result.noCommandValue, true);
-    assert.deepEqual(result.neither, {give:false, receive:false, both:false, unknown:true});
-    const giving = {give:true, receive:false, both:true, unknown:true};
-    for (const key of ["giveOnly", "redraw", "busy", "disabled", "stale"])
-      assert.deepEqual(result[key], giving, key);
-    assert.equal(result.categorySubmissions, 1);
     assert.match(result.invalid, /only one direction class/);
+  } finally { await rm(profile, { recursive: true, force: true }); }
+});
+
+test("choice text fits a single line beside numbers and grows back when widened", {
+  skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH",
+}, async () => {
+  const style = await readFile(new URL("../web/generated/style.css", import.meta.url), "utf8");
+  const html = `<!doctype html><style>${style}</style><body>
+    <div id="box" style="width:180px;font-size:24px">
+      <button class="choice era-button era-button-block" data-command-number="189">End Newlywed Play</button>
+      <button class="choice" style="width:100%">A long legacy choice label</button>
+      <button class="choice era-button era-button-block" disabled data-command-number="181">Aphrodisiac</button>
+    </div><script>
+    ${decorateButtons}
+    const box = document.querySelector("#box"), button = box.querySelector("button");
+    const label = button.querySelector(".choice-text");
+    decorateCommandNumbers(button);
+    const gap = button.querySelector(".choice-gap");
+    const gapWidth = () => gap.getBoundingClientRect().width;
+    const measure = () => {
+      const range = document.createRange();
+      range.selectNodeContents(label);
+      return range.getBoundingClientRect().width;
+    };
+    const fits = () => [...box.querySelectorAll("button")].every(control => {
+      const range = document.createRange();
+      range.selectNodeContents(control);
+      const rect = control.getBoundingClientRect();
+      return [...range.getClientRects()].every(part => part.right <= rect.right + 1 && part.left >= rect.left - 1);
+    });
+    const narrow = measure();
+    const narrowGap = gapWidth();
+    const narrowFits = fits();
+    box.style.width = "400px";
+    const wide = measure();
+    const expandsGap = gapWidth() > narrowGap;
+    const wideFits = fits();
+    box.style.width = "150px";
+    const shrinksAgain = measure() < wide;
+    const squeezedGap = gapWidth() < narrowGap;
+    const narrowerFits = fits();
+    button.classList.add("has-controller-hint");
+    const hintHidesGap = getComputedStyle(gap).display === "none";
+    button.classList.remove("has-controller-hint");
+    button.classList.remove("era-button-block");
+    box.style.width = "400px";
+    const probe = document.createElement("span");
+    probe.style.cssText = "display:inline-block;width:.75ch;font:" + getComputedStyle(gap).font;
+    document.body.append(probe);
+    const preferredGap = Math.abs(gapWidth() - probe.getBoundingClientRect().width) < 1;
+    const result = { supports: CSS.supports("text-fit", "shrink"), narrowFits, wideFits,
+      grows: wide > narrow + 1, shrinksAgain, narrowerFits,
+      expandsGap, squeezedGap, hintHidesGap, preferredGap,
+      oneGap: button.querySelectorAll(".choice-gap").length === 1,
+      nowrap: [...box.querySelectorAll("button")].every(control => getComputedStyle(control).whiteSpace === "nowrap"),
+      label: label.textContent, number: button.querySelector(".command-number").textContent };
+    document.body.textContent = JSON.stringify(result);
+    </script>`;
+  const profile = await mkdtemp(join(process.cwd(), ".era-choice-fit-"));
+  try {
+    const { stdout } = await execute(browser!, ["--headless", "--disable-gpu", "--no-first-run",
+      `--user-data-dir=${profile}`, "--dump-dom", `data:text/html;base64,${Buffer.from(html).toString("base64")}`],
+      { maxBuffer: 8 * 1024 * 1024, timeout: 30000 });
+    const match = stdout.match(/<body[^>]*>([\s\S]*?)<\/body>/);
+    assert.ok(match);
+    assert.deepEqual(JSON.parse(match[1]), { supports: true, narrowFits: true, wideFits: true,
+      grows: true, shrinksAgain: true, narrowerFits: true, nowrap: true,
+      expandsGap: true, squeezedGap: true, hintHidesGap: true, preferredGap: true, oneGap: true,
+      label: "End Newlywed Play", number: "[189]" });
+  } finally { await rm(profile, { recursive: true, force: true }); }
+});
+
+test("In play shares the actions card without covering choices and stacks below at narrow widths", {
+  skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH",
+}, async () => {
+  const style = await readFile(new URL("../web/generated/style.css", import.meta.url), "utf8");
+  const html = `<!doctype html><meta charset="utf-8"><style>${style}</style><body>
+    <div class="era-card era-actions-collection" style="width:850px">
+      <div class="line"><span class="output-text"><div class="era-card-title era-actions-header">Actions</div></span></div>
+      <div class="era-actions-body">
+        <div class="era-actions-group"><div class="line"><span class="output-text"><div class="era-actions-title">Intimate</div></span></div>
+          <div class="line"><span class="output-text"><button class="choice era-button">Remove Blindfold</button></span></div>
+          <div class="line"><span class="output-text"><button class="choice era-button">Caress</button></span></div>
+        </div>
+      </div>
+      <div class="era-card era-in-play">
+        <div class="line"><span class="output-text"><div class="era-card-title">In play</div></span></div>
+        <div class="era-in-play-item">
+          <div class="line"><span class="output-text"><button class="choice era-button era-button-block">Remove Blindfold</button></span></div>
+        </div>
+        <div class="era-in-play-item">
+          <div class="line"><span class="output-text"><button class="choice era-button era-button-block" disabled>Untie Bondage</button></span></div>
+          <div class="line"><span class="output-text"><span class="era-sub">Cannot untie now.</span></span></div>
+        </div>
+      </div>
+    </div><script>
+    const collection = document.querySelector(".era-actions-collection");
+    const body = document.querySelector(".era-actions-body"), panel = document.querySelector(".era-in-play");
+    const fits = () => [...collection.querySelectorAll("button")].every(button => {
+      const rect = button.getBoundingClientRect(), parent = collection.getBoundingClientRect();
+      return rect.left >= parent.left && rect.right <= parent.right;
+    });
+    const result = {
+      sideBySide: panel.getBoundingClientRect().left >= body.getBoundingClientRect().right,
+      aligned: Math.abs(panel.getBoundingClientRect().top - body.getBoundingClientRect().top) < 1,
+      wideFits: fits(), position: getComputedStyle(panel).position,
+      overlap: Math.abs(panel.getBoundingClientRect().right - collection.getBoundingClientRect().right - 1) < 1,
+      shadow: getComputedStyle(panel).boxShadow !== "none",
+      rounded: parseFloat(getComputedStyle(panel).borderTopRightRadius) > 0
+        && parseFloat(getComputedStyle(panel).borderBottomRightRadius) > 0,
+      disabled: panel.querySelector("button:disabled").disabled,
+      reasonVisible: panel.querySelector(".era-sub").getClientRects().length > 0,
+    };
+    collection.style.width = "360px";
+    result.stacked = panel.getBoundingClientRect().top >= body.getBoundingClientRect().bottom;
+    result.narrowFits = fits();
+    result.noNarrowOverlap = getComputedStyle(panel).marginRight === "0px";
+    result.noNarrowShadow = getComputedStyle(panel).boxShadow === "none";
+    result.noItemHeadings = !panel.querySelector(".era-in-play-label");
+    const intimate = document.createElement("div");
+    intimate.className = "era-main era-intimate";
+    intimate.style.display = "block";
+    collection.before(intimate);
+    intimate.append(collection);
+    collection.style.width = "850px";
+    result.intimateShadow = getComputedStyle(panel).boxShadow ===
+      "rgba(0, 0, 0, 0.733) 0px 3px 6px 0px, rgba(0, 0, 0, 0.6) 0px 12px 28px 4px";
+    collection.style.width = "360px";
+    result.noIntimateFloatingShadow = !getComputedStyle(panel).boxShadow.includes("28px");
+    document.body.textContent = JSON.stringify(result);
+    </script>`;
+  const profile = await mkdtemp(join(process.cwd(), ".era-in-play-layout-"));
+  try {
+    const { stdout } = await execute(browser!, ["--headless", "--disable-gpu", "--no-first-run", "--window-size=1200,900",
+      `--user-data-dir=${profile}`, "--dump-dom",
+      `data:text/html;base64,${Buffer.from(html).toString("base64")}`],
+      { maxBuffer: 8 * 1024 * 1024, timeout: 30000 });
+    const match = stdout.match(/<body[^>]*>([\s\S]*?)<\/body>/);
+    assert.ok(match);
+    assert.deepEqual(JSON.parse(match[1]), {
+      sideBySide: true, aligned: true, wideFits: true, position: "relative",
+      overlap: true, shadow: true, rounded: true,
+      noNarrowOverlap: true, noNarrowShadow: true,
+      intimateShadow: true, noIntimateFloatingShadow: true,
+      disabled: true, reasonVisible: true, stacked: true, narrowFits: true, noItemHeadings: true,
+    });
   } finally { await rm(profile, { recursive: true, force: true }); }
 });
 

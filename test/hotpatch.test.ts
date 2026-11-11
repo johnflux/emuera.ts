@@ -68,10 +68,11 @@ test("action direction is player-relative, independent of category and aware of 
   const cases = [
     [0, "give"], [1, "give"], [2, "give"], [40, "give"], [60, "give"], [65, "give"],
     [96, "give"], [100, "give"], [123, "give"], [124, "give"], [310, "give"],
+    [180, "give"], [181, "give"], [182, "give"], [189, "give"], [9228, "receive"],
     [22, "receive"], [64, "receive"], [80, "receive"], [81, "receive"], [92, "receive"],
     [99, "receive"], [120, "receive"], [125, "receive"], [130, "receive"], [305, "receive"],
-    [19, "both"], [20, "both"], [121, "both"], [126, "both"], [311, "both"], [312, "both"],
-    [9, ""], [21, ""], [24, ""], [300, ""], [352, ""], [490, ""], [809, ""], [9000, ""],
+    [19, "give"], [20, "give"], [121, "give"], [126, "receive"], [311, "both"], [312, "both"],
+    [9, ""], [21, ""], [24, ""], [50, ""], [51, ""], [300, ""], [352, ""], [490, ""], [809, ""], [9000, ""],
   ] as const;
   indexScript(game, `@SYSTEM_TITLE
 ADDVOIDCHARA
@@ -1078,6 +1079,279 @@ FLAG:2 = RESULT`, "<calendar-command-test>");
   }
 });
 
+test("Intimate groups directions once while Talk & Touch retains command order and no subheadings", {
+  skip: !existsSync(GAME_ROOT),
+}, async () => {
+  const game = await loadGame();
+  await applyHotpatches(game);
+  const source = readFileSync(new URL("../hotpatch/MAIN_SCREEN_COMMANDS.ERB", import.meta.url), "utf8");
+  const stub = emptyGame(game.root);
+  indexScript(stub, source.slice(source.indexOf("@SHOW_USERCOM\n"),
+    source.indexOf('HTML_PRINT "<era-open class=\'era-actions-group era-actions-more\'>"'))
+    + '\nHTML_PRINT "<era-open class=\'era-actions-group era-actions-situation\'>"\nHTML_PRINT "<div class=\'era-actions-title\'>Right now</div>"\n'
+    + source.slice(source.indexOf("\tFOR nIndex, 0, nPreparationCount"),
+      source.indexOf("\tIF FLAG:70 == 1 && CFLAG:TARGET:344 == 0", source.indexOf("\tFOR nIndex, 0, nPreparationCount")))
+    + '\nHTML_PRINT "<era-close>"'
+    + '\nHTML_PRINT "<era-close>"'
+    + '\nHTML_PRINT "<era-close>"', "<grouped-actions>");
+  indexScript(stub, `@SYSTEM_TITLE
+ADDCHARA 0
+ADDCHARA 1
+MASTER = 0
+PLAYER = 0
+TARGET = 1
+CFLAG:1:うふふ = 1
+CFLAG:1:奉仕アンフィルタ = 1
+CFLAG:1:Ｖアンフィルタ = 1
+CFLAG:1:Ａアンフィルタ = 1
+CALL SHOW_USERCOM
+QUIT
+@GLOBAL_COMABLE2(ARG)
+#FUNCTION
+RETURNF !GROUPMATCH(ARG, 0, 20, 21, 24, 50, 51, 80, 121, 125, 126, 310, 311)
+@QOL_BLOCKED_COM_HIDDEN_SEX(ARG)
+#FUNCTION
+RETURNF 0
+@KOJO_CHECK(ARG, sName, ARG:1 = 0, ARG:2 = 0)
+#DIMS sName
+RETURN 0
+@QUICKFILTER(ARG)
+#FUNCTION
+RETURNF 1
+@QUICKFILTER_CUSTOM(ARG)
+#FUNCTION
+RETURNF 1
+@ADD_CUSTOM_COM_ABLE228
+RETURN 1
+@HOTPATCH_FILTERS(ARG)
+RETURN
+${[0, 20, 21, 24, 50, 51, 80, 121, 125, 126, 310, 311].map(id => `@COM_ABLE${id}\nRETURN 1`).join("\n")}`, "<grouped-actions-fixture>");
+  for (const [name, routine] of stub.routines) game.routines.set(name, routine);
+  for (const jit of [false, true]) {
+    const snapshot = new Runtime(game, GAME_INSTRUCTION_LIMIT, { jit }).start();
+    assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
+    const html = snapshot.output.flatMap(item => item.type === "html" ? [item.text] : []).join("");
+    assert.deepEqual([...html.matchAll(/class='era-action-group-label'>([^<]+)/g)].map(match => match[1]),
+      ["Give", "Receive"], html);
+    const ids = [...html.matchAll(/<button value='(\d+)'/g)].map(match => Number(match[1]));
+    assert.deepEqual(ids.filter(id => id !== 352), [0, 20, 121, 80, 125, 126, 9228, 310, 311, 21, 24, 50, 51]);
+    assert.equal(ids.filter(id => id === 9228).length, 1);
+    assert.match(html, /value='9228' class='era-button era-button-tone-service era-action-receive'/);
+    const touch = html.slice(html.indexOf("Talk &amp; Touch"));
+    assert.doesNotMatch(touch, /era-action-group-label|era-action-direction-group/);
+    assert.equal((html.match(/era-action-direction-group/g) ?? []).length, 2);
+    const preparation = html.slice(html.indexOf(">Right now</div>"));
+    assert.deepEqual([...preparation.matchAll(/<button value='(\d+)'/g)].map(match => Number(match[1])), [21, 24, 50, 51]);
+    assert.doesNotMatch(preparation, /era-action-(?:give|receive|both)/);
+    assert.equal((html.match(/<era-open/g) ?? []).length, (html.match(/<era-close/g) ?? []).length);
+  }
+});
+
+test("In play reflects equipment state, preserves removal restrictions and updates action labels", {
+  skip: !existsSync(GAME_ROOT),
+}, async () => {
+  const game = await loadGame();
+  await applyHotpatches(game);
+  const equipment = [
+    [11, "乳首吸い"], [12, "胸揉み"], [19, "継続キス"], [42, "クリキャップ"],
+    [43, "オナホール"], [44, "バイブ"], [45, "アナルバイブ"], [46, "アナルビーズ"],
+    [47, "ニプルキャップ"], [48, "搾乳機"], [104, "アイマスク"], [105, "縄"], [107, "拘束"],
+  ] as const;
+  const fixture = emptyGame(game.root);
+  indexScript(fixture, `@SYSTEM_TITLE
+#DIM nAble, 800
+ADDCHARA 0
+ADDCHARA 1
+ADDCHARA 2
+MASTER = 0
+PLAYER = 0
+TARGET = 1
+TFLAG:100 = 1
+CFLAG:1:うふふ = 1
+PREVCOM = 104
+HTML_PRINT "<div class='phase-empty'></div>"
+CALL HOTPATCH_PRINT_COM(104)
+CALL HOTPATCH_IN_PLAY(nAble, 0)
+HTML_PRINT "<div class='phase-active'></div>"
+${equipment.map(([, name]) => `TEQUIP:1:${name} = 1`).join("\n")}
+TEQUIP:0:コンドーム = 1
+TEQUIP:1:焦らしモード = 1
+TCVAR:1:ピル = 1
+TCVAR:1:媚薬 = 180
+TCVAR:1:利尿剤 = 180
+TEQUIP:1:新妻プレイ = 1
+TEQUIP:1:BALL_LICKING = 1
+${equipment.filter(([id]) => id !== 12).map(([id], index) => `nAble:${index} = ${id}`).join("\n")}
+nAble:12 = 50
+nAble:13 = 181
+nAble:14 = 182
+nAble:15 = 189
+${[104, 105, 107, 45, 50, 19].map(id => `CALL HOTPATCH_PRINT_COM(${id})`).join("\n")}
+CALL HOTPATCH_IN_PLAY(nAble, 16)
+PRINTFORML State: {TEQUIP:1:アイマスク},{TEQUIP:1:縄},{TEQUIP:1:アナルバイブ}
+HTML_PRINT "<div class='phase-blocked'></div>"
+TCVAR:1:無理矢理 = 1
+CFLAG:1:好感度 = 0
+CFLAG:1:信頼度 = 0
+CALL HOTPATCH_PRINT_COM(105)
+CALL HOTPATCH_IN_PLAY(nAble, 13)
+HTML_PRINT "<div class='phase-cleared'></div>"
+${equipment.map(([, name]) => `TEQUIP:1:${name} = 0`).join("\n")}
+TEQUIP:0:コンドーム = 0
+TEQUIP:1:焦らしモード = 0
+TCVAR:1:ピル = 0
+TCVAR:1:媚薬 = 0
+TCVAR:1:利尿剤 = 0
+TEQUIP:1:新妻プレイ = 0
+TEQUIP:1:BALL_LICKING = 0
+CALL HOTPATCH_PRINT_COM(104)
+CALL HOTPATCH_PRINT_COM(189)
+CALL HOTPATCH_IN_PLAY(nAble, 13)
+HTML_PRINT "<div class='phase-other-target'></div>"
+TEQUIP:1:アイマスク = 1
+TARGET = 2
+CALL HOTPATCH_IN_PLAY(nAble, 13)
+HTML_PRINT "<div class='phase-unique'></div>"
+TARGET = 1
+PLAYER = 0
+TALENT:0:2 = 2
+TFLAG:101 = 0
+CFLAG:1:うふふ = 1
+CFLAG:1:Ｖアンフィルタ = 1
+CFLAG:1:Ａアンフィルタ = 1
+CFLAG:1:奉仕アンフィルタ = 1
+TCVAR:1:ピル = 1
+TCVAR:1:媚薬 = 180
+TCVAR:1:利尿剤 = 180
+TEQUIP:1:新妻プレイ = 1
+TEQUIP:1:BALL_LICKING = 1
+TEQUIP:1:焦らしモード = 1
+CALL SHOW_USERCOM
+TCVAR:1:ピル = 0
+TCVAR:1:媚薬 = 0
+TCVAR:1:利尿剤 = 0
+TEQUIP:1:新妻プレイ = 0
+TEQUIP:1:BALL_LICKING = 0
+TEQUIP:1:焦らしモード = 0
+HTML_PRINT "<div class='phase-native-on'></div>"
+TARGET = 1
+TEQUIP:1:アイマスク = 0
+FLAG:70 = 1
+CALL COM104
+CALL HOTPATCH_PRINT_COM(104)
+CALL HOTPATCH_IN_PLAY(nAble, 13)
+HTML_PRINT "<div class='phase-native-off'></div>"
+CALL COM104
+CALL HOTPATCH_PRINT_COM(104)
+CALL HOTPATCH_IN_PLAY(nAble, 13)
+QUIT
+@ADD_CUSTOM_COM_ABLE17
+RETURN 1
+@GLOBAL_COMABLE2(ARG)
+#FUNCTION
+RETURNF !GROUPMATCH(ARG, 51, 104, 181, 182, 189)`, "<in-play-fixture>");
+  game.routines.set("ADD_CUSTOM_COM_ABLE17", fixture.routines.get("ADD_CUSTOM_COM_ABLE17")!);
+  game.routines.set("GLOBAL_COMABLE2", fixture.routines.get("GLOBAL_COMABLE2")!);
+  game.routines.set("SYSTEM_TITLE", fixture.routines.get("SYSTEM_TITLE")!);
+  for (const jit of [false, true]) {
+    const snapshot = new Runtime(game, GAME_INSTRUCTION_LIMIT, { jit }).start();
+    assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
+    const html = snapshot.output.flatMap(item => item.type === "html" ? [item.text] : []).join("");
+    const [, empty, active, blocked, cleared, other, unique, nativeOn, nativeOff] = html.split(/<div class='phase-[a-z-]+'><\/div>/);
+    assert.doesNotMatch(empty!, /era-in-play/);
+    assert.match(empty!, />Blindfold<\/button>/);
+    assert.match(active!, /class='era-card era-in-play'/);
+    assert.equal((active!.match(/class='era-in-play-item'/g) ?? []).length, 20);
+    assert.doesNotMatch(active!, /era-in-play-label/);
+    assert.match(active!, /value='51'[^>]*aria-disabled='true'[^>]*>Birth Control/);
+    assert.match(active!, /value='181'[^>]*aria-disabled='false'[^>]*>Aphrodisiac/);
+    assert.match(active!, /value='182'[^>]*aria-disabled='false'[^>]*>Diuretic/);
+    assert.doesNotMatch(active!, /<span class='era-sub'>Already taken/);
+    assert.match(active!, />End Newlywed Play<\/button>/);
+    assert.match(active!, /value='105'[^>]*class='[^']*era-button-tone-sm[^']*'[^>]*>Untie Bondage/);
+    assert.match(blocked!, /value='105'[^>]*class='[^']*era-button-tone-sm[^']*'/);
+    assert.match(active!, /value='45'[^>]*class='[^']*era-button-tone-anal[^']*'/);
+    assert.match(active!, />Stop Ball Sucking<\/button>/);
+    for (const label of ["Remove Blindfold", "Untie Bondage", "Release Restraints",
+      "Remove Anal Vibrator", "Remove Condom", "Finish Kissing"])
+      assert.ok(active!.includes(`>${label}</button>`), label);
+    assert.match(active!, /value='12'[^>]*aria-disabled='true'/, "unavailable ongoing touch remains visible but disabled");
+    assert.doesNotMatch(active!, /Not available now/);
+    assert.doesNotMatch(active!, /class='era-in-play-label'>Spanking/);
+    assert.match(blocked!, /value='105'[^>]*aria-disabled='true'/);
+    assert.match(blocked!, /Cannot untie while forced restraint is active/);
+    assert.doesNotMatch(cleared!, /era-in-play/);
+    assert.match(cleared!, />Blindfold<\/button>/);
+    assert.match(cleared!, /value='189'[^>]*>Newlywed Play<\/button>/);
+    assert.doesNotMatch(cleared!, /Apron Play/);
+    assert.doesNotMatch(other!, /era-in-play/, "another character's equipment is not shown");
+    for (const id of [51, 104, 181, 182, 189, 826, 9017])
+      assert.equal((unique!.match(new RegExp(`<button value='${id}' class='era-button`, "g")) ?? []).length,
+        1, `active ${id} appears once`);
+    assert.doesNotMatch(unique!.slice(0, unique!.indexOf("class='era-card era-in-play'")),
+      /<button value='(?:51|104|181|182|189|826|9017)' class='era-button/);
+    assert.match(nativeOn!, />Remove Blindfold<\/button>/);
+    assert.match(nativeOn!, /era-in-play/);
+    assert.match(nativeOff!, />Blindfold<\/button>/);
+    assert.doesNotMatch(nativeOff!, /era-in-play/);
+    assert.ok(snapshot.output.some(item => item.type === "text" && item.text === "State: 1,1,1"));
+  }
+});
+
+test("verified location categories drive filters and tones while retaining Receive Service and overlapping tags", {
+  skip: !existsSync(GAME_ROOT),
+}, async () => {
+  const game = await loadGame();
+  await applyHotpatches(game);
+  const anal = [4, 5, 13, 25, 45, 46, 62, 63, 66, 69, 70, 71, 74, 75, 90, 91, 92, 93, 94, 127, 314];
+  const vaginal = [1, 3, 8, 15, 25, 42, 44, 60, 61, 64, 65, 67, 68, 71, 72, 73, 79, 120, 121, 130, 131, 132, 133, 315, 316];
+  const fixture = emptyGame(game.root);
+  indexScript(fixture, `@SYSTEM_TITLE
+ADDCHARA 0
+ADDCHARA 1
+MASTER = 0
+PLAYER = 0
+TARGET = 1
+CFLAG:1:奉仕アンフィルタ = 1
+CFLAG:1:RevServiceFilter = 1
+CFLAG:1:RevSexFilter = 1
+CFLAG:1:セクハラアンフィルタ = 1
+CFLAG:1:ＳＭアンフィルタ = 1
+CFLAG:1:Ｖアンフィルタ = 1
+CFLAG:1:Ａアンフィルタ = 1
+${anal.map(id => `PRINTFORML A${id}:{HOTPATCH_ACTION_IS_ANAL(${id})}`).join("\n")}
+${vaginal.map(id => `PRINTFORML V${id}:{HOTPATCH_ACTION_IS_VAGINAL(${id})}`).join("\n")}
+${[13, 90, 91, 92, 127, 130, 1, 15].map(id => `CALL HOTPATCH_PRINT_COM(${id})`).join("\n")}
+CFLAG:1:Ａアンフィルタ = 0
+${anal.map(id => `PRINTFORML Hidden A${id}:{HOTPATCH_ACTION_FILTER(${id})}`).join("\n")}
+PRINTFORML Unrelated:{HOTPATCH_ACTION_FILTER(80)}
+CFLAG:1:Ａアンフィルタ = 1
+CFLAG:1:Ｖアンフィルタ = 0
+${vaginal.map(id => `PRINTFORML Hidden V${id}:{HOTPATCH_ACTION_FILTER(${id})}`).join("\n")}
+PRINTFORML Anal remains:{HOTPATCH_ACTION_FILTER(90)}
+QUIT`, "<location-category-fixture>");
+  game.routines.set("SYSTEM_TITLE", fixture.routines.get("SYSTEM_TITLE")!);
+  for (const jit of [false, true]) {
+    const snapshot = new Runtime(game, GAME_INSTRUCTION_LIMIT, { jit }).start();
+    assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
+    const text = snapshot.output.flatMap(item => item.type === "text" ? [item.text] : []);
+    for (const [label, ids] of [["A", anal], ["V", vaginal]] as const)
+      for (const id of ids) {
+        assert.ok(text.includes(`${label}${id}:1`), `${label} membership for ${id}`);
+        assert.ok(text.includes(`Hidden ${label}${id}:0`), `${label} hides ${id}`);
+      }
+    assert.ok(text.includes("Unrelated:1"));
+    assert.ok(text.includes("Anal remains:1"));
+    const html = snapshot.output.flatMap(item => item.type === "html" ? [item.text] : []).join("");
+    for (const id of [90, 91, 92, 127])
+      assert.match(html, new RegExp(`value='${id}' class='[^']*era-button-tone-service[^']*era-action-category-anal`));
+    assert.match(html, /value='13' class='[^']*era-button-tone-anal[^']*era-action-category-anal/);
+    assert.match(html, /value='130' class='[^']*era-button-tone-service[^']*era-action-category-vaginal/);
+    for (const id of [1, 15])
+      assert.match(html, new RegExp(`value='${id}' class='[^']*era-button-tone-vaginal`));
+  }
+});
+
 test("action filters and command categories share vaginal, anal, SM and service colors", {
   skip: !existsSync(GAME_ROOT),
 }, async () => {
@@ -1105,6 +1379,15 @@ CALL HOTPATCH_PRINT_COM(125)
 CALL HOTPATCH_PRINT_COM(311)
 CALL HOTPATCH_FILTERS(63)
 PRINTFORML Kinds: %HOTPATCH_ACTION_KIND(3)%,%HOTPATCH_ACTION_KIND(5)%,%HOTPATCH_ACTION_KIND(100)%,%HOTPATCH_ACTION_KIND(81)%
+PRINTFORML Armpit filter: {HOTPATCH_ACTION_FILTER(9228)}
+FOR LOCAL, 0, 200
+	SIF HOTPATCH_ACTION_DIRECTION(LOCAL) != "receive"
+		CONTINUE
+	PRINTFORML Receive kind: %HOTPATCH_ACTION_KIND(LOCAL)%
+	CFLAG:1:奉仕アンフィルタ = 0
+	PRINTFORML Service off: {HOTPATCH_ACTION_FILTER(LOCAL)}
+	CFLAG:1:奉仕アンフィルタ = ${on}
+NEXT
 QUIT`, "<filter-colors-test>");
     game.routines.set("SYSTEM_TITLE", stub.routines.get("SYSTEM_TITLE")!);
     const snapshot = new Runtime(game, GAME_INSTRUCTION_LIMIT).start();
@@ -1113,16 +1396,24 @@ QUIT`, "<filter-colors-test>");
     for (const [id, kind] of [[831, "vaginal"], [832, "anal"], [836, "sm"], [835, "service"], [-9120, "service"]]) {
       assert.match(html, new RegExp(`value='${id}' class='era-toggle era-kind-${kind}${on ? " era-on" : ""}' role='checkbox' aria-checked='${on ? "true" : "false"}'`));
     }
+    assert.match(html, /value='836'[^>]*>BDSM<\/button>/);
+    assert.match(html, /Show BDSM actions \(red\)/);
     for (const id of [360, 361]) {
       assert.match(html, new RegExp(`<button value='${id}' class='era-button era-button-tone-petting'`),
         `command ${id} shares the Petting pink`);
     }
     for (const [id, direction] of [[0, "give"], [125, "receive"], [311, "both"]])
-      assert.match(html, new RegExp(`<button value='${id}' class='era-button [^']*era-action-${direction}'[^>]*data-command-number='${id}'`));
+      assert.match(html, new RegExp(`<button value='${id}' class='era-button [^']*era-action-${direction}(?: [^']*)?'[^>]*data-command-number='${id}'`));
     assert.doesNotMatch(html, /[←→↔]/, "direction arrows are CSS-only");
     if (repeat !== null) assert.match(html, new RegExp(`<button value='${repeat}' class='era-repeat' title='Repeat last action' aria-label='Repeat last action'></button></span></div>$`));
     else assert.doesNotMatch(html, /era-repeat|🔁/);
     assert.ok(snapshot.output.some((item) => item.type === "text" && item.text === "Kinds: vaginal,anal,sm,service"));
+    assert.ok(snapshot.output.some(item => item.type === "text" && item.text === `Armpit filter: ${on}`));
+    const kinds = snapshot.output.filter(item => item.type === "text" && item.text.startsWith("Receive kind: "));
+    assert.ok(kinds.length > 10);
+    assert.ok(kinds.every(item => item.type === "text" && item.text === "Receive kind: service"));
+    assert.ok(snapshot.output.filter(item => item.type === "text" && item.text.startsWith("Service off: "))
+      .every(item => item.type === "text" && item.text === "Service off: 0"));
   }
 });
 

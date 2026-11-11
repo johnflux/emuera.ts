@@ -158,6 +158,7 @@ test("number decoration preserves numeric-only controls and wraps only the butto
       },
     });
     const element = {
+      childNodes: [],
       matches: () => true,
       closest: () => surroundingLabel ? { textContent: surroundingLabel } : null,
       querySelector: () => null,
@@ -187,6 +188,7 @@ test("metadata creates one accessible decoration per number and nonempty suffix"
       },
     });
     const element = {
+      childNodes: [],
       dataset: { value: "805", commandNumber: "805", suffix },
       matches: () => true,
       querySelector: (selector: string) => children.find(child => `.${child.className}` === selector),

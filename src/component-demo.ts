@@ -119,6 +119,37 @@ HTML_PRINT HOTPATCH_BUTTON("Sleep", 9404)
 HTML_PRINT "<era-close>"
 HTML_PRINT "<era-close>"
 HTML_PRINT "<era-close>"
+HTML_PRINT "<era-open class='era-section era-button-sample'>"
+PRINTL Inline action directions
+HTML_PRINT "${classHeading("<div class='era-action-direction-group'><span class='era-action-group-label'></span></div>")}"
+HTML_PRINT "<era-open class='era-actions-group'>"
+${(["give", "receive", "both"] as const).map((direction, i) => `
+HTML_PRINT "<era-open class='era-action-direction-group'>"
+HTML_PRINT "<span class='era-action-group-label'>${["Give", "Receive", "Both"][i]}</span>"
+HTML_PRINT HOTPATCH_BUTTON("${["Caress", "Be Caressed", "Kiss"][i]}", ${[0, 125, 20][i]}, "", "default", "era-action-${direction}")
+HTML_PRINT "<era-close>"
+`).join("")}
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-open class='era-section era-button-sample'>"
+PRINTL In play panel
+HTML_PRINT "${classHeading("<div class='era-actions-body'></div>")}"
+HTML_PRINT "${classHeading("<div class='era-card era-in-play'></div>")}"
+HTML_PRINT "<era-open class='era-actions-collection'>"
+HTML_PRINT "<era-open class='era-actions-body'>"
+HTML_PRINT "<era-open class='era-actions-group'>"
+HTML_PRINT "<div class='era-actions-title'>Intimate</div>"
+HTML_PRINT HOTPATCH_BUTTON("Caress", 0)
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-open class='era-card era-in-play'>"
+HTML_PRINT "<div class='era-card-title'>In play</div>"
+HTML_PRINT "<era-open class='era-in-play-item'>"
+HTML_PRINT HOTPATCH_BUTTON("Remove Blindfold", 104, "", "block", "era-button-tone-sm")
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-close>"
 BINPUT
 SIF RESULT >= 9100 && RESULT <= 9101
   RADIO_SELECTION = RESULT - 9100

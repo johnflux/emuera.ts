@@ -14,6 +14,15 @@ export function navigationRect(element) {
 }
 
 export function decorateCommandNumbers(element) {
+  if (element.matches("button.choice")) {
+    for (const node of [...element.childNodes]) {
+      if (node.nodeType !== Node.TEXT_NODE || !node.textContent.trim()) continue;
+      const label = document.createElement("span");
+      label.className = "choice-text";
+      node.replaceWith(label);
+      label.append(node);
+    }
+  }
   if (element.matches("button.choice") && element.dataset.commandNumber !== undefined && !element.querySelector(".command-number")) {
     const number = document.createElement("span");
     number.className = "command-number";
@@ -27,6 +36,14 @@ export function decorateCommandNumbers(element) {
     suffix.setAttribute("aria-hidden", "true");
     suffix.textContent = element.dataset.suffix;
     element.append(suffix);
+  }
+  const commandNumber = element.querySelector(".command-number");
+  if (element.matches("button.era-button:not(.era-button-list)") && commandNumber?.parentElement === element
+    && !element.querySelector(".choice-gap")) {
+    const gap = document.createElement("span");
+    gap.className = "choice-gap";
+    gap.setAttribute("aria-hidden", "true");
+    commandNumber.before(gap);
   }
   if (!element.matches("button.choice") || element.querySelector(".command-number")) return;
   const value = element.dataset.value;

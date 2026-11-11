@@ -24,8 +24,13 @@ RETURNF 0
 #DIMS DYNAMIC COM_NAME
 #DIM HIGHLIGHT_SCOM ;qol custom code
 #DIM DYNAMIC nGroup
-#DIM DYNAMIC nNewGroup
-#DIMS DYNAMIC sKind
+#DIM DYNAMIC nDirection
+#DIM DYNAMIC nGroupOpen
+#DIM DYNAMIC nDirectionOpen
+#DIM DYNAMIC nOrder, 800
+#DIMS CONST sDirectionLabels, 4 = "Give", "Receive", "", ""
+#DIM DYNAMIC nPreparation, 4
+#DIM DYNAMIC nPreparationCount
 #DIM DYNAMIC nSelfCare, 2
 #DIM DYNAMIC nSelfCareCount
 #DIM DYNAMIC nAble, 800
@@ -93,11 +98,19 @@ FOR LOCAL,0,800
 		nAbleCount ++
 	ENDIF
 NEXT
+IF !STRCOUNT(SAVESTR:0, @"{ADD_CUSTOM_COM}")
+	RESULT = 0
+	TRYCALL ADD_CUSTOM_COM_ABLE228
+	IF RESULT
+		nAble:nAbleCount = 9228
+		nAbleCount ++
+	ENDIF
+ENDIF
 ; A filter toggle is shown only if flipping it would show or hide one of them (QUICKFILTER with its flag flipped,
 ; so per-command COM*_FILTER rules count too).
 nFilters = 0
 FOR nIndex, 0, nAbleCount
-	nShown:nIndex = QUICKFILTER(nAble:nIndex) != 0
+	nShown:nIndex = HOTPATCH_ACTION_FILTER(nAble:nIndex) != 0
 NEXT
 FOR nBit, 0, 9
 	nOld = HOTPATCH_FILTER_SET(nBit, 0)
@@ -105,7 +118,7 @@ FOR nBit, 0, 9
 	FOR nIndex, 0, nAbleCount
 		SIF nAble:nIndex == 352
 			CONTINUE
-		IF (QUICKFILTER(nAble:nIndex) != 0) != nShown:nIndex
+		IF (HOTPATCH_ACTION_FILTER(nAble:nIndex) != 0) != nShown:nIndex
 			SETBIT nFilters, nBit
 			BREAK
 		ENDIF
@@ -113,45 +126,79 @@ FOR nBit, 0, 9
 	CALL HOTPATCH_FILTER_SET(nBit, nOld)
 NEXT
 CALL HOTPATCH_FILTERS(nFilters)
-nGroup = -1
+HTML_PRINT "<era-open class='era-actions-body'>"
 FOR nIndex, 0, nAbleCount
 	LOCAL = nAble:nIndex
-	SIF LOCAL != 352 && !QUICKFILTER(LOCAL)
+	nShown:nIndex = LOCAL == 352 || HOTPATCH_ACTION_FILTER(LOCAL)
+	SIF HOTPATCH_ACTION_ACTIVE(LOCAL)
+		nShown:nIndex = 0
+	SIF !nShown:nIndex
 		CONTINUE
 	IF GROUPMATCH(LOCAL, 414, 431)
 		nSelfCare:nSelfCareCount = LOCAL
 		nSelfCareCount ++
+		nShown:nIndex = 0
 		CONTINUE
 	ENDIF
-	nNewGroup = HOTPATCH_ACTION_GROUP(LOCAL)
-	IF nNewGroup != nGroup
-		SIF nGroup >= 0
-			HTML_PRINT "<era-close>"
-		HTML_PRINT "<era-open class='era-actions-group'>"
-		HTML_PRINT @"<div class='era-actions-title'>%HOTPATCH_ACTION_GROUP_NAME(nNewGroup)%</div>"
-		nGroup = nNewGroup
+	IF GROUPMATCH(LOCAL, 21, 24, 50, 51)
+		nPreparation:nPreparationCount = LOCAL
+		nPreparationCount ++
+		nShown:nIndex = 0
+		CONTINUE
 	ENDIF
-	sKind '= HOTPATCH_ACTION_KIND(LOCAL)
-	SIF STRLENS(sKind)
-		HTML_PRINT @"<era-open class='era-kind era-kind-%sKind%'>"
-	CALL HOTPATCH_PRINT_COM(LOCAL)
-	SIF RESULT
-		printKojoCom = 1
-	SIF STRLENS(sKind)
+	nDirection = 3
+	IF HOTPATCH_ACTION_GROUP(LOCAL) == 0
+		SELECTCASE HOTPATCH_ACTION_DIRECTION(LOCAL)
+			CASE "give"
+				nDirection = 0
+			CASE "receive"
+				nDirection = 1
+		ENDSELECT
+	ENDIF
+	nOrder:nIndex = HOTPATCH_ACTION_GROUP(LOCAL) * 4 + nDirection
+NEXT
+FOR nGroup, 0, 7
+	nGroupOpen = 0
+	FOR nDirection, 0, 4
+		nDirectionOpen = 0
+		FOR nIndex, 0, nAbleCount
+			SIF !nShown:nIndex || nOrder:nIndex != nGroup * 4 + nDirection
+				CONTINUE
+			IF !nGroupOpen
+				HTML_PRINT "<era-open class='era-actions-group'>"
+				HTML_PRINT @"<div class='era-actions-title'>%HOTPATCH_ACTION_GROUP_NAME(nGroup)%</div>"
+				nGroupOpen = 1
+			ENDIF
+			IF !nDirectionOpen
+				SIF nGroup == 0
+					HTML_PRINT "<era-open class='era-action-direction-group'>"
+				SIF STRLENS(sDirectionLabels:nDirection)
+					HTML_PRINT @"<span class='era-action-group-label'>%sDirectionLabels:nDirection%</span>"
+				nDirectionOpen = 1
+			ENDIF
+			CALL HOTPATCH_PRINT_COM(nAble:nIndex)
+			SIF RESULT
+				printKojoCom = 1
+		NEXT
+		SIF nDirectionOpen && nGroup == 0
+			HTML_PRINT "<era-close>"
+	NEXT
+	SIF nGroupOpen
 		HTML_PRINT "<era-close>"
 NEXT
 ;addition custom code
-SIF nGroup >= 0
-	HTML_PRINT "<era-close>"
 HTML_PRINT "<era-open class='era-actions-group era-actions-more'>"
 HTML_PRINT "<div class='era-actions-title'>More</div>"
 CALL Add_Custom_List_COMS
 HTML_PRINT "<era-close>"
 CALL ADD_TOUCH_SET_OLD_FIELDS(1)
 RESULT = 0
-IF TFLAG:100
+IF TFLAG:100 || nPreparationCount
 	HTML_PRINT "<era-open class='era-actions-group era-actions-situation'>"
 	HTML_PRINT @"<div class='era-actions-title'>%(FLAG:70 ? "While time is stopped" # "Right now")%</div>"
+	FOR nIndex, 0, nPreparationCount
+		CALL HOTPATCH_PRINT_COM(nPreparation:nIndex)
+	NEXT
 	IF FLAG:70 == 1 && CFLAG:TARGET:344 == 0
 		SIF EQUIP:0 && TARGET && CFLAG:うふふ
 			HTML_PRINT HOTPATCH_BUTTON("Remove Clothes", 820)
@@ -187,9 +234,7 @@ IF TFLAG:100
 		SIF TFLAG:パンツ収奪 && !GETBIT (FLAG:USERCOMフィルタ, 61) ;com custom code
 			HTML_PRINT HOTPATCH_BUTTON("Take Panties", 825)
 		IF TARGET && !CFLAG:Hypno_Orgasm_Denial ;custom code
-			IF TEQUIP:焦らしモード
-				HTML_PRINT HOTPATCH_BUTTON("End Denial", 826)
-			ELSE
+			IF !TEQUIP:焦らしモード
 				HTML_PRINT HOTPATCH_BUTTON("Denial Mode", 826)
 			ENDIF
 		ENDIF
@@ -214,9 +259,7 @@ IF TFLAG:100
 					HTML_PRINT HOTPATCH_BUTTON("Slip Out", 850)
 				ENDIF
 				IF !CFLAG:Hypno_Orgasm_Denial ;custom code
-					IF TEQUIP:焦らしモード
-						HTML_PRINT HOTPATCH_BUTTON("End Denial", 826)
-					ELSE
+					IF !TEQUIP:焦らしモード
 						HTML_PRINT HOTPATCH_BUTTON("Denial Mode", 826)
 					ENDIF
 				ENDIF
@@ -231,9 +274,7 @@ IF TFLAG:100
 			SIF CFLAG:うふふ
 				HTML_PRINT HOTPATCH_BUTTON("Undress", 892)
 			IF TARGET && !CFLAG:Hypno_Orgasm_Denial ;custom code
-				IF TEQUIP:焦らしモード
-					HTML_PRINT HOTPATCH_BUTTON("End Denial", 826)
-				ELSE
+				IF !TEQUIP:焦らしモード
 					HTML_PRINT HOTPATCH_BUTTON("Denial Mode", 826)
 				ENDIF
 			ENDIF
@@ -291,6 +332,8 @@ IF TFLAG:100
 	ENDIF
 	HTML_PRINT "<era-close>"
 ENDIF
+HTML_PRINT "<era-close>"
+CALL HOTPATCH_IN_PLAY(nAble, nAbleCount)
 HTML_PRINT "<era-close>"
 ;自動実行中なら下記表示をスキップ
 SIF !TFLAG:100
@@ -488,6 +531,8 @@ CALL FORCE_COMMAND() ;Custom code, force any commands set through nForceCommand.
 @HOTPATCH_ACTION_GROUP(nCommand)
 #FUNCTION
 #DIM DYNAMIC nCommand
+SIF nCommand == 9228
+	RETURNF 0
 SIF nCommand < 200
 	RETURNF 0
 SIF nCommand < 270
@@ -502,6 +547,34 @@ SIF nCommand < 600
 	RETURNF 5
 RETURNF 6
 
+@HOTPATCH_ACTION_FILTER(nCommand)
+#FUNCTION
+#DIM DYNAMIC nCommand
+SIF HOTPATCH_ACTION_IS_ANAL(nCommand) && !CFLAG:TARGET:Ａアンフィルタ
+	RETURNF 0
+SIF HOTPATCH_ACTION_IS_VAGINAL(nCommand) && !CFLAG:TARGET:Ｖアンフィルタ
+	RETURNF 0
+SIF HOTPATCH_ACTION_GROUP(nCommand) == 0 && HOTPATCH_ACTION_DIRECTION(nCommand) == "receive" && !CFLAG:TARGET:奉仕アンフィルタ
+	RETURNF 0
+SIF nCommand == 9228
+	RETURNF QUICKFILTER_CUSTOM(228)
+RETURNF QUICKFILTER(nCommand)
+
+; Supplement missing native location tags without changing gameplay COM*_TAGS.
+@HOTPATCH_ACTION_IS_ANAL(nCommand)
+#FUNCTION
+#DIM DYNAMIC nCommand
+SIF GROUPMATCH(nCommand, 13, 90, 91, 92, 93, 94, 127)
+	RETURNF 1
+RETURNF IS_COM_ANAL(nCommand)
+
+@HOTPATCH_ACTION_IS_VAGINAL(nCommand)
+#FUNCTION
+#DIM DYNAMIC nCommand
+SIF GROUPMATCH(nCommand, 1, 8, 15, 42, 64, 79, 120, 121, 130, 131, 132, 133, 315)
+	RETURNF 1
+RETURNF IS_COM_VAGINA(nCommand)
+
 ;-------------------------------------------------------------------------------
 ; A command's button, named as SHOW_USERCOM names it (alternative names, colours, kojo and 606 sub-commands).
 ; Returns 1 for a kojo command.
@@ -512,6 +585,18 @@ RETURNF 6
 #DIMS DYNAMIC COM_NAME
 #DIMS DYNAMIC sButtonClass
 #DIMS DYNAMIC sDirection
+#DIMS DYNAMIC sRemovalReason
+IF nCom == 9228
+	CALL QOL_CUSTOM_SCOM_CHECK(228)
+	IF RESULT
+		SETCOLOR C_HEARTPINK
+		HTML_PRINT HOTPATCH_BUTTON(RESULTS, nCom, "", "default", "era-button-tone-service era-action-receive")
+		RESETCOLOR
+	ELSE
+		HTML_PRINT HOTPATCH_BUTTON(Add_Custom_COM_Name(228), nCom, "", "default", "era-button-tone-service era-action-receive")
+	ENDIF
+	RETURN 0
+ENDIF
 IF nCom == 352
 	HTML_PRINT HOTPATCH_BUTTON("Relationship...", 352)
 	RETURN 0
@@ -524,15 +609,27 @@ ENDIF
 sDirection '= HOTPATCH_ACTION_DIRECTION(nCom)
 SIF STRLENS(sDirection)
 	sButtonClass += " era-action-" + sDirection
+SIF HOTPATCH_ACTION_IS_ANAL(nCom)
+	sButtonClass += " era-action-category-anal"
+SIF HOTPATCH_ACTION_IS_VAGINAL(nCom)
+	sButtonClass += " era-action-category-vaginal"
 VARSET COM_DISPLAY_COLOR
 VARSET COM_DISPLAY_BEHAVIOR
 CALL COM_DISPLAY_TR(nCom) ;Custom code, control alternative command names.
 COM_NAME '= RESULTS
+SIF nCom == 189
+	COM_NAME '= "Newlywed Play"
+IF HOTPATCH_ACTION_ACTIVE(nCom)
+	COM_NAME '= HOTPATCH_ACTION_RELEASE_LABEL(nCom)
+	sRemovalReason '= HOTPATCH_ACTION_REMOVE_REASON(nCom)
+	SIF sRemovalReason != ""
+		COM_DISPLAY_BEHAVIOR = -1
+ENDIF
 IF !GROUPMATCH(COM_NAME, "Null", "")
 	SIF COM_DISPLAY_COLOR
 		SETCOLOR COM_DISPLAY_COLOR
 	IF COM_DISPLAY_BEHAVIOR == -1
-		HTML_PRINT HOTPATCH_BUTTON(COM_NAME, nCom, "", "default", sButtonClass, "", "", 0)
+		HTML_PRINT HOTPATCH_BUTTON(COM_NAME, nCom, sRemovalReason, "default", sButtonClass, "", "", 0)
 	ELSE
 		HTML_PRINT HOTPATCH_BUTTON(COM_NAME, nCom, "", "default", sButtonClass)
 	ENDIF
@@ -571,34 +668,179 @@ ELSEIF STRLENS(TRAINNAME_TR(nCom))
 ENDIF
 RETURN nKojo
 
+@HOTPATCH_ACTION_ACTIVE(nCommand)
+#FUNCTION
+#DIM DYNAMIC nCommand
+SIF TARGET <= 0 || TARGET == MASTER
+	RETURNF 0
+SELECTCASE nCommand
+	CASE 11
+		RETURNF TEQUIP:TARGET:乳首吸い != 0
+	CASE 12
+		RETURNF TEQUIP:TARGET:胸揉み != 0
+	CASE 19
+		RETURNF TEQUIP:TARGET:継続キス != 0
+	CASE 42
+		RETURNF TEQUIP:TARGET:クリキャップ != 0
+	CASE 43
+		RETURNF TEQUIP:TARGET:オナホール != 0
+	CASE 44
+		RETURNF TEQUIP:TARGET:バイブ != 0
+	CASE 45
+		RETURNF TEQUIP:TARGET:アナルバイブ != 0
+	CASE 46
+		RETURNF TEQUIP:TARGET:アナルビーズ != 0
+	CASE 47
+		RETURNF TEQUIP:TARGET:ニプルキャップ != 0
+	CASE 48
+		RETURNF TEQUIP:TARGET:搾乳機 != 0
+	CASE 50
+		RETURNF TEQUIP:PLAYER:コンドーム != 0
+	CASE 51
+		RETURNF TCVAR:TARGET:ピル || TCVAR:TARGET:偽ピル
+	CASE 181
+		RETURNF TCVAR:TARGET:媚薬 > 0
+	CASE 182
+		RETURNF TCVAR:TARGET:利尿剤 > 0
+	CASE 189
+		RETURNF TEQUIP:TARGET:新妻プレイ != 0
+	CASE 9017
+		RETURNF TEQUIP:TARGET:BALL_LICKING != 0
+	CASE 104
+		RETURNF TEQUIP:TARGET:アイマスク != 0
+	CASE 105
+		RETURNF TEQUIP:TARGET:縄 != 0
+	CASE 107
+		RETURNF TEQUIP:TARGET:拘束 != 0
+	CASE 826
+		RETURNF TEQUIP:TARGET:焦らしモード != 0
+ENDSELECT
+RETURNF 0
+
+@HOTPATCH_ACTION_RELEASE_LABEL(nCommand)
+#FUNCTIONS
+#DIM DYNAMIC nCommand
+SELECTCASE nCommand
+	CASE 11
+		RETURNF "Stop Nipple Sucking"
+	CASE 12
+		RETURNF "Stop Breast Fondling"
+	CASE 19
+		RETURNF "Finish Kissing"
+	CASE 50
+		RETURNF "Remove Condom"
+	CASE 51
+		RETURNF "Birth Control"
+	CASE 181
+		RETURNF "Aphrodisiac"
+	CASE 182
+		RETURNF "Diuretic"
+	CASE 189
+		RETURNF "End Newlywed Play"
+	CASE 9017
+		RETURNF "Stop Ball Sucking"
+	CASE 104
+		RETURNF "Remove Blindfold"
+	CASE 105
+		RETURNF "Untie Bondage"
+	CASE 107
+		RETURNF "Release Restraints"
+	CASE 826
+		RETURNF "End Denial"
+ENDSELECT
+RETURNF "Remove " + TRAINNAME_TR(nCommand)
+
+@HOTPATCH_ACTION_REMOVE_REASON(nCommand)
+#FUNCTIONS
+#DIM DYNAMIC nCommand
+SIF nCommand == 105 && TCVAR:TARGET:無理矢理 && (CFLAG:TARGET:好感度 < 500 || CFLAG:TARGET:信頼度 < 200)
+	RETURNF "Cannot untie while forced restraint is active and favor or trust is too low."
+RETURNF ""
+
+@HOTPATCH_IN_PLAY(nAble, nAbleCount)
+#DIM REF nAble
+#DIM DYNAMIC nAbleCount
+#DIM DYNAMIC nIndex
+#DIM DYNAMIC nAvailableIndex
+#DIM DYNAMIC nCommand
+#DIM DYNAMIC nEnabled
+#DIM DYNAMIC nOpen
+#DIM CONST nCommands, 20 = 11, 12, 19, 42, 43, 44, 45, 46, 47, 48, 50, 51, 104, 105, 107, 181, 182, 189, 826, 9017
+#DIMS DYNAMIC sReason
+FOR nIndex, 0, 20
+	nCommand = nCommands:nIndex
+	SIF !HOTPATCH_ACTION_ACTIVE(nCommand)
+		CONTINUE
+	IF !nOpen
+		HTML_PRINT "<era-open class='era-card era-in-play'>"
+		HTML_PRINT "<div class='era-card-title'>In play</div>"
+		nOpen = 1
+	ENDIF
+	nEnabled = 0
+	sReason '= HOTPATCH_ACTION_REMOVE_REASON(nCommand)
+	FOR nAvailableIndex, 0, nAbleCount
+		IF nAble:nAvailableIndex == nCommand
+			nEnabled = 1
+			BREAK
+		ENDIF
+	NEXT
+	IF nCommand == 826
+		nEnabled = TFLAG:100 && TARGET && !CFLAG:Hypno_Orgasm_Denial && (CFLAG:うふふ || CFLAG:MASTER:イタズラ || FLAG:70)
+	ENDIF
+	IF nCommand == 9017
+		RESULT = 0
+		TRYCALL ADD_CUSTOM_COM_ABLE17
+		nEnabled = RESULT != 0 && TFLAG:100
+		SIF STRCOUNT(SAVESTR:0, @"{ADD_CUSTOM_COM}")
+			nEnabled = 0
+	ENDIF
+	IF nCommand == 51
+		nEnabled = 0
+		sReason '= "Already taken."
+	ENDIF
+	VARSET COM_DISPLAY_COLOR
+	VARSET COM_DISPLAY_BEHAVIOR
+	SIF !GROUPMATCH(nCommand, 826, 9017)
+		CALL COM_DISPLAY_TR(nCommand)
+	IF sReason != "" || COM_DISPLAY_BEHAVIOR == -1
+		nEnabled = 0
+	ENDIF
+	HTML_PRINT "<era-open class='era-in-play-item'>"
+	HTML_PRINT HOTPATCH_BUTTON(HOTPATCH_ACTION_RELEASE_LABEL(nCommand), nCommand, sReason, "block", "era-button-tone-" + HOTPATCH_ACTION_KIND(nCommand), "", "", nEnabled)
+	SIF sReason != "" && nCommand != 51
+		HTML_PRINT @"<span class='era-sub'>%HTML_ESCAPE(sReason)%</span>"
+	HTML_PRINT "<era-close>"
+NEXT
+SIF nOpen
+	HTML_PRINT "<era-close>"
+
 ; Direction is from the player's perspective, not the command's category or initiative.
-; Unlisted, self-directed and custom commands have no direction marker.
+; Unlisted and self-directed commands have no direction marker.
 @HOTPATCH_ACTION_DIRECTION(nCommand)
 #FUNCTIONS
 #DIM DYNAMIC nCommand
 SIF TARGET <= 0 || TARGET == MASTER
 	RETURNF ""
-IF GROUPMATCH(nCommand, 19, 20, 311, 312)
+IF GROUPMATCH(nCommand, 311, 312)
 	SIF FLAG:70 || CFLAG:MASTER:イタズラ == 2
 		RETURNF "give"
 	RETURNF "both"
 ENDIF
-SIF GROUPMATCH(nCommand, 121, 126)
-	RETURNF "both"
-SIF GROUPMATCH(nCommand, 22, 64, 80, 81, 82, 83, 84, 85, 88, 90, 91, 92, 93, 94, 99, 120, 125, 127, 130, 131, 132, 133, 140, 305)
+SIF GROUPMATCH(nCommand, 22, 64, 80, 81, 82, 83, 84, 85, 88, 90, 91, 92, 93, 94, 99, 120, 125, 126, 127, 130, 131, 132, 133, 140, 305, 9228)
 	RETURNF "receive"
-SIF GROUPMATCH(nCommand, 0, 1, 2, 3, 4, 5, 6, 7, 11, 12, 15, 25, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 60, 61, 62, 63, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 79, 96, 100, 104, 105, 107, 108, 123, 124, 150, 301, 306, 307, 308, 309, 310, 313, 314, 315, 316)
+SIF GROUPMATCH(nCommand, 0, 1, 2, 3, 4, 5, 6, 7, 11, 12, 15, 19, 20, 25, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 60, 61, 62, 63, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 79, 96, 100, 104, 105, 107, 108, 121, 123, 124, 150, 180, 181, 182, 189, 301, 306, 307, 308, 309, 310, 313, 314, 315, 316)
 	RETURNF "give"
 RETURNF ""
 
-; Match QUICKFILTER's categories so filter chips and their actions share a tint.
-; For overlapping tags, location takes priority, then SM, service and everyday categories.
+; Intimate Receive is Service; other actions retain their native category priority.
 @HOTPATCH_ACTION_KIND(nCommand)
 #FUNCTIONS
 #DIM DYNAMIC nCommand
-SIF IS_COM_VAGINA(nCommand)
+SIF HOTPATCH_ACTION_GROUP(nCommand) == 0 && HOTPATCH_ACTION_DIRECTION(nCommand) == "receive"
+	RETURNF "service"
+SIF HOTPATCH_ACTION_IS_VAGINAL(nCommand)
 	RETURNF "vaginal"
-SIF IS_COM_ANAL(nCommand)
+SIF HOTPATCH_ACTION_IS_ANAL(nCommand)
 	RETURNF "anal"
 SIF IS_COM_SM(nCommand)
 	RETURNF "sm"
@@ -647,7 +889,7 @@ IF (TARGET != MASTER && FREE_USE_ACTIVE()) || CFLAG:うふふ || CFLAG:MASTER:�
 	SIF GETBIT(nFilters, 2)
 		sHtml += HOTPATCH_TOGGLE("Rev Sex", -9121, CFLAG:TARGET:RevSexFilter)
 	SIF GETBIT(nFilters, 3)
-		sHtml += HOTPATCH_TOGGLE("SM", 836, CFLAG:TARGET:ＳＭアンフィルタ, "sm", "Show SM actions (red)")
+		sHtml += HOTPATCH_TOGGLE("BDSM", 836, CFLAG:TARGET:ＳＭアンフィルタ, "sm", "Show BDSM actions (red)")
 	SIF GETBIT(nFilters, 4)
 		sHtml += HOTPATCH_TOGGLE("Service", 835, CFLAG:TARGET:奉仕アンフィルタ, "service", "Show service actions (yellow)")
 	SIF GETBIT(nFilters, 5)
@@ -758,6 +1000,10 @@ HTML_PRINT @"<div class='era-toggles era-settings'>%sHtml%</div>"
 SIF STRCOUNT(SAVESTR:0, @"{ADD_CUSTOM_COM}")
 	RETURN
 FOR LOCAL, 0, ADD_CUSTOM_MAX_COM + 1
+	SIF LOCAL == 228
+		CONTINUE
+	SIF HOTPATCH_ACTION_ACTIVE(Add_Custom_COM_To_Number(LOCAL))
+		CONTINUE
 	RESULT = 0
 	TRYCALLFORM ADD_CUSTOM_COM_ABLE{LOCAL}
 	IF RESULT

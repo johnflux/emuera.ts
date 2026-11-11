@@ -10,10 +10,6 @@ export const GAME_BUTTON_SAMPLES = [
     name: `Action direction / ${direction}`,
     html: `<button value='${[0, 125, 311][i]}' class='era-button era-action-${direction}' data-command-number='${[0, 125, 311][i]}' aria-description='${direction}'>${["Caress", "Be Caressed", "Embrace"][i]}</button>`,
   })),
-  ...["true", "false"].map(pressed => ({
-    name: `Action direction filter / ${pressed}`,
-    html: `<button value='101' class='era-chip-button era-action-direction-filter${pressed === "true" ? " era-current" : ""}' aria-pressed='${pressed}'>Give</button>`,
-  })),
   ...["chores", "petting", "dialogue", "vaginal", "anal", "sm", "service"].map(tone => ({
     name: `Action / ${tone}`, html: `<button value='101' class='era-button era-button-tone-${tone}' data-command-number='101'>Example action</button>`,
   })),
@@ -29,6 +25,7 @@ export const GAME_BUTTON_SAMPLES = [
   { name: "Sheet person", html: button("era-sheet-person", "Reimu", "Reimu<span class='era-sub'>Shrine maiden</span>") },
   { name: "Sheet person selected", html: "<span class='era-sheet-person era-current'>Reimu<span class='era-sub'>Shrine maiden</span></span>" },
   { name: "Trailing suffix", html: "<button value='805' class='era-button era-button-block' data-command-number='805' data-suffix='›'>Inventory</button>" },
+  { name: "Single-line text fitting", html: "<div style='width:180px'><button value='189' class='era-button era-button-block' data-command-number='189'>End Newlywed Play</button></div>" },
   { name: "Travel action", html: button("era-button era-button-block era-travel-button", "Move") },
   { name: "Previous page", html: button("era-chip-button era-page-prev", "Previous") },
   { name: "Next page", html: button("era-chip-button era-page-next", "Next") },

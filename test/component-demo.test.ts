@@ -82,6 +82,24 @@ test("all game catalog scenes render their actual production surfaces", { skip: 
     assert.equal(snapshot.error, null, sample);
     const html = snapshot.output.flatMap((item) => item.type === "html" ? [item.text] : []).join("");
     assert.match(html, expected[sample]!, sample);
+    if (sample === "main" || sample === "time-stopped") {
+      let category = "";
+      let previousDirection = -1;
+      for (const item of snapshot.output) {
+        if (item.type !== "html") continue;
+        const heading = item.text.match(/class='era-actions-title'>([^<]+)</);
+        if (heading) { category = heading[1]!; previousDirection = -1; }
+        if (item.text.includes("class='era-action-direction-group'")) {
+          assert.equal(category, "Intimate", "only Intimate has direction subgroups");
+        }
+        const label = item.text.match(/class='era-action-group-label'>([^<]+)</);
+        if (label) {
+          const direction = ["Give", "Receive"].indexOf(label[1]!);
+          assert.ok(direction > previousDirection, "subgroups follow Give, Receive, Both order");
+          previousDirection = direction;
+        }
+      }
+    }
     const boxes: string[] = [];
     for (const item of snapshot.output) {
       if (item.type !== "html") continue;

@@ -23,7 +23,7 @@
   border: 1px solid var(--intimate-border);
   border-radius: 10px;
   background: var(--intimate-panel);
-  box-shadow: inset 0 1px 0 #ffe3f025, inset 0 0 20px #f0a0c00b, 0 3px 15px #10081765;
+  box-shadow: var(--in-play-shadow, inset 0 1px 0 #ffe3f025, inset 0 0 20px #f0a0c00b, 0 3px 15px #10081765);
 }
 .era-main.era-intimate :is(.era-character, .era-actions-collection) {
   border-width: 2px;
@@ -57,7 +57,7 @@
   opacity: .14;
   pointer-events: none;
 }
-.era-main.era-intimate .era-actions-title {
+.era-main.era-intimate :is(.era-actions-title, .era-action-group-label) {
   color: #ffc5df;
   text-shadow: 0 0 8px #ef91ba55;
   letter-spacing: .035em;
@@ -112,7 +112,7 @@
   --intimate-room: radial-gradient(ellipse at 30% 15%, #cc859a36, transparent 60%),
     linear-gradient(160deg, #593d4b, #352a39);
 }
-.era-main.era-intimate-nonconsensual .era-actions-title { color: #eabac7; }
+.era-main.era-intimate-nonconsensual :is(.era-actions-title, .era-action-group-label) { color: #eabac7; }
 .era-main.era-intimate-nonconsensual .era-actions-title::before { border-left-color: #bc7c91; }
 .era-main.era-intimate-nonconsensual .era-actions-title::after { content: ""; }
 .era-main.era-intimate-nonconsensual .era-actions-header::after { background-image: none; }
