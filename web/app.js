@@ -1141,6 +1141,10 @@ function choice(label, value, title = "", checked = null) {
   const activate = (event) => {
     if (event.detail > 0 && settling()) return;
     if (!button.closest(".screen.is-active, .island-root")) return;
+    const occupantLabel = button.closest(".era-portrait")?.closest(".era-occupant")
+      .querySelector("button.era-occupant-label");
+    if (occupantLabel?.getAttribute("aria-pressed") === "true"
+      && button.dataset.value === occupantLabel.dataset.value) return;
     if (input?.kind === "mousekey") {
       const numeric = /^-?\d+$/.test(value) && Number.isSafeInteger(Number(value));
       void submitMouseKey([1, MOUSE_BUTTONS[0], ...clientPoint(event), -1, numeric ? Number(value) : 0], numeric ? undefined : value, button);
@@ -3134,7 +3138,8 @@ terminal.addEventListener("click", (event) => {
     const portrait = event.target.closest(".screen.is-active .era-occupant .era-portrait");
     const occupantLabel = portrait?.closest(".era-occupant").querySelector("button.era-occupant-label");
     if (occupantLabel && !occupantLabel.disabled) {
-      if (!dragged(event) && !settling()) occupantLabel.click();
+      if (occupantLabel.getAttribute("aria-pressed") !== "true" && !dragged(event) && !settling())
+        occupantLabel.click();
       return;
     }
     const checkbox = event.target.closest(".checkbox-control");

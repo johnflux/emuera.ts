@@ -240,9 +240,10 @@ backing so they remain readable even against the brighter embrace lighting.
 In intimate modes, the interaction panel uses the supplied pixel-art rose
 corner artwork at 0.85 opacity; the player panel retains its seasonal flowers.
 
-Clicking a room avatar uses the same action as its name label: selecting another
-character or toggling the selected character's body/face view. The label remains
-the keyboard control. Existing image buttons keep their own actions; dragging,
+Clicking a room avatar selects another character; clicking an already-selected
+avatar does nothing. Only its name label toggles the selected character's
+body/face view. The label remains the keyboard control. Other image buttons
+keep their own actions; dragging,
 disabled controls and portraits on previous screens do not trigger selection.
 
 The browser checks layout structure after each rendered snapshot. It reports
@@ -1174,8 +1175,11 @@ name is tinted blue. Other sprites are slightly muted. Hovering a selectable
 portrait or its name (or focusing its controls) restores its color, adds a
 light-blue underline to an unselected portrait, and enlarges its layered image
 by 10% without moving names or neighboring portraits. The selected underline
-stays cyan. Scaling leaves the lineup's spacing unchanged; reduced-motion
-settings disable the animation. The cage entry is
+stays cyan. The room allows visible overflow; offset scroll-area padding gives
+enlarged portraits room above and at the sides while preserving horizontal
+scrolling. Fixed left/right lineup margins of -10px/-13px keep the scrollbar
+from widening as the room grows. Reduced-motion settings disable the
+animation. The cage entry is
 smaller than a standing character, with its picture above (not behind) its text.
 Crowds scroll horizontally, keeping the selected person visible. The lineup
 prefers 216px high. When Character Info forces a taller room, the lineup fills

@@ -43,7 +43,7 @@
   .era-character:has(.era-main-chat) { grid-template-rows: auto auto 1fr; }
 }
 
-.era-room-stage { --era-occupant-height: 216px; position: relative; isolation: isolate; display: flex; flex-direction: column; align-self: stretch; min-width: 0; width: 100%; padding: 3px 4px 0; overflow: hidden; border-radius: 3px; background: radial-gradient(ellipse at 50% 95%, #28415166, transparent 70%), linear-gradient(#0b1c27, #101c25); }
+.era-room-stage { --era-occupant-height: 216px; position: relative; isolation: isolate; display: flex; flex-direction: column; align-self: stretch; min-width: 0; width: 100%; padding: 3px 4px 0; overflow: visible; border-radius: 3px; background: radial-gradient(ellipse at 50% 95%, #28415166, transparent 70%), linear-gradient(#0b1c27, #101c25); }
 .era-room-stage > .line:has(.era-place) { flex: none; }
 .era-room-stage .era-place { margin-bottom: 8px; }
 .era-room-stage .era-place-name { font-size: 1.15em; letter-spacing: 0; }
@@ -51,6 +51,13 @@
 .era-room-stage .era-scene { position: absolute; top: 2em; left: 8px; right: 8px; z-index: 2; margin: 0; padding: 6px 9px; border-left: 2px solid #41829b; font-size: var(--era-font-size-small); font-style: normal; pointer-events: none; text-shadow: 0 1px 3px #000; }
 .era-room-stage > .era-occupants { display: flex; flex: 1 0 auto; flex-direction: column; margin-top: auto; }
 .era-room-stage .era-occupant-list { flex: none; height: var(--era-occupant-height); align-items: flex-end; padding: 0 4px; overflow-y: hidden; }
+/* A scrolling axis clips the other axis too; offset padding gives scaled portraits room without moving the lineup. */
+.era-room-stage .era-occupant-list:has(.era-portrait) {
+  --portrait-overflow-room: calc(var(--era-occupant-height) * .1 + 1lh);
+  box-sizing: content-box;
+  padding: var(--portrait-overflow-room) calc(4px + var(--portrait-overflow-room) / 2) 0;
+  margin: calc(-1 * var(--portrait-overflow-room)) -13px 0 -10px;
+}
 .era-room-stage .era-occupant-list:has(.era-portrait) { height: auto; }
 .era-room-stage .era-occupants:has(.era-portrait[data-portrait-height]) {
   container-type: size;
@@ -58,6 +65,7 @@
   contain-intrinsic-height: var(--era-occupant-height);
 }
 .era-room-stage .era-occupants:has(.era-portrait[data-portrait-height]) .era-occupant-list {
+  --portrait-overflow-room: calc(max(calc(var(--era-occupant-height) * .1), 10cqh) + 1lh);
   height: 100%;
   align-items: stretch;
 }

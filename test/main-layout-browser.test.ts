@@ -260,7 +260,7 @@ test("In play shares the actions card without covering choices and stacks below 
   } finally { await rm(profile, { recursive: true, force: true }); }
 });
 
-test("room avatar clicks use the label action without duplicating buttons or activating stale portraits", {
+test("room avatar clicks select characters but only names toggle the selected portrait mode", {
   skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH",
 }, async () => {
   const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
@@ -270,7 +270,7 @@ test("room avatar clicks use the label action without duplicating buttons or act
   const html = `<!doctype html><body><div id="terminal">
     <div class="screen is-active"><div class="era-occupant">
       <div class="era-portrait"><span class="sprite"><canvas></canvas></span><button id="native">Image button</button></div>
-      <button class="era-occupant-label"><span>Name</span></button>
+      <button class="era-occupant-label" data-value="1000"><span>Name</span></button>
     </div></div>
     <div class="screen"><div class="era-occupant"><div class="era-portrait"><canvas id="old"></canvas></div>
       <button class="era-occupant-label">Old name</button></div></div>
@@ -280,21 +280,31 @@ test("room avatar clicks use the label action without duplicating buttons or act
     const dragged = () => dragging, settling = () => pending, choiceControl = element => element;
     const clickToContinue = () => continued++;
     const busy = false, expiring = false, input = {kind: "integer"};
+    const syncGameControllerHints = () => {}, decorateLabel = () => {};
+    const submit = () => native++;
+    ${source.slice(source.indexOf("function choice("), source.indexOf("function decorateLabel("))}
     ${source.slice(start, end)}
     const label = document.querySelector(".is-active .era-occupant-label");
     label.addEventListener("click", () => selected++);
-    document.querySelector("#native").addEventListener("click", () => native++);
+    const imageButton = choice("Image button", "1000");
+    document.querySelector("#native").replaceWith(imageButton);
     document.querySelector(".screen:not(.is-active) button").addEventListener("click", () => stale++);
     const canvas = document.querySelector("canvas");
     canvas.click();
     label.querySelector("span").click();
-    document.querySelector("#native").click();
+    imageButton.click();
     const initial = {selected, native, continued};
+    label.setAttribute("aria-pressed", "true");
+    canvas.click();
+    imageButton.click();
+    const selectedAvatar = {selected, native, continued};
+    label.querySelector("span").click();
+    const selectedName = {selected, native, continued};
     dragging = true; canvas.click(); dragging = false;
     pending = true; canvas.click(); pending = false;
     label.disabled = true; canvas.click();
     document.querySelector("#old").click();
-    document.body.textContent = JSON.stringify({initial, selected, native, stale});
+    document.body.textContent = JSON.stringify({initial, selectedAvatar, selectedName, selected, native, stale});
     </script>`;
   const profile = await mkdtemp(join(process.cwd(), ".era-avatar-click-"));
   try {
@@ -305,7 +315,10 @@ test("room avatar clicks use the label action without duplicating buttons or act
     const match = stdout.match(/<body[^>]*>([\s\S]*?)<\/body>/);
     assert.ok(match);
     assert.deepEqual(JSON.parse(match[1]), {
-      initial: { selected: 2, native: 1, continued: 0 }, selected: 2, native: 1, stale: 0,
+      initial: { selected: 2, native: 1, continued: 0 },
+      selectedAvatar: { selected: 2, native: 1, continued: 0 },
+      selectedName: { selected: 3, native: 1, continued: 0 },
+      selected: 3, native: 1, stale: 0,
     });
   } finally { await rm(profile, { recursive: true, force: true }); }
 });
@@ -1477,15 +1490,12 @@ test("portrait hover scales images in place and distinguishes hover from selecti
   const html = `<!doctype html><style>${style}
     .era-portrait > .line, .sprite-clip { transition: none !important; }
     </style><body>
-    <div class="screen is-active"><div class="era-occupant-list"><div class="era-occupant"><div class="era-portrait">
-      <div class="line">
-      <button class="choice is-target"><span class="sprite">
-        <span class="sprite-clip sprite-normal" style="width:216px;height:216px"></span>
-        <span class="sprite-clip sprite-hover" style="width:216px;height:216px"></span>
-      </span></button>
-      </div>
-    </div><button class="choice era-occupant-label">Name</button></div>
-    <div class="era-occupant" id="neighbor">Neighbor</div></div></div><script>
+    <div class="screen is-active" style="margin:160px 80px 0"><div class="era-room-stage" style="width:600px">
+    <div class="era-occupants"><div class="era-occupant-list"><div class="era-occupant">
+    <div class="era-portrait" data-portrait-height="216" style="--portrait-height:216px">
+      <div class="line"><button class="choice is-target"><span class="sprite"><span class="sprite-clip sprite-normal" style="width:216px;height:216px"></span><span class="sprite-clip sprite-hover" style="width:216px;height:216px"></span></span></button></div>
+    </div><div class="line"><button class="choice era-occupant-label">Name</button></div></div>
+    <div class="era-occupant" id="neighbor">Neighbor</div></div></div></div></div><script>
       const button = document.querySelector("button"), portrait = document.querySelector(".era-portrait");
       const label = document.querySelector(".era-occupant-label");
       const occupant = portrait.closest(".era-occupant");
@@ -1515,7 +1525,14 @@ test("portrait hover scales images in place and distinguishes hover from selecti
         [portrait, "test-hover"], [portrait, "test-focus-within"],
         [occupant, "test-hover"], [occupant, "test-focus-within"]]) {
         element.classList.add(state);
-        hoverStates.push({layers:measure(), layout:layout()});
+        const image = [...portrait.querySelectorAll(".sprite-clip")]
+          .find(clip => getComputedStyle(clip).visibility === "visible");
+        const r = image.getBoundingClientRect();
+        const topHit = document.elementFromPoint(r.left + r.width / 2, r.top + 1);
+        const sideHit = document.elementFromPoint(r.left + 1, r.top + r.height / 2);
+        hoverStates.push({layers:measure(), layout:layout(),
+          topVisible: topHit === image, sideVisible: sideHit === image,
+          topHit:topHit?.outerHTML, sideHit:sideHit?.outerHTML});
         element.classList.remove(state);
       }
       label.disabled = true;
@@ -1524,8 +1541,28 @@ test("portrait hover scales images in place and distinguishes hover from selecti
       const disabled = {layers:measure(), layout:layout()};
       document.querySelector(".screen").classList.remove("is-active");
       const inactive = layout();
+      const list = document.querySelector(".era-occupant-list");
+      const roomOverflow = getComputedStyle(document.querySelector(".era-room-stage")).overflow;
+      const scrollOverflow = getComputedStyle(list).overflowX;
+      document.querySelector("#neighbor").style.minWidth = "1000px";
+      list.scrollLeft = 100;
+      const scrolls = list.scrollLeft === 100;
+      list.scrollLeft = 0;
+      label.disabled = false;
+      button.disabled = false;
+      document.querySelector(".screen").classList.add("is-active");
+      const room = document.querySelector(".era-room-stage");
+      room.style.height = "400px";
+      const sideMargins = [getComputedStyle(list).marginLeft, getComputedStyle(list).marginRight];
+      const image = portrait.querySelector(".sprite-normal");
+      const imageRect = image.getBoundingClientRect();
+      const crowdTopVisible = document.elementFromPoint(imageRect.left + imageRect.width / 2,
+        imageRect.top + 1) === image;
+      const crowdSideVisible = document.elementFromPoint(imageRect.left + 1,
+        imageRect.top + imageRect.height / 2) === image;
       document.body.textContent = JSON.stringify({states, unselected, hoverStates,
-        initialLayout, disabled, inactive});
+        initialLayout, disabled, inactive, roomOverflow, scrollOverflow, scrolls,
+        crowdTopVisible, crowdSideVisible, crowdImage:rect(image), crowdList:rect(list), sideMargins});
     </script>`;
   const profile = await mkdtemp(join(process.cwd(), ".era-portrait-highlight-"));
   try {
@@ -1540,8 +1577,10 @@ test("portrait hover scales images in place and distinguishes hover from selecti
     type Rect = { left: number; top: number; width: number; height: number };
     type Layout = { image: Rect; label: Rect; neighbor: Rect; occupant: Rect };
     const result = JSON.parse(match[1]) as { states: Layer[][]; unselected: Layer[];
-      hoverStates: Array<{layers:Layer[]; layout:Layout}>; initialLayout:Layout;
-      disabled:{layers:Layer[]; layout:Layout}; inactive:Layout };
+      hoverStates: Array<{layers:Layer[]; layout:Layout; topVisible:boolean; sideVisible:boolean}>; initialLayout:Layout;
+      disabled:{layers:Layer[]; layout:Layout}; inactive:Layout;
+      roomOverflow:string; scrollOverflow:string; scrolls:boolean;
+      crowdTopVisible:boolean; crowdSideVisible:boolean; crowdImage:Rect; crowdList:Rect; sideMargins:string[] };
     assert.equal(result.states.length, 5);
     for (const [index, layers] of result.states.entries()) {
       assert.deepEqual(layers.map(layer => layer.visibility),
@@ -1554,6 +1593,7 @@ test("portrait hover scales images in place and distinguishes hover from selecti
     }
     assert.ok(result.unselected.every(layer => layer.shadow === "none" && layer.glow === "none"));
     for (const state of result.hoverStates) {
+      assert.ok(state.topVisible && state.sideVisible, `enlarged portrait is not clipped: ${JSON.stringify(state)}`);
       assert.ok(state.layers.every(layer => layer.shadow === "rgb(155, 213, 255) 0px -3px 0px 0px inset"));
       assert.ok(Math.abs(state.layout.image.width / result.initialLayout.image.width - 1.1) < .001);
       assert.ok(Math.abs(state.layout.image.height / result.initialLayout.image.height - 1.1) < .001);
@@ -1563,6 +1603,13 @@ test("portrait hover scales images in place and distinguishes hover from selecti
     assert.deepEqual(result.disabled.layout, result.initialLayout);
     assert.ok(result.disabled.layers.every(layer => layer.shadow === "none"));
     assert.deepEqual(result.inactive, result.initialLayout);
+    assert.equal(result.roomOverflow, "visible");
+    assert.equal(result.scrollOverflow, "auto");
+    assert.equal(result.scrolls, true, "crowds still scroll horizontally");
+    assert.deepEqual(result.sideMargins, ["-10px", "-13px"]);
+    assert.ok(result.crowdTopVisible && result.crowdSideVisible,
+      `a tall room's enlarged first portrait is not clipped in a scrolling crowd: ${JSON.stringify({
+        top:result.crowdTopVisible, side:result.crowdSideVisible, image:result.crowdImage, list:result.crowdList})}`);
   } finally { await rm(profile, { recursive: true, force: true }); }
 });
 
@@ -1594,7 +1641,8 @@ test("room height follows rendered portraits without clipping", { skip: browser 
         const grows = portraits.every(r => r.height >= 395);
         if (f.dataset.case === "growing") f.querySelector(".era-room-stage").style.height = "216px";
         const resets = f.dataset.case !== "growing" || Math.abs(f.querySelector(".sprite-clip").getBoundingClientRect().height - 216) < 1;
-        return { name: f.dataset.case, height: list.height, square, grows, resets,
+        const padding = parseFloat(getComputedStyle(f.querySelector(".era-occupant-list")).paddingTop);
+        return { name: f.dataset.case, height: list.height - padding, square, grows, resets,
           fits: portraits.every(r => r.top >= list.top - 1 && r.bottom <= list.bottom + 1) };
       });
       document.body.textContent = JSON.stringify(results);
