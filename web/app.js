@@ -2312,6 +2312,36 @@ function revealSelectedOccupants() {
 let backgroundAudio = null;
 const soundAudio = new Set();
 const blockedAudio = new Set();
+const bgmToggle = document.querySelector("#bgm-toggle");
+const bgmControls = document.querySelector(".bgm-controls");
+const bgmPrevious = document.querySelector("#bgm-previous");
+const bgmNext = document.querySelector("#bgm-next");
+const bgmIcon = bgmToggle.querySelector("path");
+const mediaTrackActions = [
+  { action: "previoustrack", handler: previousBgmTrack, enabled: false, supported: true },
+  { action: "nexttrack", handler: nextBgmTrack, enabled: false, supported: true },
+];
+function syncBgmToggle() {
+  const active = !!backgroundAudio;
+  const paused = !active || backgroundAudio.element.paused;
+  bgmControls.hidden = !active;
+  const enableNavigation = active && backgroundAudio.tracks.length >= 2;
+  bgmPrevious.hidden = bgmNext.hidden = !enableNavigation;
+  for (const action of mediaTrackActions) {
+    if (!navigator.mediaSession || !action.supported || enableNavigation === action.enabled) continue;
+    try {
+      navigator.mediaSession.setActionHandler(action.action, enableNavigation ? action.handler : null);
+      action.enabled = enableNavigation;
+    } catch (error) {
+      if (error.name !== "NotSupportedError") throw error;
+      action.supported = false;
+    }
+  }
+  bgmToggle.setAttribute("aria-label", paused ? "Play music" : "Pause music");
+  bgmToggle.setAttribute("title", paused ? "Play music" : "Pause music");
+  bgmToggle.setAttribute("aria-pressed", String(!paused));
+  bgmIcon.setAttribute("d", paused ? "M5 3v10l8-5z" : "M4 3h3v10H4zm5 0h3v10H9z");
+}
 function stopAudio(element) {
   element.pause();
   element.removeAttribute("src");
@@ -2326,18 +2356,54 @@ function playAudio(element) {
       if (!blockedAudio.has(element)) message("Audio is blocked by the browser. Click or press a key to enable playback.", true);
       blockedAudio.add(element);
     } else message(`Could not play audio: ${error.message}`, true);
+    if (backgroundAudio?.element === element) syncBgmToggle();
   });
 }
-function retryAudio() {
+function retryAudio(event) {
+  if (event?.target?.closest?.(".bgm-controls")) return;
   for (const element of blockedAudio) playAudio(element);
   blockedAudio.clear();
 }
 document.addEventListener("pointerdown", retryAudio);
 document.addEventListener("keydown", retryAudio);
+const audioTypes = { mp3: "audio/mpeg", wav: "audio/wav", ogg: "audio/ogg", flac: "audio/flac", m4a: "audio/mp4", aac: "audio/aac" };
+async function loadBgmTracks(track) {
+  try {
+    const data = await api(`/api/bgm-tracks?url=${encodeURIComponent(track.url)}`);
+    if (backgroundAudio !== track) return;
+    if (!Array.isArray(data.tracks) || data.tracks.some((url) => typeof url !== "string"))
+      throw new Error("Invalid track list");
+    track.tracks = data.tracks.filter((url) => {
+      const extension = url.split(".").pop().toLowerCase();
+      return audioTypes[extension] && track.element.canPlayType(audioTypes[extension]);
+    });
+    syncBgmToggle();
+  } catch (error) {
+    if (backgroundAudio === track) message(`Could not list music tracks: ${error.message}`, true);
+  }
+}
+function setBgmTrack(track, url) {
+  if (track.element) stopAudio(track.element);
+  const element = new Audio(url);
+  element.loop = true;
+  element.volume = track.volume;
+  track.element = element;
+  track.currentUrl = url;
+  element.addEventListener("play", syncBgmToggle);
+  element.addEventListener("pause", syncBgmToggle);
+  element.addEventListener("error", () => {
+    if (backgroundAudio === track && track.element === element) {
+      message(`Could not load background audio: ${url}`, true);
+      syncBgmToggle();
+    }
+  });
+  playAudio(element);
+}
 function resetAudio() {
   if (backgroundAudio) stopAudio(backgroundAudio.element);
   backgroundAudio = null;
   for (const element of soundAudio) stopAudio(element);
+  syncBgmToggle();
 }
 function useAudioSettings(settings) {
   if (settings.stopSounds) for (const element of soundAudio) stopAudio(element);
@@ -2345,17 +2411,15 @@ function useAudioSettings(settings) {
     if (backgroundAudio) stopAudio(backgroundAudio.element);
     backgroundAudio = null;
     if (settings.bgm) {
-      const element = new Audio(settings.bgm.url);
-      element.loop = true;
-      element.volume = settings.bgmVolume / 100;
-      backgroundAudio = { id: settings.bgm.id, element };
-      element.addEventListener("error", () => {
-        if (backgroundAudio?.element === element) message(`Could not load background audio: ${settings.bgm.url}`, true);
-      });
-      playAudio(element);
+      const track = { id: settings.bgm.id, url: settings.bgm.url, currentUrl: settings.bgm.url,
+        element: null, volume: settings.bgmVolume / 100, tracks: [] };
+      backgroundAudio = track;
+      setBgmTrack(track, track.url);
+      void loadBgmTracks(track);
     }
   }
-  if (backgroundAudio) backgroundAudio.element.volume = settings.bgmVolume / 100;
+  syncBgmToggle();
+  if (backgroundAudio) backgroundAudio.element.volume = backgroundAudio.volume = settings.bgmVolume / 100;
   for (const element of soundAudio) element.volume = settings.soundVolume / 100;
   for (const track of settings.sounds) {
     if (soundAudio.size >= 10) stopAudio(soundAudio.values().next().value);
@@ -2376,6 +2440,27 @@ function useAudioSettings(settings) {
     playAudio(element);
   }
 }
+bgmToggle.addEventListener("click", () => {
+  const element = backgroundAudio?.element;
+  if (!element) return;
+  if (element.paused) playAudio(element);
+  else element.pause();
+  syncBgmToggle();
+});
+function changeBgmTrack(direction) {
+  const track = backgroundAudio;
+  if (!track || track.tracks.length < 2) return;
+  const index = track.tracks.indexOf(track.currentUrl);
+  const next = index < 0 ? (direction > 0 ? 0 : track.tracks.length - 1)
+    : (index + direction + track.tracks.length) % track.tracks.length;
+  const url = track.tracks[next];
+  setBgmTrack(track, url);
+  syncBgmToggle();
+}
+function previousBgmTrack() { changeBgmTrack(-1); }
+function nextBgmTrack() { changeBgmTrack(1); }
+bgmPrevious.addEventListener("click", previousBgmTrack);
+bgmNext.addEventListener("click", nextBgmTrack);
 /** advanceScreen: true after a submitted input (retires the screen), "continue" after a click-to-continue wait. */
 async function renderSnapshot(snapshot, advanceScreen) {
   midday = snapshot.midday ?? null;

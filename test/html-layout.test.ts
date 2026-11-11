@@ -1167,8 +1167,10 @@ test("compact gameplay header preserves its menu and scrolling menu rows cannot 
   const compact = styleSource("responsive");
   assert.match(compact, /@media \(max-height: 800px\)/);
   assert.match(compact, /body:not\(\.is-home\) > header \{ height: 0;/);
-  assert.match(compact, /body:not\(\.is-home\) > header > :not\(\.menu\) \{ display: none;/);
+  assert.match(compact, /body:not\(\.is-home\) > header > :not\(\.menu\):not\(\.bgm-controls\) \{ display: none;/);
   assert.match(compact, /body:not\(\.is-home\) > header \.menu \{ position: fixed;/);
+  assert.match(compact, /body:not\(\.is-home\) > header > \.bgm-controls \{ position: fixed;/);
+  assert.match(compact, /@media \(max-height: 800px\) and \(pointer: coarse\)[\s\S]*\.bgm-controls \{ right: 60px;/);
   const css = styleSource("style");
   assert.match(css, /\.menu-panel \{[^}]*max-height: calc\(100dvh - var\(--menu-top, 40px\) - 8px\); overflow-y: auto;/);
   assert.match(css, /\.menu-panel > \* \{ flex-shrink: 0; \}/);
@@ -2724,9 +2726,33 @@ test("browser audio applies live volumes, repeat counts, stop/reset and autoplay
   const end = source.indexOf("/** advanceScreen:", start);
   const instances: AudioMock[] = [];
   const messages: string[] = [];
+  const icon = {
+    attributes: new Map<string, string>(),
+    setAttribute(name: string, value: string) { this.attributes.set(name, value); },
+  };
+  const controls = { hidden: true };
+  const next = {
+    hidden: true,
+    addEventListener(_name: string, handler: () => void) { this.click = handler; },
+    click() {},
+  };
+  const previous = {
+    hidden: true,
+    addEventListener(_name: string, handler: () => void) { this.click = handler; },
+    click() {},
+  };
+  const button = {
+    attributes: new Map<string, string>(),
+    addEventListener(_name: string, handler: () => void) { this.click = handler; },
+    setAttribute(name: string, value: string) { this.attributes.set(name, value); },
+    querySelector: () => icon,
+    set innerHTML(_value: string) { throw new Error("Audio updates must not replace the icon during a click"); },
+    click() {},
+  };
   class AudioMock {
     volume = 1;
     loop = false;
+    paused = true;
     currentTime = 0;
     plays = 0;
     stops = 0;
@@ -2735,21 +2761,46 @@ test("browser audio applies live volumes, repeat counts, stop/reset and autoplay
     constructor(public url: string) { instances.push(this); }
     play() {
       this.plays++;
-      return this.blocked ? Promise.reject(Object.assign(new Error("blocked"), { name: "NotAllowedError" })) : Promise.resolve();
+      if (this.blocked) return Promise.reject(Object.assign(new Error("blocked"), { name: "NotAllowedError" }));
+      this.paused = false;
+      this.listeners.get("play")?.();
+      return Promise.resolve();
     }
-    pause() { this.stops++; }
+    pause() { this.stops++; this.paused = true; this.listeners.get("pause")?.(); }
     load() {}
+    canPlayType() { return "probably"; }
     removeAttribute() {}
     addEventListener(name: string, handler: () => void) { this.listeners.set(name, handler); }
   }
   const browser = runInNewContext(`${source.slice(start, end)}\n({ useAudioSettings, resetAudio, retryAudio, playAudio })`, {
-    Audio: AudioMock, document: { addEventListener() {} }, message: (value: string) => messages.push(value),
+    Audio: AudioMock, document: { addEventListener() {}, querySelector: (selector: string) =>
+      selector === "#bgm-toggle" ? button : selector === "#bgm-next" ? next : selector === "#bgm-previous" ? previous : controls },
+    navigator: {},
+    api: async () => ({ tracks: ["/sound/bg.ogg", "/sound/next.ogg"] }),
+    message: (value: string) => messages.push(value),
   });
   const settings = { soundVolume: 20, bgmVolume: 40, bgm: { id: "bg", url: "/sound/bg.ogg" }, sounds: [{ id: "s", url: "/sound/se.wav", repeat: 2 }], stopSounds: false };
   browser.useAudioSettings(settings);
   const [bgm, sound] = instances as [AudioMock, AudioMock];
+  assert.equal(controls.hidden, false);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(next.hidden, false);
+  assert.equal(previous.hidden, false);
+  assert.equal(button.attributes.get("aria-label"), "Pause music");
+  assert.equal(button.attributes.get("aria-pressed"), "true");
+  assert.equal(icon.attributes.get("d"), "M4 3h3v10H4zm5 0h3v10H9z");
   assert.equal(bgm.loop, true);
   assert.equal(bgm.volume, 0.4);
+  browser.useAudioSettings({ ...settings, sounds: [] });
+  button.click();
+  assert.equal(bgm.paused, true);
+  assert.equal(button.attributes.get("aria-label"), "Play music");
+  assert.equal(icon.attributes.get("d"), "M5 3v10l8-5z");
+  browser.useAudioSettings({ ...settings, sounds: [] });
+  assert.equal(bgm.paused, true);
+  button.click();
+  assert.equal(bgm.paused, false);
+  assert.equal(button.attributes.get("aria-label"), "Pause music");
   assert.equal(sound.volume, 0.2);
   browser.useAudioSettings({ ...settings, bgmVolume: 10, soundVolume: 30, sounds: [] });
   assert.equal(instances.length, 2);
@@ -2764,14 +2815,100 @@ test("browser audio applies live volumes, repeat counts, stop/reset and autoplay
   await Promise.resolve();
   assert.match(messages[0]!, /blocked.*Click/);
   bgm.blocked = false;
+  browser.retryAudio({ target: { closest: () => true } });
+  assert.equal(bgm.plays, 3, "the button's activation does not retry before its play/pause handler");
   browser.retryAudio();
   await Promise.resolve();
-  assert.equal(bgm.plays, 3);
+  assert.equal(bgm.plays, 4);
   browser.useAudioSettings({ ...settings, bgm: null, sounds: [], stopSounds: true });
-  assert.equal(bgm.stops, 1);
+  assert.equal(bgm.stops, 2);
+  assert.equal(controls.hidden, true);
   browser.useAudioSettings(settings);
   browser.resetAudio();
   assert.ok(instances.slice(2).every((audio) => audio.stops === 1));
+});
+
+test("BGM track navigation resumes playback while preserving game control and ignoring stale track lists", async () => {
+  const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
+  const start = source.indexOf("let backgroundAudio ="), end = source.indexOf("/** advanceScreen:", start);
+  const controls = { hidden: true };
+  function button() {
+    return { hidden: true, addEventListener(_name: string, handler: () => void) { this.click = handler; },
+      setAttribute() {}, querySelector: () => ({ setAttribute() {} }), click() {} };
+  }
+  const toggle = button(), next = button(), previous = button();
+  const instances: AudioMock[] = [];
+  class AudioMock {
+    paused = true; volume = 1; loop = false;
+    listeners = new Map<string, () => void>();
+    constructor(public url: string) { instances.push(this); }
+    play() { this.paused = false; this.listeners.get("play")?.(); return Promise.resolve(); }
+    pause() { this.paused = true; this.listeners.get("pause")?.(); }
+    removeAttribute() {} load() {}
+    canPlayType(type: string) { return type === "audio/flac" ? "" : "probably"; }
+    addEventListener(name: string, callback: () => void) { this.listeners.set(name, callback); }
+  }
+  const requests: { resolve: (value: { tracks: string[] }) => void }[] = [];
+  const messages: string[] = [];
+  const mediaHandlers = new Map<string, (() => void) | null>();
+  const browser = runInNewContext(`${source.slice(start, end)}\n({ useAudioSettings, resetAudio })`, {
+    Audio: AudioMock, document: { addEventListener() {}, querySelector: (selector: string) =>
+      selector === "#bgm-toggle" ? toggle : selector === "#bgm-next" ? next : selector === "#bgm-previous" ? previous : controls },
+    navigator: { mediaSession: { setActionHandler(action: string, handler: (() => void) | null) {
+      mediaHandlers.set(action, handler);
+    } } },
+    api: () => new Promise(resolve => requests.push({ resolve })),
+    message: (value: string) => messages.push(value),
+  });
+  const settings = { soundVolume: 100, bgmVolume: 40, bgm: { id: "one", url: "/sound/a.ogg" }, sounds: [], stopSounds: false };
+  browser.useAudioSettings(settings);
+  assert.equal(next.hidden, true);
+  assert.equal(previous.hidden, true);
+  requests[0]!.resolve({ tracks: ["/sound/a.ogg", "/sound/b.ogg", "/sound/c.flac"] });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(next.hidden, false);
+  assert.equal(previous.hidden, false);
+  assert.ok(mediaHandlers.get("nexttrack"), "next media key becomes available with multiple tracks");
+  assert.ok(mediaHandlers.get("previoustrack"), "previous media key becomes available with multiple tracks");
+  previous.click();
+  assert.equal(instances.at(-1)?.url, "/sound/b.ogg", "previous wraps to last supported track");
+  next.click();
+  assert.equal(instances.at(-1)?.url, "/sound/a.ogg");
+  assert.equal(instances.at(-1)?.volume, 0.4);
+  assert.equal(instances.at(-1)?.paused, false);
+  browser.useAudioSettings({ ...settings, bgmVolume: 20 });
+  assert.equal(instances.length, 3, "unchanged game BGM does not replace the player selection");
+  assert.equal(instances[2]!.volume, 0.2);
+  toggle.click();
+  mediaHandlers.get("previoustrack")!();
+  assert.equal(instances.at(-1)?.url, "/sound/b.ogg");
+  assert.equal(instances.at(-1)?.paused, false, "previous media key resumes playback");
+  toggle.click();
+  mediaHandlers.get("nexttrack")!();
+  assert.equal(instances.at(-1)?.url, "/sound/a.ogg");
+  assert.equal(instances.at(-1)?.paused, false, "next media key resumes playback");
+  toggle.click();
+  previous.click();
+  assert.equal(instances.at(-1)?.url, "/sound/b.ogg");
+  assert.equal(instances.at(-1)?.paused, false, "previous button resumes playback");
+  toggle.click();
+  next.click();
+  assert.equal(instances.at(-1)?.url, "/sound/a.ogg");
+  assert.equal(instances.at(-1)?.paused, false, "next button resumes playback");
+  browser.useAudioSettings({ ...settings, bgm: { id: "two", url: "/sound/c.ogg" } });
+  assert.equal(instances.at(-1)?.url, "/sound/c.ogg");
+  assert.equal(instances.at(-1)?.paused, false);
+  assert.equal(next.hidden, true);
+  assert.equal(previous.hidden, true);
+  assert.equal(mediaHandlers.get("nexttrack"), null, "media keys are cleared while the new game's list loads");
+  assert.equal(mediaHandlers.get("previoustrack"), null);
+  browser.useAudioSettings({ ...settings, bgm: null });
+  requests[1]!.resolve({ tracks: ["/sound/c.ogg", "/sound/d.ogg"] });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(controls.hidden, true);
+  assert.equal(next.hidden, true);
+  assert.equal(previous.hidden, true);
+  assert.deepEqual(messages, []);
 });
 
 test("tooltip alignment follows TOOLTIP_FORMAT and resets with custom styling", async () => {

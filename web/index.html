@@ -18,6 +18,17 @@
     <span id="activity" class="activity" hidden></span>
     <p id="status" role="status">Loading...</p>
     <button id="library-toggle" class="library-toggle ui-button ui-button--quiet" hidden>Game library</button>
+    <div class="bgm-controls" hidden>
+      <button id="bgm-previous" class="ui-button ui-button--quiet ui-button--icon" type="button" aria-label="Previous track" title="Previous track" hidden>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M13 3v10L6 8zM3 3h2v10H3z"/></svg>
+      </button>
+      <button id="bgm-toggle" class="ui-button ui-button--quiet ui-button--icon" type="button" aria-label="Pause music" title="Pause music" aria-pressed="true">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4 3h3v10H4zm5 0h3v10H9z"/></svg>
+      </button>
+      <button id="bgm-next" class="ui-button ui-button--quiet ui-button--icon" type="button" aria-label="Next track" title="Next track" hidden>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M3 3v10l7-5zM11 3h2v10h-2z"/></svg>
+      </button>
+    </div>
     <div class="menu">
       <button id="menu-toggle" class="menu-toggle ui-button ui-button--quiet ui-button--icon" aria-haspopup="true" aria-expanded="false" aria-controls="menu-panel" title="Menu">
         <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 3h12M2 8h12M2 13h12"/></svg><span class="visually-hidden">Menu</span>

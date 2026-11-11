@@ -1806,6 +1806,12 @@ declarations and the expression evaluator. No single routine dominates.
   loading errors are displayed. Autoplay restrictions prompt for a click/key
   and retry on that gesture. Resume restores BGM and volumes, but does not
   replay old effects. New runs and library return stop the old audio.
+  The header's Previous and Next track controls play supported audio files from
+  the current track's directory, in filename order, without changing game state.
+  Selecting a track resumes playback if paused; supported media keyboards can
+  also invoke these controls.
+  Subsequent game BGM commands take precedence; a page reload restores the
+  game-selected track. Pausing also pauses a player-selected track.
   Terminal-only clients receive the same audio state but do not play it.
 - Tooltip custom font, font size, colors, delay and duration settings are sent to
   the browser. Textbox and tooltip settings survive session resume.

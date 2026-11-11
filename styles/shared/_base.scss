@@ -33,6 +33,8 @@ html, body, #terminal, #game-tooltip, #compatibility, #debug-log, .library, .era
 html, body { overscroll-behavior-y: none; }
 body { margin: 0; height: 100dvh; display: flex; flex-direction: column; background: #000; color: #fff; font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace; }
 header { flex-shrink: 0; position: relative; z-index: 5; display: flex; align-items: center; gap: 12px; height: 40px; padding: 0 12px 0 16px; border-bottom: 1px solid #2a2a2a; background: linear-gradient(#141414, #0a0a0a); }
+.bgm-controls { display: flex; flex-shrink: 0; }
+.bgm-controls[hidden] { display: none; }
 .brand { margin: 0; flex-shrink: 0; display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; letter-spacing: .02em; color: #eee; }
 .brand-mark { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 5px; background: linear-gradient(135deg, #ffd34d, #e8604c); color: #111; font-family: var(--terminal-font); font-size: 13px; font-weight: 700; }
 .brand-ts { color: #8ddaff; font-weight: 500; }

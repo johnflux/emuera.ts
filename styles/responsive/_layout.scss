@@ -25,9 +25,13 @@
   body:not(.is-home) :is(.era-main, .era-shop) .era-main-header:has(.era-area-art) > .era-watch-control { top: -20px; }
   body:not(.is-home) :is(.era-main, .era-shop) .era-main-header:has(.era-area-art) > .era-watch-control { right: 0; }
   body:not(.is-home) > header { height: 0; padding: 0; border: 0; }
-  body:not(.is-home) > header > :not(.menu) { display: none; }
+  body:not(.is-home) > header > :not(.menu):not(.bgm-controls) { display: none; }
   body:not(.is-home) > header .menu { position: fixed; top: 8px; right: 8px; }
+  body:not(.is-home) > header > .bgm-controls { position: fixed; top: 8px; right: 52px; }
   body:not(.is-home) .era-move-header { padding-right: 52px; }
   body:not(.is-home) #time-effect { top: 0; }
   body:not(.is-home) > header > #status.error { display: block; position: fixed; top: 8px; bottom: auto; left: 8px; right: 56px; padding: 8px; background: #281616; white-space: normal; }
+}
+@media (max-height: 800px) and (pointer: coarse) {
+  body:not(.is-home) > header > .bgm-controls { right: 60px; }
 }

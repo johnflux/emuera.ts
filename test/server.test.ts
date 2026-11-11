@@ -336,7 +336,10 @@ INPUT`, "audio.ERB");
   try {
     await mkdir(path.join(root, "sound"));
     await writeFile(path.join(root, "sound", "theme.ogg"), "fixture");
+    await writeFile(path.join(root, "sound", "other track.m4a"), "other");
     await writeFile(path.join(root, "sound", "private.txt"), "not audio");
+    await mkdir(path.join(root, "sound", "nested"));
+    await writeFile(path.join(root, "sound", "nested", "separate.wav"), "nested");
     await writeFile(path.join(root, "outside.ogg"), "outside");
     await symlink(path.join(root, "outside.ogg"), path.join(root, "sound", "escape.ogg"));
     app.listen(0, "127.0.0.1");
@@ -360,6 +363,18 @@ INPUT`, "audio.ERB");
       assert.equal((await fetch(base + "/sound/" + filename)).status, 403, filename);
     }
     assert.equal((await fetch(base + "/sound/missing.wav")).status, 404);
+    const tracks = async (url: string) => fetch(base + "/api/bgm-tracks?url=" + encodeURIComponent(url));
+    assert.deepEqual(await (await tracks(run.audio.bgm.url)).json(), {
+      tracks: ["/sound/other%20track.m4a", "/sound/theme.ogg"],
+    });
+    assert.deepEqual(await (await tracks("/games/audio/sound/nested/separate.wav")).json(), {
+      tracks: ["/games/audio/sound/nested/separate.wav"],
+    });
+    for (const [url, status] of [
+      ["/sound/private.txt", 403], ["/sound/escape.ogg", 403], ["/sound/..%2foutside.ogg", 403],
+      ["/sound/missing.ogg", 404], ["/games/missing/sound/theme.ogg", 404],
+      ["https://example.com/sound/theme.ogg", 400], ["/sound/%xx", 400],
+    ] as const) assert.equal((await tracks(url)).status, status, url);
     const resumed = await (await post("/api/resume", { session: run.session })).json();
     assert.deepEqual(resumed.audio, { ...run.audio, sounds: [], stopSounds: true });
   } finally {

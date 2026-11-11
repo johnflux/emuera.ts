@@ -85,6 +85,7 @@ const mime: Record<string, string> = {
   ".ttf": "font/ttf", ".txt": "text/plain; charset=utf-8", ".svg": "image/svg+xml",
   ".mp3": "audio/mpeg", ".wav": "audio/wav", ".ogg": "audio/ogg", ".flac": "audio/flac", ".m4a": "audio/mp4", ".aac": "audio/aac",
 };
+const audioExtensions = new Set([".mp3", ".wav", ".ogg", ".flac", ".m4a", ".aac"]);
 /** How the browser renders a step: a fresh run, after a submitted input, after a click-to-continue, or a timeout. */
 type Advance = "start" | "input" | "continue" | "timeout";
 /** A game the server runs; the first entry is the default, and also hosts the conformance demo. */
@@ -198,7 +199,7 @@ async function resourceFile(root: string, relative: string, audio = false): Prom
     throw error;
   }
   if (!resolved.startsWith(base + path.sep)) throw new HttpError(403, "Resource path outside game resources");
-  if (!(audio ? [".mp3", ".wav", ".ogg", ".flac", ".m4a", ".aac"] : [".png", ".webp", ".jpg", ".jpeg", ".gif", ".bmp"]).includes(path.extname(resolved).toLowerCase()))
+  if (!(audio ? audioExtensions.has(path.extname(resolved).toLowerCase()) : [".png", ".webp", ".jpg", ".jpeg", ".gif", ".bmp"].includes(path.extname(resolved).toLowerCase())))
     throw new HttpError(403, audio ? "Unsupported audio type" : "Unsupported image type");
   if (!(await stat(resolved)).isFile()) throw new HttpError(404, "Image file not found");
   return resolved;
@@ -838,6 +839,30 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
         // Validate before handing metadata to the browser.
         await resourceFile(gameDirectory(game.root, "resources"), sprite.file);
         json(response, { ...sprite, url: `${game.resourceBase}${sprite.file.split(path.sep).map(encodeURIComponent).join("/")}` });
+        return;
+      }
+      if (request.method === "GET" && url.pathname === "/api/bgm-tracks") {
+        const track = url.searchParams.get("url") ?? "";
+        const match = /^(?:\/games\/([a-z0-9-]+))?\/sound\/([^?#]+)$/.exec(track);
+        if (!match) throw new HttpError(400, "Expected a local sound URL");
+        const { game } = entryFor(match[1]);
+        let relative: string;
+        try { relative = decodeURIComponent(match[2]!); }
+        catch (error) {
+          if (!(error instanceof URIError)) throw error;
+          throw new HttpError(400, "Invalid sound path encoding");
+        }
+        const root = gameDirectory(game.root, "sound");
+        const file = await resourceFile(root, relative, true);
+        const base = await realpath(root);
+        const directory = path.dirname(file);
+        const prefix = match[1] ? `/games/${match[1]}/sound/` : "/sound/";
+        const tracks = (await readdir(directory, { withFileTypes: true }))
+          .filter((entry) => entry.isFile() && audioExtensions.has(path.extname(entry.name).toLowerCase()))
+          .map((entry) => path.relative(base, path.join(directory, entry.name)).split(path.sep).map(encodeURIComponent).join("/"))
+          .sort()
+          .map((name) => prefix + name);
+        json(response, { tracks });
         return;
       }
       const resource = /^(?:\/games\/([a-z0-9-]+))?\/(resources|sound)\/(.*)$/.exec(url.pathname);
