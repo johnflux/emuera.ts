@@ -4,7 +4,7 @@
 ; (<era-open class='era-dialog'>, see web/style.css): a header with a tab per character (‹ › arrows for long lists)
 ; and a tab per page, a close button, and the game's own page (CHARA_STATE_TR) in a scrolling body.
 ;
-; The input loops are copied unchanged, plus [5000 + n] to pick the nth character of a list.
+; The input loops redraw before retrying invalid choices, plus [5000 + n] picks the nth character of a list.
 ; Lists keep previous/next arrows even when all characters fit as tabs.
 ;
 ; The main screen's "See more" button (hotpatch/MAIN_SCREEN.ERB) sends [803], which shows you and everyone in the
@@ -53,6 +53,7 @@ RETURN ARG
 #DIM     PAGE       ;表示中のページ
 #DIM CREDRAW
 #DIM FIRST_LINE
+#DIM bInvalidInput
 FIRST_LINE = LINECOUNT
 $REPRINT
 CLEARLINE LINECOUNT - FIRST_LINE
@@ -61,6 +62,9 @@ REDRAW 0
 HTML_PRINT "<era-open class='era-dialog era-sheet'>"
 HTML_PRINT HOTPATCH_SHEET_HEADER(HOTPATCH_SHEET_PERSON(C_ID, 0, 1), C_ID, PAGE, 6)
 HTML_PRINT "<era-open class='era-sheet-body'>"
+SIF bInvalidInput
+	PRINTL Invalid Input
+bInvalidInput = 0
 CALL CHARA_STATE_TR(C_ID, PAGE, OP)
 HTML_PRINT "<era-close>"
 SIF STRCOUNT(OP, "「最終確認」")
@@ -125,8 +129,8 @@ DO
 		SFSR_PAGE = RESULT-3500
 	CASEELSE
 		$RETRY
-		REUSELASTLINE Invalid Input
-		CONTINUE
+		bInvalidInput = 1
+		GOTO REPRINT
 	ENDSELECT
 	BREAK
 LOOP 1
@@ -143,6 +147,7 @@ GOTO REPRINT
 #DIM CREDRAW
 #DIM FIRST_LINE
 #DIM nSettingsEnable
+#DIM bInvalidInput
 #DIMS sPeople
 FIRST_LINE = LINECOUNT
 $REPRINT
@@ -176,6 +181,9 @@ SIF CHARA_CNT > 1
 HTML_PRINT "<era-open class='era-dialog era-sheet'>"
 HTML_PRINT HOTPATCH_SHEET_HEADER(sPeople, CHARA_LIST:C_VIEW, PAGE, nSettingsEnable ? 7 # 6)
 HTML_PRINT "<era-open class='era-sheet-body'>"
+SIF bInvalidInput
+	PRINTL Invalid Input
+bInvalidInput = 0
 CALL CHARA_STATE_TR(CHARA_LIST:C_VIEW, PAGE, OP)
 HTML_PRINT "<era-close>"
 SIF STRCOUNT(OP, "「最終確認」")
@@ -262,8 +270,8 @@ DO
 		CALL CHECK_BODYGRAPH_RECORD("set",RESULT-90000)
 	CASEELSE
 		$RETRY
-		REUSELASTLINE Invalid Input
-		CONTINUE
+		bInvalidInput = 1
+		GOTO REPRINT
 	ENDSELECT
 	BREAK
 LOOP 1
@@ -284,6 +292,162 @@ SIF nChara == MASTER && bCurrent
 SIF !nValue
 	RETURNF @"<span class='era-sheet-person era-current'>%sLabel%</span>"
 RETURNF @"<button value='{nValue}' class='era-sheet-person%(bCurrent ? " era-current" # "")%'>%sLabel%</button>"
+
+;-------------------------------------------------------------------------------
+; The sheet's gender and pronouns follow the game's existing sex and pronoun mappings.
+;-------------------------------------------------------------------------------
+@HOTPATCH_SHEET_GENDER(nChara)
+#DIM nChara
+SELECTCASE TALENT:nChara:性別
+CASE 2
+	HTML_PRINT "<div class='era-sheet-gender'>Gender: <span class='era-sheet-gender-blue'>Male ♂ (he/him)</span></div>"
+CASE 3
+	HTML_PRINT "<div class='era-sheet-gender'>Gender: <span class='era-sheet-gender-pink'>Futanari ⚧ (she/her)</span></div>"
+CASEELSE
+	HTML_PRINT "<div class='era-sheet-gender'>Gender: <span class='era-sheet-gender-pink'>Female ♀ (she/her)</span></div>"
+ENDSELECT
+
+; A flow layout replaces native pixel offsets and blank-line spacers.
+@PRINT_STATE_BODYGRAPH(選択中キャラID)
+#DIM 選択中キャラID
+#DIMS DYNAMIC sHtml
+sHtml '= "<div class='era-bodygraph'>" + HOTPATCH_SECTION_HEADING("Body Information")
+IF HAS_PENIS(選択中キャラID)
+	CALL HOTPATCH_BODYGRAPH_PART(選択中キャラID, "P", "ちん遍歴", "penis")
+	sHtml += RESULTS
+ENDIF
+CALL HOTPATCH_BODYGRAPH_PART(選択中キャラID, "M", "肉体情報_M", "mouth")
+sHtml += RESULTS
+CALL HOTPATCH_BODYGRAPH_PART(選択中キャラID, "B", "肉体情報_B", "chest")
+sHtml += RESULTS
+CALL HOTPATCH_BODYGRAPH_PART(選択中キャラID, "F", "SHOW_SIZE", "portrait", 280)
+sHtml += RESULTS
+IF TALENT:選択中キャラID:性別 != 2
+	CALL HOTPATCH_BODYGRAPH_PART(選択中キャラID, "V", "肉体情報_V", "vagina")
+	sHtml += RESULTS
+ENDIF
+CALL HOTPATCH_BODYGRAPH_PART(選択中キャラID, "A", "肉体情報_A", "anus")
+sHtml += RESULTS
+sHtml += "</div>"
+HTML_PRINT sHtml
+
+@HOTPATCH_BODYGRAPH_PART(nChara, sPart, sFunction, sClass, nSize = 160)
+#DIM DYNAMIC nChara
+#DIMS DYNAMIC sPart
+#DIMS DYNAMIC sFunction
+#DIMS DYNAMIC sClass
+#DIM DYNAMIC nSize
+#DIMS DYNAMIC sImage
+CALL HOTPATCH_BODYGRAPH_IMAGE(nChara, sPart, nSize, nSize)
+sImage '= RESULTS
+CALL GET_STRING_STATE_GENERAL(nChara, sFunction)
+RESULTS '= @"<div class='era-bodygraph-part era-bodygraph-%sClass%'><div class='era-bodygraph-image'>%sImage%</div><div class='era-bodygraph-text'>%RESULTS%</div></div>"
+
+@HOTPATCH_BODYGRAPH_IMAGE(nChara, sPart, nWidth, nHeight)
+#DIM DYNAMIC nChara
+#DIMS DYNAMIC sPart
+#DIM DYNAMIC nWidth
+#DIM DYNAMIC nHeight
+#DIMS DYNAMIC sFirst
+#DIMS DYNAMIC sSecond
+#DIMS DYNAMIC sThird
+#DIMS DYNAMIC sHover
+#DIMS DYNAMIC sViews, 4
+#DIMS DYNAMIC sUsed, 4
+#DIMS DYNAMIC sName
+#DIMS DYNAMIC sHoverName
+#DIMS DYNAMIC sHoverAttribute
+#DIMS DYNAMIC sViewName
+#DIMS DYNAMIC sLabel
+#DIMS DYNAMIC sImages
+#DIM DYNAMIC nIndex
+#DIM DYNAMIC nPrevious
+#DIM DYNAMIC nCount
+#DIM DYNAMIC bDuplicate
+IF nChara == MASTER && TALENT:nChara:性別 == 2 && !GROUPMATCH(sPart, "P", "PC", "F")
+	RESULTS '= @"<img src='bodyGraph_X' width='{nWidth}px' height='{nHeight}px'>"
+	RETURN
+ENDIF
+SELECTCASE sPart
+CASE "F"
+	sLabel '= "Portrait"
+	CALL SET_BODYGRAPH_SETS_Fullbody(nChara, sFirst, sSecond)
+CASE "M"
+	sLabel '= "Mouth"
+	CALL SET_BODYGRAPH_SETS_M(nChara, sFirst, sSecond)
+CASE "B"
+	sLabel '= "Chest"
+	CALL SET_BODYGRAPH_SETS_B(nChara, sFirst, sSecond)
+CASE "A"
+	sLabel '= "Anus"
+	CALL SET_BODYGRAPH_SETS_A(nChara, sFirst, sHover, sSecond)
+CASE "V"
+	sLabel '= "Vagina"
+	CALL SET_BODYGRAPH_SETS_V(nChara, sFirst, sHover, sSecond, sThird)
+CASE "P", "PC"
+	sLabel '= "Penis"
+	CALL SET_BODYGRAPH_SETS_P(nChara, sFirst, sPart == "PC")
+CASEELSE
+	THROW Unknown body graph part: %sPart%
+ENDSELECT
+sViews:0 '= sFirst
+sViews:1 '= sSecond
+sViews:2 '= sThird
+IF GROUPMATCH(sPart, "F", "M", "B")
+	sHover '= sSecond
+ENDIF
+sHoverName '= HOTPATCH_BODYGRAPH_LAYERS(sHover)
+FOR nIndex, 0, (sPart == "V" ? 3 # 2)
+	sName '= HOTPATCH_BODYGRAPH_LAYERS(sViews:nIndex)
+	SIF sName == ""
+		CONTINUE
+	bDuplicate = 0
+	FOR nPrevious, 0, nCount
+		SIF sUsed:nPrevious == sName
+			bDuplicate = 1
+	NEXT
+	SIF bDuplicate
+		CONTINUE
+	sUsed:nCount '= sName
+	nCount ++
+	CALL AAZ_OVERLAY_IMAGES_BY_STRING(sName)
+	sHoverAttribute '= ""
+	IF nIndex == 0 && sHoverName != "" && sHoverName != sName
+		CALL AAZ_OVERLAY_IMAGES_BY_STRING(sHoverName)
+		sHoverAttribute '= @" srcb='%HTML_ESCAPE(sHoverName)%'"
+	ENDIF
+	IF sPart == "F"
+		sViewName '= nIndex == 0 ? "Clothed" # "Unclothed"
+	ELSEIF sPart == "B"
+		sViewName '= nIndex == 0 ? "Covered" # "Uncovered"
+	ELSE
+		sViewName '= nIndex == 0 ? "Outside" # nIndex == 1 ? "Inside" # "Uterus"
+	ENDIF
+	sImages += @"<img src='%HTML_ESCAPE(sName)%'%sHoverAttribute% title='%sViewName%' width='{nWidth}px' height='{nHeight}px'>"
+NEXT
+IF !nCount
+	RESULTS '= @"<img src='bodyGraph_X' width='{nWidth}px' height='{nHeight}px'>"
+ELSEIF nCount == 1
+	RESULTS '= @"<span class='era-image-preview'>%sImages%</span>"
+ELSE
+	RESULTS '= @"<span class='era-image-switch' title='%sLabel%'>%sImages%</span>"
+ENDIF
+
+; Missing layers do not change the picture, so exclude them before comparing views.
+@HOTPATCH_BODYGRAPH_LAYERS(sLayers)
+#FUNCTIONS
+#DIMS DYNAMIC sLayers
+#DIMS DYNAMIC sParts, 100
+#DIMS DYNAMIC sResult
+#DIM DYNAMIC nCount
+#DIM DYNAMIC nIndex
+SPLIT sLayers, ",", sParts
+nCount = RESULT
+FOR nIndex, 0, nCount
+	SIF sParts:nIndex != "" && SPRITECREATED(sParts:nIndex)
+		sResult += sParts:nIndex + ","
+NEXT
+RETURNF sResult
 
 ;-------------------------------------------------------------------------------
 ; The dialog header: the character tabs (sPeople), the close button and nPages page tabs ([2]..).
@@ -537,6 +701,7 @@ CASE 3
 	CALL PRINT_STATE_PREFERENCE(C_ID)
 	CALL PRINT_STATE_GIFTDATA(C_ID, 15)
 CASE 4
+	CALL HOTPATCH_SHEET_GENDER(C_ID)
 	CALL 肉体情報(C_ID)
 CASE 5
 	IF C_ID == MASTER

@@ -467,6 +467,10 @@ function updateControls() {
   command.placeholder = input?.kind === "wait" ? "" : input?.defaultValue !== undefined
     ? `Enter for ${JSON.stringify(input.defaultValue)}` : chatting ? "Command number, or say something…" : input ? lastCommand : "";
   [...terminal.querySelectorAll(".choice"), ...islandRoot.querySelectorAll(".choice")].forEach((button) => {
+    if (button.classList.contains("era-image-switch")) {
+      button.disabled = !button.closest(".screen.is-active, .island-root") || busy || previewDisabled;
+      return;
+    }
     const value = input?.kind === "integer" && /^-?\d+$/.test(button.dataset.value) ? BigInt(button.dataset.value).toString() : button.dataset.value;
     const skyContinue = button.matches(".era-sky-dialog .era-wait-continue");
     const waitContinue = input?.kind === "wait" && skyContinue;
@@ -1930,6 +1934,43 @@ function subarea(node, scale) {
   anchor.subareaContent = area;
   return anchor;
 }
+async function imageSwitch(node, token, sprites, scale) {
+  const views = [...node.children];
+  if (views.length < 2 || views.length > 3 || views.some(view => view.tagName !== "IMG" || !view.getAttribute("src")))
+    throw new Error("Image switches require two or three image views");
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "choice era-image-switch";
+  syncGameControllerHints(button);
+  const label = node.getAttribute("title") || "Image";
+  const pictures = await Promise.all(views.map(view =>
+    image(view, token, sprites?.[view.getAttribute("src")], scale, sprites?.[view.getAttribute("srcb")])));
+  const imageSizeScale = scale ?? imageScale();
+  button.style.height = `${Math.max(...views.map(view =>
+    Math.abs(sizeAttribute(view.getAttribute("height"), metrics.fontSize * imageSizeScale, imageSizeScale))))}px`;
+  let current = 0;
+  const show = () => {
+    pictures.forEach((picture, index) => { picture.hidden = index !== current; });
+    button.dataset.view = String(current);
+    const view = views[current].getAttribute("title") || `view ${current + 1} of ${pictures.length}`;
+    const next = views[(current + 1) % pictures.length].getAttribute("title") || "next view";
+    button.setAttribute("aria-label", `${label}: ${view}`);
+    button.title = `${label}: ${view} (${current + 1}/${pictures.length}). Next: ${next}`;
+  };
+  button.append(...pictures);
+  show();
+  button.addEventListener("click", event => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (button.disabled || busy || previewDisabled || !button.closest(".screen.is-active, .island-root")) return;
+    current = (current + 1) % pictures.length;
+    button.classList.add("era-image-switch-selected");
+    show();
+  });
+  for (const event of ["pointerleave", "focusout"])
+    button.addEventListener(event, () => button.classList.remove("era-image-switch-selected"));
+  return button;
+}
 async function renderHtml(markup, parent, sprites) {
   // Parse inertly, then rebuild an allowlisted DOM. Never attach game HTML directly.
   // The explicit <body> keeps leading spaces, which the parser otherwise drops before the body starts (Emuera keeps them).
@@ -1940,6 +1981,10 @@ async function renderHtml(markup, parent, sprites) {
   async function copy(node, destination, scale) {
     if (node.nodeType === Node.TEXT_NODE) { appendCells(destination, node.textContent); return; }
     if (!(node instanceof Element)) return;
+    if (node.tagName === "SPAN" && node.classList.contains("era-image-switch")) {
+      destination.append(await imageSwitch(node, token, sprites, scale));
+      return;
+    }
     let element;
     if (node.tagName === "IMG") {
       const maxHeight = destination.closest(".era-room-stage .era-portrait") ? 216 : Infinity;
@@ -2029,6 +2074,8 @@ async function renderHtml(markup, parent, sprites) {
     if (node.tagName === "BUTTON" || element.matches(".era-radio, .era-setup-step, .era-setup-trait"))
       element.setAttribute("aria-disabled", String(node.hasAttribute("disabled") || node.getAttribute("aria-disabled") === "true"));
     if (node.tagName === "BUTTON") {
+      if (element.matches(".era-section-toggle"))
+        element.setAttribute("aria-expanded", String(node.getAttribute("aria-expanded") === "true"));
       for (const attribute of ["data-command-number", "data-suffix"]) {
         if (node.hasAttribute(attribute)) element.setAttribute(attribute, node.getAttribute(attribute));
       }

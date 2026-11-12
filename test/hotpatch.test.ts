@@ -1828,6 +1828,237 @@ test("room lineup renders every portrait and preserves target selection", {
   }
 });
 
+test("character sheet shows gender symbols and matching pronouns", () => {
+  const patch = readFileSync(new URL("../hotpatch/CHARA_SHEET.ERB", import.meta.url), "utf8");
+  const game = emptyGame();
+  game.names.set("TALENT", new Map([["性別", 0]]));
+  indexScript(game, patch.slice(patch.indexOf("@HOTPATCH_SHEET_GENDER("), patch.indexOf("@HOTPATCH_SHEET_HEADER(")), "<sheet-gender>");
+  indexScript(game, `@SYSTEM_TITLE
+ADDVOIDCHARA
+TALENT:0:性別 = 1
+CALL HOTPATCH_SHEET_GENDER(0)
+TALENT:0:性別 = 2
+CALL HOTPATCH_SHEET_GENDER(0)
+TALENT:0:性別 = 3
+CALL HOTPATCH_SHEET_GENDER(0)
+QUIT`, "<sheet-gender-test>");
+  for (const jit of [false, true]) {
+    const snapshot = new Runtime(game, undefined, { jit }).start();
+    assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
+    assert.deepEqual(snapshot.output.flatMap(item => item.type === "html" ? [item.text] : []), [
+      "<div class='era-sheet-gender'>Gender: <span class='era-sheet-gender-pink'>Female ♀ (she/her)</span></div>",
+      "<div class='era-sheet-gender'>Gender: <span class='era-sheet-gender-blue'>Male ♂ (he/him)</span></div>",
+      "<div class='era-sheet-gender'>Gender: <span class='era-sheet-gender-pink'>Futanari ⚧ (she/her)</span></div>",
+    ]);
+  }
+});
+
+test("shared section headings escape labels and replace native character-counted rules", () => {
+  const game = emptyGame();
+  indexScript(game, readFileSync(new URL("../hotpatch/SECTION_HEADING.ERB", import.meta.url), "utf8"), "<section-heading>");
+  indexScript(game, `@SYSTEM_TITLE
+CALL PRINTLINE("Preferences")
+CALL PRINTLINE("A & B <test>", "=")
+QUIT`, "<heading-fixture>");
+  for (const jit of [false, true]) {
+    const snapshot = new Runtime(game, undefined, { jit }).start();
+    assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
+    const html = snapshot.output.flatMap(item => item.type === "html" ? [item.text] : []);
+    assert.equal(html.length, 2);
+    assert.match(html[0]!, /<h2 class='era-section-title era-section-heading'>.*Preferences.*<\/h2>/);
+    assert.match(html[1]!, /A &amp; B &lt;test&gt;/);
+    assert.doesNotMatch(html.join(""), /-{3}|={3}/);
+  }
+});
+
+test("clickable section headings preserve native values, collapse state and ordinary buttons", () => {
+  const game = emptyGame();
+  indexScript(game, `#DIM CONST C_L_GRAY = 12632256
+#DIM CONST C_YELLOW = 16776960`, "<heading-colors>", true);
+  indexScript(game, readFileSync(new URL("../hotpatch/SECTION_HEADING.ERB", import.meta.url), "utf8"), "<section-heading>");
+  indexScript(game, `@SYSTEM_TITLE
+CALL PRINTBUTTON_EX("Clothing", 161, 0, , , 1)
+CALL PRINTBUTTON_EX("A & B <test>", 169, 1, , , 1)
+CALL PRINTBUTTON_EX("Highlighted", 162, 0, 1, , 1)
+CALL PRINTBUTTON_EX("Ordinary", 803)
+CALL PRINTBUTTON_EX("Unavailable", 804, , , 1, 1)
+QUIT`, "<heading-button-fixture>");
+  for (const jit of [false, true]) {
+    const snapshot = new Runtime(game, undefined, { jit }).start();
+    assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
+    const html = snapshot.output.flatMap(item => item.type === "html" ? [item.text] : []).join("");
+    assert.match(html, /value='161' class='era-section-toggle' aria-expanded='true' title='Collapse Clothing'/);
+    assert.match(html, /value='169' class='era-section-toggle' aria-expanded='false' title='Expand A &amp; B &lt;test&gt;'/);
+    assert.match(html, /value='162' class='era-section-toggle era-section-highlight'/);
+    assert.doesNotMatch(html, /value='803'|value='804'|-{3}/);
+    assert.ok(snapshot.output.some(item => item.type === "button" && item.text === "Ordinary"));
+    assert.ok(snapshot.output.some(item => item.type === "text" && item.text.includes("Unavailable")));
+  }
+});
+
+test("Body Information groups anatomy text and images without native spacers or rules", () => {
+  const patch = readFileSync(new URL("../hotpatch/CHARA_SHEET.ERB", import.meta.url), "utf8");
+  const game = emptyGame();
+  game.names.set("TALENT", new Map([["性別", 0]]));
+  indexScript(game, readFileSync(new URL("../hotpatch/SECTION_HEADING.ERB", import.meta.url), "utf8"), "<section-heading>");
+  indexScript(game, patch.slice(patch.indexOf("@PRINT_STATE_BODYGRAPH("), patch.indexOf("@HOTPATCH_BODYGRAPH_IMAGE(")), "<bodygraph-patch>");
+  indexScript(game, `@SYSTEM_TITLE
+ADDVOIDCHARA
+TALENT:0:性別 = 3
+CALL PRINT_STATE_BODYGRAPH(0)
+QUIT
+@HAS_PENIS(C_ID)
+#DIM C_ID
+#FUNCTION
+RETURNF TALENT:C_ID:性別 & 2
+@HOTPATCH_BODYGRAPH_IMAGE(C_ID, PARTS, WIDTH, HEIGHT)
+#DIM C_ID
+#DIM WIDTH
+#DIM HEIGHT
+#DIMS PARTS
+RESULTS '= @"<img src='%PARTS%'>"
+@GET_STRING_STATE_GENERAL(C_ID, FUNCTIONNAME)
+#DIM C_ID
+#DIMS FUNCTIONNAME
+RESULTS '= @"Details: %FUNCTIONNAME%"`, "<bodygraph-fixture>");
+  for (const jit of [false, true]) {
+    const snapshot = new Runtime(game, undefined, { jit }).start();
+    assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
+    const html = snapshot.output.flatMap(item => item.type === "html" ? [item.text] : []).join("");
+    assert.match(html, /era-bodygraph-penis'><div class='era-bodygraph-image'><img src='P'><\/div><div class='era-bodygraph-text'>Details: ちん遍歴/);
+    for (const part of ["mouth", "chest", "portrait", "vagina", "anus"]) assert.ok(html.includes(`era-bodygraph-${part}`));
+    assert.match(html, /era-section-title era-section-heading/);
+    assert.doesNotMatch(html, /xpos=|ypos=|height='2000'|<hr|━/);
+    assert.equal(snapshot.output.filter(item => item.type === "text").length, 0);
+  }
+});
+
+test("body graph views omit duplicate and missing layers and expose no runtime image commands", () => {
+  const patch = readFileSync(new URL("../hotpatch/CHARA_SHEET.ERB", import.meta.url), "utf8");
+  const game = emptyGame();
+  game.names.set("TALENT", new Map([["性別", 0]]));
+  indexScript(game, patch.slice(patch.indexOf("@HOTPATCH_BODYGRAPH_IMAGE("), patch.indexOf("@HOTPATCH_SHEET_HEADER(")), "<bodygraph-views>");
+  indexScript(game, `@SYSTEM_TITLE
+ADDVOIDCHARA
+TALENT:0:性別 = 3
+GCREATE 1, 16, 16
+SPRITECREATE "base", 1
+SPRITECREATE "inside", 1
+SPRITECREATE "uterus", 1
+CALL HOTPATCH_BODYGRAPH_IMAGE(0, "M", 180, 180)
+HTML_PRINT RESULTS
+CALL HOTPATCH_BODYGRAPH_IMAGE(0, "V", 180, 180)
+HTML_PRINT RESULTS
+PRINTL [0] Return
+BINPUT
+@SET_BODYGRAPH_SETS_M(C_ID, FIRST, SECOND)
+#DIM C_ID
+#DIMS REF FIRST
+#DIMS REF SECOND
+FIRST '= "base,"
+SECOND '= "base,missing,"
+@SET_BODYGRAPH_SETS_V(C_ID, FIRST, HOVER, SECOND, THIRD)
+#DIM C_ID
+#DIMS REF FIRST
+#DIMS REF HOVER
+#DIMS REF SECOND
+#DIMS REF THIRD
+FIRST '= "base,"
+HOVER '= "base,inside,"
+SECOND '= "inside,"
+THIRD '= "uterus,"
+@AAZ_OVERLAY_IMAGES_BY_STRING(LAYERS)
+#DIMS LAYERS
+SPRITECREATE LAYERS, 1`, "<bodygraph-views-fixture>");
+  for (const jit of [false, true]) {
+    const snapshot = new Runtime(game, undefined, { jit }).start();
+    assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
+    const html = snapshot.output.flatMap(item => item.type === "html" ? [item.text] : []);
+    assert.equal(html[0], "<span class='era-image-preview'><img src='base,' title='Outside' width='180px' height='180px'></span>");
+    assert.equal(html[1], "<span class='era-image-switch' title='Vagina'><img src='base,' srcb='base,inside,' title='Outside' width='180px' height='180px'><img src='inside,' title='Inside' width='180px' height='180px'><img src='uterus,' title='Uterus' width='180px' height='180px'></span>");
+    assert.doesNotMatch(html.join(""), /<button|missing|bodyGraph_hover/);
+    assert.deepEqual(snapshot.input?.buttonValues, ["0"]);
+  }
+});
+
+test("character sheets redraw rejected choices before button input retries", () => {
+  const patch = readFileSync(new URL("../hotpatch/CHARA_SHEET.ERB", import.meta.url), "utf8");
+  const game = emptyGame();
+  game.headers.push({ text: "#DIM 画像切り替え = 99990", file: "<sheet-header>", line: 1 });
+  indexScript(game, patch.slice(patch.indexOf("@SINGLE_CHARA_STATE_TR("), patch.indexOf("@BASIC_STATE(")), "<sheet-patch>");
+  indexScript(game, `@SYSTEM_TITLE
+#DIM people, 2
+ADDVOIDCHARA
+ADDVOIDCHARA
+CALLNAME:0 '= "Player"
+CALLNAME:1 '= "Guest"
+people:1 = 1
+FOR A, 0, 45
+  CALL SINGLE_CHARA_STATE_TR(0, "")
+  CALL LIST_CHARA_STATE_TR(people, 0, 2, "")
+NEXT
+CALL SINGLE_CHARA_STATE_TR(1, "「最終確認」")
+PRINTFORML chosen={RESULT}
+CALL LIST_CHARA_STATE_TR(people, 1, 2, "「最終確認」")
+PRINTFORML chosen={RESULT}
+QUIT
+@CHARA_STATE_TR(C_ID, PAGE, OP)
+#DIM C_ID
+#DIM PAGE
+#DIMS OP
+PRINTFORML character={C_ID} page={PAGE}
+PRINTL [1] [42] [7000]
+@KOJO_SETTINGS_EXIST(C_ID)
+#DIM C_ID
+RETURN 1
+@KOJO_OPTION_RESULT(C_ID, OPTION)
+#DIM C_ID
+#DIM OPTION
+RETURN -1`, "<sheet-fixture>");
+  for (const jit of [false, true]) {
+    const runtime = new Runtime(game, undefined, { jit });
+    let snapshot = runtime.start();
+    const text = () => snapshot.output.flatMap(item => item.type === "text" ? [item.text] : []);
+    const ready = () => {
+      assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
+      assert.equal(snapshot.status, "waiting");
+      for (const value of ["0", "2", "7"]) assert.ok(snapshot.input?.buttonValues?.includes(value));
+    };
+    for (let i = 0; i < 45; i++) {
+      for (const list of [false, true]) {
+        ready();
+        for (const choice of list ? ["1", "42", "7000"] : ["1", "42"]) {
+          snapshot = runtime.input(choice);
+          ready();
+          assert.ok(text().includes("Invalid Input"));
+          assert.ok(text().includes(`character=0 page=${i === 0 ? 0 : 2}`));
+        }
+        snapshot = runtime.input("4");
+        ready();
+        assert.ok(text().includes("character=0 page=2"));
+        assert.ok(!text().includes("Invalid Input"));
+        if (list) {
+          snapshot = runtime.input("88");
+          ready();
+          assert.ok(text().includes("character=1 page=2"));
+          snapshot = runtime.input("77");
+          ready();
+          assert.ok(text().includes("character=0 page=2"));
+        }
+        snapshot = runtime.input("0");
+      }
+    }
+    ready();
+    snapshot = runtime.input("1");
+    ready();
+    assert.ok(text().includes("chosen=1"));
+    snapshot = runtime.input("1");
+    assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
+    assert.equal(snapshot.status, "halted");
+    assert.ok(text().includes("chosen=1"));
+  }
+});
+
 test("character More opens the selected person's sheet while See more still opens the player", {
   skip: !existsSync(GAME_ROOT),
 }, async () => {

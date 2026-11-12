@@ -6,6 +6,54 @@ import { runInNewContext } from "node:vm";
 import { parseFragment, type DefaultTreeAdapterMap } from "parse5";
 import { createCanvas, loadImage } from "@napi-rs/canvas";
 
+test("local image switches cycle preloaded views without input, replacement or scrolling", async () => {
+  const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
+  const routine = source.slice(source.indexOf("async function imageSwitch("), source.indexOf("async function renderHtml("));
+  const attributes = new Map<string, string>();
+  const listeners = new Map<string, (event: { preventDefault(): void; stopPropagation(): void }) => void>();
+  const pictures: { hidden: boolean }[] = [];
+  const classes = new Set<string>();
+  let active = true;
+  const button = {
+    type: "", className: "", title: "", style: {}, dataset: {} as Record<string, string>, disabled: false,
+    classList: { add: (name: string) => classes.add(name), remove: (name: string) => classes.delete(name) },
+    append: (...views: typeof pictures) => assert.deepEqual(views, pictures),
+    setAttribute: (name: string, value: string) => attributes.set(name, value),
+    closest: () => active ? {} : null,
+    addEventListener: (name: string, handler: (event: { preventDefault(): void; stopPropagation(): void }) => void) => listeners.set(name, handler),
+  };
+  const context = {
+    document: { createElement: () => button },
+    image: async () => { const picture = { hidden: false }; pictures.push(picture); return picture; },
+    imageScale: () => 1, sizeAttribute: (value: string) => Number.parseFloat(value),
+    syncGameControllerHints() {},
+    metrics: { fontSize: 16 }, busy: false, previewDisabled: false,
+  };
+  const make = runInNewContext(`${routine}\nimageSwitch`, context);
+  const view = (name: string) => ({ tagName: "IMG", getAttribute: (attr: string) => attr === "src" ? name : attr === "height" ? "160px" : null });
+  const node = { children: [view("outside"), view("inside"), view("uterus")], getAttribute: () => "Vagina" };
+  assert.equal(await make(node, 0), button);
+  assert.deepEqual(pictures.map(picture => picture.hidden), [false, true, true]);
+  const click = () => listeners.get("click")!({ preventDefault() {}, stopPropagation() {} });
+  for (const index of [1, 2, 0]) {
+    click();
+    assert.equal(button.dataset.view, String(index));
+    assert.equal(attributes.get("aria-label"), `Vagina: view ${index + 1} of 3`);
+    assert.deepEqual(pictures.map(picture => picture.hidden), pictures.map((_, n) => n !== index));
+    assert.ok(classes.has("era-image-switch-selected"), "click shows the selected view rather than a hover preview");
+  }
+  listeners.get("pointerleave")!({ preventDefault() {}, stopPropagation() {} });
+  assert.ok(!classes.has("era-image-switch-selected"));
+  context.busy = true;
+  click();
+  assert.equal(button.dataset.view, "0");
+  context.busy = false;
+  active = false;
+  click();
+  assert.equal(button.dataset.view, "0", "historical output cannot be switched");
+  await assert.rejects(make({ ...node, children: [view("only")] }, 0), /two or three image views/);
+});
+
 test("room portrait images cap canvas and hover layers proportionally without enlarging smaller images", async () => {
   const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
   const sizes = source.slice(source.indexOf("function sizeAttribute("), source.indexOf("async function loadImage("));

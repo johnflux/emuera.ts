@@ -115,8 +115,10 @@ a { color: #8ddaff; }
 .screen.is-active button.choice.is-not-target:enabled:is(:hover, :focus-visible) .sprite-clip { opacity: 1; filter: none; box-shadow: inset 0 -3px 0 #9bd5ff; }
 @media (prefers-reduced-motion: reduce) { .screen.is-active button.choice.is-not-target .sprite-clip { transition: none; } }
 .sprite-hover { visibility: hidden; }
-.screen.is-active :is(.has-tooltip, button.choice):not(:disabled):not([aria-disabled="true"]):is(:hover, :focus-visible) .sprite-hover { visibility: visible; }
-.screen.is-active :is(.has-tooltip, button.choice):not(:disabled):not([aria-disabled="true"]):is(:hover, :focus-visible) .sprite-normal { visibility: hidden; }
+.screen.is-active :is(.has-tooltip, button.choice):not(:disabled):not([aria-disabled="true"]):not(.era-image-switch-selected):is(:hover, :focus-visible) .sprite-hover { visibility: visible; }
+.screen.is-active :is(.has-tooltip, button.choice):not(:disabled):not([aria-disabled="true"]):not(.era-image-switch-selected):is(:hover, :focus-visible) .sprite-normal { visibility: hidden; }
+.screen.is-active .era-image-preview:is(:hover, :focus-within) .sprite-hover { visibility: visible; }
+.screen.is-active .era-image-preview:is(:hover, :focus-within) .sprite-normal { visibility: hidden; }
 .screen.is-active .era-portrait:is(:hover, :focus-within) .sprite-hover { visibility: visible; }
 .screen.is-active .era-portrait:is(:hover, :focus-within) .sprite-normal { visibility: hidden; }
 .shape-rect { position: relative; height: 1em; vertical-align: text-top; }

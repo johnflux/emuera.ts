@@ -22,8 +22,13 @@ export const GAME_BUTTON_SAMPLES = [
     "era-setup-character-action", "era-setup-step", "era-setup-number",
     "era-setup-trait", "era-setup-trait era-current"].map(classes => ({ name: classes, html: button(classes) })),
   { name: "Dialog close", html: button("era-dialog-close", "Close", "&#215;") },
+  ...[true, false].map(expanded => ({
+    name: `Section heading / ${expanded ? "expanded" : "collapsed"}`,
+    html: `<h2 class='era-section-title era-section-heading'><span class='era-heading-mark'>□</span><span><button value='161' class='era-section-toggle' aria-expanded='${expanded}'>Clothing</button></span><span class='era-heading-mark'>□</span></h2>`,
+  })),
   { name: "Sheet person", html: button("era-sheet-person", "Reimu", "Reimu<span class='era-sub'>Shrine maiden</span>") },
   { name: "Sheet person selected", html: "<span class='era-sheet-person era-current'>Reimu<span class='era-sub'>Shrine maiden</span></span>" },
+  { name: "Local image switch", html: "<span class='era-image-switch' title='Body view'><img src='bodyGraph_X' width='160px' height='160px'><img src='bodyGraph_circle' width='160px' height='160px'></span>" },
   { name: "Trailing suffix", html: "<button value='805' class='era-button era-button-block' data-command-number='805' data-suffix='›'>Inventory</button>" },
   { name: "Single-line text fitting", html: "<div style='width:180px'><button value='189' class='era-button era-button-block' data-command-number='189'>End Newlywed Play</button></div>" },
   { name: "Travel action", html: button("era-button era-button-block era-travel-button", "Move") },

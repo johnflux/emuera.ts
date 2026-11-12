@@ -24,6 +24,10 @@ function classHeading(html: string): string {
 const buttons = `
 @SYSTEM_TITLE
 #DIM RADIO_SELECTION
+HTML_PRINT "<era-open class='era-section era-button-sample'>"
+PRINTL Section heading
+CALL PRINTLINE("Preferences")
+HTML_PRINT "<era-close>"
 ${["default", "block", "primary", "list"].map((variant, index) => `
 HTML_PRINT "<era-open class='era-section era-helper-samples era-button-sample'>"
 PRINTL ${variant === "default" ? "Standard button" : variant === "block" ? "Full-width layout (same button)" : variant === "list" ? "Setting row" : "Primary action"}

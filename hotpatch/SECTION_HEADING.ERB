@@ -1,0 +1,29 @@
+; Replace PRINTLINE's character-counted rule with a shared responsive section heading.
+@PRINTLINE, ARGS, ARGS:1 = "-"
+HTML_PRINT HOTPATCH_SECTION_HEADING(ARGS)
+
+@HOTPATCH_SECTION_HEADING(sTitle)
+#FUNCTIONS
+#DIMS DYNAMIC sTitle
+RETURNF HOTPATCH_SECTION_FRAME(HTML_ESCAPE(sTitle))
+
+@HOTPATCH_SECTION_FRAME(sContent)
+#FUNCTIONS
+#DIMS DYNAMIC sContent
+RETURNF @"<h2 class='era-section-title era-section-heading'><span class='era-heading-mark'>□</span><span>%sContent%</span><span class='era-heading-mark'>□</span></h2>"
+
+; Only the section-heading form changes; ordinary buttons retain native behavior.
+@PRINTBUTTON_EX(ARGS:0, ARG, ARG:1, ARG:2, ARG:3, ARG:4)
+IF ARG:3
+	SETCOLOR C_L_GRAY
+	PRINTFORM %ARGS:0%
+ELSEIF ARG:4
+	HTML_PRINT HOTPATCH_SECTION_FRAME(@"<button value='{ARG}' class='era-section-toggle%ARG:2 && !ARG:1 ? " era-section-highlight" # ""%' aria-expanded='%ARG:1 ? "false" # "true"%' title='%ARG:1 ? "Expand" # "Collapse"% %HTML_ESCAPE(ARGS:0)%'>%HTML_ESCAPE(ARGS:0)%</button>")
+ELSE
+	SIF ARG:2
+		SETCOLOR C_YELLOW
+	SIF ARG:1
+		SETCOLOR C_L_GRAY
+	PRINTBUTTON @"%ARGS:0%", ARG
+ENDIF
+RESETCOLOR

@@ -8,12 +8,14 @@ import { GAME_INSTRUCTION_LIMIT, Runtime } from "../src/runtime.js";
 
 test("button catalog calls the production helper and leaves the original game unchanged", async () => {
   const game = emptyGame();
-  const [commands, attributes] = await Promise.all([
+  const [commands, attributes, headings] = await Promise.all([
     readFile(new URL("../hotpatch/MAIN_SCREEN_COMMANDS.ERB", import.meta.url), "utf8"),
     readFile(new URL("../hotpatch/INFO_PALAM.ERB", import.meta.url), "utf8"),
+    readFile(new URL("../hotpatch/SECTION_HEADING.ERB", import.meta.url), "utf8"),
   ]);
   indexScript(game, commands.slice(commands.indexOf("@HOTPATCH_BUTTON(")), "<production-buttons>");
   indexScript(game, attributes.slice(attributes.indexOf("@HOTPATCH_ATTRIBUTE(")), "<production-attributes>");
+  indexScript(game, headings, "<production-headings>");
   indexScript(game, `@SYSTEM_TITLE
 PRINTL Original title`, "<original>");
   const title = game.routines.get("SYSTEM_TITLE");
@@ -32,6 +34,7 @@ PRINTL Original title`, "<original>");
     assert.match(html, new RegExp(`era-button era-action-${direction}`));
   assert.doesNotMatch(html, /title='Production HOTPATCH_BUTTON'/);
   assert.match(html, /era-component-path/);
+  assert.match(html, /era-section-title era-section-heading/);
   assert.match(html, /<code>\.era-button<\/code>/);
   assert.match(html, /\[data-suffix=&quot;›&quot;\]/);
   assert.doesNotMatch(html, /era-component-state/);

@@ -22,6 +22,10 @@ button.choice.era-calendar-button:enabled:is(:hover, :focus-visible) { backgroun
 .era-timestop-button { position: relative; z-index: 2; }
 button.choice.era-text-button { align-self: center; padding: 0 2px; border: 0; border-radius: 0; background: transparent; color: #8fc8ff; font-weight: normal; white-space: nowrap; }
 button.choice.era-text-button:enabled:is(:hover, :focus-visible) { background: transparent; color: #d7eff8; text-decoration: underline; }
+button.choice.era-section-toggle { padding: 0; border: 0; border-radius: 0; background: transparent; color: #8fc8ff; font-size: 1.15rem; line-height: 1.4; white-space: normal; text-align: left; }
+button.choice.era-section-toggle[aria-expanded='false'] { color: #8998a2; }
+button.choice.era-section-toggle.era-section-highlight { color: #ffff00; }
+button.choice.era-section-toggle:enabled:is(:hover, :focus-visible) { background: transparent; color: #d7eff8; text-decoration: underline; text-underline-offset: .18em; }
 button.choice.era-text-button-link { display: inline-flex; align-items: baseline; gap: .4ch; color: var(--era-heading-color); font-weight: inherit; text-decoration: underline dotted; text-underline-offset: .18em; }
 button.choice.era-wait-continue { font-size: 1rem; }
 button.choice.era-relationship-select { --relationship-button: url("/relationship-assets/button-pink.svg"); --relationship-action-icon: url("/relationship-assets/icon-lovers.svg"); --relationship-button-background: #493040; --relationship-button-border: #b97d9b; display: flex; align-items: center; justify-content: center; gap: 10px; box-sizing: border-box; width: 100%; min-height: 68px; padding: 12px 14px; border: 0; border-radius: 12px; background: var(--relationship-button) center / 100% 100% no-repeat; color: #ffe1ee; white-space: normal; text-align: left; font-size: 1.2rem; }
@@ -237,3 +241,7 @@ button.choice[aria-disabled="true"]::before { filter: grayscale(1); }
   button.choice.era-relationship-select:enabled:is(:hover, :focus-visible) { filter: none; background-color: var(--relationship-button-background); }
   button.choice.era-relationship-select:enabled:focus-visible { outline: 2px solid #8ddaff; outline-offset: 2px; }
 }
+button.choice.era-image-switch { position: relative; }
+button.choice.era-image-switch > [hidden] { display: none; }
+button.choice.era-image-switch::after { content: "↻"; position: absolute; top: 4px; right: 4px; padding: 2px 4px; border-radius: 4px; background: #111c; color: #b7e9f4; font: 16px/1 sans-serif; pointer-events: none; }
+button.choice.era-image-switch:enabled:focus-visible { outline: 2px solid #8fc8ff; outline-offset: 2px; }

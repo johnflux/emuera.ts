@@ -14,6 +14,146 @@ const browser = [process.env.CHROME_PATH, "/Applications/Google Chrome.app/Conte
   "/usr/bin/google-chrome", "/usr/bin/chromium", "/usr/bin/chromium-browser"]
   .find((path): path is string => !!path && existsSync(path));
 
+test("Body Information switches views locally, retains hover layers and fits narrow screens", {
+  skip: !browser || !existsSync(GAME_ROOT),
+}, async () => {
+  const game = await loadGame();
+  await applyHotpatches(game);
+  const fixture = emptyGame(game.root);
+  indexScript(fixture, `@SYSTEM_TITLE
+ADDCHARA 0
+ADDCHARA 1
+MASTER = 0
+TALENT:1:性別 = 3
+TALENT:1:形状 = 10
+DO
+HTML_PRINT "<era-open class='era-dialog era-sheet'>"
+HTML_PRINT "<div class='era-sheet-header'>Character sheet</div>"
+HTML_PRINT "<era-open class='era-sheet-body'>"
+CALL PRINTBUTTON_EX("Clothing", 161, TFLAG:161, , , 1)
+SIF !TFLAG:161
+	HTML_PRINT "<div class='era-clothing-test-content'>Jacket</div>"
+CALL PRINT_STATE_BODYGRAPH(1)
+HTML_PRINT "<era-close>"
+HTML_PRINT "<div class='era-sheet-footer'><button value='0'>Return</button></div>"
+HTML_PRINT "<era-close>"
+BINPUT
+IF RESULT != 161
+	BREAK
+ENDIF
+TFLAG:161 = TFLAG:161 == 0
+CLEARLINE LINECOUNT
+LOOP 1
+QUIT
+@IS_DEBUG
+#FUNCTION
+RETURNF 1`, "<bodygraph-browser-fixture>");
+  for (const [name, routines] of fixture.routines) game.routines.set(name, routines);
+  const app = createApp([{ id: "tw", title: "eraTW", game }], true);
+  const server = createServer((request, response) => {
+    if (request.url !== "/bodygraph-probe") { app.emit("request", request, response); return; }
+    response.setHeader("Content-Type", "text/html; charset=utf-8");
+    response.end(`<!doctype html><style>iframe{width:1400px;height:850px;border:0}</style>
+      <iframe id="game" src="/?game=tw"></iframe><pre id="result"></pre><script>
+      const pause = () => new Promise(resolve => setTimeout(resolve, 100));
+      (async () => {
+        const frame = document.querySelector("#game");
+        let doc, graph;
+        for (let n = 0; n < 180; n++) {
+          doc = frame.contentDocument;
+          graph = doc?.querySelector(".era-bodygraph");
+          if (graph?.querySelector(".era-bodygraph-vagina button:enabled .sprite-clip")
+            && !doc.body.classList.contains("is-busy")) break;
+          await pause();
+        }
+        if (!graph) throw new Error("Body diagram did not load");
+        const toggle = () => doc.querySelector(".era-section-toggle");
+        const headingStyle = frame.contentWindow.getComputedStyle(toggle().closest("h2"));
+        const heading = {display:headingStyle.display, expanded:toggle().getAttribute("aria-expanded")};
+        toggle().click();
+        for (let n = 0; n < 180 && toggle()?.getAttribute("aria-expanded") !== "false"; n++) await pause();
+        heading.collapsed = toggle()?.getAttribute("aria-expanded") === "false"
+          && !doc.querySelector(".era-clothing-test-content");
+        toggle().click();
+        for (let n = 0; n < 180 && (toggle()?.getAttribute("aria-expanded") !== "true"
+          || doc.body.classList.contains("is-busy")); n++) await pause();
+        heading.restored = !!doc.querySelector(".era-clothing-test-content");
+        graph = doc.querySelector(".era-bodygraph");
+        const button = graph.querySelector(".era-bodygraph-vagina button");
+        const body = graph.closest(".era-sheet-body");
+        const views = [...button.children];
+        const hover = !!views[0].querySelector(".sprite-hover");
+        const outside = views[0].dataset.src;
+        const inside = views[1].dataset.src;
+        body.scrollTop = 100;
+        const scroll = body.scrollTop;
+        const inputs = () => frame.contentWindow.performance.getEntriesByType("resource")
+          .filter(entry => entry.name.includes("/api/input")).length;
+        const before = inputs();
+        const selected = [];
+        for (let n = 0; n < views.length + 1; n++) {
+          button.click();
+          selected.push({index:button.dataset.view,
+            visible:views.filter(view => frame.contentWindow.getComputedStyle(view).display !== "none").length});
+        }
+        await pause();
+        const stable = doc.querySelector(".era-bodygraph") === graph && body.scrollTop === scroll
+          && inputs() === before;
+        const layouts = [];
+        for (const width of [1400, 390]) {
+          frame.style.width = width + "px";
+          await pause();
+          const penis = graph.querySelector(".era-bodygraph-penis");
+          const bounds = graph.getBoundingClientRect();
+          const center = penis.getBoundingClientRect();
+          layouts.push({width, fits:body.scrollWidth <= body.clientWidth + 1,
+            centered:Math.abs((center.left + center.right - bounds.left - bounds.right) / 2) < 2,
+            image:!!penis.querySelector(".sprite-clip"),
+            text:penis.querySelector(".era-bodygraph-text").textContent.includes("Penis")});
+        }
+        document.querySelector("#result").textContent = JSON.stringify({heading, hover, outside, inside, selected, stable,
+          views:views.length, layouts, noOpButtons:graph.querySelectorAll(".era-bodygraph-penis button").length,
+          errors:[...graph.querySelectorAll(".missing")].map(el => el.textContent)});
+      })().catch(error => document.querySelector("#result").textContent = JSON.stringify({error:error.message}));
+      </script>`);
+  });
+  const profile = await mkdtemp(join(process.cwd(), ".era-bodygraph-browser-"));
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address !== "string");
+    const { stdout } = await promisify(execFile)(browser!, [
+      "--headless=new", "--no-sandbox", "--disable-gpu", "--disable-background-networking",
+      `--user-data-dir=${profile}`, "--window-size=1600,1000", "--dump-dom", "--virtual-time-budget=30000",
+      `http://127.0.0.1:${address.port}/bodygraph-probe`,
+    ], { timeout: 60000, maxBuffer: 2_000_000 });
+    const encoded = stdout.match(/<pre id="result">([^<]+)<\/pre>/)?.[1];
+    assert.ok(encoded, stdout.slice(0, 2000));
+    const result = JSON.parse(encoded.replaceAll("&quot;", '"').replaceAll("&amp;", "&"));
+    assert.equal(result.error, undefined, JSON.stringify(result));
+    assert.deepEqual(result.heading, {display:"flex", expanded:"true", collapsed:true, restored:true});
+    assert.equal(result.hover, true);
+    assert.equal(result.views, 3);
+    assert.notEqual(result.outside, result.inside);
+    assert.equal(result.stable, true, "clicks must not submit input, rebuild the page or change scroll");
+    assert.deepEqual(result.selected.map((view: { index: string }) => view.index), ["1", "2", "0", "1"]);
+    assert.ok(result.selected.every((view: { visible: number }) => view.visible === 1));
+    assert.equal(result.noOpButtons, 0, "the decorative penis image is not clickable");
+    assert.deepEqual(result.errors, []);
+    for (const layout of result.layouts) {
+      assert.equal(layout.fits, true, JSON.stringify(layout));
+      assert.equal(layout.centered, true, JSON.stringify(layout));
+      assert.equal(layout.image && layout.text, true, JSON.stringify(layout));
+    }
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>(resolve => server.close(() => resolve()));
+    app.closeAllConnections();
+    await rm(profile, { recursive: true, force: true });
+  }
+});
+
 test("catalog uses production rendering and context-independent buttons at wide and narrow sizes", {
   skip: !browser || !existsSync(GAME_ROOT),
 }, async () => {
