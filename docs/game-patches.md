@@ -12,7 +12,7 @@ of this document. Re-apply it after updating or reinstalling the game.
 | # | Symptom | Cause | Files |
 |---|---------|-------|-------|
 | 1 | "Ego alert! Biten has Relation towards herself!" on every load | Typo in Biten's CSV: her affinity for Ubame uses Biten's number | `CSV/Chara/Chara153 美天.csv`, `ERB/TRANSLATION/Addition/Add_Relation.ERB` |
-| 2 | Play A Game: after picking a game, "Add a wager?" answers every choice with "Invalid input" and never lets you continue | Off-by-one in the bet-choice check (`RESULT < LOCAL-1`) | `ERB/TRANSLATION/Addition/Custom_Commands/Add_CUSTOM_COM0 Play Game.ERB` |
+| 2 | Retracted: wager-choice check is correct | Emuera increments the `FOR` counter even on `BREAK`; keep `RESULT < LOCAL-1` | `ERB/TRANSLATION/Addition/Custom_Commands/Add_CUSTOM_COM0 Play Game.ERB` |
 | 3 | Pilfer Panties [821] and Take Panties [825] silently do nothing after starting mischief while time is frozen | Their handlers reject the session flag that frozen-time mischief sets, although the menu still offers both actions | `ERB/コマンド関連/USERCOM.ERB` |
 | 4 | A character with hate marks is as willing to kiss, have sex or become lovers as one without | Sign slip in the consent value: `MIN` instead of `MAX`, so the hate-mark penalty is never applied | `ERB/ステータス計算関連/ATTITUDE.ERB` |
 | 5 | After a hate mark (for example from a refused Push Down) the character is "angry..." at full anger, yet Apologize [303] is not offered | Anger decay clears the furious flag while anger is still 0, one step before the sulk refills anger to max, and nothing sets the flag again | `ERB/MOVEMENTS/BASE自然変動.ERB` |
@@ -64,28 +64,43 @@ Running [Update] does not help.
 Verified headlessly: loading save 300, which was made before the fix, no
 longer prints the alert.
 
-## 2. "Add a wager?" rejects every choice
+## 2. Wager-choice patch (retracted)
 
-### Symptom
+The earlier claim that `RESULT < LOCAL-1` rejects valid wagers was incorrect.
+Do not apply the proposed change to `RESULT < LOCAL`.
 
-Choose Play A Game `[9000]` and pick a game, for example `[1] - Shogi`. The game
-asks "Add a wager?" and lists `[0] - No wager`. Entering `0` prints
-"Invalid input", and so does every other number. The prompt never ends.
+The reported rejection was real in the older TypeScript interpreter, not a
+game-script bug. The wager patch was documented in commit `c929a1d` (October 24,
+2026). At that time, the interpreter's `BREAK` skipped the counter increment.
+With only `NONE/`, it left `LOCAL == 1`, so the original check rejected zero
+(`0 < 0`). Commit `f099a39` (October 28, 2026) fixed the interpreter to increment
+the counter on `BREAK`. The game-script workaround became incorrect after that
+fix.
 
-### Cause
+Emuera increments a `FOR` counter by its step even when leaving via `BREAK`.
+For example, `FOR LOCAL, 0, 5` with a break at `LOCAL == 4` leaves `LOCAL == 5`.
 
-- `@ADD_CUSTOM_COM0` lists the bets with `FOR LOCAL, 0, 20`, which `BREAK`s at
-  the first empty entry. The bet strings end in `/` (`ADD_GAME_STANDARD_BETS`
-  returns `NONE/`, plus `MONEY/` and `CHARISMA/` when you can afford them), so
-  `SPLIT` leaves an empty entry right after the last bet. `LOCAL` therefore ends
-  up equal to the number of bets shown.
-- The input loop accepts `RESULT >= 0 && RESULT < LOCAL-1`. That is one too few.
-  With only "No wager" it accepts nothing, and `DO … LOOP 1` asks again forever.
-  With more bets, the last one listed can never be chosen.
+In `@ADD_CUSTOM_COM0`, `SPLIT` leaves an empty entry after the trailing `/`.
+The listing loop breaks at that entry, then increments `LOCAL` once more:
 
-### Fix
+| Bet string | Listed indices | `LOCAL` after `BREAK` | Original accepted indices |
+|------------|----------------|-----------------------|---------------------------|
+| `NONE/` | 0 | 2 | 0 |
+| `NONE/MONEY/CHARISMA/` | 0, 1, 2 | 4 | 0, 1, 2 |
 
-Accept `RESULT < LOCAL`, so every listed bet, and only those, can be chosen.
+Thus `RESULT >= 0 && RESULT < LOCAL-1` is correct. The proposed patch instead
+accepts the unlisted empty entry. If already applied, restore the original line:
+
+```erb
+		SIF RESULT >= 0 && RESULT < LOCAL-1
+```
+
+Verified with the installed Emuera.NET 1.824+v24+EMv18+EEv56 executable under
+Wine. `test/fixtures/native-control-flow.erb` reproduces both wager cases and
+the break-at-4 example; `test/native-compat.test.ts` checks the same outputs in
+interpreted and warmed JIT execution. No interpreter change is needed.
+The same test file also exercises the original lone-wager input loop across
+input pauses, rejecting -1 and 1 before accepting 0.
 
 ## 3. Pilfer commands stop working during frozen-time mischief
 
@@ -222,16 +237,4 @@ diff -ru a/ERB/TRANSLATION/Addition/Add_Relation.ERB b/ERB/TRANSLATION/Addition/
  LOCAL:2 = 0
  FOR LOCAL, 0, CHARANUM
  	FOR LOCAL:1, 0, CHARANUM
-diff -ru a/ERB/TRANSLATION/Addition/Custom_Commands/Add_CUSTOM_COM0 Play Game.ERB b/ERB/TRANSLATION/Addition/Custom_Commands/Add_CUSTOM_COM0 Play Game.ERB
---- a/ERB/TRANSLATION/Addition/Custom_Commands/Add_CUSTOM_COM0 Play Game.ERB
-+++ b/ERB/TRANSLATION/Addition/Custom_Commands/Add_CUSTOM_COM0 Play Game.ERB
-@@ -130,7 +130,7 @@
- 	NEXT
- 	DO
- 		INPUT
--		SIF RESULT >= 0 && RESULT < LOCAL-1
-+		SIF RESULT >= 0 && RESULT < LOCAL ;Patch: LOCAL is already the number of bets listed (was LOCAL-1, so a lone "No wager" could never be chosen)
- 			BREAK
- 		REUSELASTLINE Invalid input
- 		CONTINUE
 ```

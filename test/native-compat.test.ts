@@ -15,6 +15,13 @@ test("native EE control-flow results match in interpreted and warmed JIT routine
     "FALL 0 77",
     "FUN 3 88",
     "BREAK 1 7 1",
+    "BREAK_LAST 5",
+    "WAGER 1 2",
+    "BET 0 NONE",
+    "WAGER 3 4",
+    "BET 0 NONE",
+    "BET 1 MONEY",
+    "BET 2 CHARISMA",
     "TRAIL_EXPR 8 13 13",
     "TRAIL_CALL 8",
     "TRAIL_REPEAT 2",
@@ -27,7 +34,53 @@ test("native EE control-flow results match in interpreted and warmed JIT routine
     const snapshot = new Runtime(game, 50_000, { jit }).start();
     assert.equal(snapshot.status, "halted", JSON.stringify(snapshot.error));
     assert.deepEqual(snapshot.output.filter((line) => line.type === "text").map((line) => line.text),
-      [...Array.from({ length: 5 }, () => expected).flat(), "DONE", "Log written to emuera.log"]);
+      ["Log written to emuera.log", ...Array.from({ length: 5 }, () => expected).flat(), "DONE", "Log written to emuera.log"]);
+  }
+});
+
+test("original lone-wager check rejects invalid input and accepts zero after input suspension", () => {
+  for (const jit of [false, true]) {
+    const game = emptyGame();
+    indexScript(game, `@SYSTEM_TITLE
+FOR A, 0, 5
+CALL WAGER
+NEXT
+QUIT
+@WAGER
+#DIMS BETS, 20
+VARSET BETS
+SPLIT "NONE/", "/", BETS
+FOR LOCAL, 0, 20
+SIF !STRLENS(BETS:LOCAL)
+BREAK
+PRINTFORML [{LOCAL}] - %BETS:LOCAL%
+NEXT
+PRINTFORML LOCAL {LOCAL}
+DO
+INPUT
+SIF RESULT >= 0 && RESULT < LOCAL-1
+BREAK
+REUSELASTLINE Invalid input
+CONTINUE
+LOOP 1
+PRINTFORML ACCEPTED {RESULT} %BETS:RESULT%
+RETURN`, "wager-input.erb");
+    const rt = new Runtime(game, 50_000, { jit });
+    let snapshot = rt.start();
+    for (let i = 0; i < 5; i++) {
+      assert.equal(snapshot.status, "waiting", JSON.stringify(snapshot.error));
+      const lines = snapshot.output.filter((line) => line.type === "text").map((line) => line.text);
+      assert.ok(lines.includes("[0] - NONE"));
+      assert.ok(lines.includes("LOCAL 2"));
+      for (const invalid of ["-1", "1"]) {
+        snapshot = rt.input(invalid);
+        assert.equal(snapshot.status, "waiting", JSON.stringify(snapshot.error));
+        assert.ok(snapshot.output.some((line) => line.text === "Invalid input"));
+      }
+      snapshot = rt.input("0");
+      assert.ok(snapshot.output.some((line) => line.text === "ACCEPTED 0 NONE"));
+    }
+    assert.equal(snapshot.status, "halted", JSON.stringify(snapshot.error));
   }
 });
 
