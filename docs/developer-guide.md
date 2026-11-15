@@ -1029,6 +1029,8 @@ dashes to `DRAWLINESTR`'s width) is clipped rather than wrapped when it is wider
 than its box, e.g. after the window was made narrower or in a dialog. HTML keeps
 its leading spaces, as in Emuera, so tables built from padded `HTML_PRINT` rows
 line up.
+Command-number labels preserve padding inside brackets (such as `[  0]`)
+without wrapping; ordinary choice labels remain single-line.
 An HTML `<div>` with EM+EE sub-area attributes (`width`, `height`, `xpos`, `ypos`,
 `size`, `rect`, `depth`, `color`, `display`, `margin`, `padding`, `border`,
 `bcolor`, `radius`) is a box placed at the print position plus its offset,
@@ -1185,6 +1187,9 @@ becomes active again and its choices work. As in Emuera, those revived choices
 stay valid only until the script prints new choices; after that they are disabled,
 and the revived output (up to where the new output starts) moves back into a
 history screen of its own, greyed like any older screen.
+Config editors keep their dialog open across inputs, so answered output inside
+the editor is instead dimmed and made inert in place. If `CLEARLINE` removes
+the newer output back to an earlier prompt, that prompt becomes active again.
 Game HTML `title` descriptions (including trait `<nonbutton>` tags) appear in
 immediate, multiline tooltips on hover or keyboard focus. Descriptions are plain
 text, not executable HTML; as in Emuera.EM/EE, a literal lowercase `<br>` in

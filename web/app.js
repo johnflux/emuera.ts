@@ -468,13 +468,13 @@ function updateControls() {
     ? `Enter for ${JSON.stringify(input.defaultValue)}` : chatting ? "Command number, or say something…" : input ? lastCommand : "";
   [...terminal.querySelectorAll(".choice"), ...islandRoot.querySelectorAll(".choice")].forEach((button) => {
     if (button.classList.contains("era-image-switch")) {
-      button.disabled = !button.closest(".screen.is-active, .island-root") || busy || previewDisabled;
+      button.disabled = !button.closest(".screen.is-active, .island-root") || !!button.closest(".dialog-prompt-history") || busy || previewDisabled;
       return;
     }
     const value = input?.kind === "integer" && /^-?\d+$/.test(button.dataset.value) ? BigInt(button.dataset.value).toString() : button.dataset.value;
     const skyContinue = button.matches(".era-sky-dialog .era-wait-continue");
     const waitContinue = input?.kind === "wait" && skyContinue;
-    choiceControl(button).disabled = !button.closest(".screen.is-active, .island-root") || button.classList.contains("is-stale") || (busy && !expiring) || !input || (input.kind === "wait" && !waitContinue) || !!input.blocking
+    choiceControl(button).disabled = !button.closest(".screen.is-active, .island-root") || !!button.closest(".dialog-prompt-history") || button.classList.contains("is-stale") || (busy && !expiring) || !input || (input.kind === "wait" && !waitContinue) || !!input.blocking
       || (skyContinue && !waitContinue)
       || button.getAttribute("aria-disabled") === "true"
       || previewDisabled
@@ -490,6 +490,30 @@ function screen() {
     outputRoot.append(currentScreen);
   }
   return currentScreen;
+}
+let dialogPromptId = 0;
+function retireDialogPrompt(body) {
+  const lines = [...body.querySelectorAll(".line:not(.era-marker):not(.dialog-prompt-history)")];
+  if (!lines.length) return;
+  const id = String(++dialogPromptId);
+  for (const line of lines) {
+    line.dataset.dialogPrompt = id;
+    line.classList.add("dialog-prompt-history");
+    line.inert = true;
+  }
+  return id;
+}
+function reviveDialogPrompt(body) {
+  const last = [...body.querySelectorAll(".line:not(.era-marker)")].at(-1);
+  if (!last?.classList.contains("dialog-prompt-history")) return false;
+  for (const line of body.querySelectorAll(".dialog-prompt-history")) {
+    if (line.dataset.dialogPrompt !== last.dataset.dialogPrompt) continue;
+    line.classList.remove("dialog-prompt-history");
+    delete line.dataset.dialogPrompt;
+    line.inert = false;
+    line.querySelectorAll(".choice.is-selected").forEach((choice) => { choice.classList.remove("is-selected"); });
+  }
+  return true;
 }
 function lastOutputLine() {
   const lines = terminal.lastElementChild?.querySelectorAll(".line:not(.era-marker)");
@@ -664,7 +688,7 @@ function describe(element, description) {
   if (!element.matches("button, a[href], .checkbox-control")) element.tabIndex = 0;
   async function show() {
     if (!element.classList.contains("has-tooltip")) return;
-    if (busy || !element.closest(".screen.is-active, .cbg-layer, .island-root") || element.matches(".is-stale")) return;
+    if (busy || !element.closest(".screen.is-active, .cbg-layer, .island-root") || element.closest(".dialog-prompt-history") || element.matches(".is-stale")) return;
     if (element.closest(".era-occupant-list") && element.querySelector(".sprite")) return;
     hideTooltip();
     if (element.matches(".era-setup-trait, .era-setup-detail")) {
@@ -2565,6 +2589,9 @@ async function renderSnapshot(snapshot, advanceScreen) {
   }
   const previousScreen = currentScreen;
   const previousLine = currentLine;
+  const editorBody = currentScreen?.querySelector(".era-config.era-setup-editor:not([data-closed]) .era-setup-body:not([data-closed])");
+  const submittedDialogPrompt = advanceScreen === true && editorBody ? retireDialogPrompt(editorBody) : null;
+  let revivedDialogPrompt = false;
   layoutDiagnostics.record(`snapshot step=${snapshot.step ?? "unknown"} status=${snapshot.status} input=${snapshot.input?.kind ?? "none"} advance=${advanceScreen}`);
   // Dialog submenus and main-screen events can wait for input before their layout boxes close.
   if (advanceScreen && currentScreen?.querySelector(".era-dialog:not([data-closed]), .era-layout:not([data-closed])")) advanceScreen = false;
@@ -2583,6 +2610,10 @@ async function renderSnapshot(snapshot, advanceScreen) {
   }
   if (previousScreen && previousScreen !== currentScreen) layoutDiagnostics.abandon(previousScreen);
   for (const output of snapshot.output) {
+    if (revivedDialogPrompt && output.type !== "clear" && output.type !== "input") {
+      retireDialogPrompt(editorBody);
+      revivedDialogPrompt = false;
+    }
     if (output.type === "input")
       layoutDiagnostics.record(`input ${/^-?\d{1,12}$/.test(output.text) ? output.text : "(text omitted)"}`);
     else if (output.type === "clear") layoutDiagnostics.record(`clear ${output.count}`);
@@ -2628,6 +2659,7 @@ async function renderSnapshot(snapshot, advanceScreen) {
       currentLine = null;
       const last = outputRoot.lastElementChild;
       if (reachedHistory && last?.classList.contains("is-history")) reviveScreen(last);
+      if (editorBody && outputRoot.contains(editorBody) && reviveDialogPrompt(editorBody)) revivedDialogPrompt = true;
       continue;
     }
     if (output.type === "title-image") {
@@ -2698,6 +2730,11 @@ async function renderSnapshot(snapshot, advanceScreen) {
     else if (output.type === "input") {
       span.classList.add("scrollback-input");
       span.textContent = output.text;
+      if (submittedDialogPrompt && editorBody.contains(target)) {
+        target.dataset.dialogPrompt = submittedDialogPrompt;
+        target.classList.add("dialog-prompt-history");
+        target.inert = true;
+      }
     }
     if (output.newline) currentLine = null;
     if (advanceScreen && output.type === "input") {

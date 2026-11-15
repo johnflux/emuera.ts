@@ -814,6 +814,7 @@ CALL EDIT_CHARACTER
 GOTO REPRINT
 @EDIT_CHARACTER
 LOCAL:1 = RESULT
+LOCAL:2 = LINECOUNT
 GCREATE 1, 720, 720
 SPRITECREATE "debug-portrait", 1, 0, 0, 720, 720
 HTML_PRINT "<img src='debug-portrait' width='180px' height='180px'>"
@@ -821,8 +822,14 @@ FOR LOCAL, 0, 12
   PRINTL
 NEXT
 PRINTFORML Chosen {LOCAL:1}
+PRINTL [98] Restore previous
 PRINT [99] Back
-INPUT`, "<config-editor-fixture>");
+INPUT
+IF RESULT == 98
+  CLEARLINE LINECOUNT - LOCAL:2
+  INPUT
+  CALL EDIT_CHARACTER
+ENDIF`, "<config-editor-fixture>");
   const app = createApp([{ id: "fixture", title: "Config choices", game }], true);
   const server = createServer((request, response) => {
     if (request.url !== "/config-probe") { app.emit("request", request, response); return; }
@@ -869,6 +876,10 @@ INPUT`, "<config-editor-fixture>");
         result.clicked = true;
         const back = await until(() => doc.querySelector(".screen.is-active button[data-value='99']:enabled"));
         result.editorInDialog = !!back.closest(".era-config");
+        const answered = button(0);
+        result.answeredDisabled = answered.disabled && answered.closest(".line").inert
+          && frame.contentWindow.getComputedStyle(answered.closest(".line")).opacity === "0.4";
+        result.currentEnabled = !back.disabled && !back.closest(".line").inert;
         const portrait = doc.querySelector(".screen.is-active .sprite-clip");
         const runtime = await fetch("/api/runtime").then(response => response.json());
         const scale = parseFloat(frame.contentWindow.getComputedStyle(doc.querySelector("#terminal")).lineHeight)
@@ -881,7 +892,16 @@ INPUT`, "<config-editor-fixture>");
         result.blankLinesVisible = [...doc.querySelectorAll(".era-config .line")]
           .filter(line => line.querySelector(":scope > .is-empty:only-child"))
           .every(line => line.getBoundingClientRect().height > 0);
-        back.click();
+        doc.querySelector(".era-config button[data-value='98']").click();
+        const restored = await until(() => !doc.body.classList.contains("is-busy")
+          && doc.querySelector(".era-config button[data-value='2']:enabled"));
+        result.clearedPromptRevived = !restored.closest(".line").inert
+          && frame.contentWindow.getComputedStyle(restored.closest(".line")).opacity === "1";
+        restored.click();
+        const nextBack = await until(() => !doc.body.classList.contains("is-busy")
+          && doc.querySelector(".era-config button[data-value='99']:enabled"));
+        result.revivedPromptRetiredAgain = doc.querySelector(".era-config button[data-value='2']").disabled;
+        nextBack.click();
         await until(() => !doc.body.classList.contains("is-busy")
           && doc.querySelector(".screen.is-active button[data-value='0']:enabled"));
         const returned = doc.querySelector(".screen.is-active button[data-value='0']");
@@ -911,6 +931,8 @@ INPUT`, "<config-editor-fixture>");
       rows: true, newline: true, printButtonsInline: true, native: true,
       singleLabel: "[10] Single native choice: No", explicitList: true, fullWidth: true, help: "Inline help", clicked: true,
       editorInDialog: true, returnedInDialog: true, preservesSpaces: true, returnedRows: true,
+      answeredDisabled: true, currentEnabled: true,
+      clearedPromptRevived: true, revivedPromptRetiredAgain: true,
       portraitAboveText: true, blankLinesVisible: true, requestedImageSize: true,
     });
   } finally {

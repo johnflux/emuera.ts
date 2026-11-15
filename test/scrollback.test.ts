@@ -88,7 +88,11 @@ async function fixture() {
     ${helpers}
     ${removeLine}
     ${revive}
-    function clear(count) { for (const output of [{ type: "clear", count }]) { ${clear} } }
+    function clear(count) {
+      const editorBody = null;
+      let revivedDialogPrompt = false;
+      for (const output of [{ type: "clear", count }]) { ${clear} }
+    }
     ({ trimScrollback, restoreHistoryScreen, clear });
   `, {
     outputRoot: root, document: { createElement: (tag: string) => new Element(tag) },
