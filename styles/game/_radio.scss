@@ -25,4 +25,5 @@ button.choice.era-radio .era-radio-description, button.choice.era-radio .era-rad
   .era-radio-group:has(.era-radio-description:not(:empty)) button.choice.era-radio .era-radio-name { min-width: 15cqw; }
   .era-radio-group:not(:has(.era-radio-description:not(:empty))) .era-radio-name { grid-column: 2 / -1; }
   .era-radio-description { grid-column: 3; }
+  button.choice.era-radio .era-radio-description { margin-left: 16px; }
 }

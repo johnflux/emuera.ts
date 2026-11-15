@@ -183,7 +183,8 @@ test("radio descriptions align in shared groups and stack on narrow screens", {
           for (const row of descriptions) {
             assert.ok(Math.abs(row.descriptionLeft - descriptions[0]!.descriptionLeft) < 1,
               `descriptions share a column at ${width}px`);
-            assert.ok(row.descriptionLeft >= row.labelRight, `description follows its label at ${width}px`);
+            assert.ok(Math.abs(row.descriptionLeft - row.labelRight - 28) < 1,
+              `description has a 28px gap from the label at ${width}px`);
             assert.ok(row.descriptionTop < row.labelBottom, `description stays alongside its label at ${width}px`);
           }
         } else {

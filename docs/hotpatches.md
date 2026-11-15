@@ -163,6 +163,7 @@ a dialog, the nearest other query container (normally the terminal) is used.
 The shared `--era-radio-indicator-width` is 19px in both standalone controls and
 setup grids. Together with the 12px column gap and unchanged 14px circle, this
 leaves 17px between the circle and label at all viewport sizes.
+On wider screens, the gap between the label and description is 28px.
 
 Wrap mutually exclusive choices in a labeled `.era-radio-group`:
 
