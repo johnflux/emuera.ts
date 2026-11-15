@@ -153,9 +153,13 @@ tabs. Their map-specific classes remain only for navigation and map linking.
 
 `HOTPATCH_RADIO(value, label, selected, description = "", enabled = 1)` in
 `MAIN_SCREEN_COMMANDS.ERB` produces the shared `.era-radio` component. Labels
-and descriptions are escaped. The optional description is below the label by
-default; setup layouts can align descriptions in columns without changing the
-control's appearance. The control works without a setup card or dialog.
+and descriptions are escaped. On wider screens, radio groups align optional
+descriptions in a shared column; on narrow screens descriptions stack below
+their labels. Standalone controls use the same responsive layout without a
+setup card or dialog. A group without descriptions gives labels the full row.
+On wider screens, labels in groups with descriptions reserve at least 15% of
+the nearest query container's width. Dialog bodies are query containers; outside
+a dialog, the nearest other query container (normally the terminal) is used.
 The shared `--era-radio-indicator-width` is 19px in both standalone controls and
 setup grids. Together with the 12px column gap and unchanged 14px circle, this
 leaves 17px between the circle and label at all viewport sizes.
@@ -175,7 +179,8 @@ enabled choice (or first enabled choice). Arrow keys wrap through enabled
 choices; Home/End select the first/last enabled choice. Enter, Space, clicks and
 controller activation use the existing game-command path. No browser-side
 selection is committed: the game's response determines the checked state.
-Rendered line wrappers span the entire group instead of individual grid tracks.
+Rendered line wrappers and buttons use subgrid to share the group's tracks.
+Layouts can also place groups in a parent subgrid to align separate groups.
 
 `HOTPATCH_SETUP_CHOICE` delegates to the same markup builder while retaining
 setup-specific location notes and emphasized descriptions. Exclusive setup

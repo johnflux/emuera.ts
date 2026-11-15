@@ -3,6 +3,9 @@
   overflow: hidden; border: 1px solid #2f4a63; border-radius: 12px; background: #0b0e11; color: var(--terminal-foreground); box-shadow: 0 12px 48px #000; }
 .era-dialog::backdrop { background: #000000b0; }
 .era-dialog > .line { flex: none; }
+.era-dialog-body { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 16px 20px; scrollbar-gutter: stable; container-type: inline-size; }
+.era-dialog-body > .line[hidden] { display: none; }
+.era-dialog-footer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; justify-content: space-between; padding: 10px 20px; border-top: 1px solid #245066; color: #92a7b5; font-size: var(--era-font-size-small); white-space: normal; }
 .era-sky-dialog:popover-open { width: min(1200px, calc(100vw - 32px)); height: min(540px, calc(100dvh - 32px)); max-height: calc(100dvh - 32px); }
 
 .era-sky-dialog > .era-main-header { position: relative; flex: none; height: var(--area-art-height, 150px); min-height: 150px; padding: 0; overflow: hidden; border: 0; border-radius: 0; }

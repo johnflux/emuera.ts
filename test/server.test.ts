@@ -383,14 +383,17 @@ INPUT`, "audio.ERB");
   }
 });
 
-test("music library searches game and sibling pops-tw trees and confines track routes", async () => {
+test("music library searches game, sibling pops-tw and GAMES trees and confines track routes", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "era-music-library-"));
   const gameRoot = path.join(root, "game"), pops = path.join(root, "pops-tw");
   const game = emptyGame(gameRoot);
-  const app = createApp([{ id: "music", title: "Music", game }]);
+  const app = createApp([{ id: "music", title: "Music", game }], false, root);
   try {
     await mkdir(path.join(gameRoot, "sound", "music", "album"), { recursive: true });
     await mkdir(path.join(pops, "sound", "music", "score"), { recursive: true });
+    await mkdir(path.join(root, "sound", "music", "album"), { recursive: true });
+    await writeFile(path.join(root, "sound", "music", "album", "shared.ogg"), "shared");
+    await symlink(path.join(root, "outside.ogg"), path.join(root, "sound", "music", "escape.ogg"));
     await writeFile(path.join(gameRoot, "sound", "music", "album", "first.ogg"), "local");
     await writeFile(path.join(pops, "sound", "music", "score", "two.m4a"), "fallback");
     await writeFile(path.join(pops, "sound", "music", "score", "unsupported.mid"), "midi");
@@ -406,9 +409,13 @@ test("music library searches game and sibling pops-tw trees and confines track r
     assert.deepEqual(library, {
       local: ["/music-library/music/local/album/first.ogg"],
       fallback: ["/music-library/music/fallback/score/two.m4a"],
+      shared: ["/music-library/music/shared/album/shared.ogg"],
     });
     assert.equal(await (await fetch(base + library.local[0])).text(), "local");
     assert.equal(await (await fetch(base + library.fallback[0])).text(), "fallback");
+    assert.equal(await (await fetch(base + library.shared[0])).text(), "shared");
+    assert.equal((await fetch(base + "/music-library/music/shared/escape.ogg")).status, 403);
+    assert.equal((await fetch(base + "/music-library/music/shared/..%2f..%2foutside.ogg")).status, 403);
     assert.equal((await fetch(base + "/music-library/music/local/escape.ogg")).status, 403);
     assert.equal((await fetch(base + "/music-library/music/local/..%2f..%2f..%2foutside.ogg")).status, 403);
     assert.equal((await fetch(base + "/music-library/music/fallback/score/unsupported.mid")).status, 403);

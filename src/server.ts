@@ -870,18 +870,20 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
       }
       if (request.method === "GET" && url.pathname === "/api/music-library") {
         const entry = entryFor(url.searchParams.get("game"));
-        const roots = [entry.game.root, path.join(path.dirname(entry.game.root), "pops-tw")];
+        const roots = [entry.game.root, path.join(path.dirname(entry.game.root), "pops-tw"), libraryDirectoryFor(entry.game.root)];
+        const sources = ["local", "fallback", "shared"];
         const tracks = await Promise.all(roots.map(async (root, index) => {
           const music = await musicDirectory(root);
-          return music ? musicFiles(music, `/music-library/${entry.id}/${index ? "fallback" : "local"}/`) : [];
+          return music ? musicFiles(music, `/music-library/${entry.id}/${sources[index]}/`) : [];
         }));
-        json(response, { local: tracks[0], fallback: tracks[1] });
+        json(response, { local: tracks[0], fallback: tracks[1], shared: tracks[2] });
         return;
       }
-      const libraryTrack = /^\/music-library\/([a-z0-9-]+)\/(local|fallback)\/(.+)$/.exec(url.pathname);
+      const libraryTrack = /^\/music-library\/([a-z0-9-]+)\/(local|fallback|shared)\/(.+)$/.exec(url.pathname);
       if (request.method === "GET" && libraryTrack) {
         const entry = entryFor(libraryTrack[1]);
-        const root = libraryTrack[2] === "local" ? entry.game.root : path.join(path.dirname(entry.game.root), "pops-tw");
+        const root = libraryTrack[2] === "local" ? entry.game.root
+          : libraryTrack[2] === "shared" ? libraryDirectoryFor(entry.game.root) : path.join(path.dirname(entry.game.root), "pops-tw");
         const music = await musicDirectory(root);
         if (!music) throw new HttpError(404, "Music directory not found");
         let relative: string;

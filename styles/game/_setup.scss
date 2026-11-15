@@ -1,8 +1,8 @@
 .era-setup:popover-open { width: min(1600px, calc(100vw - 24px)); height: min(900px, calc(100dvh - 24px)); max-height: calc(100dvh - 24px); top: 50%; bottom: auto; margin: 0 auto; transform: translateY(-50%); }
 .era-load:popover-open { width: min(1200px, calc(100vw - 24px)); height: auto; max-height: calc(100dvh - 24px); top: 50%; bottom: auto; margin: 0 auto; transform: translateY(-50%); }
 .era-dialog:is(.era-setup, .era-load) .era-inventory-header { padding: 10px 14px; }
-.era-dialog:is(.era-setup, .era-load) .era-inventory-body { padding: 12px 14px; }
-.era-dialog:is(.era-setup, .era-load) .era-inventory-footer { padding: 8px 14px; }
+.era-dialog:is(.era-setup, .era-load) .era-dialog-body { padding: 12px 14px; }
+.era-dialog:is(.era-setup, .era-load) .era-dialog-footer { padding: 8px 14px; }
 
 .era-setup-body { background: transparent; }
 .era-config:popover-open { width: calc(100vw - 24px); max-width: none; height: auto; }
@@ -111,19 +111,12 @@
 .era-setup-help-row > .era-radio-description { margin-left: calc(var(--era-radio-indicator-width) + 12px); }
 @media (min-width: 601px) {
 
-  .era-setup-card :is(.era-setup-grid, .era-setup-race-variants) { display: grid; grid-template-columns: var(--era-radio-indicator-width) fit-content(40%) minmax(0, 1fr); column-gap: 12px; }
-  .era-setup-card button.choice.era-radio { grid-column: 1 / -1; grid-template-columns: var(--era-radio-indicator-width) fit-content(40%) minmax(0, 1fr); }
-  .era-setup-card .era-radio-description { grid-column: 3; }
-
-  .era-setup-card .era-radio .era-radio-name,
-  .era-setup-card .era-radio:has(.era-radio-description:empty) .era-radio-name { grid-column: 2; }
-  .era-setup-card .era-radio-description { margin-left: 48px; }
   .era-setup-plain .era-setup-race-variants { grid-column: 1 / -1; }
-  .era-setup-body-options { display: grid; grid-template-columns: var(--era-radio-indicator-width) max-content minmax(0, 1fr); column-gap: 12px; align-content: start; }
+  .era-setup-body-options { display: grid; grid-template-columns: var(--era-radio-group-indicator-width) fit-content(40%) minmax(0, 1fr); column-gap: 12px; align-content: start; }
   .era-setup-body-options > .era-setup-plain,
   .era-setup-body-options > .era-setup-plain > .era-setup-grid { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; }
   .era-setup-body-options > .era-setup-plain > .line { grid-column: 1 / -1; }
-  :is(.era-setup-world, .era-setup-dialogue) { display: grid; grid-template-columns: var(--era-radio-indicator-width) fit-content(40%) minmax(0, 1fr); column-gap: 12px; align-content: start; }
+  :is(.era-setup-world, .era-setup-dialogue) { display: grid; grid-template-columns: var(--era-radio-group-indicator-width) fit-content(40%) minmax(0, 1fr); column-gap: 12px; align-content: start; }
   :is(.era-setup-world, .era-setup-dialogue) > .era-setup-card,
   :is(.era-setup-world, .era-setup-dialogue) > .era-setup-card > .era-setup-grid,
   .era-setup-world .era-setup-help-row { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; }
@@ -137,7 +130,7 @@
 .era-setup-description { margin: 6px 0 8px; color: #9fb3bf; line-height: 1.45; }
 .era-setup-description.era-setup-indent { margin-left: 8px; }
 
-.era-setup-editor .era-inventory-body { white-space: normal; }
+.era-setup-editor .era-dialog-body { white-space: normal; }
 
 .era-setup-description.era-body-confirmation { color: #69c9b5; }
 
@@ -159,7 +152,6 @@
 .era-save-auto { border-color: #3a776c !important; }
 @media (max-width: 600px) {
 
-  .era-radio-description { grid-column: 2; }
   .era-launch-footer { padding-left: 20px; padding-right: 20px; }
   .era-launch-actions { width: min(calc(100% - 16px), calc(var(--era-title-width) * .75)); }
 

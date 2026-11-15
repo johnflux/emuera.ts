@@ -28,7 +28,7 @@
   body:not(.is-home) #terminal:has(.screen.is-active :is(.era-main, .era-shop)) { padding-inline: 12px; }
   body:not(.is-home) .era-dialog:popover-open { width: calc(100vw - 8px); max-width: none; max-height: calc(100dvh - 8px); }
   .era-load:popover-open { height: auto; }
-  .era-load .era-inventory-body { padding: 6px 10px; }
+  .era-load .era-dialog-body { padding: 6px 10px; }
   .era-main-chat { display: none; }
   .era-actions-group > .line > span:has(> .era-actions-title) { flex-basis: auto; }
 }

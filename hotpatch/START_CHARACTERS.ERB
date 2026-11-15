@@ -124,7 +124,7 @@ ENDSELECT
 nStart = LINECOUNT
 HTML_PRINT "<era-open class='era-dialog era-setup era-setup-predefined'>"
 HTML_PRINT "<div class='era-inventory-header'><div class='era-inventory-heading'><span class='era-inventory-title'>Choose a predefined character</span><button value='999' class='era-dialog-close' title='Cancel'>×</button></div><div class='era-predefined-filter'></div><div class='era-predefined-count'></div></div>"
-HTML_PRINT "<era-open class='era-inventory-body era-predefined-list'>"
+HTML_PRINT "<era-open class='era-dialog-body era-predefined-list'>"
 FOR nIndex, 1, CHARANUM
 	SIF !IS_NAMED(nIndex)
 		CONTINUE
@@ -161,7 +161,7 @@ LOOP 1
 CLEARLINE LINECOUNT - nStart
 HTML_PRINT "<era-open class='era-dialog era-setup era-setup-editor'>"
 HTML_PRINT "<div class='era-inventory-header'><span class='era-inventory-title'>Choose a predefined character</span></div>"
-HTML_PRINT "<era-open class='era-inventory-body'>"
+HTML_PRINT "<era-open class='era-dialog-body'>"
 SIF FLAG:なりきり
 	CFLAG:(FLAG:なりきり):出禁 = 0
 CALL NEWGAME_MAKE_NARIKIRI(nChoice)

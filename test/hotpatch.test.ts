@@ -2319,7 +2319,7 @@ WAIT`, "<inventory-test>");
   assert.equal((html.match(/class='era-inventory-item'/g) ?? []).length, 2);
   assert.match(html, /value='3020'/);
   assert.match(html, /value='-9201' class='era-chip-button'>Auto Items</);
-  assert.match(html, /era-inventory-footer'><span class='era-inventory-filter'><\/span>/);
+  assert.match(html, /era-dialog-footer'><span class='era-inventory-filter'><\/span>/);
   assert.match(html, /class='era-inventory-count'>2 item types</);
   assert.match(html, /class='era-inventory-item' title='Protects from the elements/);
   assert.match(html, /title='[^']*&#39;smoothly&#39;\.'/,

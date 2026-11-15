@@ -107,7 +107,7 @@ test("inline direction groups preserve category tones, numbers and accessible de
   } finally { await rm(profile, { recursive: true, force: true }); }
 });
 
-test("choice text fits a single line beside numbers and grows back when widened", {
+test("choice text shrinks beside numbers and grows back when widened", {
   skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH",
 }, async () => {
   const style = await readFile(new URL("../web/generated/style.css", import.meta.url), "utf8");
@@ -169,10 +169,38 @@ test("choice text fits a single line beside numbers and grows back when widened"
       { maxBuffer: 8 * 1024 * 1024, timeout: 30000 });
     const match = stdout.match(/<body[^>]*>([\s\S]*?)<\/body>/);
     assert.ok(match);
-    assert.deepEqual(JSON.parse(match[1]), { supports: true, narrowFits: true, wideFits: true,
-      grows: true, shrinksAgain: true, narrowerFits: true, nowrap: true,
+    assert.deepEqual(JSON.parse(match[1]), { supports: true, narrowFits: false, wideFits: true,
+      grows: true, shrinksAgain: true, narrowerFits: false, nowrap: true,
       expandsGap: true, squeezedGap: true, hintHidesGap: true, preferredGap: true, oneGap: true,
       label: "End Newlywed Play", number: "[189]" });
+  } finally { await rm(profile, { recursive: true, force: true }); }
+});
+
+test("choice text stops shrinking at 70 percent", {
+  skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH",
+}, async () => {
+  const style = await readFile(new URL("../web/generated/style.css", import.meta.url), "utf8");
+  const html = `<!doctype html><style>${style}</style><body>
+    <button class="choice" style="display:block;width:500px;font-size:30px">A long choice label</button>
+    <script>
+    const button = document.querySelector("button");
+    const range = document.createRange();
+    range.selectNodeContents(button);
+    const wide = range.getBoundingClientRect().width;
+    button.style.width = "20px";
+    const narrow = range.getBoundingClientRect().width;
+    document.body.textContent = JSON.stringify({supports: CSS.supports("text-fit", "shrink 70%"), ratio: narrow / wide});
+    </script>`;
+  const profile = await mkdtemp(join(process.cwd(), ".era-choice-minimum-"));
+  try {
+    const { stdout } = await execute(browser!, ["--headless", "--disable-gpu", "--no-first-run",
+      `--user-data-dir=${profile}`, "--dump-dom", `data:text/html;base64,${Buffer.from(html).toString("base64")}`],
+      { maxBuffer: 8 * 1024 * 1024, timeout: 30000 });
+    const match = stdout.match(/<body[^>]*>([\s\S]*?)<\/body>/);
+    assert.ok(match);
+    const result = JSON.parse(match[1]);
+    assert.equal(result.supports, true);
+    assert.ok(Math.abs(result.ratio - 0.7) < 0.02, `minimum scale: ${result.ratio}`);
   } finally { await rm(profile, { recursive: true, force: true }); }
 });
 
@@ -725,9 +753,9 @@ RETURNF "Restores energy."`, "<rows-fixture>");
     <div class="era-dialog era-inventory era-item-use" popover>
       <div class="line"><div class="era-inventory-header"><div class="era-inventory-heading">
         <span class="era-inventory-title">Items</span><button class="choice era-dialog-close">Close</button></div></div></div>
-      <div class="era-inventory-body"><div class="era-inventory-grid">${rows}</div>
+      <div class="era-dialog-body"><div class="era-inventory-grid">${rows}</div>
         <div class="line"><div class="era-inventory-empty">No items in this category.</div></div></div>
-      <div class="line"><div class="era-inventory-footer"><span class="era-inventory-filter"></span>
+      <div class="line"><div class="era-dialog-footer"><span class="era-inventory-filter"></span>
         <span class="era-inventory-count"></span><button class="choice era-chip-button">Return</button></div></div>
     </div></div><script>
     ${decorateButtons}
@@ -736,7 +764,7 @@ RETURNF "Restores energy."`, "<rows-fixture>");
     const dialog = document.querySelector(".era-inventory");
     dialog.showPopover();
     syncInventory(dialog);
-    const body = dialog.querySelector(".era-inventory-body");
+    const body = dialog.querySelector(".era-dialog-body");
     const first = dialog.querySelector(".era-inventory-item");
     let clicked = null;
     first.addEventListener("click", () => clicked = first.getAttribute("value"));
@@ -794,7 +822,7 @@ $CONFIG
 CLEARLINE LINECOUNT - CONFIG_LINE
 HTML_PRINT "<era-open class='era-dialog era-setup era-config'>"
 HTML_PRINT "<div class='era-inventory-header'><span class='era-inventory-title'>Config</span></div>"
-HTML_PRINT "<era-open class='era-inventory-body era-setup-body'>"
+HTML_PRINT "<era-open class='era-dialog-body era-setup-body'>"
 FOR LOCAL, 0, 40
   HTML_PRINT HOTPATCH_BUTTON(@"Setting {LOCAL}", LOCAL, "", "list")
 NEXT
@@ -806,7 +834,7 @@ SIF RESULT != 1467
   GOTO CONFIG
 CLEARLINE LINECOUNT - CONFIG_LINE
 HTML_PRINT "<era-open class='era-dialog era-setup era-config era-setup-editor'>"
-HTML_PRINT "<era-open class='era-inventory-body era-setup-body'>"
+HTML_PRINT "<era-open class='era-dialog-body era-setup-body'>"
 CALL PICK_CHARACTER
 HTML_PRINT "<era-close>"
 HTML_PRINT "<era-close>"

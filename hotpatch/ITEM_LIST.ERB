@@ -21,7 +21,7 @@ DO
 	NEXT
 	sHeader += @"<div class='era-sheet-subpages era-inventory-tabs'>%sTabs%</div><div class='era-inventory-tools'><button value='777' class='era-chip-button%(nView == 2 ? " era-current" # "")%'>Item mods</button><button value='-9201' class='era-chip-button'>Auto Items</button></div>"
 	HTML_PRINT sHeader + "</div>"
-	HTML_PRINT "<era-open class='era-inventory-body'>"
+	HTML_PRINT "<era-open class='era-dialog-body'>"
 	SELECTCASE nView
 	CASE 2
 		HTML_PRINT "<div class='era-inventory-title'>Item mods</div>"
@@ -50,9 +50,9 @@ DO
 	ENDSELECT
 	HTML_PRINT "<era-close>"
 	IF nView == 0
-		HTML_PRINT @"<div class='era-inventory-footer'><span class='era-inventory-filter'></span><span><span class='era-inventory-count'>{nCount} item type%(nCount == 1 ? "" # "s")%</span> · %sCategoryName:nCategory%</span><span class='era-tone-red'>%HTML_ESCAPE(sError)%</span><button value='999' class='era-chip-button'>Return</button></div>"
+		HTML_PRINT @"<div class='era-dialog-footer'><span class='era-inventory-filter'></span><span><span class='era-inventory-count'>{nCount} item type%(nCount == 1 ? "" # "s")%</span> · %sCategoryName:nCategory%</span><span class='era-tone-red'>%HTML_ESCAPE(sError)%</span><button value='999' class='era-chip-button'>Return</button></div>"
 	ELSEIF nView == 2
-		HTML_PRINT @"<div class='era-inventory-footer'><button value='889' class='era-chip-button'>Back to items</button><span class='era-tone-red'>%HTML_ESCAPE(sError)%</span><button value='999' class='era-chip-button'>Return</button></div>"
+		HTML_PRINT @"<div class='era-dialog-footer'><button value='889' class='era-chip-button'>Back to items</button><span class='era-tone-red'>%HTML_ESCAPE(sError)%</span><button value='999' class='era-chip-button'>Return</button></div>"
 	ENDIF
 	HTML_PRINT "<era-close>"
 	BINPUT
@@ -146,7 +146,7 @@ DO
 		sHeader += @"<button value='9998' class='era-chip-button'>Use on %HTML_ESCAPE(ALTNAME_OR_CALLNAME(対象 == MASTER ? TARGET # MASTER))%</button>"
 	ENDIF
 	HTML_PRINT sHeader + "</div></div>"
-	HTML_PRINT "<era-open class='era-inventory-body'>"
+	HTML_PRINT "<era-open class='era-dialog-body'>"
 	HTML_PRINT "<era-open class='era-inventory-grid'>"
 	nCount = 0
 	FOR nIndex, 0, VARSIZE("ITEM")
@@ -165,7 +165,7 @@ DO
 	HTML_PRINT "<era-close>"
 	HTML_PRINT "<div class='era-inventory-empty'>No items in this category.</div>"
 	HTML_PRINT "<era-close>"
-	HTML_PRINT @"<div class='era-inventory-footer'><span class='era-inventory-filter'></span><span><span class='era-inventory-count'>{nCount} item type%(nCount == 1 ? "" # "s")%</span> · %sCategoryName:nCategory%</span><button value='9999' class='era-chip-button'>Return</button></div>"
+	HTML_PRINT @"<div class='era-dialog-footer'><span class='era-inventory-filter'></span><span><span class='era-inventory-count'>{nCount} item type%(nCount == 1 ? "" # "s")%</span> · %sCategoryName:nCategory%</span><button value='9999' class='era-chip-button'>Return</button></div>"
 	HTML_PRINT "<era-close>"
 	BINPUT
 	CLEARLINE LINECOUNT - nStart

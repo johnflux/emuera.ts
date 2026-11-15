@@ -2463,10 +2463,11 @@ async function loadMusicLibrary(game) {
   try {
     const data = await api(`/api/music-library?game=${encodeURIComponent(game)}`);
     if (generation !== musicLibraryGeneration) return;
-    if (![data.local, data.fallback].every((list) => Array.isArray(list) && list.every((url) => typeof url === "string")))
+    if (![data.local, data.fallback, data.shared].every((list) => Array.isArray(list) && list.every((url) => typeof url === "string")))
       throw new Error("Invalid music library");
     const local = playableTracks(data.local);
-    musicLibrary = local.length ? local : playableTracks(data.fallback);
+    const fallback = local.length ? [] : playableTracks(data.fallback);
+    musicLibrary = local.length ? local : fallback.length ? fallback : playableTracks(data.shared);
     syncBgmToggle();
   } catch (error) {
     if (generation === musicLibraryGeneration) message(`Could not list music: ${error.message}`, true);

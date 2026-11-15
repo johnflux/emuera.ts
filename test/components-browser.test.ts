@@ -326,6 +326,10 @@ test("catalog uses production rendering and context-independent buttons at wide 
         result.radioLayout = [...radioGroup().querySelectorAll(".era-radio")].every(radio =>
           radio.getBoundingClientRect().width >= radioGroup().getBoundingClientRect().width - 1
           && radio.scrollWidth <= radio.clientWidth + 1);
+        const radioDescriptions = [...radioGroup().querySelectorAll(".era-radio-description")]
+          .filter(description => description.textContent.trim());
+        result.radioDescriptionsAligned = radioDescriptions.length === 3 && radioDescriptions.every(description =>
+          Math.abs(description.getBoundingClientRect().left - radioDescriptions[0].getBoundingClientRect().left) < 1);
         const toneControls = [...atlasDoc.querySelectorAll("button[class*='era-button-tone-']")];
         const toneStyle = atlasDoc.createElement("style");
         toneStyle.textContent = [...atlasDoc.styleSheets].flatMap(sheet => [...sheet.cssRules].map(rule => rule.cssText))
@@ -582,6 +586,7 @@ test("catalog uses production rendering and context-independent buttons at wide 
     assert.equal(result.radioInitial, true);
     assert.equal(result.radioChanged, true);
     assert.equal(result.radioLayout, true);
+    assert.equal(result.radioDescriptionsAligned, true);
     assert.equal(new Set(result.toneHovers.map(tone => tone.after)).size, 7);
     assert.ok(result.toneHovers.every(tone => tone.before !== tone.after));
     assert.equal(result.reenabled, true);
@@ -695,8 +700,8 @@ RETURNF "危険日"`, "<calendar-browser-fixture>");
               fits:buttons.every(button => button.getBoundingClientRect().right <= bounds.right + 1),
               maxDayHeight:Math.max(...[...dialog.querySelectorAll(".era-calendar-day")]
                 .map(day => day.getBoundingClientRect().height)),
-              overflow:dialog.querySelector(".era-inventory-body").scrollWidth
-                > dialog.querySelector(".era-inventory-body").clientWidth + 1});
+              overflow:dialog.querySelector(".era-dialog-body").scrollWidth
+                > dialog.querySelector(".era-dialog-body").clientWidth + 1});
           }
         }
         const entries = [...doc.querySelector(".era-calendar-people").querySelectorAll(".era-calendar-person-entry")];

@@ -24,7 +24,7 @@ DO
 	SIF FLAG:1007
 		sHeader += @"<div class='era-sheet-subpages era-inventory-tabs'><button value='900' class='era-sheet-subpage%(nView == 0 ? " era-current" # "")%'>Work</button><button value='901' class='era-sheet-subpage%(nView == 1 ? " era-current" # "")%'>Fertility</button></div>"
 	HTML_PRINT sHeader + "</div>"
-	HTML_PRINT "<era-open class='era-inventory-body'>"
+	HTML_PRINT "<era-open class='era-dialog-body'>"
 	SIF FLAG:地主 && FLAG:年貢
 		HTML_PRINT @"<div class='era-calendar-tribute-notice'>%HTML_ESCAPE(HOTPATCH_CALENDAR_TRIBUTE(nDay, nDay))%</div>"
 	IF nCharacter
@@ -66,7 +66,7 @@ DO
 		HTML_PRINT "<era-close>"
 	ENDIF
 	HTML_PRINT "<era-close>"
-	HTML_PRINT @"<div class='era-inventory-footer'><button value='0' class='era-chip-button'>0 - Return</button><span class='era-tone-red'>%HTML_ESCAPE(sError)%</span></div>"
+	HTML_PRINT @"<div class='era-dialog-footer'><button value='0' class='era-chip-button'>0 - Return</button><span class='era-tone-red'>%HTML_ESCAPE(sError)%</span></div>"
 	HTML_PRINT "<era-close>"
 	BINPUT
 	sError '= ""

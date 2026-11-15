@@ -122,6 +122,153 @@ test("home choices keep complete rows at desktop and mobile widths", {
   }
 });
 
+test("radio descriptions align in shared groups and stack on narrow screens", {
+  skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH",
+}, async () => {
+  const style = await readFile(new URL("../web/generated/style.css", import.meta.url), "utf8");
+  const rows = (prefix: string) => [
+    ["None", ""],
+    ["Short", "A description for a short label."],
+    [prefix === "Body two" ? "An exceptionally long choice in a separate group" : "A much longer choice",
+      "Another description that can wrap when the space is narrow."],
+    ["Unavailable", "The reason this choice is unavailable."],
+  ].map(([name, description], index) => `<div class="line"><span class="output-text"><button
+    class="choice era-radio${index === 0 ? " era-current" : ""}" role="radio" aria-checked="${index === 0}"
+    ${index === 3 ? 'disabled aria-disabled="true"' : ""} data-value="${prefix}${index}">
+    <span class="era-radio-name">${name}</span><span class="era-radio-description">${description}</span>
+    </button></span></div>`).join("");
+  const group = (name: string) => `<div class="era-box era-setup-grid era-radio-group" role="radiogroup"
+    aria-label="${name}">${rows(name)}</div>`;
+  const html = `<!doctype html><meta name="viewport" content="width=device-width"><style>${style}</style>
+    <main id="terminal"><div class="screen is-active">
+      <div class="era-radio-group" role="radiogroup" aria-label="Standalone">${rows("standalone")}</div>
+      <div class="era-setup"><div class="era-setup-body-options">
+        <div class="era-setup-card era-setup-plain">${group("Body one")}</div>
+        <div class="era-setup-card era-setup-plain">${group("Body two")}</div>
+      </div></div>
+    </div></main><script>
+      const groups = [...document.querySelectorAll(".era-radio-group")].map(group => ({
+        width: group.getBoundingClientRect().width,
+        rows: [...group.querySelectorAll("button")].map(button => {
+          const label = button.querySelector(".era-radio-name").getBoundingClientRect();
+          const description = button.querySelector(".era-radio-description").getBoundingClientRect();
+          return {labelLeft: label.left, labelRight: label.right, labelTop: label.top, labelBottom: label.bottom,
+            descriptionLeft: description.left, descriptionTop: description.top, hasDescription: !!button.querySelector(".era-radio-description").textContent,
+            fits: button.scrollWidth <= button.clientWidth + 1, scrollWidth: button.scrollWidth, clientWidth: button.clientWidth};
+        })
+      }));
+      document.body.innerHTML = "<pre id='result'>" + JSON.stringify(groups) + "</pre>";
+    </script>`;
+  const profile = await mkdtemp(join(process.cwd(), ".era-radio-layout-"));
+  try {
+    const fixture = join(profile, "radios.html");
+    await writeFile(fixture, html);
+    for (const width of [500, 680, 1600]) {
+      const args = ["--headless", "--disable-gpu", "--no-first-run", `--user-data-dir=${profile}`,
+        `--window-size=${width},1000`, "--dump-dom", pathToFileURL(fixture).href];
+      if (process.platform === "linux") args.unshift("--no-sandbox");
+      const { stdout } = await execute(browser!, args, { maxBuffer: 4 * 1024 * 1024, timeout: 30000 });
+      const match = stdout.match(/<pre id="result">([^]*?)<\/pre>/);
+      assert.ok(match?.[1], stdout.slice(-4000));
+      const groups = JSON.parse(match[1]) as {width: number; rows: {
+        labelLeft: number; labelRight: number; labelTop: number; labelBottom: number;
+        descriptionLeft: number; descriptionTop: number; hasDescription: boolean; fits: boolean; scrollWidth: number; clientWidth: number;
+      }[]}[];
+      assert.equal(groups.length, 3);
+      for (const group of groups) {
+        assert.ok(group.width > 250);
+        assert.ok(group.rows.every(row => row.fits), `all rows fit at ${width}px: ${JSON.stringify(group)}`);
+        const descriptions = group.rows.filter(row => row.hasDescription);
+        if (width > 600) {
+          for (const row of descriptions) {
+            assert.ok(Math.abs(row.descriptionLeft - descriptions[0]!.descriptionLeft) < 1,
+              `descriptions share a column at ${width}px`);
+            assert.ok(row.descriptionLeft >= row.labelRight, `description follows its label at ${width}px`);
+            assert.ok(row.descriptionTop < row.labelBottom, `description stays alongside its label at ${width}px`);
+          }
+        } else {
+          for (const row of descriptions) {
+            assert.ok(Math.abs(row.descriptionLeft - row.labelLeft) < 1, "stacked description aligns with its label");
+            assert.ok(row.descriptionTop >= row.labelBottom, "description stacks below its label");
+          }
+        }
+      }
+      if (width > 600) {
+        assert.ok(Math.abs(groups[1]!.rows[1]!.descriptionLeft - groups[2]!.rows[1]!.descriptionLeft) < 1,
+          "body groups inherit the same description column");
+      }
+    }
+  } finally {
+    await rm(profile, { recursive: true, force: true });
+  }
+});
+
+test("radio label minimum follows the dialog body query container", {
+  skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH",
+}, async () => {
+  const style = await readFile(new URL("../web/generated/style.css", import.meta.url), "utf8");
+  const radio = (label: string, description = "") => `<div class="line"><span class="output-text">
+    <button class="choice era-radio" role="radio" aria-checked="false"><span class="era-radio-name">${label}</span>
+    <span class="era-radio-description">${description}</span></button></span></div>`;
+  const group = (description: string) => `<div class="era-setup-card era-setup-plain">
+    <div class="era-setup-grid era-radio-group" role="radiogroup">${radio("Yes", description)}${radio("No", description)}</div></div>`;
+  const html = `<!doctype html><meta name="viewport" content="width=device-width"><style>${style}</style>
+    <main id="terminal"><div class="screen is-active">
+      ${[400, 900].map(width => `<div class="era-dialog-body" style="box-sizing:border-box;width:${width}px">
+        <div class="era-setup-body-options">${group("A description.")}${group("Another description.")}</div>
+        <div class="era-radio-group" role="radiogroup">${radio("Short")}${radio("Another choice")}</div>
+      </div>`).join("")}
+    </div></main><script>
+      const result = [...document.querySelectorAll(".era-dialog-body")].map(body => {
+        const css = getComputedStyle(body);
+        const groups = [...body.querySelectorAll(".era-radio-group")];
+        const labels = groups.map(group => group.querySelector(".era-radio-name"));
+        return {contentWidth: body.clientWidth - parseFloat(css.paddingLeft) - parseFloat(css.paddingRight),
+          containerType: css.containerType,
+          minimums: labels.map(label => parseFloat(getComputedStyle(label).minWidth)),
+          widths: labels.map(label => label.getBoundingClientRect().width),
+          descriptions: groups.slice(0, 2).map(group => group.querySelector(".era-radio-description").getBoundingClientRect().left),
+          fits: [...body.querySelectorAll(".era-radio")].every(button => button.scrollWidth <= button.clientWidth + 1)};
+      });
+      document.body.innerHTML = "<pre id='result'>" + JSON.stringify(result) + "</pre>";
+    </script>`;
+  const profile = await mkdtemp(join(process.cwd(), ".era-radio-container-"));
+  try {
+    const fixture = join(profile, "radios.html");
+    await writeFile(fixture, html);
+    for (const width of [500, 1600]) {
+      const args = ["--headless", "--disable-gpu", "--no-first-run", `--user-data-dir=${profile}`,
+        `--window-size=${width},1000`, "--dump-dom", pathToFileURL(fixture).href];
+      if (process.platform === "linux") args.unshift("--no-sandbox");
+      const { stdout } = await execute(browser!, args, { maxBuffer: 4 * 1024 * 1024, timeout: 30000 });
+      const match = stdout.match(/<pre id="result">([^]*?)<\/pre>/);
+      assert.ok(match?.[1], stdout.slice(-4000));
+      const bodies = JSON.parse(match[1]) as {
+        contentWidth: number; containerType: string; minimums: number[]; widths: number[];
+        descriptions: number[]; fits: boolean;
+      }[];
+      assert.equal(bodies.length, 2);
+      for (const body of bodies) {
+        assert.equal(body.containerType, "inline-size");
+        assert.equal(body.fits, true);
+        if (width > 600) {
+          for (let i = 0; i < 2; i++) {
+            assert.ok(Math.abs(body.minimums[i]! - body.contentWidth * .15) < 1, "minimum is 15% of dialog content width");
+            assert.ok(body.widths[i]! >= body.minimums[i]! - 1, "label track honors the minimum");
+          }
+          assert.ok(Math.abs(body.descriptions[0]! - body.descriptions[1]!) < 1, "subgrid groups stay aligned");
+        } else {
+          assert.deepEqual(body.minimums.slice(0, 2), [0, 0], "mobile labels have no added minimum");
+        }
+        assert.equal(body.minimums[2], 0, "groups without descriptions have no added minimum");
+      }
+      if (width > 600) assert.ok(bodies[1]!.minimums[0]! > bodies[0]!.minimums[0]!, "minimum follows each dialog, not the terminal");
+    }
+  } finally {
+    await rm(profile, { recursive: true, force: true });
+  }
+});
+
 test("Continue waits keep disabled active portraits bright but still dim history and unavailable choices", {
   skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH",
 }, async () => {
@@ -185,13 +332,17 @@ test("item IDs and quantities stay unbroken in wide and compact dialogs and lega
       <button id="other" class="choice" style="display:flex;width:60px;white-space:normal;overflow-wrap:anywhere">
         <span class="command-number">[12345]</span><span>Long button label</span>
       </button>
-      <div popover="manual" class="era-dialog era-inventory"><div class="era-inventory-body">
+      <div popover="manual" class="era-dialog era-inventory"><div class="era-dialog-body">
         <div class="era-inventory-grid">${Array.from({ length: 8 }, (_, index) => `
           <div class="line"><button class="choice era-inventory-item era-inventory-use">
             <span class="era-inventory-name">Heavy Load [Le Deluge] Purification Drug</span>
             <span class="era-inventory-quantity">${index % 2 ? "999" : "73"}</span>
             <span class="command-number">[103${index}]</span>
-          </button></div>`).join("")}</div></div></div>
+          </button></div>`).join("")}
+          <div class="line"><div class="era-inventory-item">
+            <span class="era-inventory-name">Heavy Load [Le Deluge] Purification Drug</span>
+            <span class="era-inventory-quantity">999</span>
+          </div></div></div></div></div>
     </div></main><script>
       ${controls.replace(/^export /gm, "")}
       ${controller.replace(/^import .+;\n/gm, "").replace(/^export /gm, "")}
@@ -211,11 +362,11 @@ test("item IDs and quantities stay unbroken in wide and compact dialogs and lega
       const result = { legacyBadge, legacyFocus, guiHint, layouts: [] };
       for (const width of [null, "360px"]) {
         if (width) dialog.style.width = width;
-        const rows = [...dialog.querySelectorAll(".era-inventory-use")];
+        const rows = [...dialog.querySelectorAll(".era-inventory-item")];
         result.layouts.push({width:dialog.getBoundingClientRect().width,
           rows:rows.map(row => {
             const name = row.querySelector(".era-inventory-name");
-            return {wraps:name.getBoundingClientRect().height > parseFloat(getComputedStyle(name).lineHeight) + 1,
+            return {kind:row.tagName, wraps:name.getBoundingClientRect().height > parseFloat(getComputedStyle(name).lineHeight) + 1,
               fits:row.scrollWidth <= row.clientWidth + 1,
               numbers:[...row.querySelectorAll(".command-number, .era-inventory-quantity")].map(number => {
                 const range = document.createRange();
@@ -246,7 +397,9 @@ test("item IDs and quantities stay unbroken in wide and compact dialogs and lega
     assert.equal(result.otherLines, 1);
     assert.ok(result.layouts[0].width >= 1400, "wide dialog uses the increased width");
     for (const layout of result.layouts) {
-      assert.ok(layout.rows.some((row: { wraps: boolean }) => row.wraps), "long item names still wrap");
+      for (const kind of ["BUTTON", "DIV"])
+        assert.ok(layout.rows.some((row: { kind: string; wraps: boolean }) => row.kind === kind && row.wraps),
+          `${kind} long item names still wrap`);
       for (const row of layout.rows) {
         assert.equal(row.fits, true);
         for (const number of row.numbers) {

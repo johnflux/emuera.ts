@@ -63,6 +63,7 @@ HTML_PRINT "<era-open class='era-radio-group' role='radiogroup' aria-label='Home
 HTML_PRINT HOTPATCH_RADIO(9100, "Hakurei Shrine", RADIO_SELECTION == 0)
 HTML_PRINT HOTPATCH_RADIO(9101, "Bamboo Forest of the Lost", RADIO_SELECTION == 1, "A home among the bamboo.")
 HTML_PRINT HOTPATCH_RADIO(9102, "Scarlet Devil Mansion", RADIO_SELECTION == 2, "Requires an unlocked area.", 0)
+HTML_PRINT HOTPATCH_RADIO(9103, "Forest", RADIO_SELECTION == 3, "A shorter label with a description.")
 HTML_PRINT "<era-close>"
 HTML_PRINT "<era-close>"
 HTML_PRINT "<era-open class='era-section era-button-sample'>"

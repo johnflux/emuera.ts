@@ -1820,8 +1820,9 @@ declarations and the expression evaluator. No single routine dominates.
   The header's Previous and Next track controls play supported audio files from
   the current track's directory, in filename order, without changing game state.
   When no game BGM is playing, Play can start a random file from the game's
-  `sound/music` tree, or from the sibling `pops-tw/sound/music` tree if the
-  game has no browser-playable music there. Manual tracks use that tree as their
+  `sound/music` tree, then the sibling `pops-tw/sound/music` tree, then
+  `GAMES/sound/music`, using the first tree with browser-playable music.
+  Manual tracks use that tree as their
   playlist; later game-selected BGM replaces them. Music files are never saved
   as game state, and returning to the library stops playback.
   Selecting a track resumes playback if paused; supported media keyboards can

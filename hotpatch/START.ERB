@@ -192,7 +192,7 @@ DO
 	HTML_PRINT "<era-open class='era-dialog era-setup'>"
 	HTML_PRINT "<div class='era-inventory-header'><div class='era-inventory-heading'><span class='era-inventory-title'>New game</span><button value='999' class='era-dialog-close' title='Back to title'>×</button></div></div>"
 	HTML_PRINT @"<div class='era-sheet-subpages era-start-tabs'><button value='700' class='era-sheet-subpage%(nTab == 0 ? " era-current" # "")%'>Player</button><button value='706' class='era-sheet-subpage%(nTab == 6 ? " era-current" # "")%'>Characters</button><button value='701' class='era-sheet-subpage%(nTab == 1 ? " era-current" # "")%'>World</button><button value='703' class='era-sheet-subpage%(nTab == 3 ? " era-current" # "")%'>Bonuses</button><button value='704' class='era-sheet-subpage%(nTab == 4 ? " era-current" # "")%'>Farming</button><button value='702' class='era-sheet-subpage%(nTab == 2 ? " era-current" # "")%'>Dialogue</button><button value='705' class='era-sheet-subpage%(nTab == 5 ? " era-current" # "")%'>Yandere</button></div>"
-	HTML_PRINT "<era-open class='era-inventory-body era-setup-body'>"
+	HTML_PRINT "<era-open class='era-dialog-body era-setup-body'>"
 	SELECTCASE nTab
 	CASE 0
 		CALL HOTPATCH_SETUP_PLAYER(nPlayerPage, nDefaultClothes)
@@ -213,7 +213,7 @@ DO
 		CALL HOTPATCH_SETUP_CHARACTER_BODIES(nLastBodyAction)
 	ENDSELECT
 	HTML_PRINT "<era-close>"
-	HTML_PRINT @"<div class='era-inventory-footer'><span class='era-tone-red'>%sError%</span><button value='100' class='era-button era-button-primary'>Start game</button></div>"
+	HTML_PRINT @"<div class='era-dialog-footer'><span class='era-tone-red'>%sError%</span><button value='100' class='era-button era-button-primary'>Start game</button></div>"
 	HTML_PRINT "<era-close>"
 	INPUT
 	nAction = RESULT
@@ -291,7 +291,7 @@ DO
 		CLEARLINE LINECOUNT - nStart
 		HTML_PRINT "<era-open class='era-dialog era-setup era-setup-editor'>"
 		HTML_PRINT "<div class='era-inventory-header'><span class='era-inventory-title'>Character Bodies</span></div>"
-		HTML_PRINT "<era-open class='era-inventory-body'>"
+		HTML_PRINT "<era-open class='era-dialog-body'>"
 		CALL HOTPATCH_SETUP_CHARACTER_BODY_ACTION(nAction - 45000)
 		nLastBodyAction = nAction - 45000
 		HTML_PRINT "<era-close>"
@@ -300,7 +300,7 @@ DO
 		CLEARLINE LINECOUNT - nStart
 		HTML_PRINT "<era-open class='era-dialog era-setup era-setup-editor'>"
 		HTML_PRINT "<div class='era-inventory-header'><span class='era-inventory-title'>Game settings</span><div class='era-sub'>Finish editing to return to new-game setup.</div></div>"
-		HTML_PRINT "<era-open class='era-inventory-body'>"
+		HTML_PRINT "<era-open class='era-dialog-body'>"
 		SELECTCASE nAction
 		CASE 5000, 5001
 			CALL CUSTOM_NAME(MASTER, nAction - 5000)
@@ -337,7 +337,7 @@ ITEM:安物食材 = 10
 @HOTPATCH_DIALOGUE
 HTML_PRINT "<era-open class='era-dialog era-setup era-setup-editor'>"
 HTML_PRINT "<div class='era-inventory-header'><span class='era-inventory-title'>Character dialogue</span></div>"
-HTML_PRINT "<era-open class='era-inventory-body'>"
+HTML_PRINT "<era-open class='era-dialog-body'>"
 CALL HOTPATCH_ORIGINAL_NEWGAME_DIALOGUE_SELECT
 HTML_PRINT "<era-close>"
 HTML_PRINT "<era-close>"
@@ -379,7 +379,7 @@ DO
 	CLEARLINE LINECOUNT - nStart
 	HTML_PRINT "<era-open class='era-dialog era-load'>"
 	HTML_PRINT @"<div class='era-inventory-header'><div class='era-inventory-heading'><span class='era-inventory-title'>%(nMode == 0 ? "Load game" # (nMode == 1 ? "Save game" # "Delete save"))%</span><button value='999' class='era-dialog-close' title='Close save games'>×</button></div></div>"
-	HTML_PRINT "<era-open class='era-inventory-body era-save-list'>"
+	HTML_PRINT "<era-open class='era-dialog-body era-save-list'>"
 	FOR nSlot, nPage * 10, nPage * 10 + 10
 		CHKDATA nSlot
 		nCheck = RESULT
@@ -395,7 +395,7 @@ DO
 		HTML_PRINT @"<button value='300' class='era-save-slot era-save-auto'><span class='era-save-number'>Autosave</span><span>%(RESULT == 1 ? "Empty slot" # HTML_ESCAPE(RESULTS))%</span></button>"
 	ENDIF
 	HTML_PRINT "<era-close>"
-	sLabel '= @"<div class='era-inventory-footer'><button value='1000' class='era-chip-button era-page-prev'>Previous</button><span>Page {nPage + 1} / 20</span><button value='1002' class='era-chip-button era-page-next'>Next</button>"
+	sLabel '= @"<div class='era-dialog-footer'><button value='1000' class='era-chip-button era-page-prev'>Previous</button><span>Page {nPage + 1} / 20</span><button value='1002' class='era-chip-button era-page-next'>Next</button>"
 	IF ARG:1 != 1
 		sLabel += @"<button value='997' class='era-chip-button'>%(nMode == 0 ? "Delete" # (nMode == 1 ? "Load" # "Save"))%</button><button value='998' class='era-chip-button'>%(nMode == 0 ? "Save" # (nMode == 1 ? "Delete" # "Load"))%</button>"
 	ENDIF
@@ -424,7 +424,7 @@ DO
 				CLEARLINE LINECOUNT - nStart
 				HTML_PRINT "<era-open class='era-dialog era-load'>"
 				HTML_PRINT @"<div class='era-inventory-header'>%(nMode == 2 ? "Delete this save?" # "Overwrite this save?")%</div>"
-				HTML_PRINT "<div class='era-inventory-body'><button value='0' class='era-chip-button'>Yes</button><button value='1' class='era-dialog-close'>Cancel</button></div>"
+				HTML_PRINT "<div class='era-dialog-body'><button value='0' class='era-chip-button'>Yes</button><button value='1' class='era-dialog-close'>Cancel</button></div>"
 				HTML_PRINT "<era-close>"
 				BINPUT
 				nConfirm = RESULT

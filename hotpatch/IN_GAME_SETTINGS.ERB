@@ -12,7 +12,7 @@ RETURNF HOTPATCH_BUTTON(sName, nValue, "", "list", "", sState, sHelp, nEnabled)
 #DIM DYNAMIC nEditor
 HTML_PRINT @"<era-open class='era-dialog era-setup era-config%(nEditor ? " era-setup-editor" # "")%'>"
 HTML_PRINT @"<div class='era-inventory-header'><div class='era-inventory-heading'><span class='era-inventory-title'>%HTML_ESCAPE(sTitle)%</span>%(nEditor ? "" # "<button value='999' class='era-dialog-close' aria-label='Close'>×</button>")%</div></div>"
-HTML_PRINT "<era-open class='era-inventory-body era-setup-body'>"
+HTML_PRINT "<era-open class='era-dialog-body era-setup-body'>"
 
 @OPTION(IN_TRAINING = 0)
 #DIM DYNAMIC IN_TRAINING
@@ -48,7 +48,7 @@ DO
 	HTML_PRINT HOTPATCH_BUTTON("BAITSA・DASUTO", 200, "", "list", (DAY > 124 && !IN_TRAINING ? "" # "era-config-hidden"), "", "WARNING: Do not read any further", DAY > 124 && !IN_TRAINING)
 	HTML_PRINT "<era-close>"
 	HTML_PRINT "<era-close>"
-	HTML_PRINT "<div class='era-inventory-footer'>" + HOTPATCH_BUTTON("Done", 999, "", "primary") + "</div>"
+	HTML_PRINT "<div class='era-dialog-footer'>" + HOTPATCH_BUTTON("Done", 999, "", "primary") + "</div>"
 	HTML_PRINT "<era-close>"
 	BINPUT
 	nAction = RESULT
@@ -160,7 +160,7 @@ DO
 		HTML_PRINT "<era-close>"
 	NEXT
 	HTML_PRINT "<era-close>"
-	HTML_PRINT "<div class='era-inventory-footer'>" + HOTPATCH_BUTTON("Back", 999, "", "primary") + "</div>"
+	HTML_PRINT "<div class='era-dialog-footer'>" + HOTPATCH_BUTTON("Back", 999, "", "primary") + "</div>"
 	HTML_PRINT "<era-close>"
 	BINPUT
 	nAction = RESULT
@@ -190,7 +190,7 @@ DO
 	CALL HOTPATCH_CONFIG_HEADER("World Settings")
 	CALL HOTPATCH_SETUP_WORLD_SETTINGS
 	HTML_PRINT "<era-close>"
-	HTML_PRINT "<div class='era-inventory-footer'>" + HOTPATCH_BUTTON("Done", 999, "", "primary") + "</div>"
+	HTML_PRINT "<div class='era-dialog-footer'>" + HOTPATCH_BUTTON("Done", 999, "", "primary") + "</div>"
 	HTML_PRINT "<era-close>"
 	INPUT
 	nAction = RESULT
@@ -213,7 +213,7 @@ DO
 	CALL HOTPATCH_CONFIG_HEADER("Dialogue Settings")
 	CALL HOTPATCH_SETUP_DIALOGUE
 	HTML_PRINT "<era-close>"
-	HTML_PRINT "<div class='era-inventory-footer'>" + HOTPATCH_BUTTON("Done", 999, "", "primary") + "</div>"
+	HTML_PRINT "<div class='era-dialog-footer'>" + HOTPATCH_BUTTON("Done", 999, "", "primary") + "</div>"
 	HTML_PRINT "<era-close>"
 	INPUT
 	nAction = RESULT
@@ -259,7 +259,7 @@ DO
 	CALL HOTPATCH_SETUP_YANDERE
 	HTML_PRINT HOTPATCH_CONFIG_ROW(32, "More options & help")
 	HTML_PRINT "<era-close>"
-	HTML_PRINT "<div class='era-inventory-footer'>" + HOTPATCH_BUTTON("Done", 999, "", "primary") + "</div>"
+	HTML_PRINT "<div class='era-dialog-footer'>" + HOTPATCH_BUTTON("Done", 999, "", "primary") + "</div>"
 	HTML_PRINT "<era-close>"
 	INPUT
 	nAction = RESULT

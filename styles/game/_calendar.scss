@@ -2,7 +2,7 @@
 .era-calendar .era-inventory-header { background: linear-gradient(110deg, #253942, #131e29); border-color: #b6a17080; }
 .era-calendar .era-inventory-title { color: #e2edf0; font-size: 1.4em; font-weight: normal; }
 .era-calendar-emblem { flex: none; width: 40px; height: 40px; background: url("./calendar.svg") center / contain no-repeat; }
-.era-calendar .era-inventory-body { flex: 0 1 auto; padding: 20px 28px; }
+.era-calendar .era-dialog-body { flex: 0 1 auto; padding: 20px 28px; }
 .era-calendar-layout { display: grid; grid-template-columns: minmax(300px, .85fr) minmax(0, 1.65fr); gap: 20px; align-items: start; }
 .era-calendar-month { padding: 14px; border: 1px solid #5b8895; border-radius: 12px; background: linear-gradient(145deg, #142a34, #0b151e); box-shadow: inset 0 0 18px #76bccc08; }
 .era-calendar-month-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 16px; color: #efdfb9; text-align: center; font-size: 1.15em; }
@@ -43,9 +43,9 @@
 .era-calendar-person-entry > .line:not(.era-marker) { display: contents; }
 .era-calendar-people:not(:has(button)) { display: none; }
 
-.era-calendar .era-inventory-footer { justify-content: flex-start; padding: 16px 28px; border-color: transparent; }
+.era-calendar .era-dialog-footer { justify-content: flex-start; padding: 16px 28px; border-color: transparent; }
 @media (max-width: 600px) {
-  .era-calendar .era-inventory-body { padding: 12px; }
+  .era-calendar .era-dialog-body { padding: 12px; }
   .era-calendar-events, .era-calendar-people { flex-basis: 100%; }
   .era-calendar-table-heading > span { padding: 8px; font-size: var(--era-font-size-small); }
 }
