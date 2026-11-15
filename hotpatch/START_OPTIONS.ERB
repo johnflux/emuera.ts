@@ -46,9 +46,10 @@ NEXT
 HTML_PRINT "<era-close>"
 HTML_PRINT "<era-close>"
 
-@HOTPATCH_SETUP_PLAYER(nPage, nDefaultClothes)
+@HOTPATCH_SETUP_PLAYER(nPage, nDefaultClothes, nInGame = 0)
 #DIM DYNAMIC nPage
 #DIM DYNAMIC nDefaultClothes
+#DIM DYNAMIC nInGame
 #DIM DYNAMIC nIndex
 #DIMS DYNAMIC sState
 #DIMS DYNAMIC sAge
@@ -61,9 +62,13 @@ ELSE
 ENDIF
 HTML_PRINT "<era-open class='era-setup-player-info'>"
 sState '= ""
-SIF FLAG:なりきり
+SIF FLAG:なりきり && !nInGame
 	sState '= "<button value='12' class='era-chip-button'>Custom Character</button>"
-HTML_PRINT @"<div class='era-setup-player-names'><span class='era-setup-name-field'>%HTML_ESCAPE(NAME:MASTER)%</span><span>Nickname:</span><span class='era-setup-nickname-field'>%HTML_ESCAPE(CALLNAME:MASTER)%</span><button value='11' class='era-chip-button'>Choose a predefined character</button>%sState%</div>"
+IF nInGame
+	HTML_PRINT @"<div class='era-setup-player-names'><button value='5000' class='era-chip-button'>%HTML_ESCAPE(NAME:MASTER)%</button><span>Nickname:</span><button value='5001' class='era-chip-button'>%HTML_ESCAPE(CALLNAME:MASTER)%</button></div>"
+ELSE
+	HTML_PRINT @"<div class='era-setup-player-names'><span class='era-setup-name-field'>%HTML_ESCAPE(NAME:MASTER)%</span><span>Nickname:</span><span class='era-setup-nickname-field'>%HTML_ESCAPE(CALLNAME:MASTER)%</span><button value='11' class='era-chip-button'>Choose a predefined character</button>%sState%</div>"
+ENDIF
 sState '= ""
 FOR nIndex, 0, 200
 	SIF !HOTPATCH_SETUP_IS_RACE(nIndex) || !TALENT:MASTER:nIndex
@@ -82,8 +87,8 @@ SIF sAge == ""
 	sAge '= "Adult"
 HTML_PRINT @"<div class='era-setup-description'>%HTML_ESCAPE(sState)%%HTML_ESCAPE(HOTPATCH_SETUP_BODY_VALUE(2, TALENT:MASTER:性別))% · %HTML_ESCAPE(sAge)%</div>"
 HTML_PRINT "<era-open class='era-setup-player-stats'>"
-CALL HOTPATCH_SETUP_PLAYER_STEPPER(5100, "STA", MAX(MAXBASE:MASTER:体力 - 500, 0), MAXBASE:MASTER:体力 > 1000, MAXBASE:MASTER:体力 < 2500)
-CALL HOTPATCH_SETUP_PLAYER_STEPPER(5102, "ENE", MAXBASE:MASTER:気力, MAXBASE:MASTER:気力 > 1000, MAXBASE:MASTER:気力 < 2500)
+CALL HOTPATCH_SETUP_PLAYER_STEPPER(5100, "STA", MAX(MAXBASE:MASTER:体力 - 500, 0), MAXBASE:MASTER:体力 > 1000, MAXBASE:MASTER:体力 < (nInGame ? 10000 # 2500))
+CALL HOTPATCH_SETUP_PLAYER_STEPPER(5102, "ENE", MAXBASE:MASTER:気力, MAXBASE:MASTER:気力 > 1000, MAXBASE:MASTER:気力 < (nInGame ? 9999 # 2500))
 HTML_PRINT @"<div class='era-setup-setting'><span>TSP</span><span>{MAXBASE:MASTER:TSP}</span></div>"
 HTML_PRINT "<era-close>"
 HTML_PRINT "<era-close>"
@@ -95,32 +100,32 @@ CASE 0
 CASE 1
 	CALL HOTPATCH_SETUP_TRAITS
 CASE 2
-	HTML_PRINT "<div class='era-setup-description'>Your sensitivity and response to pleasure and others. Starting levels: 0-2.</div>"
+	HTML_PRINT @"<div class='era-setup-description'>Your sensitivity and response to pleasure and others. %(nInGame ? "Levels: 0-99." # "Starting levels: 0-2.")%</div>"
 	HTML_PRINT "<era-open class='era-setup-traits-layout'>"
 	HTML_PRINT "<era-open class='era-setup-grid era-setup-player-values era-setup-abilities'>"
 	FOR nIndex, 0, 59
 		SIF CUSTOM_選べない能力(nIndex, MASTER)
 			CONTINUE
-		CALL HOTPATCH_SETUP_PLAYER_STEPPER(7000 + nIndex * 2, ABL_TR(nIndex), ABL:MASTER:nIndex, ABL:MASTER:nIndex > 0, ABL:MASTER:nIndex < 2)
+		CALL HOTPATCH_SETUP_PLAYER_STEPPER(7000 + nIndex * 2, ABL_TR(nIndex), ABL:MASTER:nIndex, ABL:MASTER:nIndex > 0, ABL:MASTER:nIndex < (nInGame ? 99 # 2))
 	NEXT
 	HTML_PRINT "<era-close>"
 	CALL HOTPATCH_SETUP_DETAILS("Sensitivity &amp; Response Details")
 	HTML_PRINT "<era-close>"
 CASE 3
-	HTML_PRINT "<div class='era-setup-description'>Starting experience (0-30): records of past activities and encounters.</div>"
+	HTML_PRINT @"<div class='era-setup-description'>%(nInGame ? "Experience (0-9999)" # "Starting experience (0-30)")%: records of past activities and encounters.</div>"
 	HTML_PRINT "<era-open class='era-setup-traits-layout'>"
 	HTML_PRINT "<era-open class='era-setup-grid era-setup-player-values'>"
 	FOR nIndex, 0, 110
 		SIF CUSTOM_選べない経験(nIndex, MASTER)
 			CONTINUE
-		CALL HOTPATCH_SETUP_PLAYER_STEPPER(8000 + nIndex * 2, EXP_TR(nIndex, "ExpSh"), EXP:MASTER:nIndex, EXP:MASTER:nIndex > 0, EXP:MASTER:nIndex < 30)
+		CALL HOTPATCH_SETUP_PLAYER_STEPPER(8000 + nIndex * 2, EXP_TR(nIndex, "ExpSh"), EXP:MASTER:nIndex, EXP:MASTER:nIndex > 0, EXP:MASTER:nIndex < (nInGame ? 9999 # 30))
 	NEXT
 	HTML_PRINT "<era-close>"
 	CALL HOTPATCH_SETUP_DETAILS("Experience Details")
 	HTML_PRINT "<era-close>"
 CASE 4
 	HTML_PRINT "<era-open class='era-setup-body-options'>"
-	CALL HOTPATCH_SETUP_BODY
+	CALL HOTPATCH_SETUP_BODY(nInGame)
 	SIF HAS_PENIS(MASTER)
 		CALL HOTPATCH_SETUP_PENIS
 	HTML_PRINT "<era-close>"
@@ -201,14 +206,15 @@ SIF HOTPATCH_SETUP_IS_RACE(nIndex) && nValue == 0
 	RETURNF "None"
 RETURNF GET_TALENTNAME_TR(nIndex, nValue, MASTER)
 
-@HOTPATCH_SETUP_BODY
+@HOTPATCH_SETUP_BODY(nInGame = 0)
+#DIM DYNAMIC nInGame
 #DIM DYNAMIC nIndex
 #DIM DYNAMIC nValue
 #DIMS DYNAMIC sName
 #DIMS DYNAMIC sDescription
 FOR nIndex, 0, 200
 	SIF nIndex == 108
-		CALL HOTPATCH_SETUP_RACE
+		CALL HOTPATCH_SETUP_RACE(nInGame)
 	SIF !GROUPMATCH(nIndex, 2, 17, 54, 100, 105, 108, 143)
 		CONTINUE
 	SIF nIndex == 105 && !IS_FEMALE(MASTER)
@@ -270,14 +276,15 @@ FOR nIndex, 0, 200
 	HTML_PRINT "<era-close>"
 NEXT
 
-@HOTPATCH_SETUP_RACE
+@HOTPATCH_SETUP_RACE(nInGame = 0)
+#DIM DYNAMIC nInGame
 #DIM DYNAMIC nIndex
 #DIM DYNAMIC nValue
 #DIM DYNAMIC nVariants
 #DIMS DYNAMIC sName
 HTML_PRINT "<era-open class='era-setup-card era-setup-plain'>"
 HTML_PRINT "<span class='era-launch-eyebrow'>Race</span>"
-IF !FLAG:周回数
+IF !FLAG:周回数 && !nInGame
 	HTML_PRINT "<div class='era-setup-description era-setup-locked'>Unlocks in New Game+.</div>"
 	HTML_PRINT "<era-close>"
 	RETURN
@@ -286,7 +293,7 @@ HTML_PRINT "<era-open class='era-setup-grid'>"
 FOR nIndex, 0, 200
 	SIF !HOTPATCH_SETUP_IS_RACE(nIndex)
 		CONTINUE
-	HTML_PRINT HOTPATCH_SETUP_CHOICE(130000 + nIndex, TALENT_TR(nIndex), TALENT:MASTER:nIndex != 0, "", !CUSTOM_選べない素質(nIndex, MASTER), "", 0, "", 1)
+	HTML_PRINT HOTPATCH_SETUP_CHOICE(130000 + nIndex, TALENT_TR(nIndex), TALENT:MASTER:nIndex != 0, "", !CUSTOM_選べない素質(nIndex, MASTER, nInGame), "", 0, "", 1)
 	SIF !TALENT:MASTER:nIndex
 		CONTINUE
 	nVariants = 0
@@ -301,7 +308,7 @@ FOR nIndex, 0, 200
 		sName '= HOTPATCH_SETUP_BODY_VALUE(nIndex, nValue)
 		SIF sName == ""
 			CONTINUE
-		HTML_PRINT HOTPATCH_SETUP_CHOICE(100000 + nIndex * 100 + nValue + 10, sName, TALENT:MASTER:nIndex == nValue, TALENT_INFO(nIndex, nValue), !CUSTOM_選べない素質(nIndex, MASTER))
+		HTML_PRINT HOTPATCH_SETUP_CHOICE(100000 + nIndex * 100 + nValue + 10, sName, TALENT:MASTER:nIndex == nValue, TALENT_INFO(nIndex, nValue), !CUSTOM_選べない素質(nIndex, MASTER, nInGame))
 	NEXT
 	HTML_PRINT "<era-close>"
 NEXT
@@ -475,19 +482,20 @@ RETURNF ""
 sHelp '= HOTPATCH_SETUP_NUMBER_HELP(nControl)
 HTML_PRINT @"<div class='era-setup-setting %sClass%%(sHelp != "" ? " era-setup-detail" # "")%' title='%HTML_ESCAPE(sHelp)%'><span>%HTML_ESCAPE(sName)%</span><span class='era-setup-stepper'><button value='{nAction}' class='era-setup-step' aria-disabled='%(nDecrease ? "false" # "true")%' aria-label='Decrease %HTML_ESCAPE(sName)%'>-</button><button value='{9500 + nControl}' class='era-setup-number' aria-label='%HTML_ESCAPE(sName)% value'>{nValue}</button>%sSuffix%<button value='{nAction + 1}' class='era-setup-step' aria-disabled='%(nIncrease ? "false" # "true")%' aria-label='Increase %HTML_ESCAPE(sName)%'>+</button></span></div>"
 
-@HOTPATCH_SETUP_NUMBER_LIMIT(nControl, nMaximum = 0)
+@HOTPATCH_SETUP_NUMBER_LIMIT(nControl, nMaximum = 0, nInGame = 0)
 #FUNCTION
 #DIM DYNAMIC nControl
 #DIM DYNAMIC nMaximum
+#DIM DYNAMIC nInGame
 SELECTCASE nControl
 CASE 0
-	RETURNF nMaximum ? 2000 # 500
+	RETURNF nMaximum ? (nInGame ? 9500 # 2000) # 500
 CASE 1
-	RETURNF nMaximum ? 2500 # 1000
+	RETURNF nMaximum ? (nInGame ? 9999 # 2500) # 1000
 CASE 100 TO 158
-	RETURNF nMaximum ? 2 # 0
+	RETURNF nMaximum ? (nInGame ? 99 # 2) # 0
 CASE 200 TO 309
-	RETURNF nMaximum ? 30 # 0
+	RETURNF nMaximum ? (nInGame ? 9999 # 30) # 0
 CASE 400 TO 411
 	RETURNF nMaximum ? 100 # 0
 ENDSELECT
@@ -773,8 +781,10 @@ ELSE
 ENDIF
 RETURN RESULT
 
-@HOTPATCH_SETUP_YANDERE
-CALL YANDERE_DEFAULTS_INIT
+@HOTPATCH_SETUP_YANDERE(nInitialize = 1)
+#DIM DYNAMIC nInitialize
+SIF nInitialize
+	CALL YANDERE_DEFAULTS_INIT
 HTML_PRINT "<era-open class='era-setup-card'>"
 HTML_PRINT "<span class='era-launch-eyebrow'>Yandere Settings</span><button value='31' class='era-chip-button'>Character potential</button>"
 CALL HOTPATCH_SETUP_PERCENT(4200, "Subtype change chance", FLAG:YANDERE_EVOLVE_CHANCE)
@@ -836,8 +846,9 @@ CASEELSE
 ENDSELECT
 RETURN 1
 
-@HOTPATCH_SETUP_INPUT(nAction)
+@HOTPATCH_SETUP_INPUT(nAction, nInGame = 0)
 #DIM DYNAMIC nAction
+#DIM DYNAMIC nInGame
 #DIM DYNAMIC nIndex
 #DIM DYNAMIC nChoice
 #DIM DYNAMIC nSkip
@@ -845,22 +856,30 @@ SELECTCASE nAction
 CASE 160000 TO 4279999
 	nIndex = (nAction - 160000) / 10000
 	nChoice = (nAction - 160000) % 10000
-	SIF HOTPATCH_SETUP_NUMBER_LIMIT(nIndex) < 0 || nChoice < HOTPATCH_SETUP_NUMBER_LIMIT(nIndex) || nChoice > HOTPATCH_SETUP_NUMBER_LIMIT(nIndex, 1)
+	SIF HOTPATCH_SETUP_NUMBER_LIMIT(nIndex, 0, nInGame) < 0 || nChoice < HOTPATCH_SETUP_NUMBER_LIMIT(nIndex, 0, nInGame) || nChoice > HOTPATCH_SETUP_NUMBER_LIMIT(nIndex, 1, nInGame)
 		RETURN 0
 	SELECTCASE nIndex
 	CASE 0
+		SIF nInGame && MAXBASE:MASTER:体力 == nChoice + 500
+			RETURN 1
 		MAXBASE:MASTER:体力 = nChoice + 500
-		BASE:MASTER:体力 = MAXBASE:MASTER:体力
+		BASE:MASTER:体力 = nInGame ? MIN(BASE:MASTER:体力, MAXBASE:MASTER:体力) # MAXBASE:MASTER:体力
 	CASE 1
+		SIF nInGame && MAXBASE:MASTER:気力 == nChoice
+			RETURN 1
 		MAXBASE:MASTER:気力 = nChoice
-		BASE:MASTER:気力 = nChoice
+		BASE:MASTER:気力 = nInGame ? MIN(BASE:MASTER:気力, nChoice) # nChoice
 	CASE 100 TO 158
 		SIF CUSTOM_選べない能力(nIndex - 100, MASTER)
 			RETURN 0
+		SIF nInGame && ABL:MASTER:(nIndex - 100) == nChoice
+			RETURN 1
 		ABL:MASTER:(nIndex - 100) = nChoice
 	CASE 200 TO 309
 		SIF CUSTOM_選べない経験(nIndex - 200, MASTER)
 			RETURN 0
+		SIF nInGame && EXP:MASTER:(nIndex - 200) == nChoice
+			RETURN 1
 		EXP:MASTER:(nIndex - 200) = nChoice
 	CASE 400
 		FLAG:YANDERE_EVOLVE_CHANCE = nChoice
@@ -871,7 +890,7 @@ CASE 160000 TO 4279999
 	CASE 403 TO 411
 		YANDERE_CHANCE:(nIndex - 403) = nChoice
 	ENDSELECT
-	SIF nIndex < 400
+	SIF nIndex < 400 && !nInGame
 		CALL CHARA_VALIDATE(MASTER)
 CASE 140000 TO 150930
 	nIndex = (nAction - 140000) / 100
@@ -883,9 +902,11 @@ CASE 140000 TO 150930
 	CALL CHARA_VALIDATE(MASTER)
 CASE 130000 TO 130199
 	nIndex = nAction - 130000
-	IF !FLAG:周回数 || !HOTPATCH_SETUP_IS_RACE(nIndex) || CUSTOM_選べない素質(nIndex, MASTER)
+	IF (!FLAG:周回数 && !nInGame) || !HOTPATCH_SETUP_IS_RACE(nIndex) || CUSTOM_選べない素質(nIndex, MASTER, nInGame)
 		RETURN 0
 	ENDIF
+	SIF nInGame && TALENT:MASTER:nIndex
+		RETURN 1
 	FOR nChoice, 0, 200
 		SIF HOTPATCH_SETUP_IS_RACE(nChoice)
 			TALENT:MASTER:nChoice = 0
@@ -895,28 +916,55 @@ CASE 130000 TO 130199
 CASE 100000 TO 119999
 	nIndex = (nAction - 100000) / 100
 	nChoice = (nAction - 100000) % 100 - 10
-	IF CUSTOM_選べない素質(nIndex, MASTER) || HOTPATCH_SETUP_BODY_VALUE(nIndex, nChoice) == ""
+	IF CUSTOM_選べない素質(nIndex, MASTER, nInGame && HOTPATCH_SETUP_IS_RACE(nIndex)) || HOTPATCH_SETUP_BODY_VALUE(nIndex, nChoice) == ""
 		RETURN 0
 	ENDIF
-	SIF HOTPATCH_SETUP_IS_RACE(nIndex) && (!FLAG:周回数 || !TALENT:MASTER:nIndex || nChoice == 0)
+	SIF HOTPATCH_SETUP_IS_RACE(nIndex) && ((!FLAG:周回数 && !nInGame) || !TALENT:MASTER:nIndex || nChoice == 0)
 		RETURN 0
+	SIF nInGame && TALENT:MASTER:nIndex == nChoice
+		RETURN 1
 	TALENT:MASTER:nIndex = nChoice
 	CALL CHARA_VALIDATE(MASTER)
 CASE 5100 TO 5103
-	CALL CUSTOM_BASE(MASTER, nAction - 5100)
+	IF nInGame
+		nIndex = (nAction - 5100) / 2
+		nChoice = nIndex ? MAXBASE:MASTER:気力 # MAXBASE:MASTER:体力 - 500
+		SIF (nAction % 2 && nChoice >= (nIndex ? 9999 # 9500)) || (!(nAction % 2) && nChoice <= HOTPATCH_SETUP_NUMBER_LIMIT(nIndex, 0, 1))
+			RETURN 1
+		nChoice = MAX(nChoice + (nAction % 2 ? 100 # -100), HOTPATCH_SETUP_NUMBER_LIMIT(nIndex, 0, 1))
+		SIF nAction % 2
+			nChoice = MIN(nChoice, nIndex ? 9999 # 9500)
+		IF nIndex
+			MAXBASE:MASTER:気力 = nChoice
+			BASE:MASTER:気力 = MIN(BASE:MASTER:気力, nChoice)
+		ELSE
+			MAXBASE:MASTER:体力 = nChoice + 500
+			BASE:MASTER:体力 = MIN(BASE:MASTER:体力, nChoice + 500)
+		ENDIF
+	ELSE
+		CALL CUSTOM_BASE(MASTER, nAction - 5100)
+	ENDIF
 CASE 6000 TO 6199
 	SIF HOTPATCH_SETUP_IS_RACE(nAction - 6000) && !FLAG:周回数
 		RETURN 0
 	CALL CUSTOM_TALENT(nAction - 6000, MASTER)
 	CALL CHARA_VALIDATE(MASTER)
 CASE 7000 TO 7117
-	CALL CUSTOM_ABL(200 + nAction - 7000, MASTER)
+	IF nInGame
+		nIndex = (nAction - 7000) / 2
+		SIF CUSTOM_選べない能力(nIndex, MASTER)
+			RETURN 0
+		ABL:MASTER:nIndex = LIMIT(ABL:MASTER:nIndex + (nAction % 2 ? 1 # -1), 0, MAX(99, ABL:MASTER:nIndex))
+	ELSE
+		CALL CUSTOM_ABL(200 + nAction - 7000, MASTER)
+	ENDIF
 CASE 8000 TO 8219
 	nIndex = (nAction - 8000) / 2
 	SIF CUSTOM_選べない経験(nIndex, MASTER)
 		RETURN 0
-	EXP:MASTER:nIndex = LIMIT(EXP:MASTER:nIndex + (nAction % 2 ? 1 # -1), 0, 30)
-	CALL CHARA_VALIDATE(MASTER)
+	EXP:MASTER:nIndex = LIMIT(EXP:MASTER:nIndex + (nAction % 2 ? 1 # -1), 0, nInGame ? MAX(9999, EXP:MASTER:nIndex) # 30)
+	SIF !nInGame
+		CALL CHARA_VALIDATE(MASTER)
 CASE 1000 TO 1011
 	nIndex = nAction - 1000
 	IF nIndex == 1

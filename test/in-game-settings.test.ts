@@ -3,6 +3,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import { applyHotpatches, GAME_ROOT, indexScript, loadGame } from "../src/loader.js";
 import { GAME_INSTRUCTION_LIMIT, Runtime, type Snapshot } from "../src/runtime.js";
+import { readNativeSave } from "../src/save-format.js";
+import { MemorySaveStore } from "../src/storage.js";
 
 function markup(snapshot: Snapshot): string {
   assert.equal(snapshot.error, null, JSON.stringify(snapshot.error));
@@ -64,12 +66,27 @@ CALL TEST_SETTINGS_INIT
 CALL SET_MAINHOME
 PRINTFORML home={MAIN_MAP},{引っ越し}
 INPUT
+QUIT
+@TEST_SLEEP_COLORS
+CALL TEST_SETTINGS_INIT
+TIME:3 = 420
+SETCOLOR C_YELLOW
+CALL SHOW_SHOP
+PRINTFORML color={GETCOLOR()},{GETDEFCOLOR()}
+INPUT
+CALL SHOW_SHOP
+PRINTFORML color={GETCOLOR()},{GETDEFCOLOR()}
+INPUT
+CALL OPTION
+PRINTL finished
+INPUT
 QUIT`, "<settings-test>");
 
   const config = new Runtime(game, GAME_INSTRUCTION_LIMIT);
   const configSnapshot = config.start("TEST_CONFIG");
   const configScreen = markup(configSnapshot);
   assert.match(configScreen, /era-config[\s\S]*Select An Option/);
+  assert.match(configScreen, /Rerun the New Game setup[\s\S]*Caution - You may lose progress/);
   assert.equal((configScreen.match(/value='1467' class='era-config-stars'/g) ?? []).length, 2);
   for (const value of [8, 9, 10, 13, 14, 20, 29, 30, 33, 93]) {
     assert.doesNotMatch(configScreen, new RegExp(`value='${value}'`));
@@ -182,6 +199,22 @@ QUIT`, "<settings-test>");
   result = move.input("0");
   while (result.input?.kind === "wait") result = move.input("");
   assert.match(markup(result), /home=1,0/);
+
+  const sleep = new Runtime(game, GAME_INSTRUCTION_LIMIT);
+  for (const snapshot of [sleep.start("TEST_SLEEP_COLORS"), sleep.input("0")]) {
+    const text = markup(snapshot);
+    assert.match(text, /color=(\d+),\1/);
+    const tip = snapshot.output.find((item) => item.type === "text" && item.text.includes("TIPS:"));
+    assert.ok(tip && tip.type === "text");
+    const options = snapshot.output.find((item) => item.type === "text" && item.text.includes("Options[400]"));
+    assert.ok(options && options.type === "text");
+    assert.notEqual(tip.style.color, options.style.color, "tips are yellow without coloring wake-up options");
+  }
+  const sleepConfig = sleep.input("0");
+  assert.match(markup(sleepConfig), /Rerun the New Game setup/);
+  const configRow = sleepConfig.output.find((item) => item.type === "html" && item.text.includes("Rerun the New Game setup"));
+  assert.ok(configRow && configRow.type === "html");
+  assert.doesNotMatch(configRow.text, /<span color='#FFFF00'>/);
 });
 
 test("dialogue changes confirm destructive resets and honor compatibility", { skip: !existsSync(GAME_ROOT) }, async () => {
@@ -217,6 +250,18 @@ CALL HOTPATCH_DIALOGUE_SETTINGS
 PRINTFORML selected={CFLAG:1:口上セレクタ},called={FLAG:9001}
 INPUT
 QUIT`, "<dialogue-settings-test>");
+  indexScript(game, `@TEST_SETUP_DIALOGUE_CHANGE
+CALL MAKE_TALENT_MAP
+CALL Name_Array_Set
+CALL ADDCHARA_INIT(0)
+CALL MAKE_ALL_CLASS_LIST
+CALL ADD_ALL_CHARACTERS
+CFLAG:1:口上実装状況 = 2
+FLAG:9000 = 0
+CALL OPTION
+PRINTFORML selected={CFLAG:1:口上セレクタ},called={FLAG:9001}
+INPUT
+QUIT`, "<setup-dialogue-test>");
   function open(compatible: boolean): Runtime {
     const runtime = new Runtime(game, GAME_INSTRUCTION_LIMIT);
     markup(runtime.start("TEST_DIALOGUE_CHANGE"));
@@ -238,6 +283,276 @@ QUIT`, "<dialogue-settings-test>");
   assert.match(markup(compatible.input("20005")), /Applied/);
   markup(compatible.input(""));
   assert.match(markup(compatible.input("999")), /selected=1,called=1/);
+
+  const setup = new Runtime(game, GAME_INSTRUCTION_LIMIT);
+  markup(setup.start("TEST_SETUP_DIALOGUE_CHANGE"));
+  markup(setup.input("103"));
+  markup(setup.input("702"));
+  assert.match(markup(setup.input("20005")), /resets the character's relationships/);
+  assert.match(markup(setup.input("0")), /value='20005' class='era-radio/);
+  assert.match(markup(setup.input("20005")), /resets the character's relationships/);
+  assert.match(markup(setup.input("1")), /Applied/);
+  assert.match(markup(setup.input("")), /value='20005' class='era-radio era-current/);
+  markup(setup.input("999"));
+  assert.match(markup(setup.input("999")), /selected=1,called=2/);
+});
+
+test("config setup preserves an existing game and uses in-game settings", { skip: !existsSync(GAME_ROOT) }, async () => {
+  const game = await loadGame();
+  await applyHotpatches(game);
+  indexScript(game, `@TEST_EXISTING_SETUP
+CALL MAKE_TALENT_MAP
+CALL Name_Array_Set
+CALL ADDCHARA_INIT(0)
+CALL MAKE_ALL_CLASS_LIST
+CALL ADD_ALL_CHARACTERS
+CALL DEFAULT_OPTION
+FOR LOCAL, 1, CHARANUM
+	CALL KOJO_COUNT_CHECK(LOCAL)
+NEXT
+MAIN_MAP = 0
+DAY = 42
+DAY:2 = 1
+DAY:3 = 1
+CALL ROOMSETTING_0
+CALL DEFAULT_OWNER_0
+RECOLOREDMAPS = 1
+ANIMATERECOLOREDMAPS = 0
+MONEY = 123456
+ITEM:安物食材 = 77
+FLAG:1000 = 0
+FLAG:地主 = 1
+FLAG:農民難易度 = 2
+FLAG:地主貸付金 = 12345
+FLAG:畑仕事の成果 = 73
+CFLAG:MASTER:基本服装セット = 8
+MAXBASE:MASTER:体力 = 4000
+BASE:MASTER:体力 = 321
+MAXBASE:MASTER:気力 = 3500
+BASE:MASTER:気力 = 123
+EXP:MASTER:Ａ経験 = 123
+ABL:MASTER:Ａ感覚 = 8
+FLAG:YANDERE_DEFAULTS_APPLIED = 0
+FLAG:YANDERE_EVOLVE_CHANCE = 37
+CALL OPTION
+PRINTFORML state={DAY},{MONEY},{ITEM:安物食材},{FLAG:1000},{FLAG:地主},{FLAG:農民難易度},{FLAG:地主貸付金},{FLAG:畑仕事の成果},{CFLAG:MASTER:基本服装セット},{FLAG:甲斐性無},{FLAG:LUSTMODE},{FLAG:STABLEBYPASS},{FLAG:YANDERE_EVOLVE_CHANCE}
+PRINTFORML player={MAXBASE:MASTER:体力},{BASE:MASTER:体力},{MAXBASE:MASTER:気力},{BASE:MASTER:気力},{EXP:MASTER:Ａ経験},{ABL:MASTER:Ａ感覚},{FLAG:YANDERE_DEFAULTS_APPLIED}
+PRINTFORML combat={ABL:MASTER:戦闘能力},butt={TALENT:1:ヒップサイズ}
+PRINTFORML race={TALENT:MASTER:人間},{TALENT:MASTER:妖怪},name=%NAME:MASTER%,home={MAIN_MAP}
+INPUT
+QUIT
+@TEST_SETUP_FARM_RESTRICTIONS
+CALL MAKE_TALENT_MAP
+CALL Name_Array_Set
+CALL ADDCHARA_INIT(0)
+CALL MAKE_ALL_CLASS_LIST
+CALL ADD_ALL_CHARACTERS
+CALL DEFAULT_OPTION
+INPUT
+FLAG:気絶中断 = RESULT == 2
+CALL HOTPATCH_SETUP_DIALOG(1, RESULT == 1)
+PRINTL finished
+INPUT
+QUIT`, "<existing-setup-test>");
+
+  const unchanged = new Runtime(game, GAME_INSTRUCTION_LIMIT);
+  assert.match(markup(unchanged.start("TEST_EXISTING_SETUP")), /More settings[\s\S]*Rerun the New Game setup/);
+  const screen = markup(unchanged.input("103"));
+  assert.match(screen, /New game setup/);
+  for (const [value, label] of [[700, "Player"], [706, "Characters"], [703, "Bonuses"]] as const) {
+    assert.match(screen, new RegExp(`value='${value}'[^>]*>${label}`));
+  }
+  assert.doesNotMatch(screen, /Start game|Choose a predefined character/);
+  assert.match(screen, /value='130191'[^>]*aria-disabled='false'/, "race can be edited in an existing first playthrough");
+  const selectedBody = /value='(1\d{5})' class='era-radio era-current'/.exec(screen)?.[1];
+  assert.ok(selectedBody);
+  markup(unchanged.input(selectedBody));
+  markup(unchanged.input("710"));
+  markup(unchanged.input("1108"));
+  markup(unchanged.input("711"));
+  markup(unchanged.input("712"));
+  markup(unchanged.input("713"));
+  markup(unchanged.input("706"));
+  markup(unchanged.input("703"));
+  markup(unchanged.input("701"));
+  markup(unchanged.input("702"));
+  markup(unchanged.input("704"));
+  markup(unchanged.input("705"));
+  markup(unchanged.input("999"));
+  const unchangedResult = markup(unchanged.input("999"));
+  assert.match(unchangedResult, /state=42,123456,77,0,1,2,12345,73,8,0,0,0,37/);
+  assert.match(unchangedResult, /player=4000,321,3500,123,123,8,0/);
+
+  const changed = new Runtime(game, GAME_INSTRUCTION_LIMIT);
+  markup(changed.start("TEST_EXISTING_SETUP"));
+  markup(changed.input("103"));
+  assert.match(markup(changed.input("701")), /Romance Mode[\s\S]*Pregnancy Restrictions/);
+  markup(changed.input("4132"));
+  markup(changed.input("4142"));
+  markup(changed.input("4110"));
+  assert.match(markup(changed.input("704")), /Farm Settings/);
+  assert.match(markup(changed.input("800")), /Cannot quit while in debt/);
+  markup(changed.input("3103"));
+  markup(changed.input("999"));
+  assert.match(markup(changed.input("705")), /Yandere Settings/);
+  assert.match(markup(changed.input("4160037")), /Subtype change chance value'>37<\/button>/);
+  markup(changed.input("999"));
+  assert.match(markup(changed.input("999")), /state=42,123456,77,0,1,2,12345,73,8,2,1,1,37/);
+
+  const farm = new Runtime(game, GAME_INSTRUCTION_LIMIT);
+  markup(farm.start("TEST_EXISTING_SETUP"));
+  markup(farm.input("103"));
+  markup(farm.input("704"));
+  markup(farm.input("800"));
+  markup(farm.input("3103"));
+  markup(farm.input("100"));
+  markup(farm.input("999"));
+  assert.match(markup(farm.input("999")), /state=42,123456,77,4,1,3,12345,73,8,/);
+
+  for (const [scenario, reason] of [["1", "Unavailable during training"], ["2", "Unavailable while fainted"]] as const) {
+    const restricted = new Runtime(game, GAME_INSTRUCTION_LIMIT);
+    markup(restricted.start("TEST_SETUP_FARM_RESTRICTIONS"));
+    markup(restricted.input(scenario));
+    const world = markup(restricted.input("701"));
+    assert.match(world, /value='801'[^>]*aria-disabled='true'/);
+    const farming = markup(restricted.input("704"));
+    assert.match(farming, new RegExp(reason));
+    assert.match(farming, /value='800'[^>]*aria-disabled='true'/);
+    assert.match(markup(restricted.input("999")), /finished/);
+  }
+
+  const player = new Runtime(game, GAME_INSTRUCTION_LIMIT);
+  markup(player.start("TEST_EXISTING_SETUP"));
+  markup(player.input("103"));
+  markup(player.input("5100"));
+  markup(player.input("5103"));
+  markup(player.input("712"));
+  markup(player.input("7004"));
+  markup(player.input("713"));
+  markup(player.input("8004"));
+  markup(player.input("710"));
+  markup(player.input("1103"));
+  markup(player.input("999"));
+  const playerResult = markup(player.input("999"));
+  assert.match(playerResult, /player=3900,321,3600,123,122,7,0/);
+  assert.match(playerResult, /state=42,123456,77,0,1,2,12345,73,3,/);
+
+  const direct = new Runtime(game, GAME_INSTRUCTION_LIMIT);
+  markup(direct.start("TEST_EXISTING_SETUP"));
+  markup(direct.input("103"));
+  markup(direct.input("713"));
+  assert.match(markup(direct.input("9702")), /whole number \(0-9999\)/);
+  markup(direct.input("543"));
+  markup(direct.input("712"));
+  assert.match(markup(direct.input("9602")), /whole number \(0-99\)/);
+  markup(direct.input("10"));
+  markup(direct.input("999"));
+  assert.match(markup(direct.input("999")), /player=4000,321,3500,123,543,10,0/);
+
+  const identity = new Runtime(game, GAME_INSTRUCTION_LIMIT);
+  markup(identity.start("TEST_EXISTING_SETUP"));
+  markup(identity.input("103"));
+  assert.match(markup(identity.input("130191")), /value='130191' class='era-radio era-current/);
+  assert.match(markup(identity.input("5000")), /enter a new name/i);
+  assert.match(markup(identity.input("New name")), /Accepted/);
+  markup(identity.input(""));
+  markup(identity.input("999"));
+  assert.match(markup(identity.input("999")), /race=0,1,name=New name,home=0/);
+
+  const home = new Runtime(game, GAME_INSTRUCTION_LIMIT);
+  markup(home.start("TEST_EXISTING_SETUP"));
+  markup(home.input("103"));
+  markup(home.input("701"));
+  assert.match(markup(home.input("801")), /value='2000' class='era-radio era-current'/);
+  markup(home.input("2001"));
+  assert.match(markup(home.input("1998")), /New game setup/);
+  markup(home.input("999"));
+  assert.match(markup(home.input("999")), /home=0/);
+
+  const body = new Runtime(game, GAME_INSTRUCTION_LIMIT);
+  markup(body.start("TEST_EXISTING_SETUP"));
+  markup(body.input("103"));
+  markup(body.input("706"));
+  assert.match(markup(body.input("45015")), /This changes characters/);
+  assert.match(markup(body.input("0")), /Character Bodies/);
+  assert.match(markup(body.input("45015")), /This changes characters/);
+  assert.match(markup(body.input("1")), /Applied: Everyone Has a Mystifying Butt/);
+  markup(body.input("999"));
+  assert.match(markup(body.input("999")), /state=42,123456,77[\s\S]*butt=4/);
+
+  const bonus = new Runtime(game, GAME_INSTRUCTION_LIMIT);
+  markup(bonus.start("TEST_EXISTING_SETUP"));
+  markup(bonus.input("103"));
+  markup(bonus.input("703"));
+  markup(bonus.input("1008"));
+  markup(bonus.input("999"));
+  assert.match(markup(bonus.input("999")), /state=42,123456,77[\s\S]*combat=0/, "selecting a bonus without applying it does not grant it");
+
+  const applied = new Runtime(game, GAME_INSTRUCTION_LIMIT);
+  markup(applied.start("TEST_EXISTING_SETUP"));
+  markup(applied.input("103"));
+  markup(applied.input("703"));
+  markup(applied.input("1008"));
+  assert.match(markup(applied.input("802")), /value='802'[^>]*aria-disabled='true'[^>]*>Apply bonus/);
+  markup(applied.input("999"));
+  assert.match(markup(applied.input("999")), /state=42,123456,77[\s\S]*combat=2/);
+});
+
+test("in-game setup edits survive native save and load", { skip: !existsSync(GAME_ROOT) }, async () => {
+  const game = await loadGame();
+  await applyHotpatches(game);
+  game.routines.delete("SHOW_SHOP");
+  game.routines.delete("EVENTLOAD");
+  game.routines.delete("SYSTEM_LOADEND");
+  indexScript(game, `@TEST_SETUP_SAVE
+CALL MAKE_TALENT_MAP
+CALL Name_Array_Set
+CALL ADDCHARA_INIT(0)
+CALL MAKE_ALL_CLASS_LIST
+CALL ADD_ALL_CHARACTERS
+CALL DEFAULT_OPTION
+FOR LOCAL, 1, CHARANUM
+	CALL KOJO_COUNT_CHECK(LOCAL)
+NEXT
+DAY = 42
+MONEY = 123456
+EXP:MASTER:Ａ経験 = 123
+SAVEDATA 0, "existing game"
+EXP:MASTER:Ａ経験 = 1
+LOADDATA 0
+@SHOW_SHOP
+IF FLAG:9000
+	PRINTFORML state={DAY},{MONEY},{EXP:MASTER:Ａ経験},{FLAG:甲斐性無},{FLAG:LUSTMODE}
+	INPUT
+	QUIT
+ENDIF
+CALL OPTION
+FLAG:9000 = 1
+SAVEDATA 1, "edited game"
+PRINTL saved
+INPUT
+QUIT
+@TEST_SETUP_RESTORE
+LOADDATA 1
+QUIT`, "<setup-save-test>");
+  const saves = new MemorySaveStore();
+  const runtime = new Runtime(game, GAME_INSTRUCTION_LIMIT, { saves });
+  markup(runtime.start("TEST_SETUP_SAVE"));
+  markup(runtime.input("103"));
+  markup(runtime.input("713"));
+  markup(runtime.input("8005"));
+  markup(runtime.input("701"));
+  markup(runtime.input("4132"));
+  markup(runtime.input("999"));
+  assert.match(markup(runtime.input("999")), /saved/);
+  const original = saves.read("save00.sav");
+  const edited = saves.read("save01.sav");
+  assert.ok(Buffer.isBuffer(original));
+  assert.ok(Buffer.isBuffer(edited));
+  assert.equal(readNativeSave(original).text, "existing game");
+  assert.equal(readNativeSave(edited).text, "edited game");
+  const restored = new Runtime(game, GAME_INSTRUCTION_LIMIT, { saves });
+  assert.match(markup(restored.start("TEST_SETUP_RESTORE")), /state=42,123456,124,1,1/);
 });
 
 test("move-home hotpatch preserves the native flow apart from the region selector", { skip: !existsSync(GAME_ROOT) }, () => {

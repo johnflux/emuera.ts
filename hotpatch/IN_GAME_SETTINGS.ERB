@@ -45,6 +45,7 @@ DO
 	HTML_PRINT HOTPATCH_CONFIG_ROW(100, "Modded")
 	HTML_PRINT HOTPATCH_CONFIG_ROW(101, "Disable dialogue")
 	HTML_PRINT HOTPATCH_CONFIG_ROW(102, "Disable controversial content")
+	HTML_PRINT HOTPATCH_CONFIG_ROW(103, "Rerun the New Game setup", "", "Caution - You may lose progress")
 	HTML_PRINT HOTPATCH_BUTTON("BAITSA・DASUTO", 200, "", "list", (DAY > 124 && !IN_TRAINING ? "" # "era-config-hidden"), "", "WARNING: Do not read any further", DAY > 124 && !IN_TRAINING)
 	HTML_PRINT "<era-close>"
 	HTML_PRINT "<era-close>"
@@ -64,6 +65,10 @@ DO
 	CLEARLINE LINECOUNT - nStart
 	IF nAction == 100
 		CALL OPTION_MOD
+		CONTINUE
+	ENDIF
+	IF nAction == 103
+		CALL HOTPATCH_SETUP_DIALOG(1, IN_TRAINING)
 		CONTINUE
 	ENDIF
 	CALL HOTPATCH_CONFIG_HEADER("Config", 1)
@@ -206,7 +211,6 @@ CLEARLINE LINECOUNT - nStart
 #DIM DYNAMIC nAction
 #DIM DYNAMIC nIndex
 #DIM DYNAMIC nChoice
-#DIM DYNAMIC nNeedsReset
 nStart = LINECOUNT
 DO
 	CLEARLINE LINECOUNT - nStart
@@ -227,26 +231,35 @@ DO
 		CALL HOTPATCH_SETUP_DIALOGUE_INFO(nIndex, nChoice)
 		SIF !RESULT
 			CONTINUE
-		nNeedsReset = !GETBIT(RESULT:1, CFLAG:nIndex:口上セレクタ)
 		CLEARLINE LINECOUNT - nStart
-		CALL HOTPATCH_CONFIG_HEADER("Dialogue Settings", 1)
-		IF nNeedsReset
-			PRINTFORML Changing this dialogue resets the character's relationships, events, abilities and flags.
-			PRINTBUTTON "Reset and change dialogue", 1
-			PRINTBUTTON "Cancel", 0
-			INPUT
-			IF RESULT != 1
-				HTML_PRINT "<era-close>"
-				HTML_PRINT "<era-close>"
-				CONTINUE
-			ENDIF
-		ENDIF
-		CALL CHARACTER_GET_NEW_DIALOGUE(nIndex, nChoice, nNeedsReset)
-		HTML_PRINT "<era-close>"
-		HTML_PRINT "<era-close>"
+		CALL HOTPATCH_DIALOGUE_SETTINGS_CHANGE(nIndex, nChoice)
 	ENDIF
 LOOP 1
 CLEARLINE LINECOUNT - nStart
+
+@HOTPATCH_DIALOGUE_SETTINGS_CHANGE(nIndex, nChoice)
+#DIM DYNAMIC nIndex
+#DIM DYNAMIC nChoice
+#DIM DYNAMIC nNeedsReset
+CALL HOTPATCH_SETUP_DIALOGUE_INFO(nIndex, nChoice)
+SIF !RESULT || CFLAG:nIndex:口上セレクタ == nChoice
+	RETURN
+nNeedsReset = !GETBIT(RESULT:1, CFLAG:nIndex:口上セレクタ)
+CALL HOTPATCH_CONFIG_HEADER("Dialogue Settings", 1)
+IF nNeedsReset
+	PRINTFORML Changing this dialogue resets the character's relationships, events, abilities and flags.
+	PRINTBUTTON "Reset and change dialogue", 1
+	PRINTBUTTON "Cancel", 0
+	INPUT
+	IF RESULT != 1
+		HTML_PRINT "<era-close>"
+		HTML_PRINT "<era-close>"
+		RETURN
+	ENDIF
+ENDIF
+CALL CHARACTER_GET_NEW_DIALOGUE(nIndex, nChoice, nNeedsReset)
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-close>"
 
 @CUSTOM_OPTION_RESULT_4
 #DIM DYNAMIC nStart

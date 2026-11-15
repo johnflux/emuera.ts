@@ -93,6 +93,7 @@ CLEARLINE LINECOUNT - nStart
 @SHOW_SHOP
 #DIMS DYNAMIC sHtml
 #DIMS DYNAMIC sGray
+RESETCOLOR
 ;mod custom code - turn off
 THIRD_PERSON = 0
 ;起床前画面表示中フラグ
@@ -217,5 +218,6 @@ HTML_PRINT "<era-close>"
 
 HTML_PRINT "<era-open class='era-card era-shop-tip'>"
 CALL TW_TIPS
+RESETCOLOR
 HTML_PRINT "<era-close>"
 HTML_PRINT "<era-close>"

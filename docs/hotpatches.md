@@ -213,6 +213,14 @@ inline until the game prints a newline. This preserves multi-column character
 pickers, native labels, colors and tooltips in Config submenus. Explicit radios,
 number inputs, steppers, checkboxes and artwork controls retain their components.
 Native input modes and setting routines are unchanged.
+More settings includes New game setup for an existing game. All setup tabs are
+available without running new-game initialization. Player edits apply as chosen;
+switching to a predefined player is limited to new games because it replaces
+the entire player character. Bulk character changes require confirmation.
+Bonuses are selected and applied explicitly, and existing bonuses are not
+removed. Farm Settings retains its debt checks and confirmation, and dialogue
+changes retain their compatibility and reset warnings. Farming and moving home
+are unavailable during training or while fainted.
 Unfinished main layouts retain their context across input waits, including
 embrace events triggered after the header has printed. Remaining status and
 command panels stay inside the same layout until its closing marker.

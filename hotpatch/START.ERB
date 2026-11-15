@@ -167,57 +167,226 @@ RECOLOREDMAPS = 1
 ANIMATERECOLOREDMAPS = 1000
 
 @NEWGAME_OPTION
+IF !ゲーム開始処理中
+	CALL HOTPATCH_ORIGINAL_NEWGAME_OPTION
+	RETURN
+ENDIF
+CALL HOTPATCH_SETUP_DIALOG
+RETURN RESULT
+
+@HOTPATCH_SETUP_DIALOG(nInGame = 0, nInTraining = 0)
+#DIM DYNAMIC nInGame
+#DIM DYNAMIC nInTraining
 #DIM DYNAMIC nStart
 #DIM DYNAMIC nTab
 #DIM DYNAMIC nPlayerPage = 4
 #DIM DYNAMIC nDefaultClothes = 1
 #DIM DYNAMIC nAction
 #DIM DYNAMIC nLastBodyAction
+#DIM DYNAMIC nIndex
+#DIM DYNAMIC nChoice
 #DIMS DYNAMIC sError
-IF !ゲーム開始処理中
-	CALL HOTPATCH_ORIGINAL_NEWGAME_OPTION
-	RETURN
+#DIMS DYNAMIC sBonusDraft
+#DIMS DYNAMIC sBonusApplied
+#DIMS DYNAMIC sBonusSaved
+IF nInGame
+	sBonusDraft '= ニューゲーム特典
+	SIF sBonusDraft == ""
+		sBonusDraft '= HOTPATCH_SETUP_BONUS_VALUE(0)
+	sBonusApplied '= sBonusDraft
+ELSE
+	SETBIT FLAG:1000, 1
+	SETBIT FLAG:1000, 2
+	CALL CHARA_VALIDATE(MASTER)
+	SIF !TALENT:MASTER:形状 && HAS_PENIS(MASTER)
+		TALENT:MASTER:形状 = 3
+	CALL MASTER_CLOTHES_INIT
 ENDIF
-SETBIT FLAG:1000, 1
-SETBIT FLAG:1000, 2
-CALL CHARA_VALIDATE(MASTER)
-SIF !TALENT:MASTER:形状 && HAS_PENIS(MASTER)
-	TALENT:MASTER:形状 = 3
-CALL MASTER_CLOTHES_INIT
 nStart = LINECOUNT
 DO
-	SIF nDefaultClothes
-		CALL MASTER_CLOTHES_INIT
+	IF nInGame
+		nDefaultClothes = CFLAG:MASTER:基本服装セット == (FLAG:なりきり ? FLAG:なりきり + 100 # (TALENT:MASTER:性別 & 1 ? 2 # 1))
+	ELSE
+		SIF nDefaultClothes
+			CALL MASTER_CLOTHES_INIT
+	ENDIF
 	CLEARLINE LINECOUNT - nStart
 	HTML_PRINT "<era-open class='era-dialog era-setup'>"
-	HTML_PRINT "<div class='era-inventory-header'><div class='era-inventory-heading'><span class='era-inventory-title'>New game</span><button value='999' class='era-dialog-close' title='Back to title'>×</button></div></div>"
+	HTML_PRINT @"<div class='era-inventory-header'><div class='era-inventory-heading'><span class='era-inventory-title'>%(nInGame ? "New game setup" # "New game")%</span><button value='999' class='era-dialog-close' title='%(nInGame ? "Close" # "Back to title")%'>×</button></div></div>"
 	HTML_PRINT @"<div class='era-sheet-subpages era-start-tabs'><button value='700' class='era-sheet-subpage%(nTab == 0 ? " era-current" # "")%'>Player</button><button value='706' class='era-sheet-subpage%(nTab == 6 ? " era-current" # "")%'>Characters</button><button value='701' class='era-sheet-subpage%(nTab == 1 ? " era-current" # "")%'>World</button><button value='703' class='era-sheet-subpage%(nTab == 3 ? " era-current" # "")%'>Bonuses</button><button value='704' class='era-sheet-subpage%(nTab == 4 ? " era-current" # "")%'>Farming</button><button value='702' class='era-sheet-subpage%(nTab == 2 ? " era-current" # "")%'>Dialogue</button><button value='705' class='era-sheet-subpage%(nTab == 5 ? " era-current" # "")%'>Yandere</button></div>"
 	HTML_PRINT "<era-open class='era-dialog-body era-setup-body'>"
 	SELECTCASE nTab
 	CASE 0
-		CALL HOTPATCH_SETUP_PLAYER(nPlayerPage, nDefaultClothes)
+		CALL HOTPATCH_SETUP_PLAYER(nPlayerPage, nDefaultClothes, nInGame)
 	CASE 1
 		HTML_PRINT "<era-open class='era-setup-world'>"
-		CALL HOTPATCH_SETUP_WORLD
+		IF nInGame
+			HTML_PRINT "<era-open class='era-setup-card'><span class='era-launch-eyebrow'>Home</span>"
+			HTML_PRINT @"<div class='era-setup-indent'><div class='era-setup-name'>%HTML_ESCAPE(GET_MAPNAME(MAIN_MAP))%</div></div>"
+			HTML_PRINT HOTPATCH_BUTTON("Change home", 801, "", "list", "", "", (nInTraining ? "Unavailable during training." # (FLAG:気絶中断 ? "Unavailable while fainted." # "")), !nInTraining && !FLAG:気絶中断)
+			HTML_PRINT "<era-close>"
+			CALL HOTPATCH_SETUP_WORLD_SETTINGS
+		ELSE
+			CALL HOTPATCH_SETUP_WORLD
+		ENDIF
 		HTML_PRINT @"<div class='era-setup-card'><span class='era-launch-eyebrow'>Map Display</span><div class='era-setup-indent'><button value='23' class='era-chip-button'>Animation: %(ANIMATERECOLOREDMAPS ? "On" # "Off")%</button></div></div>"
 		HTML_PRINT "<era-close>"
 	CASE 2
 		CALL HOTPATCH_SETUP_DIALOGUE
 	CASE 3
-		CALL HOTPATCH_SETUP_BONUSES
+		IF nInGame
+			sBonusSaved '= ニューゲーム特典
+			ニューゲーム特典 '= sBonusDraft
+			CALL HOTPATCH_SETUP_BONUSES
+			ニューゲーム特典 '= sBonusSaved
+			HTML_PRINT "<div class='era-setup-description'>Previous bonuses are not removed.</div>"
+			HTML_PRINT HOTPATCH_BUTTON("Apply bonus", 802, "", "primary", "", "", "", sBonusDraft != sBonusApplied && sBonusDraft != HOTPATCH_SETUP_BONUS_VALUE(11))
+		ELSE
+			CALL HOTPATCH_SETUP_BONUSES
+		ENDIF
 	CASE 4
-		CALL HOTPATCH_SETUP_FARMING
+		IF nInGame
+			HTML_PRINT HOTPATCH_BUTTON("Farm Settings", 800, "", "list", "", "", (nInTraining ? "Unavailable during training." # (FLAG:気絶中断 ? "Unavailable while fainted." # "")), !nInTraining && !FLAG:気絶中断)
+		ELSE
+			CALL HOTPATCH_SETUP_FARMING
+		ENDIF
 	CASE 5
-		CALL HOTPATCH_SETUP_YANDERE
+		CALL HOTPATCH_SETUP_YANDERE(!nInGame)
 	CASE 6
 		CALL HOTPATCH_SETUP_CHARACTER_BODIES(nLastBodyAction)
 	ENDSELECT
 	HTML_PRINT "<era-close>"
-	HTML_PRINT @"<div class='era-dialog-footer'><span class='era-tone-red'>%sError%</span><button value='100' class='era-button era-button-primary'>Start game</button></div>"
+	HTML_PRINT @"<div class='era-dialog-footer'><span class='era-tone-red'>%sError%</span><button value='%(nInGame ? "999" # "100")%' class='era-button era-button-primary'>%(nInGame ? "Done" # "Start game")%</button></div>"
 	HTML_PRINT "<era-close>"
 	INPUT
 	nAction = RESULT
 	sError '= ""
+	IF nInGame
+		SELECTCASE nAction
+		CASE 999
+			RETURN 0
+		CASE 700 TO 706
+			nTab = nAction - 700
+		CASE 710 TO 713
+			SIF nTab == 0
+				nPlayerPage = nAction - 710
+		CASE 715
+			SIF nTab == 0
+				nPlayerPage = 4
+		CASE 5000, 5001
+			IF nTab == 0
+				CLEARLINE LINECOUNT - nStart
+				CALL HOTPATCH_CONFIG_HEADER("Player", 1)
+				CALL CUSTOM_NAME(MASTER, nAction - 5000)
+				HTML_PRINT "<era-close>"
+				HTML_PRINT "<era-close>"
+			ENDIF
+		CASE 1101 TO 1106, 1108 TO 1110, 1199, 1201 TO 1206, 5100 TO 5103, 6000 TO 6199, 7000 TO 7117, 8000 TO 8219, 100000 TO 119999, 130000 TO 130199
+			IF nTab == 0
+				SIF nAction == 1199
+					nDefaultClothes = 1
+				SIF INRANGE(nAction, 1101, 1110)
+					nDefaultClothes = 0
+				CALL HOTPATCH_SETUP_INPUT(nAction, 1)
+			ENDIF
+		CASE 160000 TO 3259999
+			SIF nTab == 0
+				CALL HOTPATCH_SETUP_INPUT(nAction, 1)
+		CASE 9500 TO 9809
+			IF nTab == 0 && HOTPATCH_SETUP_NUMBER_LIMIT(nAction - 9500, 0, 1) >= 0
+				PRINTFORML Enter a whole number ({HOTPATCH_SETUP_NUMBER_LIMIT(nAction - 9500, 0, 1)}-{HOTPATCH_SETUP_NUMBER_LIMIT(nAction - 9500, 1, 1)})
+				INPUT
+				IF INRANGE(RESULT, HOTPATCH_SETUP_NUMBER_LIMIT(nAction - 9500, 0, 1), HOTPATCH_SETUP_NUMBER_LIMIT(nAction - 9500, 1, 1))
+					CALL HOTPATCH_SETUP_INPUT(160000 + (nAction - 9500) * 10000 + RESULT, 1)
+				ELSE
+					sError '= "Number outside the allowed range."
+				ENDIF
+			ENDIF
+		CASE 1000 TO 1011, 10001 TO 19999
+			IF nTab == 3
+				sBonusSaved '= ニューゲーム特典
+				ニューゲーム特典 '= sBonusDraft
+				CALL HOTPATCH_SETUP_INPUT(nAction)
+				sBonusDraft '= ニューゲーム特典
+				ニューゲーム特典 '= sBonusSaved
+			ENDIF
+		CASE 802
+			IF nTab == 3 && sBonusDraft != sBonusApplied && sBonusDraft != HOTPATCH_SETUP_BONUS_VALUE(11)
+				ニューゲーム特典 '= sBonusDraft
+				CALL NEWGAME_BONUS_APPLY
+				sBonusApplied '= sBonusDraft
+			ENDIF
+		CASE 23
+			SIF nTab == 1
+				ANIMATERECOLOREDMAPS = ANIMATERECOLOREDMAPS ? 0 # 1000
+		CASE 4110, 4130 TO 4132, 4141 TO 4143
+			SIF nTab == 1
+				CALL HOTPATCH_SETUP_WORLD_INPUT(nAction, 0)
+		CASE 800
+			IF nTab == 4 && !nInTraining && !FLAG:気絶中断
+				CLEARLINE LINECOUNT - nStart
+				CALL HOTPATCH_FARM_SETTINGS
+			ENDIF
+		CASE 801
+			IF nTab == 1 && !nInTraining && !FLAG:気絶中断
+				CLEARLINE LINECOUNT - nStart
+				CALL HOTPATCH_CONFIG_HEADER("Change home", 1)
+				CALL HOTPATCH_MOVE_HOME
+				HTML_PRINT "<era-close>"
+				HTML_PRINT "<era-close>"
+			ENDIF
+		CASE 45001 TO 45021
+			IF nTab == 6
+				CLEARLINE LINECOUNT - nStart
+				CALL HOTPATCH_CONFIG_HEADER("Character Bodies", 1)
+				nChoice = 1
+				IF !GROUPMATCH(nAction, 45001, 45018, 45019, 45020)
+					PRINTL This changes characters' existing attributes and experience.
+					PRINTBUTTON "Apply", 1
+					PRINTBUTTON "Cancel", 0
+					INPUT
+					nChoice = RESULT
+				ENDIF
+				IF nChoice == 1
+					CALL HOTPATCH_SETUP_CHARACTER_BODY_ACTION(nAction - 45000)
+					nLastBodyAction = nAction - 45000
+				ENDIF
+				HTML_PRINT "<era-close>"
+				HTML_PRINT "<era-close>"
+			ENDIF
+		CASE 20004 TO 23999
+			IF nTab == 2
+				nIndex = (nAction - 20000) / 4
+				nChoice = (nAction - 20000) % 4
+				IF nIndex > 0 && nIndex < CHARANUM && nIndex != FLAG:なりきり && NO:nIndex == nIndex && CFLAG:nIndex:口上実装状況 > 1
+					CLEARLINE LINECOUNT - nStart
+					CALL HOTPATCH_DIALOGUE_SETTINGS_CHANGE(nIndex, nChoice)
+				ENDIF
+			ENDIF
+		CASE 31
+			IF nTab == 5
+				CLEARLINE LINECOUNT - nStart
+				CALL HOTPATCH_CONFIG_HEADER("Yandere Settings", 1)
+				CALL YANDERE_SET_MENU
+				HTML_PRINT "<era-close>"
+				HTML_PRINT "<era-close>"
+			ENDIF
+		CASE 9900 TO 9911
+			IF nTab == 5
+				PRINTFORML Enter a whole number (0-100)
+				INPUT
+				SIF INRANGE(RESULT, 0, 100)
+					CALL HOTPATCH_SETUP_INPUT(160000 + (nAction - 9500) * 10000 + RESULT)
+			ENDIF
+		CASE 4160000 TO 4270100
+			SIF nTab == 5 && INRANGE((nAction - 160000) / 10000, 400, 411)
+				CALL HOTPATCH_SETUP_INPUT(nAction)
+		CASE 4200 TO 4205, 4210, 4211, 4300 TO 4317, 4401, 4402, 4403, 4405, 4410, 4450
+			SIF nTab == 5
+				CALL HOTPATCH_SETUP_INPUT(nAction)
+		ENDSELECT
+		CONTINUE
+	ENDIF
 	SIF nAction == 1199
 		nDefaultClothes = 1
 	SIF GROUPMATCH(nAction, 1101, 1102, 1103, 1104, 1105, 1106, 1108, 1109, 1110)
