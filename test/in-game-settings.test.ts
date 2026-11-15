@@ -374,7 +374,19 @@ QUIT`, "<existing-setup-test>");
   markup(unchanged.input("713"));
   markup(unchanged.input("706"));
   markup(unchanged.input("703"));
-  markup(unchanged.input("701"));
+  const world = unchanged.input("701");
+  assert.match(markup(world), /Romance Mode[\s\S]*Pregnancy Restrictions/);
+  const worldOutput = world.output.flatMap(item => item.type === "html" ? [item.text] : []);
+  const worldStart = worldOutput.indexOf("<era-open class='era-setup-world'>");
+  assert.ok(worldStart >= 0);
+  assert.deepEqual(worldOutput.slice(worldStart + 1, worldStart + 3), [
+    "<era-open class='era-setup-card'>",
+    "<span class='era-launch-eyebrow'>Home</span>",
+  ], "the Home card opens with a standalone layout marker");
+  assert.match(worldOutput[worldStart + 3]!, /era-setup-name/);
+  assert.match(worldOutput[worldStart + 4]!, /Change home/);
+  assert.equal(worldOutput[worldStart + 5], "<era-close>");
+  assert.equal(worldOutput[worldStart + 6], "<era-open class='era-setup-card'>", "Romance Mode opens a separate card");
   markup(unchanged.input("702"));
   markup(unchanged.input("704"));
   markup(unchanged.input("705"));

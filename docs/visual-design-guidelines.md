@@ -157,6 +157,8 @@ changing saved game preferences.
   Keep card padding and grid gaps consistent within the same view.
   Game action groups, toggles, and adjacent inline command tiles share
   `--era-actions-gap` (6px); avoid screen-specific spacing overrides.
+  Native command tiles leave space between their label and number at all sizes;
+  compact tiles wrap long labels while keeping the full tile clickable.
   Use `.era-actions-collection` to arrange multiple `.era-actions-group`
   sections side by side with wrapping; screen-specific grid placement belongs
   to the containing screen, not the collection.

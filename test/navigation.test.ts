@@ -202,10 +202,11 @@ test("metadata creates one accessible decoration per number and nonempty suffix"
   }
 });
 
-test("hidden number-only action buttons cover their labeled tile without taking layout space", () => {
+test("number-only action buttons reserve space in compact tiles", () => {
   const css = styleSource("style");
-  assert.ok(css.includes(".era-command-tile .command-number-only { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; margin: 0; padding: 0; border-radius: inherit; }"));
-  assert.ok(css.includes(".era-command-tile:has(.command-number-only) { display: inline-flex; align-items: center; min-height: var(--compact-choice-min-height); box-sizing: border-box; }"));
+  assert.match(css, /\.era-command-tile:has\(\.command-number-only\) \{ display: inline-flex; align-items: baseline; gap: \.75ch;/);
+  assert.match(css, /\.era-command-tile \.command-number-only \{ flex: 0 0 auto; min-height: 0; margin: 0; padding: 0;/);
+  assert.match(css, /\.era-command-tile \.command-number-only::before, \.era-command-tile \.choice:not\(\.command-number-only\)::after \{ content: ""; position: absolute; inset: 0; \}/);
 });
 
 test("number-only controls use one tile focus outline in all layouts", () => {
@@ -273,10 +274,10 @@ test("main and game-output focus do not outline the whole content panel", () => 
   assert.match(css, /:is\(button, a\[href\], input, select, textarea\):not\(:disabled\):not\(\[aria-disabled="true"\]\):focus-visible \{\s*outline: 2px solid #8ddaff;/);
 });
 
-test("action tile controls remain vertically centered when their command numbers are hidden", () => {
+test("action tile controls align on the text baseline", () => {
   const css = styleSource("style");
-  assert.match(css, /\.era-command-tile \.choice \{ vertical-align: middle;/);
-  assert.match(css, /\.era-command-tile:has\(\.command-number-only\) \{ display: inline-flex; align-items: center;/);
+  assert.match(css, /\.era-command-tile \.choice \{ vertical-align: baseline;/);
+  assert.match(css, /\.era-command-tile:has\(\.command-number-only\) \{ display: inline-flex; align-items: baseline;/);
   const responsive = styleSource("responsive");
   assert.doesNotMatch(responsive, /era-guard-control/);
 });
@@ -307,7 +308,7 @@ test("compact main and wake-up screens retain their horizontal gutters", () => {
 
 test("render decorates command numbers after buttons have their surrounding labels", () => {
   const app = readFileSync(new URL("../web/app.js", import.meta.url), "utf8");
-  assert.match(app, /outputRoot\.querySelectorAll\("button\.choice"\)\.forEach\(decorateCommandNumbers\);\s*markTarget/);
+  assert.match(app, /outputRoot\.querySelectorAll\("button\.choice"\)\.forEach\(decorateCommandNumbers\);[\s\S]*?markTarget\(snapshot\.target\)/);
 });
 
 test("compact room uses content height instead of reserving hidden chat space", () => {
@@ -323,7 +324,7 @@ test("room occupant names are white with a dark outline and summary portraits fi
   assert.match(css, /\.era-room-stage \.era-occupant \.era-occupant-text \.era-occupant-name \{ color: #fff; \}/);
   assert.match(css, /\.era-occupant-text, \.era-occupant-label \{ text-shadow: -1px -1px 0 #000,/);
   const app = readFileSync(new URL("../web/app.js", import.meta.url), "utf8");
-  assert.match(app, /await image\(node,[\s\S]*?!!destination\.closest\("\.era-info-head \.era-info-face"\)\)/);
+  assert.match(app, /await image\(node,[\s\S]*?!!destination\.closest\("\.era-info-head \.era-info-face"\), maxHeight\)/);
 });
 
 test("command bar is visible outside controller mode and hidden in controller mode", () => {

@@ -85,6 +85,7 @@ HTML_PRINT "<era-open class='era-actions-group'>"
 PRINTFORMLC [9300] Move
 PRINTFORMLC [9301] Go Out
 PRINTFORMLC [9302] Lock The Door
+PRINTFORMLC [9307] A longer action label that wraps on a narrow screen
 PRINTL
 HTML_PRINT "<era-close>"
 HTML_PRINT "<div class='era-toggles era-auto-toggles'><button value='9303' class='era-toggle' role='checkbox' aria-checked='true'>Auto-TSP Move</button><button value='9304' class='era-toggle' role='checkbox' aria-checked='true'>Auto-Clean</button></div>"

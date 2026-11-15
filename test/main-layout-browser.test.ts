@@ -1381,10 +1381,13 @@ test("compact button sizes share tokens without changing desktop or sprite contr
         <div class="line"><span class="era-command-tile" id="inline-first">First</span><span class="era-command-tile" id="inline-next">Next</span></div>
         <div style="--era-actions-gap: 11px"><div class="line"><span class="era-command-tile">First</span><span class="era-command-tile" id="inline-custom">Next</span></div></div>
         <div class="era-actions-group"><div class="line">
-          <span class="print-cell era-command-tile" id="tile">Move<button class="choice command-number-only"><span class="command-number">400</span></button></span>
-          <span class="print-cell era-command-tile" id="number-guard">Guard<button class="choice command-number-only"><span class="command-number">1</span></button></span>
-          <span class="print-cell era-command-tile" id="multiline" style="width: 80px">A long action label that wraps across multiple lines<button class="choice command-number-only"><span class="command-number">2</span></button></span>
+          <span class="print-cell era-command-tile" id="tile"><span class="label">Move</span><button class="choice command-number-only"><span class="command-number">400</span></button></span>
+          <span class="print-cell era-command-tile" id="number-guard"><span class="label">Guard</span><button class="choice command-number-only"><span class="command-number">1</span></button></span>
+          <span class="print-cell era-command-tile" id="multiline" style="width: 80px">A long action label that wraps across multiple lines<button class="choice command-number-only"><span class="command-number">2000</span></button></span>
+          <span class="print-cell era-command-tile" id="long-word" style="width: 110px">ExtraordinarilyLongUnbrokenAction<button class="choice command-number-only"><span class="command-number">-1234</span></button></span>
           <button class="choice era-button era-button" id="guard">Relationship<span class="command-number">[352]</span></button>
+          <button class="choice era-button" id="comparison"><span class="choice-text">Move</span><span class="choice-gap"></span><span class="command-number">400</span></button>
+          <span class="output-text print-cell era-command-tile" id="colored" style="--output-color: #ff6666">Highlighted<button class="choice command-number-only"><span class="command-number">1</span></button></span>
           <button class="choice" id="choice">Choice</button>
           <button class="choice" id="sprite"><span class="sprite"></span></button>
         </div></div>
@@ -1402,7 +1405,34 @@ test("compact button sizes share tokens without changing desktop or sprite contr
         const initial = snapshot();
         const number = document.querySelector("#tile button");
         const numberStyle = getComputedStyle(number), tile = document.getElementById("tile").getBoundingClientRect(), button = number.getBoundingClientRect();
-        const overlay = { position: numberStyle.position, marginLeft: numberStyle.marginLeft, covers: ["top", "right", "bottom", "left"].every(edge => Math.abs(tile[edge] - button[edge]) <= 1.1), numberDisplay: getComputedStyle(number.firstElementChild).display };
+        const overlay = { position: numberStyle.position, marginLeft: numberStyle.marginLeft, pseudoPosition: getComputedStyle(number, "::before").position, numberDisplay: getComputedStyle(number.firstElementChild).display };
+        const comparison = getComputedStyle(document.getElementById("comparison"));
+        const tileStyle = getComputedStyle(document.getElementById("tile"));
+        const parity = Object.fromEntries(["paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "borderTopWidth", "borderTopColor",
+          "borderRadius", "backgroundImage", "color", "fontFamily", "fontSize", "fontWeight", "lineHeight"].map(key =>
+          [key, [tileStyle[key], comparison[key]]]));
+        const markers = [document.querySelector("#tile .label"), number.querySelector(".command-number")].map(parent => {
+          const marker = document.createElement("span");
+          marker.style.cssText = "display:inline-block;width:0;height:0;vertical-align:baseline";
+          parent.append(marker);
+          return marker;
+        });
+        const baselineDifference = Math.abs(markers[0].getBoundingClientRect().top - markers[1].getBoundingClientRect().top);
+        const colored = getComputedStyle(document.getElementById("colored")).color;
+        const layouts = Object.fromEntries(["tile", "number-guard", "multiline", "long-word"].map(id => {
+          const element = document.getElementById(id), label = element.querySelector(".label") ?? element.firstChild;
+          const bounds = element.getBoundingClientRect(), numberBounds = element.querySelector(".command-number").getBoundingClientRect();
+          const range = document.createRange();
+          range.selectNodeContents(label);
+          const lines = [...range.getClientRects()];
+          return [id, { gap: numberBounds.left - Math.max(...lines.map(rect => rect.right)), fits: numberBounds.left >= bounds.left - 1 && numberBounds.right <= bounds.right + 1
+            && lines.every(rect => rect.left >= bounds.left - 1 && rect.right <= bounds.right + 1 && rect.right <= numberBounds.left + 1),
+            lines: lines.length }];
+        }));
+        let hits = 0;
+        number.addEventListener("click", () => hits++);
+        const hit = document.elementFromPoint(tile.left + 3, tile.top + 3);
+        hit?.click();
         document.documentElement.style.setProperty("--compact-choice-min-height", "48px");
         document.documentElement.style.setProperty("--compact-relationship-button-height", "64px");
         const updated = snapshot();
@@ -1410,27 +1440,30 @@ test("compact button sizes share tokens without changing desktop or sprite contr
         number.dataset.controllerHint = "A";
         number.focus();
         const focus = { control: getComputedStyle(number).outlineStyle,
-          tile: getComputedStyle(document.getElementById("tile")).outlineStyle };
+          tile: getComputedStyle(document.getElementById("tile")).outlineStyle,
+          hint: getComputedStyle(number, "::after").content,
+          numberDisplay: getComputedStyle(number.firstElementChild).display };
+        document.elementFromPoint(tile.left + 3, tile.top + 3)?.click();
         const spacing = Object.fromEntries(["inline-first", "inline-next", "inline-custom", "number-guard"].map(id =>
           [id, getComputedStyle(document.getElementById(id)).marginLeft]));
         const group = document.querySelector(".era-actions-group");
         spacing["group-gap"] = getComputedStyle(group).gap;
         group.style.setProperty("--era-actions-gap", "11px");
         spacing["custom-group-gap"] = getComputedStyle(group).gap;
-        document.body.textContent = JSON.stringify({ initial, updated, overlay, focus, spacing });
+        document.body.textContent = JSON.stringify({ initial, updated, overlay, focus, spacing, layouts, hits, parity, baselineDifference, colored });
       </script>`;
   type Item = { minHeight: string; height: number; display: string; position: string };
-  type Result = { initial: Record<string, Item>; updated: Record<string, Item>; overlay: { position: string; marginLeft: string; covers: boolean; numberDisplay: string }; focus: { control: string; tile: string }; spacing: Record<string, string> };
+  type Result = { initial: Record<string, Item>; updated: Record<string, Item>; overlay: { position: string; marginLeft: string; pseudoPosition: string; numberDisplay: string }; focus: { control: string; tile: string; hint: string; numberDisplay: string }; spacing: Record<string, string>; layouts: Record<string, { fits: boolean; lines: number; gap: number }>; hits: number; parity: Record<string, [string, string]>; baselineDifference: number; colored: string };
   const profile = await mkdtemp(join(process.cwd(), ".era-buttons-"));
   try {
-    for (const [mode, size] of [["desktop", "1440,1000"], ["compact", "1200,700"]] as const) {
+    for (const [mode, size] of [["desktop", "1440,1000"], ["compact", "1200,700"], ["phone", "500,900"]] as const) {
       const args = ["--headless", "--disable-gpu", "--no-first-run", `--user-data-dir=${profile}`, `--window-size=${size}`, "--dump-dom"];
       if (process.platform === "linux" && process.getuid?.() === 0) args.push("--no-sandbox");
       args.push(`data:text/html;base64,${Buffer.from(html.replace("MODE", mode)).toString("base64")}`);
       const { stdout } = await execute(browser!, args, { maxBuffer: 8 * 1024 * 1024, timeout: 30000 });
       const match = stdout.match(/<body[^>]*>([\s\S]*?)<\/body>/);
       assert.ok(match, `${mode}: browser returned button measurements`);
-      const { initial, updated, overlay, focus, spacing } = JSON.parse(match[1]) as Result;
+      const { initial, updated, overlay, focus, spacing, layouts, hits, parity, baselineDifference, colored } = JSON.parse(match[1]) as Result;
       assert.deepEqual(spacing, { "inline-first": "0px", "inline-next": "6px", "inline-custom": "11px", "number-guard": "0px",
         "group-gap": "6px", "custom-group-gap": "11px" },
         `${mode}: inline tiles share the spacing token without doubling action-group gaps`);
@@ -1442,17 +1475,32 @@ test("compact button sizes share tokens without changing desktop or sprite contr
         assert.equal(updated[id].minHeight, compact ? "48px" : "auto", `${mode}: ${id} updated minimum`);
         if (compact) assert.equal(updated[id].height, 48, `${mode}: ${id} follows the shared size`);
       }
-      assert.equal(overlay.position, compact ? "absolute" : "static", `${mode}: number button position`);
-      assert.equal(overlay.marginLeft, "0px", `${mode}: command button has no internal left offset`);
+      assert.equal(overlay.position, "static", `${mode}: number remains in the tile layout`);
+      assert.equal(parseFloat(overlay.marginLeft) > 0, !compact, `${mode}: desktop uses a margin, compact uses a flex gap`);
       assert.equal(overlay.numberDisplay, "inline", `${mode}: viewport alone does not hide command numbers`);
-      if (compact) assert.ok(overlay.covers, `${mode}: number button covers its tile`);
+      assert.equal(overlay.pseudoPosition, "absolute", `${mode}: the button hit area covers its tile`);
+      assert.equal(hits, 2, `${mode}: clicking the tile activates its number button with and without a controller hint`);
+      assert.equal(focus.hint, '"A"', `${mode}: controller hint remains visible`);
+      assert.equal(focus.numberDisplay, "none", `${mode}: controller hint hides the command number`);
+      for (const [property, values] of Object.entries(parity))
+        assert.equal(values[0], values[1], `${mode}: tile and shared button match ${property}`);
+      assert.ok(baselineDifference < 1, `${mode}: label and number share a text baseline`);
+      assert.equal(colored, "rgb(255, 102, 102)", `${mode}: native highlighted labels keep their color`);
+      for (const id of ["tile", "number-guard"])
+        assert.ok(layouts[id].gap > 2, `${mode}: ${id} has a visible label-to-number gap`);
+      if (compact) {
+        for (const [id, layout] of Object.entries(layouts))
+          assert.ok(layout.fits, `${mode}: ${id} label and number fit without overlap: ${JSON.stringify(layout)}`);
+        assert.ok(layouts.multiline.lines > 1, "long labels wrap in narrow tiles");
+        assert.ok(layouts["long-word"].lines > 1, "unbroken labels wrap in narrow tiles");
+      }
       assert.ok(updated.multiline.height > 48, `${mode}: long labels can grow beyond the minimum height`);
       assert.equal(updated.guard.minHeight, initial.guard.minHeight);
       assert.equal(updated.choice.minHeight, initial.choice.minHeight);
       assert.equal(updated.sprite.minHeight, initial.sprite.minHeight);
-      assert.equal(initial.save.minHeight, compact ? "36px" : "28px");
-      assert.equal(updated.save.minHeight, compact ? "48px" : "28px");
-      if (compact) {
+      assert.equal(initial.save.minHeight, mode === "compact" ? "36px" : "28px");
+      assert.equal(updated.save.minHeight, mode === "compact" ? "48px" : "28px");
+      if (mode === "compact") {
         assert.equal(initial.relationship.height, 56);
         assert.equal(updated.relationship.height, 64);
       }

@@ -110,6 +110,8 @@ test("custom commands use shared action buttons and retain availability and high
     { text: "#DIM C_HEARTPINK = 16751052", file: "<button-header>", line: 3 },
   );
   indexScript(game, attributes.slice(attributes.indexOf("@HOTPATCH_ATTRIBUTE(")), "<attribute-helper>");
+  indexScript(game, source.slice(source.indexOf("@HOTPATCH_ACTION_ACTIVE("),
+    source.indexOf("@HOTPATCH_ACTION_RELEASE_LABEL(")), "<active-action-helper>");
   indexScript(game, source.slice(source.indexOf("@Add_Custom_List_COMS\n")), "<custom-button-helpers>");
   indexScript(game, `@SYSTEM_TITLE
 ADD_CUSTOM_MAX_COM = 2

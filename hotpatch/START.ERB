@@ -221,7 +221,8 @@ DO
 	CASE 1
 		HTML_PRINT "<era-open class='era-setup-world'>"
 		IF nInGame
-			HTML_PRINT "<era-open class='era-setup-card'><span class='era-launch-eyebrow'>Home</span>"
+			HTML_PRINT "<era-open class='era-setup-card'>"
+			HTML_PRINT "<span class='era-launch-eyebrow'>Home</span>"
 			HTML_PRINT @"<div class='era-setup-indent'><div class='era-setup-name'>%HTML_ESCAPE(GET_MAPNAME(MAIN_MAP))%</div></div>"
 			HTML_PRINT HOTPATCH_BUTTON("Change home", 801, "", "list", "", "", (nInTraining ? "Unavailable during training." # (FLAG:気絶中断 ? "Unavailable while fainted." # "")), !nInTraining && !FLAG:気絶中断)
 			HTML_PRINT "<era-close>"
