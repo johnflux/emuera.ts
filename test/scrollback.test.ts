@@ -76,6 +76,51 @@ function element(className: string, text = "", tag = "div") {
   return node;
 }
 
+test("game dialogs open at the top, follow output unless scrolled up, and choices force existing dialogs to the bottom", async () => {
+  const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
+  const helpers = source.slice(source.indexOf("function dialogScrollKey("), source.indexOf("function dialogClose("));
+  const followBottom = source.slice(source.indexOf("  const followBottom = toBottom ||"), source.indexOf("  // Moving an open popover"));
+  const scrollMain = source.slice(source.indexOf("    if (followBottom) terminal.scrollTop = terminal.scrollHeight;"),
+    source.indexOf("    terminal.scrollLeft = fresh"));
+  for (const classes of ["era-config", "era-sheet", "era-sky-dialog", "era-inventory"]) {
+    for (const [initialScroll, toBottom, newDialog, expected] of [
+      [800, false, false, 1200], [160, false, false, 160], [160, true, false, 1200],
+      [160, true, true, 0], [800, false, true, 0],
+    ] as const) {
+      const body = {
+        className: `${classes}-body`, scrollTop: initialScroll, scrollHeight: 1000, clientHeight: 200,
+        closest: () => dialog,
+      };
+      const dialog = {
+        className: `era-dialog ${classes}`,
+        querySelector: () => ({ textContent: "Menu" }),
+        querySelectorAll: (selector: string) => selector === "*" ? [body] : [],
+        closest: () => dialog,
+      };
+      const terminal = {
+        scrollTop: initialScroll, scrollHeight: 1000, clientHeight: 200,
+        querySelectorAll: () => [dialog],
+      };
+      const commit = runInNewContext(`
+        ${helpers}
+        const state = newDialog ? [] : captureDialogScroll(terminal);
+        const scrollTop = terminal.scrollTop;
+        ${followBottom}
+        () => { restoreDialogScroll(terminal, state, toBottom); ${scrollMain} }
+      `, {
+        terminal, newDialog, toBottom,
+        getComputedStyle: (element: unknown) => ({ overflowY: element === body ? "auto" : "hidden" }),
+      }) as () => void;
+      body.scrollHeight = terminal.scrollHeight = 1200;
+      body.scrollTop = terminal.scrollTop = 0;
+      commit();
+      assert.equal(body.scrollTop, expected, `${classes}: initial=${initialScroll}, choice=${toBottom}, new=${newDialog}`);
+      assert.equal(terminal.scrollTop, toBottom || initialScroll === 800 ? 1200 : 160,
+        `main: initial=${initialScroll}, choice=${toBottom}`);
+    }
+  }
+});
+
 async function fixture() {
   const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
   const root = element("");

@@ -1016,6 +1016,34 @@ function syncDialogs() {
     else dialog.hidePopover();
   }
 }
+function dialogScrollKey(dialog) {
+  return JSON.stringify([dialog.className, dialog.querySelector(".era-inventory-title")?.textContent,
+    [...dialog.querySelectorAll(".era-current[data-value]")].map(tab => tab.dataset.value)]);
+}
+function dialogScrollContainers(dialog) {
+  return [dialog, ...dialog.querySelectorAll("*")].filter(element =>
+    element.closest(".era-dialog") === dialog && /^(auto|scroll)$/.test(getComputedStyle(element).overflowY));
+}
+function captureDialogScroll(root) {
+  return [...root.querySelectorAll(".screen.is-active .era-dialog:popover-open")].map(dialog => ({
+    key: dialogScrollKey(dialog),
+    containers: dialogScrollContainers(dialog).map(element => ({
+      classes: element.className, top: element.scrollTop,
+      following: element.scrollHeight - element.clientHeight - element.scrollTop < 2,
+    })),
+  }));
+}
+function restoreDialogScroll(root, state, toBottom = false) {
+  for (const dialog of root.querySelectorAll(".screen.is-active .era-dialog:popover-open")) {
+    const previous = state.find(entry => entry.key === dialogScrollKey(dialog));
+    const remaining = [...(previous?.containers ?? [])];
+    for (const element of dialogScrollContainers(dialog)) {
+      const index = remaining.findIndex(entry => entry.classes === element.className);
+      const saved = index < 0 ? null : remaining.splice(index, 1)[0];
+      element.scrollTop = !saved ? 0 : toBottom || saved.following ? element.scrollHeight : saved.top;
+    }
+  }
+}
 function dialogClose(dialog) {
   return dialog.querySelector(".era-dialog-close:enabled");
 }
@@ -2199,25 +2227,9 @@ async function renderSteps(steps, fresh = false, keepFocus = false, toBottom = f
   }
   if (fresh) disposeCharacterChats(terminal);
   const clickingThrough = input?.kind === "wait";
-  const setup = terminal.querySelector(".screen.is-active .era-setup:not(.era-setup-editor)");
-  const setupTab = setup?.querySelector(".era-start-tabs .era-current")?.dataset.value;
-  const playerTab = setup?.querySelector(".era-player-tabs .era-current")?.dataset.value;
-  const setupScroll = setup?.querySelector(".era-setup-body")?.scrollTop;
-  const bodyOptionsScroll = setup?.querySelector(".era-setup-body-options")?.scrollTop;
-  const restoreSetupScroll = () => {
-    if (fresh || setupTab === undefined || setupScroll === undefined) return;
-    const next = terminal.querySelector(".screen.is-active .era-setup:not(.era-setup-editor)");
-    if (next?.querySelector(".era-start-tabs .era-current")?.dataset.value === setupTab
-      && next?.querySelector(".era-player-tabs .era-current")?.dataset.value === playerTab) {
-      next.querySelector(".era-setup-body").scrollTop = setupScroll;
-      const bodyOptions = next.querySelector(".era-setup-body-options");
-      if (bodyOptions && bodyOptionsScroll !== undefined) bodyOptions.scrollTop = bodyOptionsScroll;
-    }
-  };
+  const dialogScroll = fresh ? [] : captureDialogScroll(terminal);
   const scrollTop = terminal.scrollTop;
   const scrollLeft = terminal.scrollLeft;
-  const skyNarration = terminal.querySelector(".screen.is-active .era-sky-dialog:popover-open .era-sky-narration");
-  const followSky = !skyNarration || skyNarration.scrollHeight - skyNarration.clientHeight - skyNarration.scrollTop < 2;
   const followBottom = toBottom || terminal.scrollHeight - terminal.clientHeight - scrollTop < 2;
   // Moving an open popover into the staging tree closes it; keep the sky dialog
   // in place across its narration and final command-result wait.
@@ -2238,7 +2250,7 @@ async function renderSteps(steps, fresh = false, keepFocus = false, toBottom = f
     staged.append(...terminal.childNodes);
     terminal.replaceChildren(...visible.childNodes);
     syncDialogs();
-    restoreSetupScroll();
+    restoreDialogScroll(terminal, dialogScroll);
   }
   outputRoot = staged;
   pendingImages = [];
@@ -2268,13 +2280,11 @@ async function renderSteps(steps, fresh = false, keepFocus = false, toBottom = f
     syncMainSidebarSizing();
     pendingImages = [];
     syncDialogs();
-    const updatedSky = terminal.querySelector(".screen.is-active .era-sky-dialog:popover-open .era-sky-narration");
-    if (updatedSky && followSky) updatedSky.scrollTop = updatedSky.scrollHeight;
     profileEnd("render.commit", phaseStarted);
     phaseStarted = profileStart();
     layoutHtmlPositions();
     layoutMapPictures();
-    restoreSetupScroll();
+    restoreDialogScroll(terminal, dialogScroll, toBottom);
     revealSelectedOccupants();
     organizeMovePlaces();
     fitMoveMaps();

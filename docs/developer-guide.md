@@ -1049,7 +1049,8 @@ Browser snapshots are buffered: the previous completed display remains visible
 while clears, HTML and image decoding are prepared off-screen, then the finished
 update is committed together. Existing output nodes and their event listeners
 are retained during staging; unchanged images are not reconstructed. Scroll
-position is preserved unless already following the bottom or starting a new run.
+position is preserved unless already following the bottom, submitting a choice,
+or starting a new run.
 Japanese text the game prints is translated in place by the browser's on-device
 Translator API (Chrome/Edge 138 or later; `web/translate.js`). Nothing is sent
 off the machine. It is on by default unless the browser's language is Japanese,
@@ -1190,6 +1191,11 @@ history screen of its own, greyed like any older screen.
 Config editors keep their dialog open across inputs, so answered output inside
 the editor is instead dimmed and made inert in place. If `CLEARLINE` removes
 the newer output back to an earlier prompt, that prompt becomes active again.
+Game dialogs open at the top. Subsequent updates follow new output when already
+at the bottom, but preserve scroll positions while reading older output.
+Submitting a choice scrolls existing dialogs and main output to the bottom;
+newly opened dialogs or pages still start at the top. This applies to all game
+dialog scroll containers, not just Config.
 Game HTML `title` descriptions (including trait `<nonbutton>` tags) appear in
 immediate, multiline tooltips on hover or keyboard focus. Descriptions are plain
 text, not executable HTML; as in Emuera.EM/EE, a literal lowercase `<br>` in

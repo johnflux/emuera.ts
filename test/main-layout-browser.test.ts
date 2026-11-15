@@ -788,6 +788,23 @@ test("Config editors preserve printed choice rows and require explicit full-widt
   indexScript(game, attributes.slice(attributes.indexOf("@HOTPATCH_ATTRIBUTE(")), "<attributes>");
   indexScript(game, source.slice(source.indexOf("@HOTPATCH_BUTTON(")), "<buttons>");
   indexScript(game, `@SYSTEM_TITLE
+#DIM CONFIG_LINE
+CONFIG_LINE = LINECOUNT
+$CONFIG
+CLEARLINE LINECOUNT - CONFIG_LINE
+HTML_PRINT "<era-open class='era-dialog era-setup era-config'>"
+HTML_PRINT "<div class='era-inventory-header'><span class='era-inventory-title'>Config</span></div>"
+HTML_PRINT "<era-open class='era-inventory-body era-setup-body'>"
+FOR LOCAL, 0, 40
+  HTML_PRINT HOTPATCH_BUTTON(@"Setting {LOCAL}", LOCAL, "", "list")
+NEXT
+HTML_PRINT HOTPATCH_BUTTON("Cheat menu", 1467, "", "list")
+HTML_PRINT "<era-close>"
+HTML_PRINT "<era-close>"
+BINPUT
+SIF RESULT != 1467
+  GOTO CONFIG
+CLEARLINE LINECOUNT - CONFIG_LINE
 HTML_PRINT "<era-open class='era-dialog era-setup era-config era-setup-editor'>"
 HTML_PRINT "<era-open class='era-inventory-body era-setup-body'>"
 CALL PICK_CHARACTER
@@ -799,6 +816,9 @@ INPUT
 FIRST_LINE = LINECOUNT
 $REPRINT
 CLEARLINE LINECOUNT - FIRST_LINE
+FOR LOCAL:3, 0, 100
+  PRINTFORML Editor row {LOCAL:3}
+NEXT
 FOR LOCAL, 0, 8
   PRINTFORM [{LOCAL,3}] Character {LOCAL}
   SIF (LOCAL + 1) % 4 == 0
@@ -845,13 +865,31 @@ ENDIF`, "<config-editor-fixture>");
       (async () => {
         const doc = await until(() => {
           const doc = frame.contentDocument;
-          return doc?.querySelector(".era-config button[data-value='0']:enabled")
+          return doc?.querySelector(".era-config:not(.era-setup-editor) button[data-value='0']:enabled")
             && !doc.body.classList.contains("is-busy") && doc;
         });
         await doc.fonts.ready;
+        const initialDialogAtTop = doc.querySelector(".era-config .era-setup-body").scrollTop === 0;
         const button = value => doc.querySelector(".era-config button[data-value='" + value + "']");
         const rect = value => button(value).getBoundingClientRect();
+        const menuBody = doc.querySelector(".era-config .era-setup-body");
+        menuBody.scrollTop = 160;
+        const menuScroll = menuBody.scrollTop;
+        const original = button(0);
+        original.click();
+        await until(() => !doc.body.classList.contains("is-busy") && button(0) !== original && button(0)?.matches(":enabled"));
+        const configAtBottom = () => {
+          const body = doc.querySelector(".era-config .era-setup-body");
+          return body.scrollHeight - body.clientHeight - body.scrollTop < 2;
+        };
+        const menuChoiceScrollsToBottom = menuScroll > 0 && configAtBottom();
+        button(1467).click();
+        await until(() => !doc.body.classList.contains("is-busy")
+          && doc.querySelector(".era-config.era-setup-editor button[data-value='0']:enabled"));
         const result = {
+          menuChoiceScrollsToBottom,
+          initialDialogAtTop,
+          submenuStartsAtTop: doc.querySelector(".era-config .era-setup-body").scrollTop === 0,
           paddedNumber: button(0).querySelector(".command-number").textContent === "[  0]"
             && frame.contentWindow.getComputedStyle(button(0).querySelector(".command-number")).whiteSpace === "pre",
           nativeTextAlign: frame.contentWindow.getComputedStyle(button(10)).textAlign,
@@ -871,11 +909,15 @@ ENDIF`, "<config-editor-fixture>");
         coloredOutput.style.setProperty("--output-color", "#ffff00");
         result.coloredNumberOpacity = frame.contentWindow.getComputedStyle(button(0).querySelector(".command-number")).opacity;
         coloredOutput.style.removeProperty("--output-color");
+        const editorBody = doc.querySelector(".era-config .era-setup-body");
+        editorBody.scrollTop = 160;
+        const editorScroll = editorBody.scrollTop;
         button(2).click();
         await until(() => !doc.body.classList.contains("is-busy") && doc.querySelector("#terminal").textContent.includes("Chosen 2"));
         result.clicked = true;
         const back = await until(() => doc.querySelector(".screen.is-active button[data-value='99']:enabled"));
         result.editorInDialog = !!back.closest(".era-config");
+        result.editorChoiceScrollsToBottom = editorScroll > 0 && configAtBottom();
         const answered = button(0);
         result.answeredDisabled = answered.disabled && answered.closest(".line").inert
           && frame.contentWindow.getComputedStyle(answered.closest(".line")).opacity === "0.4";
@@ -906,6 +948,7 @@ ENDIF`, "<config-editor-fixture>");
           && doc.querySelector(".screen.is-active button[data-value='0']:enabled"));
         const returned = doc.querySelector(".screen.is-active button[data-value='0']");
         result.returnedInDialog = !!returned.closest(".era-config:popover-open");
+        result.returnedScrollsToBottom = configAtBottom();
         result.preservesSpaces = frame.contentWindow.getComputedStyle(returned.closest(".line")).whiteSpace === "pre-wrap";
         result.returnedRows = [1, 2, 3].every(value => {
           const next = doc.querySelector(".screen.is-active button[data-value='" + value + "']");
@@ -933,6 +976,8 @@ ENDIF`, "<config-editor-fixture>");
       editorInDialog: true, returnedInDialog: true, preservesSpaces: true, returnedRows: true,
       answeredDisabled: true, currentEnabled: true,
       clearedPromptRevived: true, revivedPromptRetiredAgain: true,
+      menuChoiceScrollsToBottom: true, initialDialogAtTop: true, submenuStartsAtTop: true,
+      editorChoiceScrollsToBottom: true, returnedScrollsToBottom: true,
       portraitAboveText: true, blankLinesVisible: true, requestedImageSize: true,
     });
   } finally {
