@@ -33,6 +33,71 @@ Going past the newest entry restores your unfinished input. History lasts until
 the page is reloaded. Recalled commands show their button label as a non-editable
 hint (for example, `400 [Move]`); editing the input hides the hint.
 
+## Agent QA (MCP)
+
+The game includes a **live MCP endpoint** at `http://127.0.0.1:PORT/mcp`,
+using its existing server port. Open **Menu > Agent access** to find the URL.
+An agent connection prompts for approval in the game; approval grants screen
+inspection, controls, variable changes, and `#FUNCTION(S)` calls in that run.
+Use **Disconnect** to revoke access. Live changes affect your real game and
+can be included in normal saves. There is no source-file editor.
+
+For Claude Code, while the game is running:
+
+```sh
+claude mcp add --transport http era-live http://127.0.0.1:3003/mcp
+```
+
+Replace `3003` with the displayed port (the desktop app uses a dynamic port).
+VS Code and other local HTTP MCP clients can use the same URL. For local
+stdio-only integrations, including Claude Desktop's local MCP configuration,
+launch `node /absolute/path/to/era/dist/mcp.js --connect URL` instead. Claude's
+cloud-based remote connectors cannot reach a localhost game.
+
+**Isolated mode** remains a standard stdio MCP server for Claude Code, Claude Desktop,
+VS Code/Copilot, and other MCP clients. Install dependencies and run
+`npm run build`, then configure your client to launch
+`node /absolute/path/to/era/dist/mcp.js`. No VS Code dependency or separate
+application server is required; games default to this installation's `GAMES/`
+regardless of the client's working directory.
+
+For Claude Code:
+
+```sh
+claude mcp add --transport stdio era-qa -- node /absolute/path/to/era/dist/mcp.js
+```
+
+For Claude Desktop and clients using `mcpServers`:
+
+```json
+{
+  "mcpServers": {
+    "era-qa": {
+      "command": "node",
+      "args": ["/absolute/path/to/era/dist/mcp.js"]
+    }
+  }
+}
+```
+
+Use your Node executable's absolute path if a desktop client cannot find
+`node`. VS Code's optional workspace configuration is in `.vscode/mcp.json`.
+
+It supports graphical and headless runs, playable buttons, real clicks and
+keyboard input, variable inspection/changes, ERB expressions and `#FUNCTION(S)`
+calls, native-save fixtures, screenshots, and local QA reports. QA runs use
+separate in-memory saves. Set `ERA_QA_BROWSER` to a Chrome/Chromium executable,
+or run `npx playwright install chromium` if no supported browser is installed.
+
+In either mode, `qa_context` identifies the running game and its source paths.
+Agents can use their own coding tools to edit scripts: game logic belongs in
+upstream ERB files, and browser GUI changes in hotpatches. Scripts are cached;
+restart the game server (or isolated MCP process) to load source changes.
+Hot reload is not implemented.
+
+See [QA details](docs/developer-guide.md#agent-qa-mcp)
+for tool schemas, limits, and setup.
+
 ## Midday saves (TW)
 
 In TW, use **Quicksave** below **Config** at the main command screen. **Quickload**

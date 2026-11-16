@@ -6,7 +6,7 @@ import { test } from "node:test";
 import vm from "node:vm";
 import { createCanvas, Image } from "@napi-rs/canvas";
 import { compactPicture, decodePicture, pictureColor, PixelCache, rasterize } from "../src/graphics.js";
-import { emptyGame, indexScript, type Game } from "../src/loader.js";
+import { emptyGame, GAME_ROOT, gameDirectory, indexScript, type Game } from "../src/loader.js";
 import { EraError } from "../src/model.js";
 import { Runtime, type Picture, type RuntimeOptions } from "../src/runtime.js";
 import { FileSaveStore, MemorySaveStore } from "../src/storage.js";
@@ -193,7 +193,7 @@ test("matrix readback reuses the rasterized base while pixel batches grow and in
   assert.equal(reads, 2);
 });
 
-const twOutline = new URL("../GAMES/anon-tw-anon-tw_eng-modding/ERB/ステータス表示関連/縁取り.ERB", import.meta.url);
+const twOutline = path.join(gameDirectory(GAME_ROOT, "ERB"), "ステータス表示関連", "縁取り.ERB");
 for (const jit of [false, true]) test(`AnonTW's original image-border routine stays within the serialized output limit (JIT ${jit})`, { skip: !existsSync(twOutline) }, () => {
   const game = emptyGame();
   indexScript(game, readFileSync(twOutline, "utf8"), "tw-outline.erb");

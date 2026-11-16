@@ -50,13 +50,15 @@ async function inputHarness() {
   const submitStart = source.indexOf("async function submit(");
   const submitEnd = source.indexOf('  const chat = terminal.querySelector', submitStart);
   assert.ok(start >= 0 && end > start && submitStart >= 0 && submitEnd > submitStart);
+  const sendAppearance = source.slice(source.indexOf("function updateSendAppearance("), source.indexOf("function updateControls("));
   const submit = runInNewContext([
-    source.slice(submitStart, submitEnd), "sent.push(value);\n}",
+    sendAppearance, source.slice(submitStart, submitEnd), "sent.push(value);\n}",
     source.slice(start, end), "\nsubmit;",
   ].join("\n"), {
     touchInput: () => state.touch,
     componentSample: null,
     command,
+    send: { dataset: {} as Record<string, string> },
     sent,
     terminal: { querySelectorAll: () => choices },
     get busy() { return state.busy; },

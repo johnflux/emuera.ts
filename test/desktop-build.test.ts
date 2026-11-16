@@ -129,6 +129,46 @@ test("preload exposes Steam launch context without display mode preferences", ()
   }
 });
 
+test("desktop MCP capture is restricted to the game window and preload exposes only a capture action", async () => {
+  const contents = {
+    capturePage: async () => ({ toPNG: () => Buffer.from("test PNG") }),
+  };
+  type Event = { sender: object; senderFrame: { url: string } };
+  const handlers = new Map<string, (event: Event) => Promise<string>>();
+  const desktopRequire = createRequire(path.join(appDir, "electron", "main.cjs"));
+  runInNewContext(readFileSync(path.join(appDir, "electron", "main.cjs"), "utf8") + `
+    server = { address: () => ({ port: 3003 }) };
+    window = { webContents: contents };
+  `, {
+    require: (id: string) => id === "electron" ? {
+      app: { whenReady: () => new Promise(() => {}), on: () => {} },
+      ipcMain: { handle: (name: string, handler: (event: Event) => Promise<string>) => handlers.set(name, handler) },
+    } : desktopRequire(id),
+    contents, console: { error: () => {} }, __dirname: path.join(appDir, "electron"),
+  });
+  const capture = handlers.get("era:capture-game");
+  assert.ok(capture);
+  assert.equal(await capture({ sender: contents, senderFrame: { url: "http://127.0.0.1:3003/" } }), Buffer.from("test PNG").toString("base64"));
+  await assert.rejects(capture({ sender: {}, senderFrame: { url: "http://127.0.0.1:3003/" } }), /only available from the game window/);
+  await assert.rejects(capture({ sender: contents, senderFrame: { url: "https://example.com/" } }), /only available from the game window/);
+  let called = false;
+  runInNewContext(readFileSync(path.join(appDir, "electron", "preload.cjs"), "utf8"), {
+    process: { argv: [] },
+    require: () => ({
+      contextBridge: { exposeInMainWorld: (_name: string, bridge: { captureGame(): Promise<string> }) => {
+        assert.ok(bridge.captureGame);
+        void bridge.captureGame();
+      } },
+      ipcRenderer: { invoke: (channel: string, ...args: unknown[]) => {
+        assert.equal(channel, "era:capture-game");
+        assert.deepEqual(args, []);
+        called = true;
+      } },
+    }),
+  });
+  assert.equal(called, true);
+});
+
 test("Linux distribution uses a native x64 archive with a stable executable name", () => {
   const { scripts, build } = require("../package.json");
   assert.equal(scripts["dist:linux"], "npm run build && electron-builder --linux tar.gz --x64");

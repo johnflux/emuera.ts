@@ -23,6 +23,11 @@ ipcMain.handle("era:quit", (event) => {
   app.quit();
 });
 
+ipcMain.handle("era:capture-game", async (event) => {
+  requireGameWindow(event, "Game capture");
+  return (await window.webContents.capturePage()).toPNG().toString("base64");
+});
+
 ipcMain.handle("era:write-clipboard", (event, text) => {
   requireGameWindow(event, "Clipboard access");
   if (typeof text !== "string" || text.length > 1_000_000) {

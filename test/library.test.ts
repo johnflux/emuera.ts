@@ -7,7 +7,7 @@ import { test } from "node:test";
 import { runInNewContext } from "node:vm";
 import { downloadedCatalogGames, GAME_CATALOG, installGame, installStarterGame, type PrepareGame } from "../src/library.js";
 import { createApp, startServer } from "../src/server.js";
-import { discoverGames, HOTPATCH_ROOT, loadGame } from "../src/loader.js";
+import { discoverGames, HOTPATCH_ROOT, KNOWN_GAMES, loadGame } from "../src/loader.js";
 
 test("first launch installs TW adjacent once, keeps AppData installations, and retries failures safely", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "era-starter-"));
@@ -260,6 +260,35 @@ test("recognized games retain their ids when extracted directly or into an archi
       { ...known[0], root: path.join(root, "eraTohoK") },
       { ...known[1], root: path.join(root, "eraRanceK/archive-main") },
     ]);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test("eraTW is recognized by its Git origin or GAMEBASE in any folder, but not in eraNAS", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "era-library-identity-"));
+  const game = async (dir: string, gamebase?: string, remote?: string) => {
+    await mkdir(path.join(root, dir, "ERB"), { recursive: true });
+    await mkdir(path.join(root, dir, "CSV"));
+    if (gamebase) await writeFile(path.join(root, dir, "CSV", "GAMEBASE.CSV"), gamebase);
+    if (remote) {
+      await mkdir(path.join(root, dir, ".git"));
+      await writeFile(path.join(root, dir, ".git", "config"), `[core]\n\tbare = false\n[remote "origin"]\n\turl = ${remote}\n`);
+    }
+  };
+  const twBase = "\uFEFFコード,7153\nバージョン,proto\nタイトル,eraThe World AnonTW ; comment\n";
+  const tw = KNOWN_GAMES.find((known) => known.id === "tw")!;
+  const known = [{ ...tw, root: path.join(root, "anon-tw-anon-tw_eng-modding") }];
+  const summary = () => discoverGames(root, known).map((found) => [found.id, path.relative(root, found.root), found.hotpatch === HOTPATCH_ROOT]);
+  try {
+    await game("anon-tw", twBase);
+    await game("pops-tw", twBase);
+    await game("nas", twBase, "https://gitgud.io/mrpopsalot/pops-tw.git");
+    await game("tw-clone", undefined, "git@ssh.gitgud.io:Legis1998/anon-tw.git");
+    assert.deepEqual(summary(), [
+      ["tw", "anon-tw", true], ["nas", "nas", false], ["pops-tw", "pops-tw", false], ["tw-clone", "tw-clone", true],
+    ]);
+    await game("anon-tw-anon-tw_eng-modding", twBase);
+    assert.deepEqual(summary()[0], ["tw", "anon-tw-anon-tw_eng-modding", true]);
+    assert.deepEqual(summary()[1], ["anon-tw", "anon-tw", true]);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 

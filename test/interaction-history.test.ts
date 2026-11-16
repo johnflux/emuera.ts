@@ -1671,7 +1671,13 @@ test("a character's memory goes with her history and the save, and is due again 
     const context = internals.context(internals.globals);
     internals.globals.set("DAY", [], (internals.globals.get("DAY", [], context) as bigint) + 1n, context);
     let next = check(runtime.refresh());
-    for (let i = 0; next.input?.kind === "wait" && i < 40; i++) next = check(runtime.input(""));
+    for (let i = 0; i < 40; i++) {
+      // The day can begin with her moving on; follow her as a player would.
+      const follow = next.output.some((item) => item.type === "text" && /Follow her\?/.test(item.text ?? ""));
+      if (next.input?.kind === "wait") next = check(runtime.input(""));
+      else if (follow) next = check(runtime.input("0"));
+      else break;
+    }
     return next;
   };
   runtime.chatMessage(reimu.id, "Hello");

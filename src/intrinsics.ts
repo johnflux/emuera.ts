@@ -49,11 +49,14 @@ const OBJ_ROUTINES = [
   "MAKE_INT", "MAKE_STR", "TEMP_VARMAKE", "TEMP_STOCK", "TEMP_GET", "TEMP_INT", "TEMP_STR", "TEMP_RE_INT", "TEMP_RE_STR", "TEMP_VARCLEAR",
 ];
 const OBJ_HASH = "86a0a451cbfbfa72";
+/** Later eraTW maps ids through OBJ_ID_SLOT, adding the reserved OBJ_MOD_ID_FIRST..OBJ_MOD_ID_LAST range. */
+const OBJ_SLOT_ROUTINES = [...OBJ_ROUTINES, "OBJ_ID_SLOT", "IS_MOD_OBJ_ID"];
+const OBJ_SLOT_HASH = "d095a5359980efcf";
 
 interface Capture { name: string; value?: Value }
 
-function objFramework(host: IntrinsicHost): Map<string, Intrinsic> {
-  let first: bigint | undefined, last = 0n;
+function objFramework(host: IntrinsicHost, modRange: boolean): Map<string, Intrinsic> {
+  let ranges: [bigint, bigint][] | undefined;
   // Pending V_NAMEs; null marks an ERB-run GET_OBJ whose MAKE_* calls must reach TEMP_STOCK.
   const captures: (Capture | null)[] = [];
   let getStack = 0n, idStack = 0n;
@@ -69,28 +72,34 @@ function objFramework(host: IntrinsicHost): Map<string, Intrinsic> {
     captures.push(null);
     try { return host.call(name, args, false); } finally { captures.pop(); }
   };
-  /** OBJ_ID_FIRST..OBJ_ID_LAST, the range every class id must fall in. */
-  const inRange = (id: bigint): boolean => {
-    if (first === undefined) { first = host.global("OBJ_ID_FIRST") as bigint; last = host.global("OBJ_ID_LAST") as bigint; }
-    return id >= first && id <= last;
+  /** The id's index in EXIST, or -1 outside OBJ_ID_FIRST..OBJ_ID_LAST (and the mod range, where present). */
+  const slot = (id: bigint): number => {
+    ranges ??= [
+      [host.global("OBJ_ID_FIRST") as bigint, host.global("OBJ_ID_LAST") as bigint],
+      ...modRange ? [[host.global("OBJ_MOD_ID_FIRST") as bigint, host.global("OBJ_MOD_ID_LAST") as bigint] as [bigint, bigint]] : [],
+    ];
+    const [[first, last], mod] = ranges as [[bigint, bigint], [bigint, bigint]?];
+    if (id >= first && id <= last) return Number(id);
+    if (mod && id >= mod[0] && id <= mod[1]) return Number(last + 1n + id - mod[0]);
+    return -1;
   };
   /** TEMP_STOCK's GET_VALUE: the string when non-empty, else the integer as text. */
   const stored = (capture: Capture): string => typeof capture.value === "string" ? capture.value : String(capture.value);
 
-  /** OBJ_EXIST("GET", CLASS_NAME, O_ID) for an in-range id; undefined when ERB should run (and throw). */
-  const exists = (className: string, id: bigint): boolean | undefined => {
+  /** OBJ_EXIST("GET", CLASS_NAME, O_ID) for an in-range slot; undefined when ERB should run (and throw). */
+  const exists = (className: string, index: number): boolean | undefined => {
     const variables = host.statics("OBJ_EXIST");
     if (!className || !variables) return undefined;
     const context = host.context(variables);
     const names = variables.row("CLASS_NAME", [], context);
-    let index = classIndex.get(className);
-    if (index === undefined || names.get(index) !== className) {
-      index = -1;
-      for (let i = 1; i < names.size; i++) if (names.get(i) === className) { index = i; break; }
-      if (index < 0) return undefined;
-      classIndex.set(className, index);
+    let row = classIndex.get(className);
+    if (row === undefined || names.get(row) !== className) {
+      row = -1;
+      for (let i = 1; i < names.size; i++) if (names.get(i) === className) { row = i; break; }
+      if (row < 0) return undefined;
+      classIndex.set(className, row);
     }
-    return variables.row("EXIST", [literal(BigInt(index))], context).get(Number(id)) !== 0n;
+    return variables.row("EXIST", [literal(BigInt(row))], context).get(index) !== 0n;
   };
 
   const getObj = (args: IntrinsicArgument[]): string | typeof DECLINE => {
@@ -101,8 +110,9 @@ function objFramework(host: IntrinsicHost): Map<string, Intrinsic> {
       if (id < 0n) return DECLINE;
       id = host.global("NO", [Number(id)]) as bigint;
     }
-    if (!inRange(id)) return "";
-    const exist = exists(className, id);
+    const index = slot(id);
+    if (index < 0) return "";
+    const exist = exists(className, index);
     if (exist === undefined) return DECLINE;
     if (!exist) return "";
     const target = key(`${className}${id}`);
@@ -142,8 +152,9 @@ function objFramework(host: IntrinsicHost): Map<string, Intrinsic> {
     }],
     ["GET_EXIST", (args) => {
       const className = str(args[0]), id = int(args[1]);
-      if (className === undefined || id === undefined || !inRange(id) || args.length > 2) return erb("GET_EXIST", args);
-      const exist = exists(className, id);
+      const index = id === undefined ? -1 : slot(id);
+      if (className === undefined || index < 0 || args.length > 2) return erb("GET_EXIST", args);
+      const exist = exists(className, index);
       return exist === undefined ? erb("GET_EXIST", args) : exist ? 1n : 0n;
     }],
     ["OBJNAME_TO_ID", (args) => {
@@ -172,8 +183,9 @@ function objFramework(host: IntrinsicHost): Map<string, Intrinsic> {
 export function loadIntrinsics(host: IntrinsicHost): { functions: Map<string, Intrinsic>; enabled: string[] } {
   const functions = new Map<string, Intrinsic>();
   const enabled: string[] = [];
-  if (routineHash(host.routines, OBJ_ROUTINES) === OBJ_HASH) {
-    for (const [name, intrinsic] of objFramework(host)) functions.set(name, intrinsic);
+  const modRange = routineHash(host.routines, OBJ_SLOT_ROUTINES) === OBJ_SLOT_HASH;
+  if (modRange || routineHash(host.routines, OBJ_ROUTINES) === OBJ_HASH) {
+    for (const [name, intrinsic] of objFramework(host, modRange)) functions.set(name, intrinsic);
     if (functions.size) enabled.push("OBJ framework (GET_INT/GET_STR/GET_OBJ/OBJNAME_TO_ID/GET_EXIST)");
   }
   return { functions, enabled };

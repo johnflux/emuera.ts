@@ -20,6 +20,9 @@ import { LLM_REQUEST_BYTES, LlmRequestError, proxyLlm } from "./llm.js";
 import { readSuspend, writeSuspend } from "./suspend-format.js";
 import { backgroundQuicksave } from "./background-quicksave.js";
 import { componentGame, isComponentSample, startComponent } from "./component-demo.js";
+import { debugCommand } from "./debugger.js";
+import { readNativeSave } from "./save-format.js";
+import { LiveMcp, PairingError } from "./live-mcp.js";
 
 type BrowserSnapshot = ReturnType<typeof patchTitleImage>;
 
@@ -91,6 +94,7 @@ type Advance = "start" | "input" | "continue" | "timeout";
 /** A game the server runs; the first entry is the default, and also hosts the conformance demo. */
 export type GameEntry = {
   id: string; title: string; store?: GlobalStore; saves?: SaveStore;
+  hotpatch?: string;
   /** Character voices edited for LLM chat; by default V2 PNGs in character-cards/<game id>/ outside GAMES. */
   voices?: VoiceStore;
   /** Loads the game in Emuera's debug mode (with its [IF_DEBUG] code); by default a copy of `game` with the debug flag. */
@@ -106,7 +110,7 @@ function discoveredEntry(definition: GameDefinition): GameEntry {
     console.log(`Loaded ${game.scriptFiles} scripts, ${game.routines.size} function names and ${game.sprites.size} sprites`);
     return game;
   };
-  return { id: definition.id, title: definition.title, root: definition.root, load: () => load(), loadDebug: () => load(true) };
+  return { id: definition.id, title: definition.title, root: definition.root, ...(definition.hotpatch ? { hotpatch: definition.hotpatch } : {}), load: () => load(), loadDebug: () => load(true) };
 }
 interface Session {
   runtime: Runtime;
@@ -270,7 +274,12 @@ function clientState(value: unknown): ClientState | undefined {
  * Emuera save directory, and its resources/ images are served at /resources/ (the default game) or
  * /games/<id>/resources/.
  */
-export function createApp(games: Game | readonly GameEntry[], development = false, gamesDir = GAMES_DIR, additionalGamesDirs: readonly string[] = []) {
+export interface QaOptions {
+  /** Enables the debugger on this instance only; never sent to the browser. All stores are in memory. */
+  token: string;
+}
+export function createApp(games: Game | readonly GameEntry[], development = false, gamesDir = GAMES_DIR, additionalGamesDirs: readonly string[] = [], qa?: QaOptions) {
+  if (qa && qa.token.length < 32) throw new Error("QA token must contain at least 32 characters");
   gamesDir = path.resolve(gamesDir);
   const searchDirectories = libraryDirectories(gamesDir, additionalGamesDirs);
   const libraryDirectoryFor = (root: string) => searchDirectories.find((directory) => {
@@ -298,6 +307,12 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
       /** A lazily loaded game folder, forgotten once it no longer holds ERB/ and CSV/. */
       folder: entry.load && isGameRoot(entry.root) ? entry.root : undefined,
       initializeStores(loaded: Game) {
+        if (qa) {
+          registered.store = new MemoryGlobalStore();
+          registered.saves = new MemorySaveStore();
+          registered.voices = new MemoryVoiceStore();
+          return;
+        }
         const saveDirectory = loaded.root && gameSaveDirectory(loaded.root, loaded.config);
         registered.store = entry.store ?? (saveDirectory ? new FileGlobalStore(path.join(saveDirectory, "global.sav")) : new MemoryGlobalStore());
         registered.saves = entry.saves ?? (saveDirectory ? new FileSaveStore(saveDirectory, path.join(loaded.root, "dat")) : new MemorySaveStore());
@@ -404,6 +419,20 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
     writeSync(2, `[era execution] ${JSON.stringify({ pid: process.pid, session: id, game, step, action, debug,
       heapUsedMiB: Math.round(heapUsed / 1048576), heapTotalMiB: Math.round(heapTotal / 1048576), rssMiB: Math.round(rss / 1048576) })}\n`);
   }
+  function recordSnapshot(session: Session, advance: Advance, snapshot: BrowserSnapshot): void {
+    session.step++;
+    if (snapshot.cbg) session.cbg = snapshot.cbg;
+    if (snapshot.cbgMap !== undefined) session.cbgMap = snapshot.cbgMap;
+    if (snapshot.islands !== undefined) session.islands = snapshot.islands;
+    if (snapshot.tooltip) session.tooltip = snapshot.tooltip;
+    if (snapshot.audio) session.audio = { ...snapshot.audio, sounds: [], stopSounds: true };
+    if (snapshot.textbox !== undefined) session.textbox = snapshot.textbox;
+    else if (advance === "input") session.textbox = "";
+    const bytes = JSON.stringify(snapshot).length;
+    session.history.push({ advance, snapshot, bytes });
+    session.bytes += bytes;
+    while (session.bytes > HISTORY_BYTES && session.history.length > 1) session.bytes -= session.history.shift()!.bytes;
+  }
   /** Delivers a step's snapshot and records it so a reloaded page can replay the run (see /api/resume). */
   function deliver(response: ServerResponse, id: string, session: Session | undefined, advance: Advance, snapshot: Snapshot, game: Game, gameId = session?.game ?? path.basename(game.root)): void {
     const started = performance.now();
@@ -418,19 +447,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
         const newest = latestGameSave(entryFor(session.game).saves, true);
         session.lastSaveAt = Math.max(session.lastSaveAt ?? newest?.modified ?? Date.now(), newest?.modified ?? 0);
       }
-      session.step++;
-      if (patched.cbg) session.cbg = patched.cbg;
-      if (patched.cbgMap !== undefined) session.cbgMap = patched.cbgMap;
-      if (patched.islands !== undefined) session.islands = patched.islands;
-      if (patched.tooltip) session.tooltip = patched.tooltip;
-      if (patched.audio) session.audio = { ...patched.audio, sounds: [], stopSounds: true };
-      if (patched.textbox !== undefined) session.textbox = patched.textbox;
-      else if (advance === "input") session.textbox = "";
-      const bytes = JSON.stringify(patched).length;
-      session.history.push({ advance, snapshot: patched, bytes });
-      session.bytes += bytes;
-      // The oldest steps go first; the browser keeps a bounded scrollback anyway.
-      while (session.bytes > HISTORY_BYTES && session.history.length > 1) session.bytes -= session.history.shift()!.bytes;
+      recordSnapshot(session, advance, patched);
       if (session.mode === "game" && session.runtime.canSaveMidday
         && !pendingQuicksaves.has(session.game)
         && session.lastSaveAt !== undefined && Date.now() - session.lastSaveAt >= QUICKSAVE_INTERVAL) {
@@ -492,7 +509,12 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
       entries.set(definition.id, register(discoveredEntry(definition), entries.size));
     }
   }
-  return createServer((request, response) => {
+  const liveMcp = qa ? undefined : new LiveMcp();
+  const forgetSession = (id: string) => {
+    liveMcp?.detach(id);
+    sessions.delete(id);
+  };
+  const app = createServer((request, response) => {
     void (async () => {
       response.setHeader("Cache-Control", "no-store");
       response.setHeader("X-Content-Type-Options", "nosniff");
@@ -503,6 +525,104 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
       const origin = request.headers.origin;
       if (origin && origin !== `http://${host}`) throw new HttpError(403, "Cross-origin requests are not allowed");
       const url = new URL(request.url ?? "/", `http://${host}`);
+      if (liveMcp && url.pathname === "/mcp") {
+        await liveMcp.handle(request, response, request.method === "POST" ? await body(request, 256 * 1024) : undefined);
+        return;
+      }
+      if (liveMcp && request.method === "POST" && url.pathname === "/api/mcp/browser") {
+        const data = await body(request, 20 * 1024 * 1024);
+        if (typeof data.session !== "string" || !sessions.has(data.session)) throw new HttpError(404, "Game session expired");
+        try { json(response, liveMcp.poll(data.session, data)); }
+        catch (error) {
+          if (!(error instanceof PairingError)) throw error;
+          throw new HttpError(409, error.message);
+        }
+        return;
+      }
+      if (url.pathname.startsWith("/api/debug")) {
+        const qaAuthorized = qa && request.headers.authorization === `Bearer ${qa.token}`;
+        if (!qa && url.pathname !== "/api/debug") throw new HttpError(404, "Debugger is not enabled");
+        if (qa && !qaAuthorized) throw new HttpError(403, "Invalid QA token");
+        if (request.method === "GET" && url.pathname === "/api/debug/sessions") {
+          json(response, [...sessions].map(([id, session]) => ({
+            session: id, game: session.game, step: session.step, debug: session.debug,
+            status: session.history.at(-1)?.snapshot.status,
+          })));
+          return;
+        }
+        if (request.method !== "POST" || !["/api/debug", "/api/debug/save"].includes(url.pathname))
+          throw new HttpError(404, "Unknown debugger route");
+        const data = await body(request, url.pathname.endsWith("/save") ? 64 * 1024 * 1024 : 256 * 1024);
+        if (!qaAuthorized && !liveMcp?.authorizes(request.headers.authorization, data.session))
+          throw new HttpError(404, "Debugger is not enabled for this session");
+        const session = typeof data.session === "string" ? sessions.get(data.session) : undefined;
+        if (!session) throw new HttpError(404, "Session expired or does not exist; start a new run");
+        if (data.step !== session.step) throw new HttpError(409, "Stale debugger step; observe the current run first");
+        session.used = Date.now();
+        if (url.pathname.endsWith("/save")) {
+          if (session.mode !== "game") throw new HttpError(400, "Native save fixtures require game mode");
+          if (typeof data.base64 !== "string" || !/^[A-Za-z0-9+/]+={0,2}$/.test(data.base64))
+            throw new HttpError(400, "Expected a base64 native save");
+          const bytes = Buffer.from(data.base64, "base64");
+          const name = data.name ?? "save999.sav";
+          if (typeof name !== "string" || !/^save\d+\.sav$/i.test(name)) throw new HttpError(400, "Expected a native save slot filename");
+          try {
+            if (readNativeSave(bytes).type !== 0) throw new EraError("Expected a native game save");
+            const saves = entryFor(session.game).saves;
+            saves.write(name, bytes);
+            const snapshot = session.runtime.continueNative(name);
+            const restored: Session = { runtime: session.runtime, game: session.game, debug: session.debug,
+              mode: "game", used: Date.now(), step: session.step, history: [], bytes: 0 };
+            sessions.set(data.session as string, restored);
+            deliver(response, data.session as string, restored, "start", snapshot, restored.runtime.game);
+          } catch (error) {
+            if (!(error instanceof EraError)) throw error;
+            throw new HttpError(400, error.message);
+          }
+          return;
+        }
+        if (typeof data.command === "object" && data.command !== null && "action" in data.command && data.command.action === "context") {
+          const entry = entryFor(session.game);
+          const root = session.runtime.game.root ? path.resolve(session.runtime.game.root) : null;
+          json(response, {
+            session: data.session, step: session.step, game: session.game, title: entry.title, mode: session.mode,
+            isolated: !!qa, debug: session.debug,
+            sources: {
+              root, erb: root ? gameDirectory(root, "ERB") : null, csv: root ? gameDirectory(root, "CSV") : null,
+              hotpatch: entry.hotpatch ? path.resolve(entry.hotpatch) : null,
+              files: [...new Set([...session.runtime.game.routines.values()].flatMap(routines => routines.map(routine => routine.file)))].sort(),
+            },
+            editing: "Game logic belongs in upstream ERB files; hotpatches are for browser GUI changes. Scripts are cached; restart to load source changes. Hot reload is not implemented.",
+          });
+          return;
+        }
+        const parsed = debugCommand.safeParse(data.command);
+        if (!parsed.success) throw new HttpError(400, parsed.error.message);
+        const command = parsed.data;
+        try { session.runtime.assertDebuggable(); }
+        catch (error) {
+          if (!(error instanceof EraError)) throw error;
+          throw new HttpError(409, error.message);
+        }
+        const mutating = ["write", "evaluate", "call", "seed"].includes(command.action);
+        let result: unknown;
+        let failure: ReturnType<EraError["diagnostic"]> | undefined;
+        try { result = session.runtime.debugCommand(command); }
+        catch (error) {
+          if (!(error instanceof EraError)) throw error;
+          failure = error.diagnostic();
+        }
+        // Even a failed function can have changed state before throwing.
+        if (mutating) {
+          const snapshot = session.runtime.debugSnapshot();
+          const capture = patchTitleImage(session.runtime.game, snapshot);
+          const previous = session.history.at(-1)?.snapshot;
+          if (previous?.continueAvailable !== undefined) capture.continueAvailable = previous.continueAvailable;
+          recordSnapshot(session, "continue", capture);
+        }
+        json(response, { session: data.session, step: session.step, result, ...(failure ? { error: failure } : {}) }, failure ? 400 : 200);
+        return;
+      }
       if (request.headers["x-era-profile"] === "1") response.setHeader("Server-Timing", "");
       if (request.method === "GET" && url.pathname === "/api/library") {
         pruneGames();
@@ -525,6 +645,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
         return;
       }
       if (request.method === "POST" && url.pathname === "/api/library/install") {
+        if (qa) throw new HttpError(403, "Game installation is disabled in QA instances");
         const data = await body(request);
         const game = GAME_CATALOG.find((item) => item.id === data.id);
         if (!game || (!game.repository && !game.archive)) throw new HttpError(400, "Choose a catalog game with an available ZIP or Git repository.");
@@ -543,13 +664,13 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
       if (request.method === "GET" && url.pathname === "/api/runtime") {
         await Promise.all([...entries.values()].map(ensureMetadata));
         const games = [...entries.values()].map(({ id, title, game }) => ({ id, title, display: displayDefaults(game), metrics: displayMetrics(game) }));
-        json(response, { instance, development, games, display: displayDefaults(defaultEntry().game), metrics: displayMetrics(defaultEntry().game) });
+        json(response, { instance, development, ...(qa ? { qa: true } : {}), games, display: displayDefaults(defaultEntry().game), metrics: displayMetrics(defaultEntry().game) });
         return;
       }
       if (request.method === "POST" && url.pathname === "/api/stop") {
         const data = await body(request);
         if (typeof data.session !== "string") throw new HttpError(400, "Expected a session string");
-        sessions.delete(data.session);
+        forgetSession(data.session);
         json(response, { ok: true });
         return;
       }
@@ -583,8 +704,8 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
         if (data.columns !== undefined && (typeof data.columns !== "number" || !Number.isSafeInteger(data.columns) || data.columns < 20 || data.columns > 1000))
           throw new HttpError(400, "columns must be an integer from 20 to 1000");
         const now = Date.now();
-        for (const [id, session] of sessions) if (now - session.used > 30 * 60_000) sessions.delete(id);
-        if (typeof data.previousSession === "string") sessions.delete(data.previousSession);
+        for (const [id, session] of sessions) if (now - session.used > 30 * 60_000) forgetSession(id);
+        if (typeof data.previousSession === "string") forgetSession(data.previousSession);
         if (sessions.size >= 8) throw new HttpError(429, "Too many sessions; restart the server or wait for expiry");
         const id = randomUUID();
         try {
@@ -605,7 +726,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
           const started = performance.now();
           const snapshot = component ? startComponent(runtime, component) : runtime.start();
           serverTiming(response, "execute", started);
-          const session: Session | undefined = snapshot.status === "waiting"
+          const session: Session | undefined = snapshot.status === "waiting" || qa
             ? { runtime, used: now, mode: data.mode, game: entry.id, debug, history: [], bytes: 0, step: 0 } : undefined;
           if (session) sessions.set(id, session);
           deliver(response, id, session, "start", snapshot, game, entry.id);
@@ -638,7 +759,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
           const started = performance.now();
           const snapshot = timeout ? session.runtime.timeout() : session.runtime.input(data.value as string);
           serverTiming(response, "execute", started);
-          if (snapshot.status !== "waiting") sessions.delete(data.session);
+          if (snapshot.status !== "waiting" && !qa && !liveMcp?.attached(data.session)) forgetSession(data.session);
           deliver(response, data.session, session, timeout ? "timeout" : waiting ? "continue" : "input", snapshot, session.runtime.game);
         } catch (error) {
           if (!(error instanceof EraError)) throw error;
@@ -767,7 +888,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
         try {
           executionBreadcrumb(data.session, session.game, session.step, "refresh", session.debug);
           const snapshot = session.runtime.refresh();
-          if (snapshot.status !== "waiting") sessions.delete(data.session);
+          if (snapshot.status !== "waiting" && !liveMcp?.attached(data.session)) forgetSession(data.session);
           deliver(response, data.session, session, "input", snapshot, session.runtime.game);
         } catch (error) {
           if (!(error instanceof EraError)) throw error;
@@ -799,7 +920,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
             const id = randomUUID();
             const session: Session = { runtime: current.runtime, used: Date.now(), mode: "game", game: current.game,
               debug: current.debug, history: [], bytes: 0, step: 0 };
-            sessions.delete(data.session);
+            forgetSession(data.session);
             if (snapshot.status === "waiting") sessions.set(id, session);
             deliver(response, id, session, "start", snapshot, current.runtime.game);
             return;
@@ -826,7 +947,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
             const session: Session = { runtime, mode: "game", game: current.game, debug: current.debug,
               history: [], bytes: 0, step: 0, used: Date.now(), lastSaveAt: entry.saves.modified(MIDDAY_FILE) ?? Date.now() };
             sessions.set(id, session);
-            sessions.delete(data.session);
+            forgetSession(data.session);
             deliver(response, id, session, "start", snapshot, game);
           }
         } catch (error) {
@@ -867,7 +988,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
         const session = sessions.get(data.session);
         if (client && session) session.runtime.setClient(client);
         if (session) executionBreadcrumb(data.session, session.game, session.step, "prefetch", session.debug);
-        json(response, { prefetched: session?.runtime.prefetch() ?? false });
+        json(response, { prefetched: session && !liveMcp?.attached(data.session) ? session.runtime.prefetch() : false });
         return;
       }
       if (request.method === "GET" && url.pathname === "/api/sprite") {
@@ -993,6 +1114,8 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
         "/fonts/BIZUDGothic-Regular.ttf": "fonts/BIZUDGothic-Regular.ttf",
         "/fonts/OFL.txt": "fonts/OFL.txt",
       };
+      pages["/qa.js"] = "qa.js";
+      if (liveMcp) pages["/mcp.js"] = "mcp.js";
       if (development) {
         pages["/components"] = "components.html";
         pages["/components.js"] = "components.js";
@@ -1024,11 +1147,13 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
       }
     });
   });
+  app.on("close", () => { void liveMcp?.close().catch(error => console.error("MCP shutdown failed:", error)); });
+  return app;
 }
-export async function startServer(port = 3003, gamesDir = GAMES_DIR, development = false, additionalGamesDirs: readonly string[] = []): Promise<Server> {
+export async function startServer(port = 3003, gamesDir = GAMES_DIR, development = false, additionalGamesDirs: readonly string[] = [], qa?: QaOptions): Promise<Server> {
   gamesDir = path.resolve(gamesDir);
   const loaded = discoverLibraryGames(libraryDirectories(gamesDir, additionalGamesDirs)).map(discoveredEntry);
-  const app = createApp(loaded, development, gamesDir, additionalGamesDirs);
+  const app = createApp(loaded, development, gamesDir, additionalGamesDirs, qa);
   await new Promise<void>((resolve, reject) => {
     const onError = (error: Error) => reject(error);
     app.once("error", onError);

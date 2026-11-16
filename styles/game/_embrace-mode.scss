@@ -87,21 +87,6 @@
   background-image: url("/decoration/intimate-rose-corner.png");
 }
 
-.era-main.era-intimate .era-actions-collection :is(button, [role="button"]) {
-  border-radius: 7px;
-  box-shadow: inset 0 1px 0 #fff1, 0 2px 4px #10081740;
-  transition: filter 150ms ease, box-shadow 150ms ease, transform 150ms ease;
-}
-.era-main.era-intimate .era-actions-collection :is(button, [role="button"]):not(:disabled):hover {
-  filter: brightness(1.16);
-  transform: translateY(-1px);
-  box-shadow: inset 0 1px 0 #fff2, 0 0 9px #ff98c45c, 0 3px 7px #10081755;
-}
-.era-main.era-intimate :is(button, [role="button"]):focus-visible {
-  outline: 2px solid #ffd0e5;
-  outline-offset: 2px;
-}
-
 .era-main.era-intimate-nonconsensual {
   --era-heading-color: #eabac7;
   --intimate-border: #885364;
@@ -144,7 +129,3 @@
   background-image: url("/decoration/intimate-heart-divider.png");
 }
 .era-main.era-intimate.era-embrace .era-room-stage::after { opacity: .2; }
-
-@media (prefers-reduced-motion: reduce) {
-  .era-main.era-intimate .era-actions-collection :is(button, [role="button"]) { transition: none; }
-}

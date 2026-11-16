@@ -409,7 +409,7 @@ test("date panel hides blank text lines and renders an accessible calendar icon"
 
 test("calendar popup presents seven day rows with a shared day and schedule heading", async () => {
   const css = styleSource("style");
-  assert.match(css, /\.era-calendar:popover-open \{ width: min\(1440px, calc\(100vw - 32px\)\); height: fit-content; max-height: calc\(100dvh - 32px\);/);
+  assert.match(css, /\.era-calendar:popover-open \{ width: min\(1440px, calc\(100vw - 32px\)\); height: fit-content; max-height: calc\(var\(--client-height, 100dvh\) - 32px\);/);
   assert.match(css, /\.era-calendar-layout \{ display: grid; grid-template-columns: minmax\(300px, \.85fr\) minmax\(0, 1\.65fr\); gap: 20px; align-items: start;/);
   assert.match(css, /\.era-calendar-month-grid \{ display: grid; grid-template-columns: repeat\(7, minmax\(0, 1fr\)\);/);
   assert.match(css, /\.era-calendar \.era-dialog-body \{ flex: 0 1 auto;/);
@@ -1354,7 +1354,7 @@ test("action headers reserve filter-row height without preventing wrapping", asy
 
 test("last command is a placeholder, never input data, and defaults and waits take precedence", async () => {
   const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
-  const updateControls = source.slice(source.indexOf("function updateControls("), source.indexOf("function screen("));
+  const updateControls = source.slice(source.indexOf("function updateSendAppearance("), source.indexOf("function screen("));
   const field = { value: "", placeholder: "", disabled: false, title: "" };
   const element = { classList: { toggle() {} }, setAttribute() {} };
   let chatHost: object | null = null;
@@ -1365,7 +1365,7 @@ test("last command is a placeholder, never input data, and defaults and waits ta
     terminal: { ...element, querySelectorAll: () => [], querySelector: () => chatHost },
     islandRoot: { querySelectorAll: () => [] },
     syncRadioGroups() {},
-    command: field, send: { ...element, disabled: false, textContent: "" },
+    command: field, send: { ...element, dataset: {}, disabled: false, textContent: "" },
     document: { querySelector: () => ({ hidden: false }) },
     startButtons: [], restartButton: element, debugButton: { disabled: false },
     autoAdvance: { update() {}, isPaused: () => false },
@@ -1567,11 +1567,11 @@ test("Continue stays pending throughout its request and view restoration, and cl
 
 test("title Continue is disabled without a save and enabled when a save is available", async () => {
   const source = await readFile(new URL("../web/app.js", import.meta.url), "utf8");
-  const controls = source.slice(source.indexOf("function updateControls("), source.indexOf("function screen("));
+  const controls = source.slice(source.indexOf("function updateSendAppearance("), source.indexOf("function screen("));
   const attributes = new Map<string, string>();
   const button = {
     dataset: { value: "2" }, disabled: false, title: "",
-    matches: () => false, closest: () => ({}),
+    matches: () => false, closest: (selector: string) => selector.includes(".screen.is-active") ? {} : null,
     classList: { contains: () => false },
     setAttribute: (name: string, value: string) => attributes.set(name, value),
     getAttribute: (name: string) => attributes.get(name),
@@ -1582,7 +1582,7 @@ test("title Continue is disabled without a save and enabled when a save is avail
       querySelectorAll: (selector: string) => selector.includes("era-quicksave") ? [] : [button] },
     islandRoot: { querySelectorAll: () => [] }, choiceControl: () => button, syncRadioGroups() {},
     document: { querySelector: () => ({ hidden: false }) },
-    command: {}, send: element, startButtons: [], restartButton: element, debugButton: {},
+    command: {}, send: { ...element, dataset: {} }, startButtons: [], restartButton: element, debugButton: {},
     autoAdvance: { update() {}, isPaused: () => false },
     mainChatInput: () => false, lastOutputLine: () => null,
     busy: false, expiring: false, input: { kind: "integer", buttonValues: ["2", "0", "1"] },
@@ -1632,8 +1632,8 @@ test("room overlays reserve no layout height and chat follows every responsive m
   assert.doesNotMatch(chromeButtons, /\.ui-button(?:--[\w-]+)? \{[^}]*position: absolute;/);
   assert.match(css, /\.era-history-more-overlay \{[^}]*display: flex;[^}]*justify-content: flex-end;/);
   assert.match(css, /\.era-main-chat > \.era-history-pane \{[^}]*contain: size; overflow: auto;/);
-  assert.match(css, /\.era-actions-collection \{\s*display: flex;\s*flex-wrap: wrap;/);
-  assert.match(css, /\.era-actions-collection \{[\s\S]*?> \.era-actions-group \{ flex: 0 1 auto;/);
+  assert.match(css, /\.era-actions-collection, \.era-actions-body \{\s*display: flex;\s*flex-wrap: wrap;/);
+  assert.match(css, /\.era-actions-collection, \.era-actions-body \{[\s\S]*?> \.era-actions-group \{ flex: 0 1 auto;/);
   assert.match(css, /\.era-main > \.era-actions-collection \{ grid-area: actions; align-self: stretch; \}/);
   assert.match(css, /\.era-main:has\(\.era-main-chat\) \{ grid-template-rows: auto 1fr auto auto auto; \}/);
   assert.match(css, /\.era-main:has\(\.era-main-chat\):not\(:has\(\.era-counters\)\) \{ grid-template-rows: auto 1fr auto auto; \}/);
@@ -1647,7 +1647,7 @@ test("room overlays reserve no layout height and chat follows every responsive m
   assert.doesNotMatch(css, /\.era-main-sidebar \{[^}]*contain: size;/);
   assert.match(css, /\.era-main-sidebar \.era-stats \{ flex: 1 1 0; overflow-y: auto; \}/);
   assert.match(css, /\.era-player > \.era-actions-panel > \.line:has\(\.era-auto-toggles\) \{ margin-top: auto;/);
-  assert.match(css, /button\.choice\.era-button \{[^}]*padding: 4px 9px;/);
+  assert.match(css, /button\.choice\.era-button, \.era-command-tile \{[^}]*padding: 4px 9px;/);
   assert.match(css, /\.checkbox-control\.era-toggle \{ padding: 3px 7px; gap: 6px;/);
   assert.match(css, /\.checkbox-control \{[^}]*display: inline-flex; align-items: center;/);
   assert.match(css, /\.checkbox-control \{[^}]*--checkbox-accent: #0072a8;/);

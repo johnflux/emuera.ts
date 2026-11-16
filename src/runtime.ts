@@ -9,6 +9,7 @@ import { parseFormat } from "./format.js";
 import { formNameEnd, parseAssignment, parseCallTarget, parseCaseTests, statementExpression, type Assignment, type CallTarget, type CaseTest } from "./statement-parser.js";
 import { MemoryGlobalStore, MemorySaveStore, StagedStores, type GlobalStore, type SaveStore } from "./storage.js";
 import { randomInt, randomUUID } from "node:crypto";
+import { checkDebugRead, debugInteger, debugValue, type DebugCommand } from "./debugger.js";
 import { escapeHtml, type ColoredText, htmlButtons, htmlContentLines, htmlLineBreaks, htmlLineCount, htmlSpriteNames, htmlTagSplit, htmlWidth, plainHtml } from "./html.js";
 import { formatInteger, stringWidth, toFullWidth, toHalfWidth } from "./strings.js";
 import { DataTables, TABLE_OPERATIONS } from "./data-tables.js";
@@ -408,6 +409,79 @@ function power(base: bigint, exponent: bigint): bigint {
 }
 
 export class Runtime {
+  assertDebuggable(): void {
+    if (this.ahead) throw new EraError("A prefetched step is pending; consume it before debugging");
+  }
+
+  /** Opt-in tooling uses the same evaluator and variable validation as ERB, never JavaScript evaluation. */
+  debugCommand(command: DebugCommand): unknown {
+    this.assertDebuggable();
+    useMacros(this.game.macros);
+    const context = this.context(this.globals);
+    const read = (expression: string) => {
+      const expr = this.parse(expression);
+      checkDebugRead(expr);
+      return { expression, ...debugValue(evaluate(expr, context)) };
+    };
+    if (command.action === "state") return {
+      status: this.finished ? "halted" : this.pending ? "waiting" : "idle",
+      input: this.pending, source: this.currentSource,
+      stack: this.doing.map(({ name, file, line }) => ({ name, file, line })),
+      randomState: this.randomState.toString(), instructions: this.steps,
+      characters: this.number("CHARANUM").toString(), target: this.currentTarget(),
+      buttonValues: [...new Set([...this.buttonLines.flat(), ...this.lineButtons, ...this.islands.flatMap(island => htmlButtons(island.text))])],
+      printedText: [...this.printedLines, this.printedLine].map(plainHtml).join("\n").slice(-100_000),
+      values: command.expressions.map(read),
+    };
+    if (command.action === "variables" || command.action === "functions") {
+      const entries = command.action === "variables"
+        ? this.globals.declaredNames().map(name => ({ name }))
+        : [...this.game.routines].flatMap(([name, routines]) => routines.map(routine => ({
+          name, file: routine.file, line: routine.line, parameters: routine.parameters,
+          type: routine.directives.find(line => /^#FUNCTIONS?$/i.test(line.text))?.text ?? "routine",
+        })));
+      const matching = entries.filter(entry => key(entry.name).includes(key(command.search))).sort((a, b) => a.name.localeCompare(b.name));
+      return { total: matching.length, entries: matching.slice(command.offset, command.offset + command.limit) };
+    }
+    if (command.action === "read") return command.expressions.map(read);
+    if (this.finished || !this.pending) throw new EraError("Debugger mutations require a running game paused for input");
+    if (command.action === "seed") {
+      this.randomState = BigInt.asUintN(64, debugInteger(command.value));
+      return { randomState: this.randomState.toString() };
+    }
+    if (command.action === "write") {
+      const target = this.parse(command.target);
+      checkDebugRead(target);
+      if (target.kind !== "variable") throw new EraError("Debugger assignment target must be a variable");
+      const value = command.value.type === "integer" ? debugInteger(command.value.value) : command.value.value;
+      this.globals.set(target.name, target.indices, value, context);
+      return { expression: command.target, ...debugValue(value) };
+    }
+    const saved = { steps: this.steps, maxSteps: this.maxSteps, jit: this.jit, source: this.currentSource };
+    this.steps = 0;
+    this.maxSteps = Math.min(this.maxSteps, 1_000_000);
+    this.jit = undefined;
+    try {
+      const expr = command.action === "evaluate" ? this.parse(command.expression) : {
+        kind: "call" as const, name: key(command.name.replace(/^@/, "")), args: command.arguments.map(arg => this.parse(arg)),
+      };
+      return debugValue(evaluate(expr, context));
+    } finally {
+      this.steps = saved.steps;
+      this.maxSteps = saved.maxSteps;
+      this.jit = saved.jit;
+      this.currentSource = saved.source;
+    }
+  }
+
+  debugSnapshot(): Snapshot {
+    const output = this.deferred.splice(0);
+    return this.withDebug({
+      status: this.finished ? "halted" : "waiting", output, input: this.pending,
+      error: null, title: this.windowTitle(), target: this.currentTarget(),
+    });
+  }
+
   private dataTables = new DataTables();
   private autoToStr: boolean;
   private xmlDocuments = new Map<string, XmlDocument>();

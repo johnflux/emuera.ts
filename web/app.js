@@ -146,6 +146,10 @@ function showDebugOutput(snapshot) {
 }
 const gameTitle = (id) => (games.find((game) => game.id === id) ?? games[0])?.title ?? "Game";
 let session = null;
+let qaMode = false;
+let agentConnected = false;
+let qaSnapshot = null;
+let qaRender = 0;
 /** Steps the server has delivered for this session; sent with input so a stale duplicate tab is refused. */
 let step = 0;
 // The running session survives a page reload through this tab's sessionStorage (see resume()).
@@ -183,7 +187,7 @@ const AUTO_ADVANCE_KEY = "era-typescript.auto-advance";
 const autoAdvanceToggle = document.querySelector("#auto-advance-toggle");
 autoAdvanceToggle.checked = !componentSample && localStorage.getItem(AUTO_ADVANCE_KEY) === "1";
 const autoAdvance = createAutoAdvance(
-  () => autoAdvanceToggle.checked && session && !busy && !document.hidden
+  () => autoAdvanceToggle.checked && !agentConnected && session && !busy && !document.hidden
     && !document.body.classList.contains("is-home")
     && !document.querySelector("dialog[open], #menu-panel:not([hidden]), .screen.is-active .era-dialog:popover-open")
     && input?.kind === "wait" && !input.blocking && !input.timeout ? input : null,
@@ -269,6 +273,37 @@ const settingsLoaded = (async () => {
   applySettings();
   try {
     const runtime = await api("/api/runtime");
+    qaMode = runtime.qa === true;
+    {
+      if (qaMode) autoAdvanceToggle.checked = false;
+      const { installQaBridge } = await import("./qa.js");
+      installQaBridge({
+        state: () => ({
+          session, step, busy, rendering: terminal.hasAttribute("aria-busy"), game: runGame, input, render: qaRender,
+          snapshot: qaSnapshot && {
+            status: qaSnapshot.status, error: qaSnapshot.error, title: qaSnapshot.title,
+            target: qaSnapshot.target, timeStopped: qaSnapshot.timeStopped,
+          },
+        }),
+        resume,
+      });
+      if (!qaMode) {
+        const { installLiveMcp } = await import("./mcp.js");
+        installLiveMcp({
+          bridge: window.eraQA,
+          connected: value => {
+            agentConnected = value;
+            if (value) {
+              autoAdvanceToggle.checked = false;
+              autoAdvance.clear();
+              clearTimedWait();
+              encounterRun?.abort();
+            } else scheduleTimedWait();
+          },
+          message,
+        });
+      } else document.querySelector("#agent-toggle").hidden = true;
+    }
     games = runtime.games ?? [];
     const componentsLink = document.querySelector("#components-link");
     if (componentsLink) componentsLink.hidden = !runtime.development;
@@ -337,7 +372,7 @@ async function watchDevelopment() {
     setTimeout(() => { void watchDevelopment(); }, 1500);
     return;
   }
-  if (!runtime.development) return;
+  if (!runtime.development || runtime.qa) return;
   if (sessionStorage.getItem("era-dev-reloaded")) {
     sessionStorage.removeItem("era-dev-reloaded");
     if (!session && !busy) message("Development reload complete. Starting a fresh run.");
@@ -2219,6 +2254,7 @@ async function revealPendingScreen() {
 }
 /** Renders steps in order and shows the result at once; several steps rebuild a reloaded run's output. */
 async function renderSteps(steps, fresh = false, keepFocus = false, toBottom = fresh) {
+  qaRender++;
   const totalStarted = profileStart();
   let phaseStarted = totalStarted;
   if (fresh) {
@@ -2326,6 +2362,7 @@ function clearTimedWait() {
 }
 function scheduleTimedWait() {
   clearTimedWait();
+  if (qaMode || agentConnected) return;
   if (!input?.timeout) return;
   const delay = input.kind === "mousekey" ? Math.max(input.timeout, FRAME_INTERVAL) : input.timeout;
   const deadline = performance.now() + delay;
@@ -2580,6 +2617,7 @@ bgmPrevious.addEventListener("click", previousBgmTrack);
 bgmNext.addEventListener("click", nextBgmTrack);
 /** advanceScreen: true after a submitted input (retires the screen), "continue" after a click-to-continue wait. */
 async function renderSnapshot(snapshot, advanceScreen) {
+  qaSnapshot = snapshot;
   midday = snapshot.midday ?? null;
   continueAvailable = snapshot.continueAvailable ?? false;
   lastCommand = snapshot.lastCommand ?? "";
@@ -2921,7 +2959,7 @@ function runQueuedContinue() {
   continueQueued = false;
   if (busy || input?.kind !== "wait" || input.blocking) return;
   if (queued) void submit("");
-  else if (input.timeout == null) {
+  else if (input.timeout == null && !qaMode && !agentConnected) {
     // Let the server run the next step while the player reads, so the click is answered at once.
     void fetch("/api/prefetch", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ session, client: clientState() }) }).catch(() => {});
   }
@@ -2968,7 +3006,7 @@ function resetRun() {
   void showBackgroundMap(null);
   useTooltipSettings(null);
 }
-async function start(mode, game = runGame, debug = debugPreferred()) {
+async function start(mode, game = runGame, debug = qaMode || debugPreferred()) {
   if (busy) return;
   library.hide();
   runMode = mode;
@@ -3145,6 +3183,7 @@ async function submit(value, selectedChoice = null, automatic = false) {
     if (!automatic) await revealPendingScreen();
     return;
   }
+
   if (selectedChoice?.matches(".era-quicksave")) {
     await saveMidday();
     return;
@@ -3242,6 +3281,7 @@ async function submit(value, selectedChoice = null, automatic = false) {
  * input cancels it.
  */
 async function reactToEncounters() {
+  if (qaMode || agentConnected) return;
   if (componentSample) return;
   if (pendingScreen) return;
   const pendingRun = pendingEncounters;

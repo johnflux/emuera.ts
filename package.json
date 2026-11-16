@@ -8,12 +8,15 @@
     "node": ">=22.6"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.25.0",
     "@napi-rs/canvas": "^0.1.80",
     "@napi-rs/image": "^1.16.0",
     "@xmldom/xmldom": "^0.9.12",
     "parse5": "^8.0.0",
+    "playwright": "^1.56.0",
     "xpath": "^0.0.35",
-    "yauzl": "^3.4.0"
+    "yauzl": "^3.4.0",
+    "zod": "^4.0.0"
   },
   "scripts": {
     "dev": "npm run build:css && concurrently --kill-others \"npm:watch:css\" \"npm:watch:server\"",
@@ -35,7 +38,9 @@
     "test": "tsx --test test/*.test.ts",
     "compat": "tsx src/compat.ts",
     "area-art": "tsx src/area-art.ts",
-    "area-seasons": "tsx src/seasonal-art.ts"
+    "area-seasons": "tsx src/seasonal-art.ts",
+    "mcp": "tsx src/mcp.ts",
+    "mcp:prod": "node dist/mcp.js"
   },
   "main": "electron/main.cjs",
   "devDependencies": {

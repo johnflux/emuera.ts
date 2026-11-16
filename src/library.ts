@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, rename, rm, rmdir, lstat } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
-import { discoverGames, isGameRoot } from "./loader.js";
+import { discoverGames, isGameRoot, KNOWN_GAMES } from "./loader.js";
 import { downloadArchive, extractArchive } from "./archive.js";
 
 export interface CatalogGame {
@@ -114,9 +114,10 @@ const prepareGame: PrepareGame = async (game, destination) => {
 
 export async function installStarterGame(gamesDir: string, searchDirectories: readonly string[], prepare: PrepareGame = prepareGame): Promise<void> {
   const starter = GAME_CATALOG.find((game) => game.id === "tw")!;
+  const known = KNOWN_GAMES.find((game) => game.id === starter.id)!;
   for (const directory of searchDirectories) {
-    const root = path.join(directory, starter.folder);
-    if (isGameRoot(root) || discoverGames(root, []).some((game) => isGameRoot(game.root))) return;
+    const games = discoverGames(directory, [{ ...known, root: path.join(directory, starter.folder) }]);
+    if (games.some((game) => game.id === starter.id && isGameRoot(game.root))) return;
   }
   await installGame(starter, gamesDir, prepare);
 }

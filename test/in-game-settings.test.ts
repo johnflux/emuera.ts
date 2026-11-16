@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
 import { test } from "node:test";
-import { applyHotpatches, GAME_ROOT, indexScript, loadGame } from "../src/loader.js";
+import { applyHotpatches, GAME_ROOT, gameDirectory, indexScript, loadGame } from "../src/loader.js";
 import { GAME_INSTRUCTION_LIMIT, Runtime, type Snapshot } from "../src/runtime.js";
 import { readNativeSave } from "../src/save-format.js";
 import { MemorySaveStore } from "../src/storage.js";
@@ -572,7 +573,7 @@ QUIT`, "<setup-save-test>");
 });
 
 test("move-home hotpatch preserves the native flow apart from the region selector", { skip: !existsSync(GAME_ROOT) }, () => {
-  const original = readFileSync(new URL("../GAMES/anon-tw-anon-tw_eng-modding/ERB/MOVEMENTS/物件関連/MAP_MANAGE.ERB", import.meta.url), "utf8");
+  const original = readFileSync(path.join(gameDirectory(GAME_ROOT, "ERB"), "MOVEMENTS", "物件関連", "MAP_MANAGE.ERB"), "utf8");
   const native = original.slice(original.indexOf("@SET_MAINHOME\n"), original.indexOf("@HAS_DUPLICATE_KEY, ARG"));
   const patch = readFileSync(new URL("../hotpatch/MOVE_HOME.ERB", import.meta.url), "utf8");
   const start = native.indexOf("LOCAL:1 = 0\nFOR LOCAL, 0, 11\n");

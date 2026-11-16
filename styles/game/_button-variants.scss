@@ -155,6 +155,10 @@ button.choice.era-button[hidden] { display: none; }
 .era-button .interactive-label { text-decoration: none; }
 .era-button .command-number { margin-left: .75ch; font-size: var(--era-font-size-small); }
 button.choice.era-button:has(> .choice-gap) { column-gap: 0; }
+button.choice.era-button.era-button-fancy { border-radius: 7px; box-shadow: inset 0 1px 0 #fff1, 0 2px 4px #10081740; transition: filter 150ms ease, box-shadow 150ms ease, transform 150ms ease; }
+button.choice.era-button.era-button-fancy:enabled:hover { filter: brightness(1.16); transform: translateY(-1px); box-shadow: inset 0 1px 0 #fff2, 0 0 9px #ff98c45c, 0 3px 7px #10081755; }
+button.choice.era-button.era-button-fancy:enabled:focus-visible { outline: 2px solid #ffd0e5; outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { button.choice.era-button.era-button-fancy { transition: none; } }
 .era-button > .choice-gap { flex: 1 1 .75ch; min-width: 0; font-size: var(--era-font-size-small); }
 .era-button > .choice-gap + .command-number { margin-left: 0; }
 button.choice.has-controller-hint > .choice-gap { display: none; }
@@ -184,7 +188,7 @@ button.choice.era-timestop-button.era-stopped { color: #f0d8ff; background: tran
 .era-timestop-button .era-sub { margin: 1px 0 0; font-size: .65em; font-weight: normal; letter-spacing: 0; color: inherit; opacity: .75; }
 .era-timestop-button .era-timestop-gauge { margin-top: 4px; gap: 2px; }
 .era-timestop-button .era-timestop-tsp { font-size: .65em; opacity: 1; }
-.era-timestop-button.era-unavailable .era-sub { font-size: .55em; line-height: 1.1; }
+.era-timestop-button:is(.era-unavailable, .era-wake-button) .era-sub { font-size: .55em; line-height: 1.1; }
 .era-timestop-button.era-unavailable .era-timestop-gauge { margin-top: 1px; gap: 1px; }
 .era-timestop-button.era-unavailable .era-meter { height: 3px; }
 .era-timestop-button.era-unavailable .era-timestop-tsp { font-size: .55em; line-height: 1; }

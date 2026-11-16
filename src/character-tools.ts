@@ -84,7 +84,7 @@ const RELATIONSHIP_ACTIONS: Record<string, RelationshipAction> = {
 const SCENE_COMMANDS = 200;
 /** USERCOM's "end the affair" input. */
 const END_SCENE = 999;
-/** TEQUIP 101-108 hold which of the player's parts touches each of the character's (TOUCH_SET's numbering). */
+/** Body parts in TOUCH_SET's numbering, used by TEQUIP 101-108 and eraTW's ADD_TOUCH table. */
 const PARTS = ["", "penis", "clitoris", "fingers", "mouth", "breasts", "vagina", "anus", "feet"];
 const AROUSAL = { clitoris: "快Ｃ", vagina: "快Ｖ", anus: "快Ａ", breasts: "快Ｂ", wetness: "潤滑", lust: "欲情", submission: "屈服", shame: "恥情", pain: "苦痛", fear: "恐怖", disgust: "反感" } as const;
 const ORGASMS = { clitoral: "Ｃ絶頂", vaginal: "Ｖ絶頂", anal: "Ａ絶頂", breast: "Ｂ絶頂", oral: "Ｍ絶頂" } as const;
@@ -361,16 +361,36 @@ class CharacterTools {
    * The scene from the character's side: both bodies' reserves, the character's arousal gauges (PALAM levels, as the
    * status screen shows them) and orgasms so far, what is touching what, and the commands available now.
    */
+  /** Current contacts involving this character: eraTW's ADD_TOUCH table where present, else TEQUIP's contact parts. */
+  private touching(): string[] {
+    const touching: string[] = [];
+    const part = (value: number) => value > 0 && value < PARTS.length ? PARTS[value] : undefined;
+    if (!this.host.has("ADD_TOUCH_SET_TR")) {
+      for (let mine = 1; mine < PARTS.length; mine++) {
+        const theirs = part(this.num("TEQUIP", BigInt(this.self), BigInt(100 + mine)));
+        if (theirs) touching.push(`the player's ${theirs} on your ${PARTS[mine]}`);
+      }
+      return touching;
+    }
+    const who = (i: number) => i === this.master ? "the player" : this.name(i);
+    for (let i = 0; i < Number(this.host.read("ADD_MAXTOUCH")); i++) {
+      // Active entries come first; history entries follow them.
+      if (!this.num("ADD_TOUCH_ACTIVE", BigInt(i)) || this.num("ADD_TOUCH_HISTORY", BigInt(i)) > 0) break;
+      const actor = this.num("ADD_TOUCH_ACTOR", BigInt(i)), target = this.num("ADD_TOUCH_TARGET", BigInt(i));
+      const actorPart = part(this.num("ADD_TOUCH_ACTOR_PART", BigInt(i))), targetPart = part(this.num("ADD_TOUCH_TARGET_PART", BigInt(i)));
+      if (!actorPart || !targetPart) continue;
+      if (target === this.self && actor !== this.self) touching.push(`${who(actor)}'s ${actorPart} on your ${targetPart}`);
+      else if (actor === this.self && target !== this.self) touching.push(`your ${actorPart} on ${who(target)}'s ${targetPart}`);
+      else if (actor === this.self) touching.push(`your ${actorPart} on your ${targetPart}`);
+    }
+    return touching;
+  }
   private intimate(): Record<string, unknown> {
     const self = BigInt(this.self), master = BigInt(this.master);
     const level = (name: string) => this.palamLevel(this.num("PALAM", self, name), 10);
     const arousal = Object.fromEntries(Object.entries(AROUSAL).map(([key, name]) => [key, level(name)]).filter(([, value]) => value));
     const orgasms = Object.fromEntries(Object.entries(ORGASMS).map(([key, name]) => [key, this.num("EX", self, name)]).filter(([, value]) => value));
-    const touching: string[] = [];
-    for (let part = 1; part < PARTS.length; part++) {
-      const theirs = this.num("TEQUIP", self, BigInt(100 + part));
-      if (theirs > 0 && theirs < PARTS.length) touching.push(`the player's ${PARTS[theirs]} on your ${PARTS[part]}`);
-    }
+    const touching = this.touching();
     const last = this.num("SELECTCOM");
     return {
       ...(this.num("TFLAG", 102n) === 3 ? { started: "you pushed the player down" } : {}),

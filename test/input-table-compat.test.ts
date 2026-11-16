@@ -242,7 +242,10 @@ test("image tooltip UI paints a graphics canvas while missing IDs and ordinary t
     const tooltip = {
       textContent: "", hidden: true, id: "tooltip", style: {}, popover: false,
       getBoundingClientRect: () => ({ width: 3, height: 2 }), child: null as unknown,
-      replaceChildren(child: unknown) { this.child = child; },
+      replaceChildren(...children: { textContent?: string }[]) {
+        this.child = children.length === 1 ? children[0] : children;
+        this.textContent = children.map((child) => child.textContent ?? "").join("");
+      },
     };
     const scope = {
       busy: false, tooltipTarget: null as unknown, tooltip, tooltipDuration: undefined,
@@ -250,10 +253,11 @@ test("image tooltip UI paints a graphics canvas while missing IDs and ordinary t
       hideTooltip() { scope.tooltipTarget = null; tooltip.textContent = ""; },
       translation: { text: (value: string) => value }, paintPicture: async () => ({}), newCanvas: () => canvas,
       visibleBox: () => ({ left: 0, bottom: 1 }), innerWidth: 100, innerHeight: 100,
+      document: { createElement: () => ({ textContent: "" }) },
     };
     const describe = runInNewContext(`${source.slice(start, end)}\ndescribe`, scope);
     describe({
-      classList: { add() {}, contains: () => true }, dataset: {}, matches: () => false,
+      classList: { add() {}, contains: () => true }, dataset: {}, matches: () => false, querySelector: () => null,
       closest: (selector: string) => selector.includes(".screen.is-active") ? {} : null,
       addEventListener(name: string, handler: () => Promise<void>) { handlers.set(name, handler); },
       setAttribute() {},

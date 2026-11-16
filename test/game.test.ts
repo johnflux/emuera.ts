@@ -260,7 +260,7 @@ test("OBJ framework intrinsics return what the ERB framework returns", {
     };
     const values: unknown[] = [];
     for (const className of ["衣装セット", "下半身下着_ずらし不可", "上半身下着_はだけ可能", "キャラデータ", "酒データ", "存在しないクラス"])
-      for (let id = -1n; id < 40n; id++)
+      for (const id of [...Array.from({ length: 41 }, (_, i) => BigInt(i - 1)), 1000n, 1001n, 1002n, 1100n, 1101n])
         for (const field of ["名前", "描写", "着せ替え可能", "ズボン", "普段着"]) {
           values.push(call("GET_STR", [0n, className, id, field]), call("GET_INT", [0n, className, id, field]));
           if (className !== "存在しないクラス") values.push(call("GET_EXIST", [className, id < 0n ? 0n : id]));

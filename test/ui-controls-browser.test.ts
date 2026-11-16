@@ -356,6 +356,8 @@ test("item IDs and quantities stay unbroken in wide and compact dialogs and lega
       const legacyBadge = getComputedStyle(legacy, "::after").content;
       const legacyFocus = legacy.classList.contains("controller-focus");
       gui.focus();
+      // A headless window without OS focus moves activeElement but dispatches no focus events.
+      if (!document.hasFocus()) gui.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
       const guiHint = gui.classList.contains("has-controller-hint") && gui.classList.contains("controller-focus");
       setPreviewControllerHints(false);
       const dialog = document.querySelector(".era-inventory");

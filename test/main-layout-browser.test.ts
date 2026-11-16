@@ -445,9 +445,9 @@ test("intimate panels use readable dark rose surfaces without button recoloring"
       <div class="era-card era-actions-collection">
         <div class="era-card-title era-actions-header"><span>Interact with Mima</span><span class="era-toggles">Petting</span></div>
         <div class="era-actions-title">Activities</div>
-        <button class="choice era-button era-button-tone-petting">Petting</button>
-        <button class="choice era-button era-button-tone-chores">Cleaning</button>
-        <button class="choice era-button">Conversation</button>
+        <button class="choice era-button era-button-fancy era-button-tone-petting">Petting</button>
+        <button class="choice era-button era-button-fancy era-button-tone-chores">Cleaning</button>
+        <button class="choice era-button era-button-fancy">Conversation</button>
       </div>
       <div class="era-card era-character"><div class="era-room-stage">
         <div class="era-card-title era-place"><span class="era-place-name">Living Room<span class="era-sub">Hakurei Shrine</span></span></div>
@@ -1612,7 +1612,7 @@ test("room names have no pressed-button box while other pressed controls keep it
       });
       const shadows = [...document.querySelectorAll(".era-occupant-name, .era-occupant-state, .era-feel")]
         .map(element => getComputedStyle(element).textShadow);
-      document.body.textContent = JSON.stringify({ names, shadows, control: getComputedStyle(document.querySelector("#control")).boxShadow });
+      document.body.textContent = JSON.stringify({ names, shadows, control: (({ borderColor, backgroundColor }) => ({ border: borderColor, background: backgroundColor }))(getComputedStyle(document.querySelector("#control"))) });
     </script>`;
   const profile = await mkdtemp(join(process.cwd(), ".era-room-labels-"));
   try {
@@ -1626,13 +1626,13 @@ test("room names have no pressed-button box while other pressed controls keep it
       const result = JSON.parse(match[1]) as {
         names: Array<{ border: string; shadow: string; background: string }>;
         shadows: string[];
-        control: string;
+        control: { border: string; background: string };
       };
       assert.equal(result.names.length, 2);
       for (const name of result.names) {
         assert.deepEqual(name, { border: "0px", shadow: "none", background: "rgba(0, 0, 0, 0)" }, mode);
       }
-      assert.notEqual(result.control, "none", `${mode}: other pressed buttons retain their highlight`);
+      assert.deepEqual(result.control, { border: "rgb(141, 218, 255)", background: "rgb(32, 64, 82)" }, `${mode}: other pressed buttons retain their highlight`);
       assert.equal(result.shadows.length, 5);
       for (const shadow of result.shadows) {
         assert.ok(shadow.includes("rgb(0, 0, 0) -1px -1px 0px"), `${mode}: black outline above/left`);

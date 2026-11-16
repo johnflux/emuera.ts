@@ -2,6 +2,202 @@
 
 A TypeScript/Node.js interpreter for Emuera/eramaker ERB, with a browser terminal.
 
+## Agent QA MCP
+
+### Built-in live access
+
+Ordinary browser and desktop servers expose Streamable HTTP MCP at `/mcp` on
+their existing loopback port. There is no second listener or standalone process
+to start. **Menu > Agent access** displays the full endpoint, including the
+desktop app's dynamically assigned port.
+
+```sh
+claude mcp add --transport http era-live http://127.0.0.1:3003/mcp
+```
+
+Local HTTP clients such as VS Code can connect directly. For local stdio
+integrations, launch the adapter:
+
+```sh
+node /absolute/path/to/era/dist/mcp.js --connect http://127.0.0.1:3003/mcp
+```
+
+For example, Claude Desktop's local configuration can use:
+
+```json
+{
+  "mcpServers": {
+    "era-live": {
+      "command": "node",
+      "args": ["/absolute/path/to/era/dist/mcp.js", "--connect", "http://127.0.0.1:3003/mcp"]
+    }
+  }
+}
+```
+
+Use the port displayed by the running game. Cloud remote connectors cannot
+reach localhost; do not expose this debugger through a public listener/tunnel.
+The adapter never starts another game and never launches a browser.
+
+Initialization/tool discovery can happen before approval, but game reads and
+actions are locked until the player allows access in the open game. Start a game
+first; the library alone cannot approve access. The displayed client name is
+self-reported, not a verified identity. Approval is bound to that browser's
+unguessable game session. Debug requests additionally require a random scoped
+capability. MCP requests use a random transport session ID; foreign HTTP origins
+and non-loopback Host headers are refused. Keep session IDs and tokens private.
+
+Only one live client is allowed per application server. Pairing prompts are
+rate-limited to one per minute; pending requests expire after a minute.
+The browser polls for commands and maintains an approval heartbeat; access
+expires after a minute without it. **Disconnect**, denial, HTTP session deletion,
+and `qa_finish` revoke access. A changed/restarted game needs fresh approval.
+`qa_finish` does not stop the player's game. Switching games invalidates the old
+binding; active sessions and local agent clients are trusted on this machine,
+not protected from a malicious process already able to read browser memory.
+
+Live mode uses the actual player's runtime and normal stores, not memory
+copies. Variables, expression evaluations and `#FUNCTION(S)` calls immediately
+change that runtime and can be saved by normal gameplay, without changing native
+`.sav` layout. Display history is resynchronized after a debugging mutation;
+this is not a rerun of the game's display routine. An already-prefetched wait
+must be consumed before debugging; it is never silently advanced or discarded.
+Automatic advancement, wait timers, prefetch and background encounter AI are
+disabled while connected; auto-advance stays off after disconnect.
+
+Live observations and actions go through the open tab. Click/fill/select/scroll
+are DOM operations with stale-reference, enabled-state and hit checks, not
+trusted OS input. Live keyboard actions support Enter/Space activation only;
+real hover and full keyboard testing require isolated graphical mode.
+`qa_screenshot` captures the actual Electron window in the desktop app; it
+explicitly errors in an ordinary browser. Use isolated graphical mode or your
+client's browser tools for browser-hosted screenshots. Live `qa_report` writes
+an observation JSON file, without a screenshot or isolated-driver action log.
+`qa_start` and `qa_load_save` are isolated-only; use normal game controls to
+restart/load a live run. Commands time out after 30 seconds; if an outcome is
+unknown, observe before retrying a mutation.
+
+`qa_context` returns the approved game's identity, absolute game/ERB/CSV/hotpatch
+paths, loaded routine source filenames, and debug/isolation mode. No paths or
+game state are exposed through this tool before approval. Agents use their own
+file tools to edit these sources; this MCP server has no source editor. Game logic
+belongs in upstream ERB files, hotpatches only in browser GUI changes. Source
+edits require restarting the server to invalidate its script cache. Hot reload
+is a separate, not-yet-implemented feature.
+
+### MCP setup
+
+`era-qa` speaks standard MCP over stdio, without any VS Code APIs or dependency
+on the built-in character AI. It works with Claude Code, Claude Desktop,
+VS Code/Copilot, and other clients supporting local stdio MCP servers.
+Start with `qa_games` and `qa_start`.
+
+Build with `npm install` and `npm run build`, then add it to Claude Code:
+
+```sh
+claude mcp add --transport stdio era-qa -- node /absolute/path/to/era/dist/mcp.js
+```
+
+For Claude Desktop, merge this into its `claude_desktop_config.json` and restart
+the client. Other clients using `mcpServers` can use the same configuration:
+
+```json
+{
+  "mcpServers": {
+    "era-qa": {
+      "command": "node",
+      "args": ["/absolute/path/to/era/dist/mcp.js"]
+    }
+  }
+}
+```
+
+Replace paths with your installation, and use an absolute Node executable path
+if a desktop client's PATH does not include Node. On Windows, use forward
+slashes or escape backslashes in JSON paths. No working-directory setting is
+required. `.vscode/mcp.json` is an optional VS Code-specific registration only;
+the server itself is client-independent.
+
+For source development,
+use `node --import tsx src/mcp.ts` from the repository root. npm scripts are also
+available as `npm run --silent mcp` and `npm run --silent mcp:prod`; the `--silent`
+is important because stdout must contain only MCP JSON-RPC. Game/loader logs go
+to stderr. No ordinary application server needs to be running.
+
+The MCP process owns a separate loopback HTTP server, random debugger token,
+browser context, and in-memory save/global/voice stores. It never attaches to the
+player's server or modifies their saves. Scripts/resources come from the normal
+library: by default `GAMES/` beside this installation's source/build directories,
+not the client's working directory. Set `ERA_QA_GAMES_DIR` (or `ERA_GAMES_DIR`)
+to override it; generic MCP configurations accept an `env` object alongside
+`command`/`args`. There are no source-editing tools, and library installation is
+disabled in this QA instance. Use the agent client's own coding tools to change
+source, then restart the MCP process to reload cached scripts. Closing the MCP connection
+disposes the browser and server.
+
+Graphical mode uses a detected Chrome/Chromium installation or Playwright's
+Chromium. Set `ERA_QA_BROWSER` to an executable path, or install the bundled
+browser with `npx playwright install chromium`. `headed: true` shows the QA
+window. External browser requests are blocked; QA does not invoke external LLM
+services. Normal application LLM settings are not copied.
+
+| Tool | Purpose |
+| --- | --- |
+| `qa_games` | Installed game IDs and component fixture names. |
+| `qa_context` | Running game identity, game/ERB/CSV/hotpatch paths and loaded routine source filenames. |
+| `qa_start` | `{game?, fixture?, graphical: true, headed: false, viewport: {width: 1440, height: 900}}`; replaces the driver's previous run. |
+| `qa_observe` | Rendered controls with refs, names, values, availability, geometry and hit testing; text, runtime status, layout/browser/network errors. Headless mode returns runtime state and candidate command values instead of DOM controls. |
+| `qa_act` | `{action: {kind: "click" \| "hover" \| "fill" \| "select" \| "press" \| "scroll", ...}}`; real Playwright interactions. Ref-based actions use the latest observation. |
+| `qa_input` | `{value: "7"}` sends direct Emuera input; empty input continues a wait; `{timeout: true}` explicitly expires a timed wait. This bypasses browser event handlers. |
+| `qa_debug` | `{command: ...}` using the shared debugger commands below. |
+| `qa_load_save` | `{file: "/absolute/path/save01.sav"}` imports a native save into memory and runs normal native-load hooks/compatibility checks. The source bytes are unchanged. |
+| `qa_screenshot` | Actual browser viewport as a PNG MCP image. |
+| `qa_report` | Persistent local JSON observation/action/error report plus screenshot; returns paths under a new temporary directory. Capture before finishing. |
+| `qa_finish` | Disposes the driver's browser and session. Memory saves last only for this MCP process. |
+
+Graphical actions wait for the application's busy/rendering state, font/image
+readiness and two animation frames, not a fixed sleep or network-idle heuristic.
+Control refs are invalidated by a new observation, session, step or renderer
+pass. Hidden/history controls are excluded; off-viewport controls remain listed
+so Playwright can scroll to them. Disabled controls and obstructed clicks are not
+force-activated. Browser timers, runtime prefetch and background encounter LLM
+reactions are disabled in QA; use explicit timeout input. Sprite animation still
+runs, so this is not a deterministic execution checkpoint or pixel-baseline
+system. RNG seeding controls the game's random stream, not its wall clock.
+
+### Shared runtime debugger
+
+The authenticated `/api/debug` endpoint accepts `{session, step, command}`.
+Ordinary application instances always return 404; only opt-in QA instances
+expose the authenticated debugger. Stale steps are rejected. Debugger mutations,
+including failed function calls that may have partial side effects, advance the
+step and are replayed through the existing renderer history.
+
+Examples of `command`:
+
+```json
+{"action":"state","expressions":["DAY","TIME","FLAG:0"]}
+{"action":"variables","search":"CFLAG","offset":0,"limit":100}
+{"action":"functions","search":"HOTPATCH_","offset":0,"limit":100}
+{"action":"read","expressions":["FLAG:(1+1)","CFLAG:TARGET:7398"]}
+{"action":"write","target":"FLAG:0","value":{"type":"integer","value":"42"}}
+{"action":"write","target":"STR:0","value":{"type":"string","value":"Example"}}
+{"action":"evaluate","expression":"MAX(FLAG:0, 10)"}
+{"action":"call","name":"MY_FUNCTION","arguments":["42","\"text\""]}
+{"action":"seed","value":"1234"}
+```
+
+Integers use decimal strings to preserve all signed 64 bits. Reads reject
+function calls, increments and RAND; evaluate/call explicitly allow side effects.
+Assignments use normal variable type, constant, dimension and named-index
+validation. Global and character variables are accessible, not suspended
+routine-local frames. Routine discovery includes source locations, parameters
+and function type. Calls must obey normal `#FUNCTION(S)` restrictions; they cannot
+replace arbitrary suspended game routines. Evaluation temporarily disables JIT,
+uses at most one million interpreted instructions, and restores the paused
+instruction budget/source afterward. Mutations do not automatically rerun game
+display routines. A prefetched continuation must be consumed before debugging.
+
 ### End-of-command acknowledgement
 
 The browser runtime adds a fallback Continue wait after TRAIN's `EVENTCOMEND`
@@ -94,6 +290,15 @@ and hotpatches; the server offers each one whose directory exists. At startup it
 also offers any other folder in `GAMES/` that holds `ERB/` and `CSV/`, directly
 or one level down (e.g. an unzipped `name/name-master`), titled and identified
 by the folder name. Use **Refresh library** after adding a game; a restart is not required.
+eraToho The World is also recognized under any folder name (for example a
+`git clone` into `GAMES/anon-tw`): first by a Git `origin` of
+`Legis1998/anon-tw`, otherwise by `CSV/GAMEBASE.CSV` code `7153` and title
+`eraThe World AnonTW`. eraNAS shares that GAMEBASE, so a folder or origin
+repository named `pops-tw…` is never treated as eraTW (`identity` in
+`KNOWN_GAMES`). The standard folder keeps the `tw` id if several copies exist;
+other copies get folder-based ids but still receive the hotpatches.
+Folders that are renamed or removed drop out of the library when it is listed or
+refreshed. Starting such a game returns a 404 that asks the player to refresh.
 Startup and library refresh only discover game folders. Scripts, CSV tables,
 resources and hotpatches load on first access to that game (play, demo,
 compatibility checks or sprite lookup), then remain cached for the server's
@@ -1576,8 +1781,10 @@ Two further layers can be switched off with the `Runtime` options
   `OBJNAME_TO_ID`/`GET_EXIST`/`MAKE_INT`/`MAKE_STR`), which otherwise
   dispatches through `CALLFORMF` and a name table on every lookup.
   Replacements are enabled only when the SHA-256 hash of the routine
-  sources matches the version they were written against. Any edit to
-  those routines falls back to the ERB.
+  sources matches a version they were written against: the original
+  framework, or the later one whose `OBJ_ID_SLOT` adds the reserved
+  `OBJ_MOD_ID_FIRST`..`OBJ_MOD_ID_LAST` range. Any other edit to those
+  routines falls back to the ERB.
 - **JIT** (`src/jit.ts`) compiles a routine to a JavaScript function on its
   second call. Unsupported constructs fall back to single-stepping
   the interpreter for that line, or for the whole routine.

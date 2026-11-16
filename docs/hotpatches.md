@@ -239,9 +239,11 @@ During an intimate session, the main layout uses light pink for the consensual
 state (`CFLAG:MASTER:うふふ == 1`) and red-pink for the non-consensual state
 (`== 2`). Intimate modes share strawberry-pink and lavender surfaces over a
 dark canvas, softly glowing rounded panels, and seasonal corner art at 0.85
-opacity. Action buttons gain rounded corners, a gentle hover lift/glow, and
+opacity. While `SHOW_USERCOM` prints the actions collection in these modes it
+sets `HOTPATCH_FANCY_BUTTONS(1)`, so `HOTPATCH_BUTTON` adds the shared
+`era-button-fancy` variant: rounded corners, a gentle hover lift/glow, and
 pink keyboard-focus outlines while preserving category colors. Reduced-motion
-preferences disable button transitions. All active modes carry the
+preferences disable its transitions. All active modes carry the
 shared `era-intimate` base class; consent-state classes and `era-embrace` add
 their specific palette overrides. The room stage is brighter than the panels;
 embrace adds extra rosy lighting and filled heart ornaments to action headings.

@@ -54,6 +54,7 @@ ENDIF
 
 
 HTML_PRINT "<era-open class='era-card era-actions-collection'>"
+CALLF HOTPATCH_FANCY_BUTTONS(CFLAG:MASTER:うふふ == 1 || CFLAG:MASTER:うふふ == 2 || (TFLAG:102 == 3 && TFLAG:抱きつきモード))
 nAbleCount = 0
 
 ;コマンド表示 (the usable commands first, so the filters can leave out toggles that would change nothing)
@@ -334,6 +335,7 @@ IF TFLAG:100 || nPreparationCount
 ENDIF
 HTML_PRINT "<era-close>"
 CALL HOTPATCH_IN_PLAY(nAble, nAbleCount)
+CALLF HOTPATCH_FANCY_BUTTONS(0)
 HTML_PRINT "<era-close>"
 ;自動実行中なら下記表示をスキップ
 SIF !TFLAG:100
@@ -1064,7 +1066,19 @@ IF sVariant == "list"
 		sStateClass '= " era-config-state-off"
 	sLabel '= @"<span class='era-config-setting'><span class='era-config-label'>%sLabel%</span><span class='era-config-state%sStateClass%'>%HTML_ESCAPE(sState)%</span></span><span class='era-config-help'>%HTML_ESCAPE(sHelp)%</span>"
 ENDIF
-RETURNF @"<button value='{nValue}' class='era-button%(sVariant == "default" ? "" # " era-button-" + sVariant)% %HOTPATCH_ATTRIBUTE(HTML_ESCAPE(sClass))%' data-command-number='{nValue}' data-suffix='%HOTPATCH_ATTRIBUTE(HTML_ESCAPE(sSuffix))%' aria-disabled='%(!nEnabled ? "true" # "false")%' title='%HOTPATCH_ATTRIBUTE(HTML_ESCAPE(sTitle))%'>%sLabel%</button>"
+RETURNF @"<button value='{nValue}' class='era-button%(sVariant == "default" ? "" # " era-button-" + sVariant)%%(HOTPATCH_FANCY_BUTTONS() ? " era-button-fancy" # "")% %HOTPATCH_ATTRIBUTE(HTML_ESCAPE(sClass))%' data-command-number='{nValue}' data-suffix='%HOTPATCH_ATTRIBUTE(HTML_ESCAPE(sSuffix))%' aria-disabled='%(!nEnabled ? "true" # "false")%' title='%HOTPATCH_ATTRIBUTE(HTML_ESCAPE(sTitle))%'>%sLabel%</button>"
+
+;-------------------------------------------------------------------------------
+; While set, HOTPATCH_BUTTON gives its buttons the fancy look (the intimate scene's actions).
+; Pass 0 or 1 to set it; omit the argument to read it.
+;-------------------------------------------------------------------------------
+@HOTPATCH_FANCY_BUTTONS(nSet = -1)
+#FUNCTION
+#DIM DYNAMIC nSet
+#DIM nFancy
+SIF nSet >= 0
+	nFancy = nSet != 0
+RETURNF nFancy
 
 @HOTPATCH_RADIO(nValue, sName, nSelected, sDescription = "", nEnabled = 1)
 #FUNCTIONS

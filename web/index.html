@@ -41,6 +41,7 @@
         <button id="demo" class="ui-button ui-button--menu-item" aria-pressed="false">Conformance demo</button>
         <button id="report" class="ui-button ui-button--menu-item" aria-expanded="false" aria-controls="compatibility">Compatibility report</button>
         <button id="settings-toggle" class="ui-button ui-button--menu-item" aria-haspopup="dialog" aria-controls="settings">Settings…</button>
+        <button id="agent-toggle" class="ui-button ui-button--menu-item" aria-haspopup="dialog" aria-controls="agent-access">Agent access…</button>
         <button id="menu-library" class="ui-button ui-button--menu-item">Game library</button>
         <a id="components-link" class="ui-button ui-button--menu-item" href="/components" hidden>UI components</a>
       </nav>
@@ -276,6 +277,20 @@
       <div class="confirm-actions llm-config-actions">
         <button class="ui-button ui-button--quiet" value="cancel" formnovalidate data-controller-hint="B">Cancel</button>
         <button class="ui-button ui-button--primary" value="save">Save</button>
+      </div>
+    </form>
+  </dialog>
+  <dialog id="agent-access" class="confirm ui-panel" aria-labelledby="agent-heading">
+    <form method="dialog">
+      <h2 id="agent-heading">Agent access</h2>
+      <p><code id="agent-endpoint"></code></p>
+      <p id="agent-status" role="status">No agent connected.</p>
+      <p>Allow reading the screen, controlling play, and changing live game variables and function state.</p>
+      <div class="confirm-actions">
+        <button id="agent-disconnect" class="ui-button ui-button--danger" type="button" hidden>Disconnect</button>
+        <button id="agent-deny" class="ui-button ui-button--quiet" type="button" hidden>Deny</button>
+        <button id="agent-allow" class="ui-button ui-button--primary" type="button" hidden>Allow</button>
+        <button class="ui-button ui-button--quiet" value="close">Close</button>
       </div>
     </form>
   </dialog>

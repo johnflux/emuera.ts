@@ -6,7 +6,8 @@ import { styleSource } from "./style-source.js";
 
 test("shared game buttons use baseline alignment and compact spacing", () => {
   const css = styleSource("style");
-  assert.match(css, /button\.choice\.era-button \{[^}]*align-items: baseline;[^}]*gap: \.2em;[^}]*padding: 4px 9px;/);
+  assert.match(css, /button\.choice\.era-button, \.era-command-tile \{[^}]*padding: 4px 9px;/);
+  assert.match(css, /button\.choice\.era-button \{[^}]*align-items: baseline;[^}]*gap: \.2em;/);
 });
 
 test("every explicit game button style has a catalog fixture", async () => {
@@ -24,7 +25,7 @@ test("game panels do not declare button appearance or inherited button themes", 
   const directory = new URL("../styles/game/", import.meta.url);
   const files = await readdir(directory);
   const buttonClasses = new Set(["choice", ...GAME_BUTTON_SAMPLES.flatMap(sample =>
-    sample.html.match(/^<[^>]*class=['"]([^'"]*)/)?.[1]?.split(/\s+/).find(name => name.startsWith("era-")) ?? [])]);
+    (sample.html.match(/<button\b[^>]*class=['"]([^'"]*)/) ?? sample.html.match(/^<[^>]*class=['"]([^'"]*)/))?.[1]?.split(/\s+/).find(name => name.startsWith("era-")) ?? [])]);
   const control = new RegExp(`\\bbutton\\b|\\.(?:${[...buttonClasses].join("|")})(?![\\w-])`);
   const violations: string[] = [];
   const visual = /(?:^|;)\s*(?:padding(?:-[a-z]+)?|border(?:-[a-z]+)?|background(?:-[a-z]+)?|color|font(?:-[a-z]+)?|text-align|text-shadow|box-shadow|--button-[a-z-]+|--relationship-button[a-z-]*)\s*:/;

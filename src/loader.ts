@@ -1,18 +1,30 @@
 import { readdir, readFile } from "node:fs/promises";
-import { closeSync, existsSync, openSync, readdirSync, readFileSync, readSync } from "node:fs";
+import { closeSync, existsSync, openSync, readdirSync, readFileSync, readSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { characterField, EraError, EVENT_FUNCTIONS, isCharacterNumberField, key, allowsFullWidthSpace, stripComment, splitArguments, trimEndWhitespace, type Diagnostic, type Line, type Routine } from "./model.js";
 import { CONFIG_ITEMS, configSetting } from "./config-items.js";
 
+const utf16Decoder = new TextDecoder("utf-16le");
+const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
+const shiftJisDecoder = new TextDecoder("shift_jis", { fatal: true });
 /** Browser-presentation ERB layered over eraToho The World without editing its files (see docs/hotpatches.md). */
 export const HOTPATCH_ROOT = fileURLToPath(new URL("../hotpatch/", import.meta.url));
 export const GAMES_DIR = path.resolve(process.env.ERA_GAMES_DIR ?? "GAMES");
+/**
+ * How a known game is recognized in a folder with another name. A matching Git origin decides first; otherwise
+ * GAMEBASE.CSV's code and title must match and neither the folder nor the origin may name one of `forks`.
+ */
+export interface GameIdentity { remote: RegExp; code: string; title: string; forks?: readonly string[] }
 /** A game the server offers when its directory exists; the first is the default. */
-export interface GameDefinition { id: string; title: string; root: string; hotpatch?: string }
+export interface GameDefinition { id: string; title: string; root: string; hotpatch?: string; identity?: GameIdentity }
 /** Games with a fixed id (used in ?game= addresses), title or hotpatch; other folders in GAMES/ are discovered. */
 export const KNOWN_GAMES: readonly GameDefinition[] = [
-  { id: "tw", title: "eraToho The World", root: path.join(GAMES_DIR, "anon-tw-anon-tw_eng-modding"), hotpatch: HOTPATCH_ROOT },
+  {
+    id: "tw", title: "eraToho The World", root: path.join(GAMES_DIR, "anon-tw-anon-tw_eng-modding"), hotpatch: HOTPATCH_ROOT,
+    // eraNAS (pops-tw) keeps TW's GAMEBASE code and title, but TW hotpatches do not target it.
+    identity: { remote: /[/:]Legis1998\/anon-tw(?:\.git)?\/?$/i, code: "7153", title: "eraThe World AnonTW", forks: ["pops-tw"] },
+  },
   { id: "k", title: "eraTohoK", root: path.join(GAMES_DIR, "eraTohoK", "eraTohoK-master") },
   { id: "rancek", title: "eraRanceK", root: path.join(GAMES_DIR, "eraRanceK") },
 ];
@@ -56,14 +68,70 @@ export function discoverGames(gamesDir = GAMES_DIR, known: readonly GameDefiniti
       continue;
     }
     if (!root || roots.has(root)) continue;
+    const identified = games.findIndex((game) => game.identity && identifies(game.identity, root, dir, name));
+    const knownGame = games[identified];
+    if (knownGame && !isGameRoot(knownGame.root)) {
+      roots.delete(knownGame.root);
+      roots.add(root);
+      games[identified] = { ...knownGame, root };
+      continue;
+    }
     const base = name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "") || "game";
     let id = base;
     for (let n = 2; ids.has(id); n++) id = `${base}-${n}`;
-    games.push({ id, title: name, root });
+    games.push({ id, title: name, root, ...(knownGame?.hotpatch ? { hotpatch: knownGame.hotpatch } : {}) });
     roots.add(root);
     ids.add(id);
   }
   return games;
+}
+/** The fetch URL of a checkout's `origin` (or its only remote), following `.git` files used by worktrees. */
+function gitOrigin(dir: string): string | undefined {
+  const missing = (error: unknown) => error instanceof Error && "code" in error && (error.code === "ENOENT" || error.code === "ENOTDIR");
+  let config: string;
+  try {
+    let gitDir = path.join(dir, ".git");
+    if (statSync(gitDir).isFile()) {
+      const pointer = /^gitdir:\s*(.+?)\s*$/m.exec(readFileSync(gitDir, "utf8"))?.[1];
+      if (!pointer) return undefined;
+      gitDir = path.resolve(dir, pointer);
+      const common = path.join(gitDir, "commondir");
+      if (existsSync(common)) gitDir = path.resolve(gitDir, readFileSync(common, "utf8").trim());
+    }
+    config = readFileSync(path.join(gitDir, "config"), "utf8");
+  } catch (error) {
+    if (missing(error)) return undefined;
+    throw error;
+  }
+  const urls = new Map<string, string>();
+  let remote: string | undefined;
+  for (const line of config.split(/\r\n|[\r\n]/)) {
+    const section = /^\s*\[\s*([^\]\s]+)(?:\s+"([^"]*)")?\s*\]/.exec(line);
+    if (section) { remote = section[1]!.toLowerCase() === "remote" ? section[2] : undefined; continue; }
+    const url = /^\s*url\s*=\s*(.+?)\s*$/i.exec(line);
+    if (remote !== undefined && url && !urls.has(remote)) urls.set(remote, url[1]!);
+  }
+  return urls.get("origin") ?? (urls.size === 1 ? [...urls.values()][0] : undefined);
+}
+/** GAMEBASE.CSV's settings (コード, タイトル, ...); empty when the game has none. */
+function gameBase(root: string): Map<string, string> {
+  const csv = gameDirectory(root, "CSV");
+  const file = existsSync(csv) ? readdirSync(csv).find((name) => name.toUpperCase() === "GAMEBASE.CSV") : undefined;
+  const base = new Map<string, string>();
+  for (const raw of (file && readTextFileSync(path.join(csv, file)) || "").split(/\r\n|[\r\n]/)) {
+    const line = raw.split(";")[0]!;
+    const comma = line.indexOf(",");
+    if (comma > 0) base.set(line.slice(0, comma).trim(), line.slice(comma + 1).trim());
+  }
+  return base;
+}
+function identifies(identity: GameIdentity, root: string, dir: string, folder: string): boolean {
+  const remote = gitOrigin(root) ?? (root === dir ? undefined : gitOrigin(dir));
+  if (remote && identity.remote.test(remote)) return true;
+  const repository = remote?.toLowerCase().replace(/\.git\/?$|\/$/g, "").split(/[/:]/).at(-1);
+  if (identity.forks?.some((fork) => folder.toLowerCase().startsWith(fork) || repository?.startsWith(fork))) return false;
+  const base = gameBase(root);
+  return base.get("コード") === identity.code && base.get("タイトル") === identity.title;
 }
 export const GAMES: readonly GameDefinition[] = discoverGames();
 export const GAME_ROOT = GAMES[0]!.root;
@@ -183,9 +251,6 @@ export function readTextFileSync(file: string): string | null {
     throw error;
   }
 }
-const utf16Decoder = new TextDecoder("utf-16le");
-const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
-const shiftJisDecoder = new TextDecoder("shift_jis", { fatal: true });
 function decodeText(buffer: Buffer): string {
   if (buffer[0] === 0xff && buffer[1] === 0xfe) return utf16Decoder.decode(buffer);
   try { return utf8Decoder.decode(buffer); }

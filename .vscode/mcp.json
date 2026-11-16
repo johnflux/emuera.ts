@@ -1,0 +1,10 @@
+{
+  "servers": {
+    "era-qa": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["--import", "tsx", "${workspaceFolder}/src/mcp.ts"],
+      "cwd": "${workspaceFolder}"
+    }
+  }
+}

@@ -6,7 +6,8 @@ import path from "node:path";
 import { test } from "node:test";
 import { runInNewContext } from "node:vm";
 import { demoGame } from "../src/demo.js";
-import { applyHotpatches, emptyGame, GAME_ROOT, indexScript, loadGame } from "../src/loader.js";
+import { applyHotpatches, emptyGame, GAME_ROOT, gameDirectory, indexScript, loadGame } from "../src/loader.js";
+import { coloredHtml } from "../src/html.js";
 import { GAME_INSTRUCTION_LIMIT, Runtime } from "../src/runtime.js";
 import { readNativeSave } from "../src/save-format.js";
 import { MemoryGlobalStore, MemorySaveStore } from "../src/storage.js";
@@ -143,10 +144,9 @@ RETURN ARG == 1`, "<custom-button-fixture>");
   }
 });
 
-test("time transitions skip generic narration and waits without suppressing other effects", async () => {
+test("time transitions skip generic narration and waits without suppressing other effects", { skip: !existsSync(GAME_ROOT) }, async () => {
   const patch = readFileSync(new URL("../hotpatch/TIME_EFFECTS.ERB", import.meta.url), "utf8");
-  const root = new URL("../GAMES/anon-tw-anon-tw_eng-modding/ERB/", import.meta.url);
-  const resumeSource = readFileSync(new URL("時間停止解除.ERB", root), "utf8");
+  const resumeSource = readFileSync(path.join(gameDirectory(GAME_ROOT, "ERB"), "時間停止解除.ERB"), "utf8");
   const resumeAnnouncement = resumeSource.slice(resumeSource.indexOf('SIF !LS_RESTRICTION("Resume time print")'),
     resumeSource.indexOf("追い出し = 0"));
   for (const jit of [false, true]) {
@@ -574,9 +574,8 @@ WAIT`, "<stub>");
   const snapshot = new Runtime(game, GAME_INSTRUCTION_LIMIT).start();
   assert.equal(snapshot.error, null);
   const markup = snapshot.output.flatMap((item) => item.type === "html" ? [item.text] : []).join("");
-  assert.match(markup, /<font color='#C070C0'>Ex<\/font>/);
-  assert.match(markup, /<font color='#FFFF00'>  ★★<\/font>/);
-  assert.doesNotMatch(markup, /#0x/i);
+  // Current eraTW writes Emuera's #0xRRGGBB form; renderers resolve it to a CSS color.
+  assert.deepEqual(coloredHtml(markup, "inherit"), [{ text: "Ex", color: "#C070C0" }, { text: "  ★★", color: "#FFFF00" }]);
 });
 
 test("Palam hotpatch prints one HTML line with formatted values", {
@@ -884,7 +883,13 @@ QUIT`, "<embrace-layout>");
   assert.match(styles, /\.era-intimate\.era-embrace \{/);
   assert.doesNotMatch(styles, /era-button-tone|button\.choice/,
     "intimate styling leaves category-specific button colors to their existing rules");
-  assert.match(styles, /@media \(prefers-reduced-motion: reduce\)/);
+  assert.doesNotMatch(styles, /:is\(button|\bbutton\b[^-]/, "intimate action buttons use the shared fancy variant");
+  const variants = readFileSync(new URL("../styles/game/_button-variants.scss", import.meta.url), "utf8");
+  assert.match(variants, /@media \(prefers-reduced-motion: reduce\) \{ button\.choice\.era-button\.era-button-fancy \{ transition: none; \} \}/);
+  const commands = readFileSync(new URL("../hotpatch/MAIN_SCREEN_COMMANDS.ERB", import.meta.url), "utf8");
+  const collection = commands.slice(commands.indexOf("<era-open class='era-card era-actions-collection'>"), commands.indexOf("CALLF HOTPATCH_FANCY_BUTTONS(0)"));
+  assert.match(collection, /CALLF HOTPATCH_FANCY_BUTTONS\(CFLAG:MASTER:うふふ == 1 \|\| CFLAG:MASTER:うふふ == 2 \|\| \(TFLAG:102 == 3 && TFLAG:抱きつきモード\)\)/,
+    "the actions collection is fancy exactly when the screen gets era-intimate");
   assert.doesNotMatch(styles, /mix-blend-mode|\.era-main\.era-embrace::after/,
     "embrace colors stay selective instead of tinting the whole screen");
 });

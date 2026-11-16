@@ -13,6 +13,9 @@ export const GAME_BUTTON_SAMPLES = [
   ...["chores", "petting", "dialogue", "vaginal", "anal", "sm", "service"].map(tone => ({
     name: `Action / ${tone}`, html: `<button value='101' class='era-button era-button-tone-${tone}' data-command-number='101'>Example action</button>`,
   })),
+  ...["", " era-button-tone-petting"].map(tone => ({
+    name: `Fancy action${tone ? " / petting" : ""}`, html: `<button value='101' class='era-button era-button-fancy${tone}' data-command-number='101'>Example action</button>`,
+  })),
   ...["era-chip-button", "era-cycle-toggle", "era-star", "era-star era-on", "era-chip-button era-current",
     "era-chip-button era-warn", "era-chip-button era-unavailable",
     "era-text-button", "era-wait-continue", "era-config-stars",
@@ -26,6 +29,10 @@ export const GAME_BUTTON_SAMPLES = [
     name: `Section heading / ${expanded ? "expanded" : "collapsed"}`,
     html: `<h2 class='era-section-title era-section-heading'><span class='era-heading-mark'>□</span><span><button value='161' class='era-section-toggle' aria-expanded='${expanded}'>Clothing</button></span><span class='era-heading-mark'>□</span></h2>`,
   })),
+  {
+    name: "Section heading / highlighted",
+    html: "<h2 class='era-section-title era-section-heading'><span class='era-heading-mark'>□</span><span><button value='161' class='era-section-toggle era-section-highlight' aria-expanded='true'>Clothing</button></span><span class='era-heading-mark'>□</span></h2>",
+  },
   { name: "Sheet person", html: button("era-sheet-person", "Reimu", "Reimu<span class='era-sub'>Shrine maiden</span>") },
   { name: "Sheet person selected", html: "<span class='era-sheet-person era-current'>Reimu<span class='era-sub'>Shrine maiden</span></span>" },
   { name: "Local image switch", html: "<span class='era-image-switch' title='Body view'><img src='bodyGraph_X' width='160px' height='160px'><img src='bodyGraph_circle' width='160px' height='160px'></span>" },
@@ -53,7 +60,8 @@ export const GAME_BUTTON_SAMPLES = [
   })),
   { name: "Predefined character", html: button("era-predefined-character", "Character", "<span class='era-predefined-face'></span><span class='era-predefined-info'><span class='era-predefined-name'>Example character</span><span class='era-predefined-summary'>Character summary</span></span>") },
   { name: "Save slot", html: button("era-save-slot", "Save", "<span class='era-save-slot-number'>1</span><span class='era-save-slot-info'>Saved game</span>") },
-  ...["era-title-new", "era-title-load", "era-title-continue"].map(classes => ({ name: classes, html: button(classes) })),
+  ...[["era-title-new", "New Game"], ["era-title-load", "Load Game"], ["era-title-continue", "Continue"]].map(([classes, label]) =>
+    ({ name: classes!, html: `<div class='era-launch-actions'>${button(classes!, label, `<span class='era-title-label'>${label}</span>`)}</div>` })),
   { name: "Occupant label", html: button("era-occupant-label", "Reimu", "<span class='era-occupant-text'><span class='era-occupant-name'>Reimu</span><span class='era-occupant-state'>Here</span></span>") },
   { name: "Occupant selected", html: "<button value='101' class='era-occupant-label' aria-pressed='true'>Reimu</button>" },
   { name: "Repeat", html: "<button value='101' class='era-repeat' title='Repeat last action' aria-label='Repeat last action'></button>" },
