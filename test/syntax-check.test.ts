@@ -23,6 +23,27 @@ PRINTFORML {GETCSVNOBYNICKNAME("name")} {HASH_XXH32("name")}
   assert.throws(() => parseExpression("(LOCAL + 1)++"), /needs a variable/);
 });
 
+test("selective syntax checks keep full routine lookup but skip unrelated routine bodies", async () => {
+  const game = emptyGame();
+  indexScript(game, `@EDITED
+PRINTFORML {HELPER()}
+@HELPER
+#FUNCTION
+RETURNF 7
+@UNRELATED
+RETURNF 1 +
+`, "selective.ERB");
+  const edited = game.routines.get("EDITED")![0]!;
+  const selected = await checkSyntax(game, new Set([edited]));
+  assert.equal(selected.routines, 1);
+  assert.deepEqual(selected.diagnostics, []);
+  assert.deepEqual(selected.references, []);
+  const broken = await checkSyntax(game, new Set(game.routines.get("UNRELATED")));
+  assert.equal(broken.routines, 1);
+  assert.match(JSON.stringify(broken.diagnostics), /Expected value/);
+  assert.equal((await checkSyntax(game)).routines, 3);
+});
+
 test("syntax checks report unvisited errors by source and continue after broken routines", async () => {
   const game = emptyGame();
   indexScript(game, `@SYSTEM_TITLE

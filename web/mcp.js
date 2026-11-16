@@ -58,7 +58,7 @@ export function installLiveMcp({ bridge, connected, message }) {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data),
     });
     const value = await response.json();
-    if (!response.ok) throw new Error(value.error || `Agent connection failed (${response.status})`);
+    if (!response.ok) throw Object.assign(new Error(value.error || `Agent connection failed (${response.status})`), { status: response.status });
     return value;
   }
   async function execute(command, key, session) {
@@ -143,6 +143,11 @@ export function installLiveMcp({ bridge, connected, message }) {
         }
       }
     } catch (error) {
+      if (error.status === 409) {
+        decision = {};
+        pending = null;
+        shown = null;
+      }
       status.textContent = error.message;
       message(`Agent access: ${error.message}`, true);
     } finally {

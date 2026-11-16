@@ -3,7 +3,7 @@ import { classify, compile, inlineDeclaration, isSupported, printVariant } from 
 import { expandArgumentMacros, parseExpression, useMacros, type Expr } from "./expression.js";
 import { parseFormat } from "./format.js";
 import type { Game } from "./loader.js";
-import { allowsFullWidthSpace, EraError, key, splitArguments, type Diagnostic, type Line, type Source } from "./model.js";
+import { allowsFullWidthSpace, EraError, key, splitArguments, type Diagnostic, type Line, type Routine, type Source } from "./model.js";
 import { BUILTIN_FUNCTIONS, Runtime } from "./runtime.js";
 import { symbolTable, Variables } from "./variables.js";
 import { formNameEnd, parseAssignment, parseCallTarget, parseCaseTests, statementExpression } from "./statement-parser.js";
@@ -276,8 +276,8 @@ function checkLine(line: Line, game: Game, strings: Map<string, boolean>, inspec
   return true;
 }
 
-/** Parses every loaded, active script line without evaluating expressions or running game code. */
-export async function checkSyntax(game: Game): Promise<SyntaxReport> {
+/** Parses active script lines, optionally in selected routines, without running game code. */
+export async function checkSyntax(game: Game, onlyRoutines?: ReadonlySet<Routine>): Promise<SyntaxReport> {
   const report: SyntaxReport = {
     scriptFiles: game.scriptFiles, routines: 0, lines: 0, skippedLines: 0, diagnostics: [...game.diagnostics], references: [],
   };
@@ -321,6 +321,7 @@ export async function checkSyntax(game: Game): Promise<SyntaxReport> {
   } finally { useMacros(previous); }
   let batch = 0;
   for (const routines of game.routines.values()) for (const routine of routines) {
+    if (onlyRoutines && !onlyRoutines.has(routine)) continue;
     previous = useMacros(game.macros);
     try {
       report.routines++;

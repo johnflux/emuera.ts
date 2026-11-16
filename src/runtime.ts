@@ -182,6 +182,7 @@ export interface Snapshot {
   lastCommand?: string;
   midday?: { available: boolean };
   continueAvailable?: boolean;
+  refreshable?: boolean;
   quicksaveError?: string;
   quicksavePending?: boolean;
   characterHistory?: CharacterHistory;
@@ -277,7 +278,7 @@ function rgbColor(value: bigint): string {
   return "#" + value.toString(16).padStart(6, "0");
 }
 const SKIPPED: Yield = { output: { type: "text", text: "", newline: false, style: {} as Style } };
-/** Sent by refresh() to the TRAIN command prompt; integer input validation means a player cannot send it. */
+/** Sent by refresh() to a TRAIN/SHOP prompt; integer input validation means a player cannot send it. */
 const REFRESH = "\u0000refresh";
 /** Character tool calls in the interaction history: their results are cut to this length, in this colour. */
 // History colours for character tool calls: a dim call, a lighter outcome, and willing, refusing or uneasy picked out.
@@ -595,6 +596,7 @@ export class Runtime {
   private characterActions: CharacterAction[] = [];
   /** The TRAIN command prompt currently awaited, which refresh() may resume without a command. */
   private trainRequest: InputRequest | undefined;
+  private shopRequest: InputRequest | undefined;
   private trainAvailable: number[] | undefined;
   private resumeTrain = false;
   /** The result of continuing a click-to-continue wait ahead of the click; see prefetch(). */
@@ -994,6 +996,15 @@ export class Runtime {
     yield this.emit("input", value, true);
     return BigInt(value.trim());
   }
+  private *shopInput(): Generator<Yield, bigint | undefined, string> {
+    const request: InputRequest = { kind: "integer" };
+    this.shopRequest = request;
+    let value: string;
+    try { value = yield { input: request }; }
+    finally { this.shopRequest = undefined; }
+    yield this.emit("input", value === REFRESH ? "" : value, true);
+    return value === REFRESH ? undefined : BigInt(value.trim());
+  }
   /** The TRAIN command prompt; undefined when refresh() resumed it instead of a command. */
   private *commandInput(): Generator<Yield, bigint | undefined, string> {
     const request: InputRequest = { kind: "integer" };
@@ -1051,11 +1062,10 @@ export class Runtime {
     return command;
   }
   /**
-   * Resumes the TRAIN command prompt without a command so the status is redrawn, running queued character actions
-   * first. Character tools change state outside the script, and this shows the result the way the game would.
+   * Resumes a TRAIN or SHOP prompt without submitting a command. TRAIN also runs queued character actions first.
    */
   refresh(): Snapshot {
-    if (this.ahead || !this.pending || this.pending !== this.trainRequest) throw new EraError("The game is not waiting for a command, so it cannot redraw now");
+    if (!this.canRefresh) throw new EraError("The game is not waiting for a command or shop prompt, so it cannot redraw now");
     this.action = "refresh";
     this.messageSkip = false;
     this.textbox = "";
@@ -1064,6 +1074,9 @@ export class Runtime {
     this.pending = null;
     this.timed = undefined;
     return this.advance(REFRESH);
+  }
+  private get canRefresh(): boolean {
+    return !this.ahead && !!this.pending && (this.pending === this.trainRequest || this.pending === this.shopRequest);
   }
   /**
    * Runs an LLM tool for a character in the current interaction history; see character-tools.ts. `aside` is for talk
@@ -1332,7 +1345,8 @@ export class Runtime {
     while (true) {
       yield* this.system("SHOW_SHOP", true);
       while (true) {
-        const value = yield* this.systemInput();
+        const value = yield* this.shopInput();
+        if (value === undefined) break;
         if (value >= 0n && value < BigInt(this.maxShopItem)) {
           const item = Number(value);
           if (this.number("ITEMSALES", item) !== 0n && this.game.tables.get("ITEM")?.has(item)) {
@@ -3460,6 +3474,7 @@ export class Runtime {
   }
   /** Adds the debug window text gathered since the last snapshot. */
   private withDebug(snapshot: Snapshot): Snapshot {
+    snapshot.refreshable = snapshot.status === "waiting" && this.canRefresh;
     if (this.middaySupported) snapshot.midday = { available: this.canSaveMidday };
     if (this.interactionHistory)
       snapshot.timeStopped = this.globals.get("FLAG", [literal(70n)], this.context(this.globals)) !== 0n;

@@ -705,7 +705,13 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
       }
       if (request.method === "GET" && url.pathname === "/api/runtime") {
         await Promise.all([...entries.values()].map(ensureMetadata));
-        const games = [...entries.values()].map(({ id, title, game }) => ({ id, title, display: displayDefaults(game), metrics: displayMetrics(game) }));
+        const games = [...entries.values()].map(({ id, title, game }) => {
+          const reload = reloaders.get(id)?.status(0);
+          return {
+            id, title, display: displayDefaults(game), metrics: displayMetrics(game),
+            reload: reload?.last ?? null, reloading: reload?.reloading ?? false,
+          };
+        });
         json(response, { instance, development, ...(qa ? { qa: true } : {}), games, display: displayDefaults(defaultEntry().game), metrics: displayMetrics(defaultEntry().game) });
         return;
       }
@@ -921,7 +927,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
         return;
       }
       if (request.method === "POST" && url.pathname === "/api/refresh") {
-        // Redraws the command screen after character tools changed the game, running their queued actions.
+        // Redraws a command/shop prompt; command prompts also run queued character actions.
         const data = await body(request);
         if (typeof data.session !== "string" || !Number.isSafeInteger(data.step)) throw new HttpError(400, "Expected session and step");
         const session = sessions.get(data.session);

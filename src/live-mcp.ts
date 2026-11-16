@@ -28,7 +28,7 @@ export class LiveMcp {
 
   private expire(): void {
     const connection = this.connection;
-    if (connection && Date.now() - connection.seen > 60_000) {
+    if (connection && (connection.session || connection.revoked) && Date.now() - connection.seen > 60_000) {
       if (!connection.revoked) this.revoke();
       this.connection = undefined;
       void connection.server.close().catch(error => console.error("MCP connection cleanup failed:", error));

@@ -80,6 +80,31 @@ const executablePath = process.env.ERA_QA_BROWSER ?? [
   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", "/usr/bin/google-chrome", "/usr/bin/chromium",
 ].find(candidate => existsSync(candidate));
 
+test("pending approval remains available after long inactivity and Disconnect still revokes it", async t => {
+  const server = await app();
+  const client = new Client({ name: "patient-agent", version: "1" });
+  const transport = new StreamableHTTPClientTransport(new URL(server.base + "/mcp"));
+  let now = Date.now();
+  t.mock.method(Date, "now", () => now);
+  try {
+    const started = await (await server.post("/api/start", { mode: "game" })).json();
+    await client.connect(transport);
+    const pending = await (await server.post("/api/mcp/browser", { session: started.session })).json();
+    assert.ok(pending.pending);
+    now += 24 * 60 * 60_000;
+    const later = await (await server.post("/api/mcp/browser", { session: started.session })).json();
+    assert.deepEqual(later.pending, pending.pending);
+    assert.equal((await client.callTool({ name: "qa_context" })).isError, true);
+    const approved = await (await server.post("/api/mcp/browser", {
+      session: started.session, id: pending.pending.id, decision: "allow",
+    })).json();
+    assert.equal(approved.connected, true);
+    const revoked = await (await server.post("/api/mcp/browser", { session: started.session, revoke: true })).json();
+    assert.equal(revoked.connected, false);
+    await assert.rejects(client.callTool({ name: "qa_context" }), /404|revoked/);
+  } finally { await client.close(); await server.close(); }
+});
+
 test("configured live HTTP MCP reuses one approval across actions and mutations until revoked", { skip: !executablePath }, async () => {
   const server = await app();
   const browser = await chromium.launch({ executablePath: executablePath!, headless: true });
@@ -103,6 +128,15 @@ test("configured live HTTP MCP reuses one approval across actions and mutations 
     assert.equal(blocked.isError, true);
     assert.match(JSON.stringify(blocked), /approval/);
     await page.locator("#agent-access[open]").waitFor();
+    let staleDecisions = 0;
+    await page.route("**/api/mcp/browser", async route => {
+      if (route.request().postDataJSON().decision === "allow" && staleDecisions++ === 0) {
+        await route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ error: "This pairing request is no longer available" }) });
+      } else await route.continue();
+    });
+    await page.locator("#agent-allow").click();
+    await page.locator("#agent-access[open]").waitFor();
+    assert.equal(staleDecisions, 1, "an old decision must not be sent again on every poll");
     await page.locator("#agent-allow").click();
     await page.waitForFunction(() => document.querySelector("#agent-status")?.textContent === "Connected: live-test");
     assert.deepEqual(await (await server.post("/api/prefetch", { session: started.session })).json(), { prefetched: false });

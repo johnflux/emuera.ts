@@ -368,11 +368,16 @@ async function watchDevelopment() {
   let runtime;
   try { runtime = await api("/api/runtime"); }
   catch (error) {
-    message(`Cannot check development reload status: ${error.message}. Retrying...`, true);
+    message(`Cannot check reload status: ${error.message}. Retrying...`, true);
     setTimeout(() => { void watchDevelopment(); }, 1500);
     return;
   }
-  if (!runtime.development || runtime.qa) return;
+  function showReloadActivity(runtime) {
+    const reloading = !!(session && runMode === "game" && runtime.games.find(game => game.id === runGame)?.reloading);
+    document.body.classList.toggle("is-reloading", reloading);
+  }
+  showReloadActivity(runtime);
+  const revisions = new Map(runtime.games.map(game => [game.id, game.reload?.revision ?? 0]));
   if (sessionStorage.getItem("era-dev-reloaded")) {
     sessionStorage.removeItem("era-dev-reloaded");
     if (!session && !busy) message("Development reload complete. Starting a fresh run.");
@@ -381,17 +386,31 @@ async function watchDevelopment() {
   async function poll() {
     try {
       const next = await api("/api/runtime");
-      if (next.instance !== runtime.instance) {
+      if (runtime.development && !runtime.qa && next.instance !== runtime.instance) {
         sessionStorage.setItem("era-dev-reloaded", "1");
         location.reload();
         return;
       }
+      showReloadActivity(next);
       if (disconnected) {
         disconnected = false;
-        message("Development server reconnected.");
+        message("Server reconnected.");
+      }
+      for (const game of next.games) {
+        const reload = game.reload;
+        const previous = revisions.get(game.id) ?? 0;
+        revisions.set(game.id, reload?.revision ?? 0);
+        if (!session || runMode !== "game" || game.id !== runGame || !reload || reload.revision <= previous) continue;
+        if (reload.status === "reloaded") {
+          if (qaSnapshot?.refreshable && !busy && input && !pendingScreen) {
+            if (!await refreshScreen("Refreshing screen...")) continue;
+          }
+          message("Hot reload complete.");
+        } else message(`Hot reload failed: ${reload.errors.map(error => error.message).join("; ")}`, true);
       }
     } catch (error) {
-      if (!disconnected) message(`Development server disconnected (${error.message}); waiting for restart...`, true);
+      document.body.classList.remove("is-reloading");
+      if (!disconnected) message(`Server disconnected (${error.message}); waiting for restart...`, true);
       disconnected = true;
     }
     setTimeout(() => { void poll(); }, 1000);
@@ -3313,18 +3332,22 @@ async function reactToEncounters() {
   if (status.textContent === shown) message("");
   if (changed) await refreshScreen();
 }
-/** Redraws the command screen after LLM character tools changed the game, showing what they did in the room. */
-async function refreshScreen() {
-  if (busy || !input || pendingScreen) return;
+/** Redraws a supported prompt after character actions or script reload. */
+async function refreshScreen(notice = "Updating the room...") {
+  if (busy || !input || pendingScreen) return false;
   busy = true;
-  message("Updating the room...");
+  message(notice);
   beginActivity();
   updateControls();
   try {
     const snapshot = await api("/api/refresh", { session, step });
     activityResponded();
     await render(snapshot, true, false, false, true);
-  } catch (error) { if (!staleTab(error)) message(error.message, true); }
+    return snapshot.status === "waiting";
+  } catch (error) {
+    if (!staleTab(error)) message(error.message, true);
+    return false;
+  }
   finally {
     busy = false;
     endActivity();

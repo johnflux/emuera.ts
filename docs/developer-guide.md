@@ -70,7 +70,9 @@ preference. Automatic approval still follows the normal session-bound server
 approval flow, one-client limit and pairing cooldown.
 
 Only one live client is allowed per application server. Pairing prompts are
-rate-limited to one per minute; pending requests expire after a minute.
+rate-limited to one per minute; pending approval requests have no timeout and
+remain available until approved, denied, explicitly disconnected, or the server
+shuts down. The cooldown limits new requests, not time allowed to answer a popup.
 The browser polls for commands and maintains an approval heartbeat; access
 expires after a minute without it. **Disconnect**, denial, HTTP session deletion,
 and `qa_finish` revoke access. A changed/restarted game needs fresh approval.
@@ -119,10 +121,21 @@ and `runtimeError`. Each event has a revision, timestamp, status (`reloaded` or
 `error`), absolute changed file paths, changed routine names, and diagnostics with
 file/line/message. Events are incremental since that MCP client's previous call;
 `last` retains the latest outcome even when there are no new events. The last
-100 events are retained; `truncated` reports a gap. `runtimeError` is the current
+100 events are retained; `truncated` reports a gap. Each event's `durationMs`
+measures scan/load/check time, excluding the debounce; successful server log
+messages include this timing too. `runtimeError` is the current
 runtime snapshot's error, if any. Watch, scan, load and syntax-check failures are
 logged to the server and included as error events, not success-shaped reloads.
 An error event is a successfully retrieved report, not an MCP transport error.
+The game's colored top-bar animation runs while scripts reload. Its status line
+shows completion or errors once per reload; the next normal status message
+replaces the notice.
+After a successful reload, an idle main command screen or SHOP prompt (eraTW's
+pre-wakeup screen) redraws automatically using the new routines. Other dialogs
+and in-progress input/render operations are left alone. Redraw runs the game's
+normal display routines, not a player command; it is not a side-effect-free
+replay. At the main command screen, queued character actions run as on a normal
+screen refresh.
 `qa_reload({scan: true})` scans immediately and waits for any pending scan/reload.
 Unchanged files aren't reloaded; after a failed reload, fix/save the source and
 scan again. Tool calls remain subject to ordinary live-game approval.
@@ -131,8 +144,11 @@ Existing variables and suspended execution frames are retained. Active routines
 finish their old instructions; future calls resolve new routine definitions.
 Unchanged routines retain their static variables; changed routines start new
 static scopes. JIT/native intrinsic optimizations are disabled on reloaded
-runtimes to avoid executing stale optimized code. Pre-existing syntax diagnostics
-are tolerated; newly introduced syntax diagnostics reject the replacement set.
+runtimes to avoid executing stale optimized code. Ordinary edits syntax-check
+only changed routines, using the full game's symbols for lookups. Header/macro
+changes check all routines because they can affect otherwise unchanged code.
+Pre-existing syntax diagnostics are tolerated; newly introduced syntax diagnostics
+reject the replacement set.
 This is deliberately best-effort: no execution-position migration, state rollback,
 or structural variable migration. ERH macros reload, but global declarations and
 array sizes are not reapplied to existing variables. Restart for declaration,
@@ -735,18 +751,21 @@ The **Game library** button returns from a game to the home screen, asking first
 before discarding unsaved progress. Direct `?game=...` / `?demo` links and page
 reloads still open or restore the requested run rather than the library.
 
-`npm start` (or its equivalent `npm run dev`) watches imported TypeScript modules
-and `web/`. Changes to these files restart the backend and
+`npm start` (or its equivalent `npm run dev`) watches imported TypeScript modules,
+`web/`, `hotpatch/`, and game `ERB/`, `CSV/`, and `resources/` directories.
+Changes to these files restart the backend and
 automatically refresh connected browser tabs once the backend is ready again.
 **Reloads reset active interpreter sessions and browser scrollback**; they do
 not preserve live game state. The UI shows a reload notice. A disconnected
 server is reported while the browser waits for reconnection.
-Game ERB/ERH and GUI hotpatch edits instead use in-process script hot reload,
-preserving active sessions. CSV/config/resource edits no longer restart the
-backend automatically; restart manually when needed.
+Use `npm run start:hotreload` for live game-script development instead.
+It keeps TypeScript/web restart watching and the CSS watcher, but explicitly
+excludes `GAMES/**` and `hotpatch/**` from backend restarts. Game ERB/ERH and GUI
+hotpatch edits then use in-process script hot reload, preserving active sessions.
+CSV/config/resource changes require a manual restart in this mode.
 
 Styles are authored in `styles/` as Sass and compiled to `web/generated/`.
-`npm start` builds them before starting the server and watches for changes;
+Both development start commands build them before starting the server and watch for changes;
 the generated CSS triggers the usual browser reload. `npm run build` and
 `npm test` also compile styles. For direct test-runner invocations, first run
 `npm run build:css`. Generated CSS is not checked in.
