@@ -41,7 +41,6 @@
         <button id="demo" class="ui-button ui-button--menu-item" aria-pressed="false">Conformance demo</button>
         <button id="report" class="ui-button ui-button--menu-item" aria-expanded="false" aria-controls="compatibility">Compatibility report</button>
         <button id="settings-toggle" class="ui-button ui-button--menu-item" aria-haspopup="dialog" aria-controls="settings">Settings…</button>
-        <button id="agent-toggle" class="ui-button ui-button--menu-item" aria-haspopup="dialog" aria-controls="agent-access">Agent access…</button>
         <button id="menu-library" class="ui-button ui-button--menu-item">Game library</button>
         <a id="components-link" class="ui-button ui-button--menu-item" href="/components" hidden>UI components</a>
       </nav>
@@ -160,6 +159,7 @@
       <h3>Interpreter</h3>
       <div class="settings-actions">
         <label class="checkbox-control" title="Emuera's debug mode: restarts the run with [IF_DEBUG] code loaded, DEBUGPRINT output shown and ASSERT checked"><input id="debug-toggle" type="checkbox"><span>Debug mode</span></label>
+        <button id="agent-toggle" class="ui-button" type="button" aria-haspopup="dialog" aria-controls="agent-access">Agent access…</button>
       </div>
     </dialog>
     <dialog id="art-demo" class="confirm art-demo ui-panel" aria-labelledby="art-demo-heading">
@@ -286,6 +286,7 @@
       <p><code id="agent-endpoint"></code></p>
       <p id="agent-status" role="status">No agent connected.</p>
       <p>Allow reading the screen, controlling play, and changing live game variables and function state.</p>
+      <p><label class="checkbox-control"><input id="agent-auto-approve" type="checkbox"><span>Always approve any local agent</span></label></p>
       <div class="confirm-actions">
         <button id="agent-disconnect" class="ui-button ui-button--danger" type="button" hidden>Disconnect</button>
         <button id="agent-deny" class="ui-button ui-button--quiet" type="button" hidden>Deny</button>

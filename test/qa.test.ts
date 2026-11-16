@@ -195,6 +195,27 @@ test("graphical driver observes and clicks real controls, synchronizes debugger 
   } finally { await driver.close(); await server.close(); }
 });
 
+test("portable workspace MCP configuration initializes and lists QA tools", async () => {
+  const root = fileURLToPath(new URL("../", import.meta.url));
+  const config = JSON.parse(await readFile(new URL("../.mcp.json", import.meta.url), "utf8"));
+  assert.deepEqual(Object.keys(config), ["mcpServers"]);
+  const server = config.mcpServers["era-qa"];
+  assert.equal(server.type, "stdio");
+  assert.equal("cwd" in server, false);
+  assert.ok(!JSON.stringify(server).includes("${workspaceFolder}"));
+  assert.equal(existsSync(new URL("../.vscode/mcp.json", import.meta.url)), false);
+  const transport = new StdioClientTransport({
+    command: server.command, args: server.args, cwd: root, stderr: "pipe",
+  });
+  const client = new Client({ name: "workspace-config-test", version: "1" });
+  try {
+    await client.connect(transport);
+    const tools = await client.listTools();
+    for (const name of ["qa_start", "qa_context", "qa_observe", "qa_debug", "qa_finish"])
+      assert.ok(tools.tools.some(tool => tool.name === name), name);
+  } finally { await client.close(); }
+});
+
 test("generic stdio MCP works outside the repository and supports headless gameplay without stdout log corruption", async () => {
   const directory = await mkdtemp(path.join(tmpdir(), "era-mcp-test-"));
   const root = path.join(directory, "fixture");

@@ -2,14 +2,52 @@ export function installLiveMcp({ bridge, connected, message }) {
   const dialog = document.querySelector("#agent-access");
   const status = document.querySelector("#agent-status");
   const allow = document.querySelector("#agent-allow");
+  const autoApprove = document.querySelector("#agent-auto-approve");
+  const preferenceKey = "era-typescript.agent-auto-approve";
+  function readPreference() {
+    try { autoApprove.checked = localStorage.getItem(preferenceKey) === "1"; }
+    catch (error) {
+      autoApprove.checked = false;
+      message(`Could not read agent approval preference: ${error.message}`, true);
+    }
+  }
+  readPreference();
+  dialog.addEventListener("close", readPreference);
+  function savePreference(value) {
+    try {
+      if (value) localStorage.setItem(preferenceKey, "1");
+      else localStorage.removeItem(preferenceKey);
+      autoApprove.checked = value;
+      return true;
+    } catch (error) {
+      autoApprove.checked = false;
+      message(`Could not save agent approval preference: ${error.message}`, true);
+      return false;
+    }
+  }
+  autoApprove.addEventListener("change", () => {
+    if (!pending) savePreference(autoApprove.checked);
+  });
+  window.addEventListener("storage", event => {
+    if (event.storageArea === localStorage && (event.key === preferenceKey || event.key === null))
+      autoApprove.checked = event.newValue === "1";
+  });
   const deny = document.querySelector("#agent-deny");
   const disconnect = document.querySelector("#agent-disconnect");
   document.querySelector("#agent-endpoint").textContent = `${location.origin}/mcp`;
   document.querySelector("#agent-toggle").addEventListener("click", () => { if (!dialog.open) dialog.showModal(); });
   let pending = null, shown = null, active = false, previousSession = null, result = {}, decision = {};
-  allow.addEventListener("click", () => { decision = { id: pending?.id, decision: "allow" }; dialog.close(); });
+  allow.addEventListener("click", () => {
+    if (savePreference(autoApprove.checked)) {
+      decision = { id: pending?.id, decision: "allow" };
+      dialog.close();
+    }
+  });
   deny.addEventListener("click", () => { decision = { id: pending?.id, decision: "deny" }; dialog.close(); });
-  disconnect.addEventListener("click", () => { decision = { revoke: true }; });
+  disconnect.addEventListener("click", () => {
+    savePreference(false);
+    decision = { revoke: true };
+  });
   const setConnected = value => {
     if (active === value) return;
     active = value;
@@ -93,7 +131,8 @@ export function installLiveMcp({ bridge, connected, message }) {
         : state.connected ? `Connected: ${state.name}` : "No agent connected.";
       if (pending && shown !== pending.id) {
         shown = pending.id;
-        if (!dialog.open) dialog.showModal();
+        if (autoApprove.checked) decision = { id: pending.id, decision: "allow" };
+        else if (!dialog.open) dialog.showModal();
       }
       if (state.command) {
         try {

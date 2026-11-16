@@ -8,7 +8,7 @@ A TypeScript/Node.js interpreter for Emuera/eramaker ERB, with a browser termina
 
 Ordinary browser and desktop servers expose Streamable HTTP MCP at `/mcp` on
 their existing loopback port. There is no second listener or standalone process
-to start. **Menu > Agent access** displays the full endpoint, including the
+to start. **Settings > Agent access** displays the full endpoint, including the
 desktop app's dynamically assigned port.
 
 ```sh
@@ -21,6 +21,16 @@ integrations, launch the adapter:
 ```sh
 node /absolute/path/to/era/dist/mcp.js --connect http://127.0.0.1:3003/mcp
 ```
+
+The workspace `.mcp.json` registers `era-live` as a persistent HTTP connection
+to the default port, alongside the isolated `era-qa` server. Enable `era-live`
+in the MCP client while the game is running. Retain the same MCP session across
+user requests: one approval allows repeated reads/actions/mutations.
+Do not create a new client or call `qa_finish`/HTTP DELETE after every tool call.
+Those explicitly end approval and force a new pairing. A one-off connection
+check is not a replacement for registering the live endpoint with the client.
+Do not automatically approve a new connection just because its self-reported
+name matches a previously approved agent.
 
 For example, Claude Desktop's local configuration can use:
 
@@ -46,6 +56,18 @@ self-reported, not a verified identity. Approval is bound to that browser's
 unguessable game session. Debug requests additionally require a random scoped
 capability. MCP requests use a random transport session ID; foreign HTTP origins
 and non-loopback Host headers are refused. Keep session IDs and tokens private.
+
+The popup's **Always approve any local agent** checkbox is applied when **Allow**
+is clicked, storing `era-typescript.agent-auto-approve` in browser localStorage.
+Checking it alone does not grant access or save the preference. With this enabled,
+that browser approves any local agent's pending pairing request for its current
+game without opening the popup, including after reloads or new game sessions.
+It is not trust in a client name. The preference is scoped to the browser
+profile and origin (including port), not saved in native game saves.
+**Always approve any local agent** in Agent access can turn this off without
+ending current access; **Disconnect** both revokes access and clears the
+preference. Automatic approval still follows the normal session-bound server
+approval flow, one-client limit and pairing cooldown.
 
 Only one live client is allowed per application server. Pairing prompts are
 rate-limited to one per minute; pending requests expire after a minute.
@@ -115,8 +137,15 @@ the client. Other clients using `mcpServers` can use the same configuration:
 Replace paths with your installation, and use an absolute Node executable path
 if a desktop client's PATH does not include Node. On Windows, use forward
 slashes or escape backslashes in JSON paths. No working-directory setting is
-required. `.vscode/mcp.json` is an optional VS Code-specific registration only;
-the server itself is client-independent.
+required when using an absolute script path. This repository's workspace-root
+`.mcp.json` uses the portable `mcpServers` format and launches `node dist/mcp.js`
+from the workspace root. Run `npm run build` before connecting and after source
+changes. Open the repository itself as the workspace root. This replaces the
+legacy `.vscode/mcp.json`: no `cwd` or VS Code-only `${workspaceFolder}` variable
+is needed. If VS Code still shows the old entry, reload the window and enable
+the workspace-root server in MCP settings; remove any separately copied legacy
+`era-qa` entry from your personal configuration. Other clients launching from
+another directory should use the absolute-path configuration above.
 
 For source development,
 use `node --import tsx src/mcp.ts` from the repository root. npm scripts are also

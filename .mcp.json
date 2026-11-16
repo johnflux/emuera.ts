@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "era-live": {
+      "type": "http",
+      "url": "http://127.0.0.1:3003/mcp",
+      "tools": ["*"]
+    },
+    "era-qa": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["dist/mcp.js"],
+      "tools": ["*"]
+    }
+  }
+}

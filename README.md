@@ -35,12 +35,16 @@ hint (for example, `400 [Move]`); editing the input hides the hint.
 
 ## Agent QA (MCP)
 
-The game includes a **live MCP endpoint** at `http://127.0.0.1:PORT/mcp`,
-using its existing server port. Open **Menu > Agent access** to find the URL.
+The game includes a **live MCP endpoint** at `http://127.0.0.1:3003/mcp`,
+using its existing server port (default 3003). Open **Settings > Agent access** to find the URL.
 An agent connection prompts for approval in the game; approval grants screen
 inspection, controls, variable changes, and `#FUNCTION(S)` calls in that run.
 Use **Disconnect** to revoke access. Live changes affect your real game and
 can be included in normal saves. There is no source-file editor.
+Check **Always approve any local agent**, then choose **Allow** to automatically
+approve future local agents in this browser. Turn off the checkbox in Agent access to require
+prompts again; **Disconnect** also turns it off. This preference is browser-local
+to the server address/port and is not stored in game saves.
 
 For Claude Code, while the game is running:
 
@@ -53,6 +57,13 @@ VS Code and other local HTTP MCP clients can use the same URL. For local
 stdio-only integrations, including Claude Desktop's local MCP configuration,
 launch `node /absolute/path/to/era/dist/mcp.js --connect URL` instead. Claude's
 cloud-based remote connectors cannot reach a localhost game.
+
+The workspace `.mcp.json` includes **era-live** for the default port. Enable
+that server in VS Code and approve it once in the game. Keep it connected
+between requests; do not call `qa_finish` after each action. Approval lasts
+for that MCP session while the same game remains open. A new connection,
+Disconnect, or restarting the game requires approval again. Use **era-qa**
+for isolated tests, not for changes to your open game.
 
 **Isolated mode** remains a standard stdio MCP server for Claude Code, Claude Desktop,
 VS Code/Copilot, and other MCP clients. Install dependencies and run
@@ -81,7 +92,10 @@ For Claude Desktop and clients using `mcpServers`:
 ```
 
 Use your Node executable's absolute path if a desktop client cannot find
-`node`. VS Code's optional workspace configuration is in `.vscode/mcp.json`.
+`node`. The workspace-root `.mcp.json` registers live access and isolated QA for Copilot and
+other compatible clients. Run `npm run build` first; rebuild after source changes.
+It uses the portable `mcpServers` format without the legacy VS Code `cwd` or
+`${workspaceFolder}` settings. Open this repository as the workspace root.
 
 It supports graphical and headless runs, playable buttons, real clicks and
 keyboard input, variable inspection/changes, ERB expressions and `#FUNCTION(S)`

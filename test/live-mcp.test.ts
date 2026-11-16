@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { request } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -80,12 +80,17 @@ const executablePath = process.env.ERA_QA_BROWSER ?? [
   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", "/usr/bin/google-chrome", "/usr/bin/chromium",
 ].find(candidate => existsSync(candidate));
 
-test("live HTTP MCP requires approval, changes the open game, refreshes the UI and revokes access", { skip: !executablePath }, async () => {
+test("configured live HTTP MCP reuses one approval across actions and mutations until revoked", { skip: !executablePath }, async () => {
   const server = await app();
   const browser = await chromium.launch({ executablePath: executablePath!, headless: true });
   const page = await browser.newPage();
   const client = new Client({ name: "live-test", version: "1" });
-  const transport = new StreamableHTTPClientTransport(new URL(server.base + "/mcp"));
+  const config = JSON.parse(await readFile(new URL("../.mcp.json", import.meta.url), "utf8"));
+  const live = config.mcpServers["era-live"];
+  assert.equal(live.type, "http");
+  const endpoint = new URL(live.url);
+  endpoint.port = new URL(server.base).port;
+  const transport = new StreamableHTTPClientTransport(endpoint);
   try {
     const started = await (await server.post("/api/start", { mode: "game" })).json();
     await page.goto(server.base);
@@ -142,7 +147,8 @@ test("live HTTP MCP requires approval, changes the open game, refreshes the UI a
     assert.notEqual(ended.isError, true, JSON.stringify(ended));
     assert.notEqual((await tool("qa_observe")).isError, true);
     await page.locator("#menu-toggle").click();
-    await page.locator("#agent-toggle").click();
+    await page.locator("#settings-toggle").click();
+    await page.locator("#settings #agent-toggle").click();
     await page.locator("#agent-disconnect").click();
     await page.waitForFunction(() => document.querySelector("#agent-status")?.textContent === "No agent connected.");
     assert.equal((await server.post("/api/debug", { ...debug, session: started.session }, { Authorization: `Bearer ${poll.key}` })).status, 404);
@@ -155,6 +161,82 @@ test("live HTTP MCP requires approval, changes the open game, refreshes the UI a
     await client.close();
     await browser.close();
     await server.close();
+  }
+});
+
+test("always approval is saved, reused without a popup and can be disabled or cleared by disconnect", { skip: !executablePath }, async () => {
+  for (const remembered of [false, true]) {
+    const server = await app();
+    const browser = await chromium.launch({ executablePath: executablePath!, headless: true });
+    const page = await browser.newPage();
+    const client = new Client({ name: "always-approval-test", version: "1" });
+    const transport = new StreamableHTTPClientTransport(new URL(server.base + "/mcp"));
+    const preference = "era-typescript.agent-auto-approve";
+    try {
+      const started = await (await server.post("/api/start", { mode: "game" })).json();
+      await page.goto(server.base);
+      if (remembered) {
+        await page.evaluate(key => localStorage.setItem(key, "1"), preference);
+        await page.reload();
+      }
+      await page.waitForFunction(() => !!window.eraQA && !window.eraQA.state().busy);
+      assert.equal(await page.evaluate(id => window.eraQA.resume(id), started.session), true);
+      let popupCount = 0;
+      await page.exposeFunction("recordAgentPopup", () => { popupCount++; });
+      await page.evaluate(() => {
+        const dialog = document.querySelector("#agent-access");
+        new MutationObserver(() => {
+          if (dialog?.hasAttribute("open")) window.recordAgentPopup();
+        }).observe(dialog!, { attributes: true, attributeFilter: ["open"] });
+      });
+      await client.connect(transport);
+      if (!remembered) {
+        await page.locator("#agent-access[open]").waitFor();
+        assert.equal(await page.getByRole("button", { name: "Always approve", exact: true }).count(), 0);
+        const checkbox = page.locator("#agent-auto-approve");
+        await checkbox.check();
+        await checkbox.focus();
+        const spacing = await checkbox.evaluate(input => {
+          const label = input.closest("label")!;
+          const style = getComputedStyle(label);
+          const buttons = document.querySelector("#agent-access .confirm-actions")!;
+          return {
+            gap: buttons.getBoundingClientRect().top - label.getBoundingClientRect().bottom,
+            outline: parseFloat(style.outlineWidth) + parseFloat(style.outlineOffset),
+          };
+        });
+        assert.ok(spacing.gap >= spacing.outline + 4, JSON.stringify(spacing));
+        assert.equal(await page.locator("#agent-access").isVisible(), true);
+        assert.equal(await page.evaluate(key => localStorage.getItem(key), preference), null);
+        assert.equal((await client.callTool({ name: "qa_context" })).isError, true, "checking the box must not grant access before Allow");
+        await page.locator("#agent-allow").click();
+      }
+      await page.waitForFunction(() => document.querySelector("#agent-status")?.textContent === "Connected: always-approval-test");
+      assert.equal(popupCount, remembered ? 0 : 1);
+      assert.equal(await page.evaluate(key => localStorage.getItem(key), preference), "1");
+      assert.notEqual((await client.callTool({ name: "qa_context" })).isError, true);
+      await page.reload();
+      await page.waitForFunction(() => !!window.eraQA && !window.eraQA.state().busy);
+      await page.waitForFunction(() => document.querySelector("#agent-status")?.textContent === "Connected: always-approval-test");
+      assert.equal(await page.locator("#agent-auto-approve").isChecked(), true);
+      await page.locator("#menu-toggle").click();
+      await page.locator("#settings-toggle").click();
+      await page.locator("#settings #agent-toggle").click();
+      if (!remembered) {
+        await page.locator("#agent-auto-approve").uncheck();
+        assert.equal(await page.evaluate(key => localStorage.getItem(key), preference), null);
+        assert.notEqual((await client.callTool({ name: "qa_context" })).isError, true, "turning off future approval does not revoke current access");
+      }
+      await page.locator("#agent-disconnect").click();
+      await page.waitForFunction(() => document.querySelector("#agent-status")?.textContent === "No agent connected.");
+      assert.equal(await page.evaluate(key => localStorage.getItem(key), preference), null);
+      assert.equal(await page.locator("#agent-auto-approve").isChecked(), false);
+      await assert.rejects(client.callTool({ name: "qa_context" }), /404|revoked/);
+    } finally {
+      await client.close();
+      await browser.close();
+      await server.close();
+    }
   }
 });
 
