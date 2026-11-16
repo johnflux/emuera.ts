@@ -9,6 +9,11 @@ hotpatch normally only changes presentation. `INTIMACY_COMMANDS.ERB` and
 
 ## GUI input
 
+Game dialog popovers and their dimming backdrops use the terminal's measured
+client area (`--client-top` and `--client-height`), not the full viewport.
+The app header and bottom game-input form remain outside the backdrop; large
+dialogs scroll within the available output area.
+
 Plain main-screen commands (including the mod's custom-command list and its
 request-meeting-point and quest label overrides) use
 `HOTPATCH_BUTTON(label, value, title = "", variant = "default", class = "", state = "", help = "", enabled = 1, suffix = "")`

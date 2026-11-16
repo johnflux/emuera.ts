@@ -1,4 +1,4 @@
-.era-calendar:popover-open { width: min(1440px, calc(100vw - 32px)); height: fit-content; max-height: calc(100dvh - 32px); border: 1px solid #b6a170; background: radial-gradient(ellipse at top left, #19394255, transparent 65%), #0b151d; box-shadow: inset 0 0 0 4px #0b151d, inset 0 0 0 5px #b6a17055, 0 12px 48px #000; }
+.era-calendar:popover-open { width: min(1440px, calc(100vw - 32px)); height: fit-content; max-height: calc(var(--client-height, 100dvh) - 32px); border: 1px solid #b6a170; background: radial-gradient(ellipse at top left, #19394255, transparent 65%), #0b151d; box-shadow: inset 0 0 0 4px #0b151d, inset 0 0 0 5px #b6a17055, 0 12px 48px #000; }
 .era-calendar .era-inventory-header { background: linear-gradient(110deg, #253942, #131e29); border-color: #b6a17080; }
 .era-calendar .era-inventory-title { color: #e2edf0; font-size: 1.4em; font-weight: normal; }
 .era-calendar-emblem { flex: none; width: 40px; height: 40px; background: url("./calendar.svg") center / contain no-repeat; }

@@ -248,8 +248,7 @@ nNeedsReset = !GETBIT(RESULT:1, CFLAG:nIndex:口上セレクタ)
 CALL HOTPATCH_CONFIG_HEADER("Dialogue Settings", 1)
 IF nNeedsReset
 	PRINTFORML Changing this dialogue resets the character's relationships, events, abilities and flags.
-	PRINTBUTTON "Reset and change dialogue", 1
-	PRINTBUTTON "Cancel", 0
+	HTML_PRINT "<div class='era-actions-group'>" + HOTPATCH_BUTTON("Reset and change dialogue", 1, "", "primary") + HOTPATCH_BUTTON("Cancel", 0) + "</div>"
 	INPUT
 	IF RESULT != 1
 		HTML_PRINT "<era-close>"

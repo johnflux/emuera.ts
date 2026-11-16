@@ -1,4 +1,4 @@
-.era-proposal:popover-open { width: min(660px, calc(100vw - 24px)); height: fit-content; max-height: calc(100dvh - 24px); overflow: auto; border: 1px solid #b98caa; border-radius: 18px; background: radial-gradient(ellipse at 50% 20%, #482b424f, transparent 70%), #101019; box-shadow: 0 0 70px #df9db933; }
+.era-proposal:popover-open { width: min(660px, calc(100vw - 24px)); height: fit-content; max-height: calc(var(--client-height, 100dvh) - 24px); overflow: auto; border: 1px solid #b98caa; border-radius: 18px; background: radial-gradient(ellipse at 50% 20%, #482b424f, transparent 70%), #101019; box-shadow: 0 0 70px #df9db933; }
 .era-proposal > .line.era-marker, .era-proposal-body > .line.era-marker { display: none; }
 .era-proposal-header { display: flex; align-items: center; gap: 14px; padding-right: 14px; background: url("/relationship-assets/header-sakura.svg") right center / auto 100% no-repeat, #271d2a; border-bottom: 1px solid #795367; }
 .era-proposal-header > div { min-width: 0; flex: 1; }

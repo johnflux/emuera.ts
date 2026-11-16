@@ -343,8 +343,7 @@ DO
 				nChoice = 1
 				IF !GROUPMATCH(nAction, 45001, 45018, 45019, 45020)
 					PRINTL This changes characters' existing attributes and experience.
-					PRINTBUTTON "Apply", 1
-					PRINTBUTTON "Cancel", 0
+					HTML_PRINT "<div class='era-actions-group'>" + HOTPATCH_BUTTON("Apply", 1, "", "primary") + HOTPATCH_BUTTON("Cancel", 0) + "</div>"
 					INPUT
 					nChoice = RESULT
 				ENDIF

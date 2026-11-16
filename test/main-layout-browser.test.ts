@@ -32,6 +32,89 @@ const browser = [
   process.env.PROGRAMFILES && join(process.env.PROGRAMFILES, "Google/Chrome/Application/chrome.exe"),
 ].find((path): path is string => !!path && existsSync(path));
 
+test("game dialog backdrops exclude the header and input and panels fit the terminal", {
+  skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH",
+}, async () => {
+  const [style, responsive, source] = await Promise.all([
+    readFile(new URL("../web/generated/style.css", import.meta.url), "utf8"),
+    readFile(new URL("../web/generated/responsive.css", import.meta.url), "utf8"),
+    readFile(new URL("../web/app.js", import.meta.url), "utf8"),
+  ]);
+  const placement = source.slice(source.indexOf("function placeBackground()"), source.indexOf("/** Shows the CBG layers"));
+  const html = `<!doctype html><meta charset="utf-8"><style>${style}\n${responsive}
+    body { margin:0; height:100dvh; display:flex; flex-direction:column; }
+    header { flex:0 0 40px; padding:0; }
+    body > header > #top { display:inline-flex; }
+    main { flex:1; min-height:0; padding:0; display:flex; flex-direction:column; }
+    #input-form { flex:0 0 50px; margin:0; }
+    </style><body><header><button id="top">Menu</button></header><main>
+    <section id="terminal"><div class="screen is-active">
+      <div class="era-dialog era-setup era-config" popover="manual">
+        <div class="era-inventory-header">Name</div><div class="era-dialog-body"><div class="line">Enter name</div></div>
+      </div>
+    </div></section><form id="input-form"><input id="command"><button>Send</button></form></main>
+    <script>
+      const terminal = document.querySelector("#terminal"), backgroundLayers = {};
+      const islandRoot = document.createElement("div"), imageScale = () => 1;
+      ${placement}
+      const dialog = document.querySelector(".era-dialog"), input = document.querySelector("#command");
+      const results = [];
+      for (const hidden of [false, true, false]) {
+        document.querySelector("#input-form").hidden = hidden;
+        if (hidden) document.querySelector("#input-form").style.display = "none";
+        else document.querySelector("#input-form").style.removeProperty("display");
+        placeBackground();
+        if (!dialog.matches(":popover-open")) dialog.showPopover();
+        for (const large of [false, true]) {
+          dialog.querySelector(".era-dialog-body").innerHTML = "<div class='line'>Enter name</div>".repeat(large ? 100 : 1);
+          const bounds = terminal.getBoundingClientRect(), panel = dialog.getBoundingClientRect();
+          const backdrop = getComputedStyle(dialog, "::backdrop");
+          const top = document.querySelector("#top").getBoundingClientRect(), field = input.getBoundingClientRect();
+          input.focus();
+          results.push({
+            hidden, large, terminalTop: bounds.top, terminalHeight: terminal.clientHeight,
+            backdropTop: parseFloat(backdrop.top), backdropHeight: parseFloat(backdrop.height),
+            panelTop: panel.top, panelBottom: panel.bottom, terminalBottom: bounds.bottom,
+            headerReachable: !!document.elementFromPoint(top.x + top.width / 2, top.y + top.height / 2)?.closest("#top"),
+            inputReachable: hidden || document.elementFromPoint(field.x + field.width / 2, field.y + field.height / 2) === input,
+            inputFocused: hidden || document.activeElement === input,
+            scrolls: !large || dialog.querySelector(".era-dialog-body").scrollHeight > dialog.querySelector(".era-dialog-body").clientHeight
+          });
+        }
+      }
+      document.body.textContent = JSON.stringify(results);
+    </script>`;
+  const profile = await mkdtemp(join(process.cwd(), ".era-dialog-bounds-"));
+  try {
+    for (const size of ["1440,900", "1100,700", "540,700"]) {
+      const args = ["--headless", "--disable-gpu", "--no-first-run", `--user-data-dir=${profile}`, `--window-size=${size}`, "--dump-dom"];
+      if (process.platform === "linux" && process.getuid?.() === 0) args.push("--no-sandbox");
+      args.push(`data:text/html;base64,${Buffer.from(html).toString("base64")}`);
+      const { stdout } = await execute(browser!, args, { maxBuffer: 8 * 1024 * 1024, timeout: 30000 });
+      const match = stdout.match(/<body[^>]*>([\s\S]*?)<\/body>/);
+      assert.ok(match);
+      const results = JSON.parse(match[1]) as Array<{
+        hidden: boolean; large: boolean; terminalTop: number; terminalHeight: number;
+        backdropTop: number; backdropHeight: number; panelTop: number; panelBottom: number; terminalBottom: number;
+        headerReachable: boolean; inputReachable: boolean; inputFocused: boolean; scrolls: boolean;
+      }>;
+      assert.equal(results.length, 6);
+      for (const result of results) {
+        const label = `${size}, input hidden=${result.hidden}, large=${result.large}`;
+        assert.ok(Math.abs(result.backdropTop - result.terminalTop) < 1, `${label}: backdrop starts at terminal`);
+        assert.ok(Math.abs(result.backdropHeight - result.terminalHeight) < 1, `${label}: backdrop matches terminal height`);
+        assert.ok(result.panelTop >= result.terminalTop, `${label}: panel below header`);
+        assert.ok(result.panelBottom <= result.terminalBottom, `${label}: panel above input`);
+        assert.ok(result.headerReachable, `${label}: header is outside backdrop hit area`);
+        assert.ok(result.inputReachable && result.inputFocused, `${label}: input is reachable and focusable`);
+        assert.ok(result.scrolls, `${label}: oversized body scrolls`);
+      }
+    }
+  } finally {
+    await rm(profile, { recursive: true, force: true });
+  }
+});
+
 test("inline direction groups preserve category tones, numbers and accessible descriptions without extra filters", {
   skip: browser ? false : "Chrome/Chromium not found; set CHROME_PATH",
 }, async () => {

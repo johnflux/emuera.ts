@@ -269,7 +269,9 @@ QUIT`, "<setup-dialogue-test>");
     return runtime;
   }
   const canceled = open(false);
-  assert.match(markup(canceled.input("20005")), /resets the character's relationships/);
+  const resetPrompt = markup(canceled.input("20005"));
+  assert.match(resetPrompt, /resets the character's relationships/);
+  assert.match(resetPrompt, /class='era-actions-group'><button value='1' class='era-button era-button-primary '[^>]*>Reset and change dialogue<\/button><button value='0' class='era-button '[^>]*>Cancel<\/button><\/div>/);
   markup(canceled.input("0"));
   assert.match(markup(canceled.input("999")), /selected=0,called=0/);
 
@@ -485,7 +487,9 @@ QUIT`, "<existing-setup-test>");
   markup(body.start("TEST_EXISTING_SETUP"));
   markup(body.input("103"));
   markup(body.input("706"));
-  assert.match(markup(body.input("45015")), /This changes characters/);
+  const bodyPrompt = markup(body.input("45015"));
+  assert.match(bodyPrompt, /This changes characters/);
+  assert.match(bodyPrompt, /class='era-actions-group'><button value='1' class='era-button era-button-primary '[^>]*>Apply<\/button><button value='0' class='era-button '[^>]*>Cancel<\/button><\/div>/);
   assert.match(markup(body.input("0")), /Character Bodies/);
   assert.match(markup(body.input("45015")), /This changes characters/);
   assert.match(markup(body.input("1")), /Applied: Everyone Has a Mystifying Butt/);

@@ -26,7 +26,7 @@
   body:not(.is-home) main { padding: 0; }
   body:not(.is-home) #terminal:has(.screen.is-active :is(.era-main, .era-shop, .era-dialog)) { padding: 0; scrollbar-gutter: auto; }
   body:not(.is-home) #terminal:has(.screen.is-active :is(.era-main, .era-shop)) { padding-inline: 12px; }
-  body:not(.is-home) .era-dialog:popover-open { width: calc(100vw - 8px); max-width: none; max-height: calc(100dvh - 8px); }
+  body:not(.is-home) .era-dialog:popover-open { width: calc(100vw - 8px); max-width: none; max-height: calc(var(--client-height, 100dvh) - 8px); }
   .era-load:popover-open { height: auto; }
   .era-load .era-dialog-body { padding: 6px 10px; }
   .era-main-chat { display: none; }

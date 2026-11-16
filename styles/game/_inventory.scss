@@ -1,4 +1,4 @@
-.era-inventory:popover-open { width: min(1400px, calc(100vw - 32px)); height: min(820px, calc(100dvh - 32px)); }
+.era-inventory:popover-open { width: min(1400px, calc(100vw - 32px)); height: min(820px, calc(var(--client-height, 100dvh) - 32px)); }
 .era-inventory-header { padding: 16px 20px 12px; border-bottom: 1px solid #245066; background: linear-gradient(135deg, #102735, #0b141d); white-space: normal; }
 .era-inventory-heading, .era-inventory-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
 .era-inventory-title { color: #63d3f6; font-size: 1.15em; font-weight: bold; }

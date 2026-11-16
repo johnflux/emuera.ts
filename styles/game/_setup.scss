@@ -1,5 +1,5 @@
-.era-setup:popover-open { width: min(1600px, calc(100vw - 24px)); height: min(900px, calc(100dvh - 24px)); max-height: calc(100dvh - 24px); top: 50%; bottom: auto; margin: 0 auto; transform: translateY(-50%); }
-.era-load:popover-open { width: min(1200px, calc(100vw - 24px)); height: auto; max-height: calc(100dvh - 24px); top: 50%; bottom: auto; margin: 0 auto; transform: translateY(-50%); }
+.era-setup:popover-open { width: min(1600px, calc(100vw - 24px)); height: min(900px, calc(var(--client-height, 100dvh) - 24px)); max-height: calc(var(--client-height, 100dvh) - 24px); }
+.era-load:popover-open { width: min(1200px, calc(100vw - 24px)); height: auto; max-height: calc(var(--client-height, 100dvh) - 24px); }
 .era-dialog:is(.era-setup, .era-load) .era-inventory-header { padding: 10px 14px; }
 .era-dialog:is(.era-setup, .era-load) .era-dialog-body { padding: 12px 14px; }
 .era-dialog:is(.era-setup, .era-load) .era-dialog-footer { padding: 8px 14px; }
