@@ -113,6 +113,25 @@ test("configured live HTTP MCP reuses one approval across actions and mutations 
       root: server.root, erb: path.join(server.root, "erb"), csv: path.join(server.root, "csv"),
       hotpatch: path.join(server.root, "gui"), files: ["live.ERB"],
     });
+    const reloadFile = path.join(server.root, "erb", "reload.erb");
+    await writeFile(reloadFile, "@HOTPATCH_LIVE_RELOAD\n#FUNCTION\nRETURNF 17");
+    const reload = await tool("qa_reload", { scan: true });
+    assert.notEqual(reload.isError, true, JSON.stringify(reload));
+    const reloadStatus = JSON.parse((reload.content as { text: string }[])[0]!.text);
+    assert.ok(reloadStatus.events.some((event: { status: string }) => event.status === "reloaded"));
+    const reloadedFunction = await tool("qa_debug", { command: { action: "call", name: "HOTPATCH_LIVE_RELOAD" } });
+    assert.match(JSON.stringify(reloadedFunction), /17/);
+    const unchanged = await tool("qa_reload");
+    assert.deepEqual(JSON.parse((unchanged.content as { text: string }[])[0]!.text).events, []);
+    await writeFile(reloadFile, "@HOTPATCH_LIVE_RELOAD\n#FUNCTION\nRETURNF 1 +");
+    const compileFailure = await tool("qa_reload", { scan: true });
+    assert.notEqual(compileFailure.isError, true);
+    const failedReload = JSON.parse((compileFailure.content as { text: string }[])[0]!.text);
+    assert.equal(failedReload.last.status, "error");
+    assert.ok(failedReload.last.errors.length);
+    assert.match(JSON.stringify(await tool("qa_debug", { command: { action: "call", name: "HOTPATCH_LIVE_RELOAD" } })), /17/);
+    await rm(reloadFile);
+    await tool("qa_reload", { scan: true });
     const observe = await tool("qa_observe");
     const content = observe.content as { type: string; text: string }[];
     const before = JSON.parse(content[0]!.text);

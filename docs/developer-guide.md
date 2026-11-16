@@ -103,9 +103,43 @@ unknown, observe before retrying a mutation.
 paths, loaded routine source filenames, and debug/isolation mode. No paths or
 game state are exposed through this tool before approval. Agents use their own
 file tools to edit these sources; this MCP server has no source editor. Game logic
-belongs in upstream ERB files, hotpatches only in browser GUI changes. Source
-edits require restarting the server to invalidate its script cache. Hot reload
-is a separate, not-yet-implemented feature.
+belongs in upstream ERB files, hotpatches only in browser GUI changes.
+
+### Script hot reload
+
+After a game starts, browser/desktop and isolated servers watch its ERB directory
+and configured GUI hotpatch directory recursively for ERB/ERH changes. Saves are
+debounced for 250 ms. A content-hash scan detects edits, additions, atomic renames,
+and deletions, then loads and checks fresh script definitions before swapping.
+Both normal and active debug-mode games are updated. Reload is independent of
+MCP and never writes scripts or saves.
+
+`qa_reload` returns `revision`, `watching`, `roots`, `events`, `last`, `truncated`,
+and `runtimeError`. Each event has a revision, timestamp, status (`reloaded` or
+`error`), absolute changed file paths, changed routine names, and diagnostics with
+file/line/message. Events are incremental since that MCP client's previous call;
+`last` retains the latest outcome even when there are no new events. The last
+100 events are retained; `truncated` reports a gap. `runtimeError` is the current
+runtime snapshot's error, if any. Watch, scan, load and syntax-check failures are
+logged to the server and included as error events, not success-shaped reloads.
+An error event is a successfully retrieved report, not an MCP transport error.
+`qa_reload({scan: true})` scans immediately and waits for any pending scan/reload.
+Unchanged files aren't reloaded; after a failed reload, fix/save the source and
+scan again. Tool calls remain subject to ordinary live-game approval.
+
+Existing variables and suspended execution frames are retained. Active routines
+finish their old instructions; future calls resolve new routine definitions.
+Unchanged routines retain their static variables; changed routines start new
+static scopes. JIT/native intrinsic optimizations are disabled on reloaded
+runtimes to avoid executing stale optimized code. Pre-existing syntax diagnostics
+are tolerated; newly introduced syntax diagnostics reject the replacement set.
+This is deliberately best-effort: no execution-position migration, state rollback,
+or structural variable migration. ERH macros reload, but global declarations and
+array sizes are not reapplied to existing variables. Restart for declaration,
+CSV/ERD, configuration or resource changes and whenever mixed old/new code causes
+trouble. Reload never advances input, discards prefetch, or reruns display routines.
+New output appears when gameplay next calls the edited routine. Native `.sav`
+layout and serialization are unchanged.
 
 ### MCP setup
 
@@ -161,7 +195,7 @@ not the client's working directory. Set `ERA_QA_GAMES_DIR` (or `ERA_GAMES_DIR`)
 to override it; generic MCP configurations accept an `env` object alongside
 `command`/`args`. There are no source-editing tools, and library installation is
 disabled in this QA instance. Use the agent client's own coding tools to change
-source, then restart the MCP process to reload cached scripts. Closing the MCP connection
+source and `qa_reload` to inspect automatic reloads or trigger a scan. Closing the MCP connection
 disposes the browser and server.
 
 Graphical mode uses a detected Chrome/Chromium installation or Playwright's
@@ -174,6 +208,7 @@ services. Normal application LLM settings are not copied.
 | --- | --- |
 | `qa_games` | Installed game IDs and component fixture names. |
 | `qa_context` | Running game identity, game/ERB/CSV/hotpatch paths and loaded routine source filenames. |
+| `qa_reload` | `{scan?: boolean}`; incremental script reload/error feedback, latest outcome and current runtime error. A manual scan waits for reload without advancing gameplay. |
 | `qa_start` | `{game?, fixture?, graphical: true, headed: false, viewport: {width: 1440, height: 900}}`; replaces the driver's previous run. |
 | `qa_observe` | Rendered controls with refs, names, values, availability, geometry and hit testing; text, runtime status, layout/browser/network errors. Headless mode returns runtime state and candidate command values instead of DOM controls. |
 | `qa_act` | `{action: {kind: "click" \| "hover" \| "fill" \| "select" \| "press" \| "scroll", ...}}`; real Playwright interactions. Ref-based actions use the latest observation. |
@@ -330,8 +365,9 @@ Folders that are renamed or removed drop out of the library when it is listed or
 refreshed. Starting such a game returns a 404 that asks the player to refresh.
 Startup and library refresh only discover game folders. Scripts, CSV tables,
 resources and hotpatches load on first access to that game (play, demo,
-compatibility checks or sprite lookup), then remain cached for the server's
-lifetime. Concurrent requests share one load; a failed load affects only that
+compatibility checks or sprite lookup). Starting play enables script hot reload;
+other loaded data remains cached for the server's lifetime.
+Concurrent requests share one load; a failed load affects only that
 game and can be retried after repairing its files. Debug games are separately
 loaded and cached when requested. The runtime listing reads only configuration
 files to preserve each game's display defaults, without loading its scripts or
@@ -699,13 +735,15 @@ The **Game library** button returns from a game to the home screen, asking first
 before discarding unsaved progress. Direct `?game=...` / `?demo` links and page
 reloads still open or restore the requested run rather than the library.
 
-`npm start` (or its equivalent `npm run dev`) watches imported TypeScript modules, `web/`, and the game's
-`ERB/`, `CSV/`, and `resources/` trees (including new and deleted files).
-Changes restart the backend, reload game data and the compatibility report, and
+`npm start` (or its equivalent `npm run dev`) watches imported TypeScript modules
+and `web/`. Changes to these files restart the backend and
 automatically refresh connected browser tabs once the backend is ready again.
 **Reloads reset active interpreter sessions and browser scrollback**; they do
 not preserve live game state. The UI shows a reload notice. A disconnected
 server is reported while the browser waits for reconnection.
+Game ERB/ERH and GUI hotpatch edits instead use in-process script hot reload,
+preserving active sessions. CSV/config/resource edits no longer restart the
+backend automatically; restart manually when needed.
 
 Styles are authored in `styles/` as Sass and compiled to `web/generated/`.
 `npm start` builds them before starting the server and watches for changes;
@@ -720,8 +758,9 @@ overrides live in `styles/responsive/`, ordered by `styles/responsive.scss`;
 library and art-demo styles have their own entry points. Keep rule order intact
 when moving styles: game markup and renderer rules share the global cascade.
 
-`npm run start:prod` runs the compiled production build without watching or
-automatic browser refresh. If switching from the old, already-running
+`npm run start:prod` runs the compiled production build without backend restart
+watching or automatic browser refresh; script hot reload still runs after play starts.
+If switching from the old, already-running
 non-watching server, stop that process once, then use `npm start` instead.
 
 Static files (including game images/audio and bundled fonts) use HTTP ETags and

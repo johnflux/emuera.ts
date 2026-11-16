@@ -35,6 +35,7 @@ const uiAction = z.discriminatedUnion("kind", [
 
 /** One driver owns one run and browser context; it never attaches to a player's ordinary server. */
 export class QaDriver {
+  private reloadRevision = 0;
   private browser: Browser | undefined;
   private page: Page | undefined;
   private run: Run | undefined;
@@ -68,6 +69,15 @@ export class QaDriver {
     const run = await this.current();
     return this.request("/api/debug", { session: run.session, step: run.step, command: { action: "context" } });
   }
+  async reload(scan: boolean): Promise<unknown> {
+    const run = await this.current();
+    const result = await this.request("/api/debug", {
+      session: run.session, step: run.step, command: { action: "reload", scan, since: this.reloadRevision },
+    });
+    const status = z.object({ revision: z.number().int() }).passthrough().parse(result);
+    this.reloadRevision = status.revision;
+    return status;
+  }
   private async ready(): Promise<Page> {
     const page = this.page;
     if (!page) throw new Error("No graphical run; call qa_start with graphical: true");
@@ -98,6 +108,7 @@ export class QaDriver {
     const previous = this.run?.session;
     await this.closeBrowser();
     this.actions = [];
+    this.reloadRevision = 0;
     this.messages = [];
     const started = await this.request("/api/start", {
       mode: options.fixture ? "demo" : "game", game: options.game, debug: true,
@@ -222,7 +233,7 @@ export class QaDriver {
   }
 }
 
-export type QaTools = Pick<QaDriver, "games" | "context" | "start" | "observe" | "act" | "input" | "debug" | "loadSave" | "screenshot" | "report" | "close">;
+export type QaTools = Pick<QaDriver, "games" | "context" | "reload" | "start" | "observe" | "act" | "input" | "debug" | "loadSave" | "screenshot" | "report" | "close">;
 
 export function createQaMcpServer(driver: QaTools, live = false): McpServer {
   const server = new McpServer({ name: "era-qa", version: "1.0.0" }, {
@@ -243,9 +254,13 @@ export function createQaMcpServer(driver: QaTools, live = false): McpServer {
   });
   server.registerTool("qa_games", { description: "List installed games and real game-screen fixtures.", inputSchema: {} }, () => execute(() => driver.games()));
   server.registerTool("qa_context", {
-    description: "Identify the running game, absolute game/ERB/CSV/hotpatch paths and loaded routine source files. Use the agent client's file tools for edits: game logic belongs in upstream ERB files; hotpatches are for browser GUI changes. Scripts are cached; source changes require a restart, not an automatic hot reload.",
+    description: "Identify the running game, absolute game/ERB/CSV/hotpatch paths and loaded routine source files. Use the agent client's file tools for edits: game logic belongs in upstream ERB files; hotpatches are for browser GUI changes. Use qa_reload for watched script reload feedback.",
     inputSchema: {},
   }, () => execute(() => driver.context()));
+  server.registerTool("qa_reload", {
+    description: "Report script reloads and errors since this MCP client's last call: changed files/routines, compile/load/watch errors, latest reload result and current runtime error. scan:true immediately scans script contents and waits for reload. ERB/ERH files are watched automatically. Existing variables and active frames are retained; future calls use new definitions. Structural variable/header changes may need restart. Does not redraw or advance the game. A status:error event means old definitions remain active.",
+    inputSchema: { scan: z.boolean().default(false) },
+  }, ({ scan }) => execute(() => driver.reload(scan)));
   server.registerTool("qa_start", {
     description: live ? "Unavailable in live mode: use qa_observe to attach to the player-approved game. Use isolated stdio mode to start separate runs." : "Start an isolated game or component fixture. Graphical mode enables real UI controls and screenshots; headed shows its browser window.",
     inputSchema: { game: z.string().optional(), fixture: z.enum(COMPONENT_SAMPLES).optional(), graphical: z.boolean().default(true), headed: z.boolean().default(false), viewport: viewportSchema.default({ width: 1440, height: 900 }) },

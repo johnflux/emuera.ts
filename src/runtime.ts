@@ -409,6 +409,30 @@ function power(base: bigint, exponent: bigint): bigint {
 }
 
 export class Runtime {
+  reloadScripts(next: Game): void {
+    // Suspended frames retain their compiled instructions; future calls resolve against the new definitions.
+    this.game.routines = next.routines;
+    this.game.macros = next.macros;
+    this.game.headers = next.headers;
+    this.game.scriptFiles = next.scriptFiles;
+    this.game.diagnostics = next.diagnostics;
+    COMPILED.delete(this.game);
+    this.compiled = new Map();
+    this.jit = undefined;
+    this.intrinsics.clear();
+    this.enabledIntrinsics.length = 0;
+    this.expressionCache.clear();
+    this.formatCache.clear();
+    this.assignmentCache.clear();
+    this.argumentCache.clear();
+    this.callCache.clear();
+    this.caseCache.clear();
+    this.routineInfo.clear();
+    this.evaluatorCache = new WeakMap();
+    this.userFunctions.clear();
+    this.kojoCache.clear();
+  }
+
   assertDebuggable(): void {
     if (this.ahead) throw new EraError("A prefetched step is pending; consume it before debugging");
   }

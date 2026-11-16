@@ -23,6 +23,7 @@ import { componentGame, isComponentSample, startComponent } from "./component-de
 import { debugCommand } from "./debugger.js";
 import { readNativeSave } from "./save-format.js";
 import { LiveMcp, PairingError } from "./live-mcp.js";
+import { ScriptReload } from "./script-reload.js";
 
 type BrowserSnapshot = ReturnType<typeof patchTitleImage>;
 
@@ -357,6 +358,30 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
     return entry;
   };
   const sessions = new Map<string, Session>();
+  const reloaders = new Map<string, ScriptReload>();
+  async function scriptReload(entry: ReturnType<typeof register>): Promise<ScriptReload | undefined> {
+    if (!entry.game.root || !isGameRoot(entry.game.root)) return undefined;
+    let reloader = reloaders.get(entry.id);
+    if (!reloader) {
+      reloader = new ScriptReload(entry.game, entry.hotpatch,
+        () => [...sessions.values()].filter(session => session.game === entry.id && session.mode === "game").map(session => session.runtime.game),
+        (previous, next) => {
+          for (const session of sessions.values())
+            if (session.runtime.game === previous) session.runtime.reloadScripts(next);
+          previous.routines = next.routines;
+          previous.macros = next.macros;
+          previous.headers = next.headers;
+          previous.scriptFiles = next.scriptFiles;
+          previous.diagnostics = next.diagnostics;
+          entry.report = undefined;
+          entry.syntax = undefined;
+          entry.debugGame = undefined;
+        });
+      reloaders.set(entry.id, reloader);
+    }
+    await reloader.ready;
+    return reloader;
+  }
   const pendingQuicksaves = new Map<string, Promise<void>>();
   function quicksave(session: Session, trigger: "automatic" | "manual"): void {
     const started = performance.now();
@@ -500,7 +525,11 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
   let installing = false;
   /** Forget discovered games whose folder was removed, renamed or no longer holds ERB/ and CSV/. */
   function pruneGames() {
-    for (const [id, entry] of entries) if (entry.folder && !isGameRoot(entry.folder)) entries.delete(id);
+    for (const [id, entry] of entries) if (entry.folder && !isGameRoot(entry.folder)) {
+      reloaders.get(id)?.close();
+      reloaders.delete(id);
+      entries.delete(id);
+    }
   }
   async function refreshGames() {
     pruneGames();
@@ -581,6 +610,19 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
           }
           return;
         }
+        if (typeof data.command === "object" && data.command !== null && "action" in data.command && data.command.action === "reload") {
+          const command = data.command;
+          if (("scan" in command && typeof command.scan !== "boolean")
+            || !("since" in command) || typeof command.since !== "number" || !Number.isSafeInteger(command.since) || command.since < 0)
+            throw new HttpError(400, "Expected reload scan boolean and non-negative since revision");
+          const reloader = await scriptReload(entryFor(session.game));
+          if (!reloader) throw new HttpError(409, "Script reload requires a game folder with ERB and CSV directories");
+          if ("scan" in command && command.scan) await reloader.scan();
+          json(response, {
+            ...reloader.status(command.since), runtimeError: session.history.at(-1)?.snapshot.error ?? null,
+          });
+          return;
+        }
         if (typeof data.command === "object" && data.command !== null && "action" in data.command && data.command.action === "context") {
           const entry = entryFor(session.game);
           const root = session.runtime.game.root ? path.resolve(session.runtime.game.root) : null;
@@ -592,7 +634,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
               hotpatch: entry.hotpatch ? path.resolve(entry.hotpatch) : null,
               files: [...new Set([...session.runtime.game.routines.values()].flatMap(routines => routines.map(routine => routine.file)))].sort(),
             },
-            editing: "Game logic belongs in upstream ERB files; hotpatches are for browser GUI changes. Scripts are cached; restart to load source changes. Hot reload is not implemented.",
+            editing: "Game logic belongs in upstream ERB files; hotpatches are for browser GUI changes. ERB/ERH changes are watched. Use qa_reload for reload results, errors or a manual scan. Active frames keep old code; structural changes need restart.",
           });
           return;
         }
@@ -710,6 +752,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
         const id = randomUUID();
         try {
           const baseGame = await ensureGame(entry);
+          if (data.mode === "game") await scriptReload(entry);
           const demo = component ? componentGame(baseGame, component) : data.mode === "demo" ? entry.demo ??= demoGame(baseGame) : undefined;
           const game = demo ? debug ? entry.debugDemo ??= { ...demo, debug: true } : demo
             : debug ? await debugGame(entry) : baseGame;
@@ -1147,7 +1190,10 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
       }
     });
   });
-  app.on("close", () => { void liveMcp?.close().catch(error => console.error("MCP shutdown failed:", error)); });
+  app.on("close", () => {
+    for (const reloader of reloaders.values()) reloader.close();
+    void liveMcp?.close().catch(error => console.error("MCP shutdown failed:", error));
+  });
   return app;
 }
 export async function startServer(port = 3003, gamesDir = GAMES_DIR, development = false, additionalGamesDirs: readonly string[] = [], qa?: QaOptions): Promise<Server> {

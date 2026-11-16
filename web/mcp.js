@@ -81,6 +81,7 @@ export function installLiveMcp({ bridge, connected, message }) {
         return window.eraDesktop.captureGame();
       case "input":
       case "context":
+      case "reload":
       case "debug": {
         const debug = command.operation !== "input";
         const response = await fetch(debug ? "/api/debug" : command.args.timeout ? "/api/timeout" : "/api/input", {

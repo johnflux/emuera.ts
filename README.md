@@ -105,9 +105,13 @@ or run `npx playwright install chromium` if no supported browser is installed.
 
 In either mode, `qa_context` identifies the running game and its source paths.
 Agents can use their own coding tools to edit scripts: game logic belongs in
-upstream ERB files, and browser GUI changes in hotpatches. Scripts are cached;
-restart the game server (or isolated MCP process) to load source changes.
-Hot reload is not implemented.
+upstream ERB files, and browser GUI changes in hotpatches. Loaded games watch
+ERB/ERH files and hotpatches, debounce saves, and reload scripts without resetting
+variables. Active routines keep their old code; future calls use the new code.
+`qa_reload` reports changed files/routines and reload errors since its previous
+call; `{ "scan": true }` also scans immediately and waits for reload.
+Failed loads keep the previous definitions. Structural variable changes, CSV,
+configuration and resources require a restart. Reload does not redraw the screen.
 
 See [QA details](docs/developer-guide.md#agent-qa-mcp)
 for tool schemas, limits, and setup.

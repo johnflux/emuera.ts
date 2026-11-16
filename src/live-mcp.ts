@@ -82,9 +82,17 @@ export class LiveMcp {
   }
   private tools(connection: () => Connection): QaTools {
     const invoke = (operation: string, args?: unknown) => this.invoke(connection(), operation, args);
+    let revision = 0;
     return {
       games: () => invoke("games"),
       context: () => invoke("context"),
+      reload: async scan => {
+        const result = await invoke("reload", { action: "reload", scan, since: revision });
+        if (typeof result !== "object" || result === null || !("revision" in result) || typeof result.revision !== "number")
+          throw new Error("Invalid script reload status from game");
+        revision = result.revision;
+        return result;
+      },
       start: async () => { throw new Error("Live mode controls the approved running game. Use qa_observe, or launch --isolated for a separate QA run."); },
       observe: () => invoke("observe"),
       act: action => invoke("act", action),
