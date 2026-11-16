@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
-import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -314,6 +314,14 @@ test("empty library serves home, refresh discovers games live, and stop releases
     assert.equal((await post("/api/stop", { session: run.session })).status, 200);
     assert.equal((await post("/api/resume", { session: run.session })).status, 404);
     assert.equal((await post("/api/stop", { session: 12 })).status, 400);
+    const gameId = library.installed[0].id;
+    await rename(gameRoot, gameRoot + ".old");
+    const missing = await post("/api/start", { mode: "game", game: gameId });
+    assert.equal(missing.status, 404);
+    assert.match((await missing.json()).error, /no longer at .*Refresh the library/);
+    assert.deepEqual((await (await fetch(base + "/api/library")).json()).installed.map((game: { id: string }) => game.id), []);
+    assert.equal((await post("/api/library/refresh", {})).status, 200);
+    assert.deepEqual((await (await fetch(base + "/api/library")).json()).installed.map((game: { title: string }) => game.title), ["eraAS.old"]);
   } finally {
     app.close();
     await rm(root, { recursive: true, force: true });

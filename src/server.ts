@@ -295,6 +295,8 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
       metadata: undefined as Promise<void> | undefined,
       demo: undefined as Game | undefined,
       debugDemo: undefined as Game | undefined,
+      /** A lazily loaded game folder, forgotten once it no longer holds ERB/ and CSV/. */
+      folder: entry.load && isGameRoot(entry.root) ? entry.root : undefined,
       initializeStores(loaded: Game) {
         const saveDirectory = loaded.root && gameSaveDirectory(loaded.root, loaded.config);
         registered.store = entry.store ?? (saveDirectory ? new FileGlobalStore(path.join(saveDirectory, "global.sav")) : new MemoryGlobalStore());
@@ -308,14 +310,20 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
     if (!entry.load) registered.initializeStores(game);
     return registered;
   }
-  const ensureGame = (entry: ReturnType<typeof register>): Promise<Game> => entry.loading ??= (async () => {
-    if (!entry.load) return entry.game;
-    const game = await entry.load();
-    game.resourceBase = entry.game.resourceBase;
-    entry.initializeStores(game);
-    entry.game = game;
-    return game;
-  })().catch((error: unknown) => { entry.loading = undefined; throw error; });
+  const ensureGame = (entry: ReturnType<typeof register>): Promise<Game> => {
+    if (entry.folder && !isGameRoot(entry.folder)) {
+      pruneGames();
+      return Promise.reject(new HttpError(404, `${entry.title} is no longer at ${entry.folder}. Refresh the library.`));
+    }
+    return entry.loading ??= (async () => {
+      if (!entry.load) return entry.game;
+      const game = await entry.load();
+      game.resourceBase = entry.game.resourceBase;
+      entry.initializeStores(game);
+      entry.game = game;
+      return game;
+    })().catch((error: unknown) => { entry.loading = undefined; throw error; });
+  };
   const ensureMetadata = (entry: ReturnType<typeof register>): Promise<void> => entry.metadata ??= (async () => {
     const game = entry.game;
     if (entry.load) game.config = await loadGameConfig(game.root);
@@ -473,7 +481,12 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
   })().catch((error: unknown) => { entry.debugGame = undefined; throw error; });
   const instance = randomUUID();
   let installing = false;
+  /** Forget discovered games whose folder was removed, renamed or no longer holds ERB/ and CSV/. */
+  function pruneGames() {
+    for (const [id, entry] of entries) if (entry.folder && !isGameRoot(entry.folder)) entries.delete(id);
+  }
   async function refreshGames() {
+    pruneGames();
     for (const definition of discoverLibraryGames(searchDirectories)) {
       if (entries.has(definition.id) || [...entries.values()].some((entry) => entry.game.root === definition.root)) continue;
       entries.set(definition.id, register(discoveredEntry(definition), entries.size));
@@ -492,6 +505,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
       const url = new URL(request.url ?? "/", `http://${host}`);
       if (request.headers["x-era-profile"] === "1") response.setHeader("Server-Timing", "");
       if (request.method === "GET" && url.pathname === "/api/library") {
+        pruneGames();
         json(response, {
           installed: [...entries.values()].map(({ id, title, game }) => {
             const relative = path.relative(libraryDirectoryFor(game.root), game.root);
