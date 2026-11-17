@@ -19,11 +19,31 @@ export function serializeXml(node: Node): string {
 }
 
 export function selectNodes(document: Document | Node, path: string): Node[] {
+  // Resource manifests enumerate children with /sprites/*[1], /sprites/*[2], etc.
+  // Avoid evaluating the XPath predicate against every sibling for each lookup.
+  const indexed = document.nodeType === 9
+    ? /^(?:\/([A-Za-z_][\w.-]*)|\*)\/(\*|[A-Za-z_][\w.-]*)\[([1-9]\d*)\]$/.exec(path)
+    : null;
+  if (indexed && indexed[0] === path) {
+    const [, parentName, childName, position] = indexed;
+    let parent = document.firstChild;
+    while (parent && parent.nodeType !== 1) parent = parent.nextSibling;
+    if (!parent || (parentName && !matchesElement(parent, parentName))) return [];
+    let remaining = Number(position);
+    for (let child = parent.firstChild; child; child = child.nextSibling) {
+      if (matchesElement(child, childName!) && --remaining === 0) return [child];
+    }
+    return [];
+  }
   let result: unknown;
   try { result = xpath.select(path, document as unknown as globalThis.Node); }
   catch (error) { throw new EraError(`Invalid XPath ${path}: ${error instanceof Error ? error.message : String(error)}`); }
   if (!Array.isArray(result)) throw new EraError(`XPath does not select nodes: ${path}`);
   return result as unknown as Node[];
+}
+
+function matchesElement(node: Node, name: string): boolean {
+  return node.nodeType === 1 && (name === "*" || ("namespaceURI" in node && !node.namespaceURI && node.nodeName === name));
 }
 
 /** XML_GET output types: 1 InnerText, 2 InnerXml, 3 OuterXml, 4 Name, otherwise Value. */

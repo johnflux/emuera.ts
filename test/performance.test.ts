@@ -5,6 +5,36 @@ import { test } from "node:test";
 import { runInNewContext } from "node:vm";
 import { createApp } from "../src/server.js";
 import { emptyGame, indexScript } from "../src/loader.js";
+import { parseXml, selectNodes } from "../src/xml.js";
+
+test("sprite manifests can look up many indexed entries without a startup stall", () => {
+  const document = parseXml(`<sprites>${Array.from({ length: 3000 }, (_, i) => `<i id="${i + 1}"/>`).join("")}</sprites>`);
+  const start = performance.now();
+  for (let i = 1; i <= 3000; i += 50) {
+    const [node] = selectNodes(document, `/sprites/*[${i}]`);
+    assert.equal(node, document.documentElement!.childNodes.item(i - 1));
+    const elapsed = performance.now() - start;
+    assert.ok(elapsed < 5000, `indexed sprite lookups took ${Math.round(elapsed)} ms`);
+  }
+});
+
+test("indexed XML child selections count only matching elements and reflect mutations", () => {
+  const document = parseXml(`<!--before root--><sprites xmlns:p="urn:sprite">
+    <f id="1"/>text<!--comment--><p:f/><other/><f id="2"/>
+  </sprites>`);
+  for (const [indexed, fallback] of [
+    ["/sprites/*[2]", "/sprites/*[position() = 2]"],
+    ["*/f[2]", "*/f[position() = 2]"],
+    ["/sprites/*[5]", "/sprites/*[position() = 5]"],
+    ["/missing/*[1]", "/missing/*[position() = 1]"],
+  ]) {
+    assert.deepEqual(selectNodes(document, indexed!), selectNodes(document, fallback!));
+  }
+  const [first] = selectNodes(document, "*/f[1]");
+  const [second] = selectNodes(document, "*/f[2]");
+  first!.parentNode!.removeChild(first!);
+  assert.deepEqual(selectNodes(document, "*/f[1]"), [second]);
+});
 
 test("browser profiling is opt-in, bounded and returns independent snapshots", async () => {
   const source = (await readFile(new URL("../web/performance.js", import.meta.url), "utf8")).replace(/^export /gm, "");

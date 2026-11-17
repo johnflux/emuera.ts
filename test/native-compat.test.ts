@@ -6,6 +6,28 @@ import { test } from "node:test";
 import { csvRows, emptyGame, indexScript, loadGame } from "../src/loader.js";
 import { Runtime } from "../src/runtime.js";
 import { regexCharacterClasses, regexGroupOrder, replaceRegex } from "../src/regex.js";
+import { FileGlobalStore } from "../src/storage.js";
+import { readNativeSave } from "../src/save-format.js";
+
+test("native LOADGLOBAL preserves transient globals used for random name generation", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "era-native-global-reload-"));
+  try {
+    const game = emptyGame();
+    for (const kind of ["erh", "erb"]) {
+      const name = `native-global-reload.${kind}`;
+      indexScript(game, await readFile(new URL(`./fixtures/${name}`, import.meta.url), "utf8"), name, kind === "erh");
+    }
+    const file = path.join(root, "global.sav");
+    const result = new Runtime(game, 50_000, { store: new FileGlobalStore(file) }).start();
+    assert.equal(result.status, "halted", JSON.stringify(result.error));
+    assert.deepEqual(result.output.filter(line => line.type === "text" && /^(SAVED|LOADED|NAME|DONE)/.test(line.text)).map(line => line.text),
+      ["SAVED 0", "LOADED 1 1 Sample 3", "NAME Sample", "DONE"]);
+    const saved = readNativeSave(await readFile(file)).data.variables;
+    assert.equal(saved.SAVED_SETTING?.["0"], "3");
+    assert.equal(saved.NAME_COUNT, undefined);
+    assert.equal(saved.NAME_LIST, undefined);
+  } finally { await rm(root, { recursive: true }); }
+});
 
 test("native EE control-flow results match in interpreted and warmed JIT routines", async () => {
   const source = await readFile(new URL("./fixtures/native-control-flow.erb", import.meta.url), "utf8");

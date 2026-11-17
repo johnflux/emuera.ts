@@ -541,6 +541,10 @@ writeback, stored documents and `_BYNAME` forms. Map imports merge `/map/p`
 entries (key inner text, value inner XML), skipping malformed pairs; clear
 preserves the map itself. Rotation persists for subsequent drawing, including
 across a full `GCLEAR`, matching the native graphics transform.
+
+Indexed child lookups such as `/sprites/*[42]` and `*/f[1]` traverse XML
+siblings directly. This keeps AiSekai's startup resource scan from evaluating
+a full XPath predicate for each entry in its large sprite manifests.
 The installed report now has only three unsupported `CALLSHARP` occurrences:
 the optional Gemini, Ollama and generic LLM API plugins. They remain explicit
 errors, not fake successful responses; no provider requests are made.
