@@ -1926,7 +1926,9 @@ declarations and the expression evaluator. No single routine dominates.
   targets, including default expressions and legacy comma-prefixed signatures.
   `CALLF`, `CALLFORM`, `CALLFORMF`, `TRYCALLF`, `TRYCALLFORMF`, `TRYCALLFORM` and `TRYCCALLFORM`/`CATCH`/
   `ENDCATCH` support dynamic dispatch; missing-target branches do not swallow
-  errors inside existing routines. `CALLF`-style instructions discard the return
+  errors inside existing routines. Literal call and jump targets use native
+  string escapes (`TOILETIN\G_END` resolves to `TOILETING_END`) in both syntax
+  checks and execution. `CALLF`-style instructions discard the return
   value. Expression functions may print (output appears before the caller's);
   input inside them is an error. Bounded recursion shares static locals and
   creates fresh `DYNAMIC` locals. `#LOCALSIZE` and `#LOCALSSIZE` are respected.

@@ -1,6 +1,6 @@
 import { expandArgumentMacros, parseExpression, type Expr } from "./expression.js";
 import { EraError, key, splitArguments, stripComment } from "./model.js";
-import { conditionalEnd, quotedEnd } from "./strings.js";
+import { conditionalEnd, decodeStringEscape, quotedEnd } from "./strings.js";
 
 export interface Assignment { reference: Extract<Expr, { kind: "variable" }>; operator: string; value: string; expressionValue: string }
 export interface CallTarget { name: string; parameters: string }
@@ -43,12 +43,21 @@ export function parseAssignment(source: string, fullWidthSpace: boolean, parse =
 }
 
 export function parseCallTarget(source: string): CallTarget | null {
-  const match = /^([^\s,(]+)\s*(.*)$/.exec(source);
-  if (!match) return null;
-  let parameters = match[2]!.trim();
+  // Native Emuera reads literal call targets as escaped strings, not identifiers.
+  let name = "", end = 0;
+  for (; end < source.length; end++) {
+    const character = source[end]!;
+    if (/[\s,(]/.test(character)) break;
+    if (character !== "\\") { name += character; continue; }
+    const escaped = source[++end];
+    if (escaped === undefined) throw new EraError("Unterminated routine name escape");
+    name += decodeStringEscape(escaped);
+  }
+  name = name.replace(/^[ \t]+|[ \t]+$/g, "");
+  let parameters = source.slice(end).trim();
   if (parameters.startsWith("(") && parameters.endsWith(")")) parameters = parameters.slice(1, -1);
   else parameters = parameters.replace(/^,/, "");
-  return { name: key(match[1]!), parameters: parameters.trim() };
+  return name ? { name: key(name), parameters: parameters.trim() } : null;
 }
 
 /** End of a CALLFORM-style function name: the first top-level "(" or "," outside %...% and {...}. */

@@ -8,6 +8,31 @@ import { Runtime } from "../src/runtime.js";
 import { regexCharacterClasses, regexGroupOrder, replaceRegex } from "../src/regex.js";
 import { FileGlobalStore } from "../src/storage.js";
 import { readNativeSave } from "../src/save-format.js";
+import { checkSyntax } from "../src/syntax-check.js";
+
+test("native literal routine calls decode escaped names in the checker and runtime", async () => {
+  const game = emptyGame();
+  indexScript(game, String.raw`@SYSTEM_TITLE
+FOR LOCAL, 0, 5
+CALL TOILETIN\G_END(1,2,3)
+NEXT
+JUMP FINIS\H, 4
+@TOILETING_END(ARG, ARG:1, ARG:2)
+PRINTFORML Reached {ARG}, {ARG:1}, {ARG:2}
+RETURN
+@FINISH(ARG)
+PRINTFORML Done {ARG}
+QUIT`, "literal-call-escape.erb");
+  const report = await checkSyntax(game);
+  assert.deepEqual(report.diagnostics, []);
+  assert.deepEqual(report.references, []);
+  for (const jit of [false, true]) {
+    const result = new Runtime(game, 50_000, { jit }).start();
+    assert.equal(result.status, "halted", JSON.stringify(result.error));
+    assert.deepEqual(result.output.filter(item => item.type === "text").map(item => item.text),
+      [...Array(5).fill("Reached 1, 2, 3"), "Done 4"]);
+  }
+});
 
 test("native LOADGLOBAL preserves transient globals used for random name generation", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "era-native-global-reload-"));

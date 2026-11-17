@@ -1,3 +1,9 @@
+const STRING_ESCAPES: Readonly<Record<string, string>> = { n: "\n", t: "\t", s: " ", S: "\u3000", "\n": "" };
+
+export function decodeStringEscape(character: string): string {
+  return STRING_ESCAPES[character] ?? character;
+}
+
 let doubleByte: Set<string> | undefined;
 /** Characters CP932 encodes in two bytes, from the platform's Shift_JIS (Windows-31J) decoder. */
 function cp932DoubleByte(): Set<string> {

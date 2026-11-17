@@ -1,6 +1,6 @@
 import { EraError, integer, integerLiteral, INTEGER_LITERAL, key, text, type Value } from "./model.js";
 import { readConditional, readFormattedLiteral } from "./format.js";
-import { conditionalEnd, quotedEnd, stringWidth } from "./strings.js";
+import { conditionalEnd, decodeStringEscape, quotedEnd, stringWidth } from "./strings.js";
 
 export type Expr =
   | { kind: "literal"; value: Value }
@@ -87,8 +87,7 @@ function tokenize(source: string, depth = 0): Token[] {
         if (c === "\\") {
           const next = source[i++];
           if (next === undefined) throw new EraError("Unterminated string escape");
-          const escapes: Record<string, string> = { n: "\n", t: "\t", s: " ", S: "\u3000", "\n": "" };
-          value += next in escapes ? escapes[next] : next;
+          value += decodeStringEscape(next);
         } else value += c;
       }
       if (!closed) throw new EraError("Unterminated string");
