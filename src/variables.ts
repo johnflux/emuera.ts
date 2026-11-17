@@ -362,6 +362,10 @@ export class Variables {
     return ["GLOBAL", "GLOBALS", ...[...this.declarations].filter(([, line]) => /^#DIMS?\s+(?:\w+\s+)*GLOBAL\b/i.test(line.text))
       .map(([name]) => name)];
   }
+  private savedGlobalNames(): string[] {
+    return this.globalNames().filter(name => name === "GLOBAL" || name === "GLOBALS"
+      || /^#DIMS?\s+(?:\w+\s+)*SAVEDATA\b/i.test(this.declarations.get(name)!.text));
+  }
   /** Records every variable's values; the function returned puts them all back, undoing whatever ran in between. */
   checkpoint(): () => void {
     const saved = [...this.values.values()].map((variable) => ({ variable, values: new Map(variable.values), dimensions: [...variable.dimensions] }));
@@ -384,7 +388,7 @@ export class Variables {
   }
   exportGlobals(context: EvaluationContext): GlobalData {
     const result: GlobalData = {};
-    for (const name of this.globalNames()) {
+    for (const name of this.savedGlobalNames()) {
       if (!this.has(name)) continue;
       const variable = this.resolve(key(name), context);
       result[name] = Object.fromEntries([...variable.values].map(([index, value]) => [addressText(variable, index), String(value)]));
@@ -393,7 +397,7 @@ export class Variables {
   }
   importGlobals(data: GlobalData, context: EvaluationContext): void {
     const updates: { variable: Variable; values: Map<number, Value> }[] = [];
-    for (const name of this.globalNames()) {
+    for (const name of this.savedGlobalNames()) {
       if (!this.has(name)) continue;
       const variable = this.resolve(key(name), context);
       const values = new Map<number, Value>();
@@ -434,7 +438,7 @@ export class Variables {
     return { characters: this.characterCount(), variables };
   }
   saveLayout(context: EvaluationContext, global = false): SaveLayout[] {
-    return (global ? this.globalNames() : this.savedNames(context)).filter((name) => this.has(name)).map((name) => {
+    return (global ? this.savedGlobalNames() : this.savedNames(context)).filter((name) => this.has(name)).map((name) => {
       const variable = this.resolve(name, context);
       return { name, string: variable.string, character: !!variable.character, userDefined: this.declarations.has(name),
         dimensions: [...(variable.character ? variable.dimensions.slice(1) : variable.dimensions)] };

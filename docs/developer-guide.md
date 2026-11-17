@@ -1587,6 +1587,12 @@ lines with the expectations in the TypeScript test. Do not run these probes
 inside an installed game's directory. The browser runtime additionally prints
 its existing `Log written to emuera.log` notification.
 
+The `native-global-reload.erb` fixture (with its matching `.erh` and binary
+save mode enabled) checks that `LOADGLOBAL` restores built-in global data and
+user declarations marked both `GLOBAL` and `SAVEDATA`, but leaves transient
+`GLOBAL` declarations alone. AiSekai's title Options path relies on this:
+reloading saved settings must not restore the empty startup name list.
+
 EEv56 Wine probes confirm that `FORM中の三連記号を展開しない:YES` preserves
 `***`, `+++`, `===`, `///`, and `$$$` literally, including in formatted string
 literals, as this interpreter currently does. With that setting `NO`, native

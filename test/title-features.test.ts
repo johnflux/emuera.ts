@@ -200,7 +200,7 @@ test("global save/load round trip across independent runtimes, missing file stat
   const root = await mkdtemp(path.join(tmpdir(), "era-globals-"));
   const file = path.join(root, "global.sav");
   try {
-    const headers = '#DIM GLOBAL SETTING, 2\n#DIMS GLOBAL LABEL = "initial"';
+    const headers = '#DIM GLOBAL SAVEDATA SETTING, 2\n#DIMS SAVEDATA GLOBAL LABEL = "initial"';
     const saveGame = game(`@SYSTEM_TITLE
 LOADGLOBAL
 PRINTFORML missing={RESULT}
