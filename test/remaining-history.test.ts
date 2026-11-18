@@ -342,10 +342,12 @@ PRINTFORM second{2}
 PRINTL
 PRINTSL GETDISPLAYLINE(0)
 PRINTSL GETDISPLAYLINE(1)
+PRINTSL GETDISPLAYLINE(-1)
+PRINTSL GETDISPLAYLINE(1000000)
 PRINTFORML {GETFOCUSCOLOR()} {STRLENS(GETLINESTR("ab")) == STRLENS(DRAWLINESTR)}
 QUIT`, jit, game);
     assert.equal(snapshot.status, "halted", JSON.stringify(snapshot.error));
-    assert.deepEqual(texts(snapshot), ["first", "second2", "", "first", "second2", "66051 1"]);
+    assert.deepEqual(texts(snapshot), ["first", "second2", "", "first", "second2", "", "", "66051 1"]);
   }
 });
 

@@ -2562,7 +2562,7 @@ export class Runtime {
           }
           case "GETDISPLAYLINE": {
             const index = argInt(args, name, 0);
-            if (index < 0n || index >= BigInt(this.printedLines.length)) throw new EraError(`GETDISPLAYLINE: line ${index} is out of range`);
+            if (index < 0n || index >= BigInt(this.printedLines.length)) return "";
             return plainHtml(this.printedLines[Number(index)]!);
           }
           case "EXISTCSV": return this.game.characters.has(Number(argInt(args, name, 0))) ? 1n : 0n;

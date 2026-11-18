@@ -1697,7 +1697,8 @@ prefetch staging. They remain in the save store; installed game files are not ch
 
 The remaining-history regressions cover `TRYCGOTO`/`TRYCGOTOFORM`,
 `ENUMVAR`/`ENUMMACRO` begins-with/ends-with/contains searches, `RESETGLOBAL`,
-`CUPCHECK`, `GETFOCUSCOLOR`, `GETLINESTR`, and `GETDISPLAYLINE`.
+`CUPCHECK`, `GETFOCUSCOLOR`, `GETLINESTR`, and `GETDISPLAYLINE`. Display-line
+queries outside the retained display buffer return an empty string.
 Enumeration preserves declaration spelling and omits routine-private variables.
 RESETGLOBAL restores declared global initializers rather than erasing them.
 CDFLAG supports both data axes, `CDFLAG1.csv`/`CDFLAG2.csv` symbols,

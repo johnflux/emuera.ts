@@ -149,41 +149,6 @@ not offered. Elsewhere the game treats sulking as always furious: the favor
 process sets both together, and a successful Apologize clears both together.
 The fix sets `ブチギレ` alongside the anger in the sulk block.
 
-## Native button-spacing diff (browser hotpatch prompts)
-
-The touching `ApplyCancel` labels come from this repository's browser hotpatch,
-not the installed upstream game's scripts. The dialogue-reset confirmation in
-the hotpatch had the same issue. Do not report these exact prompts as an
-existing upstream game bug: there is no matching original-game hunk to apply.
-
-For sharing the native-compatible correction, the diff below is against the
-original hotpatch prompts, before their browser-button conversion.
-`PRINTBUTTONLC` is appropriate: it left-aligns each label in a padded print
-column; `PRINTBUTTONC` right-aligns it. Neither changes the submitted values.
-This alternative needs no browser-specific HTML or helper.
-
-```diff
---- a/hotpatch/START.ERB
-+++ b/hotpatch/START.ERB
-@@ -346,2 +346,2 @@
--					PRINTBUTTON "Apply", 1
--					PRINTBUTTON "Cancel", 0
-+					PRINTBUTTONLC "Apply", 1
-+					PRINTBUTTONLC "Cancel", 0
---- a/hotpatch/IN_GAME_SETTINGS.ERB
-+++ b/hotpatch/IN_GAME_SETTINGS.ERB
-@@ -251,2 +251,2 @@
--	PRINTBUTTON "Reset and change dialogue", 1
--	PRINTBUTTON "Cancel", 0
-+	PRINTBUTTONLC "Reset and change dialogue", 1
-+	PRINTBUTTONLC "Cancel", 0
-```
-
-The active browser hotpatches instead use `HOTPATCH_BUTTON` inside the shared
-`.era-actions-group` wrapping row, which supplies a 6px gap. They are loaded
-automatically by `applyHotpatches`; no separate patch application is needed.
-The native diff above is an alternative, not an additional browser patch.
-
 ## Patch
 
 Apply from inside `GAMES/anon-tw-anon-tw_eng-modding` with `git apply -p1` or
