@@ -8,6 +8,7 @@ import { compatibility } from "./compatibility.js";
 import { checkSyntax } from "./syntax-check.js";
 import { demoGame } from "./demo.js";
 import { applyHotpatches, displayDefaults, displayMetrics, discoverGames, emptyGame, gameDirectory, GAMES_DIR, KNOWN_GAMES, isGameRoot, loadGame, loadGameConfig, stillFrame, type DisplaySettings, type Game, type GameDefinition } from "./loader.js";
+import { AISEKAI_ID, AiSekaiSession, loadAiSekaiBridge } from "./aisekai.js";
 import { CATALOG_UPDATED, downloadedCatalogGames, GAME_CATALOG, installGame } from "./library.js";
 import { EraError, key } from "./model.js";
 import { GAME_INSTRUCTION_LIMIT, Runtime, type BackgroundLayer, type ClientState, type Snapshot } from "./runtime.js";
@@ -115,6 +116,7 @@ function discoveredEntry(definition: GameDefinition): GameEntry {
 }
 interface Session {
   runtime: Runtime;
+  aiSekai?: AiSekaiSession;
   used: number;
   mode: "game" | "demo";
   game: string;
@@ -539,8 +541,10 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
     }
   }
   const liveMcp = qa ? undefined : new LiveMcp();
+  const aiSekaiBridges = new Map<string, ReturnType<typeof loadAiSekaiBridge>>();
   const forgetSession = (id: string) => {
     liveMcp?.detach(id);
+    sessions.get(id)?.aiSekai?.close();
     sessions.delete(id);
   };
   const app = createServer((request, response) => {
@@ -709,6 +713,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
           const reload = reloaders.get(id)?.status(0);
           return {
             id, title, display: displayDefaults(game), metrics: displayMetrics(game),
+            ...(id === AISEKAI_ID ? { aiSekaiBridge: true } : {}),
             reload: reload?.last ?? null, reloading: reload?.reloading ?? false,
           };
         });
@@ -762,7 +767,17 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
           const demo = component ? componentGame(baseGame, component) : data.mode === "demo" ? entry.demo ??= demoGame(baseGame) : undefined;
           const game = demo ? debug ? entry.debugDemo ??= { ...demo, debug: true } : demo
             : debug ? await debugGame(entry) : baseGame;
+          const aiSekai = data.mode === "game" && entry.id === AISEKAI_ID ? new AiSekaiSession(() => {
+            let bridge = aiSekaiBridges.get(game.root);
+            if (!bridge) {
+              bridge = loadAiSekaiBridge(game.root, gameSaveDirectory(game.root, game.config))
+                .catch(error => { aiSekaiBridges.delete(game.root); throw error; });
+              aiSekaiBridges.set(game.root, bridge);
+            }
+            return bridge;
+          }) : undefined;
           const runtime = new Runtime(game, GAME_INSTRUCTION_LIMIT, {
+            ...(aiSekai ? { aiSekai } : {}),
             store: data.mode === "game" ? entry.store : new MemoryGlobalStore(),
             saves: data.mode === "game" ? entry.saves : new MemorySaveStore(),
             // The demo plays the same game's characters, so their edited voices apply there too.
@@ -773,11 +788,13 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
           });
           executionBreadcrumb(id, entry.id, 0, "start", debug);
           const started = performance.now();
-          const snapshot = component ? startComponent(runtime, component) : runtime.start();
+          const snapshot = aiSekai ? aiSekai.run(data.aiSekai, () => runtime.start())
+            : component ? startComponent(runtime, component) : runtime.start();
           serverTiming(response, "execute", started);
           const session: Session | undefined = snapshot.status === "waiting" || qa
-            ? { runtime, used: now, mode: data.mode, game: entry.id, debug, history: [], bytes: 0, step: 0 } : undefined;
+            ? { runtime, used: now, mode: data.mode, game: entry.id, debug, history: [], bytes: 0, step: 0, ...(aiSekai ? { aiSekai } : {}) } : undefined;
           if (session) sessions.set(id, session);
+          else aiSekai?.close();
           deliver(response, id, session, "start", snapshot, game, entry.id);
         } catch (error) {
           if (!(error instanceof EraError)) throw error;
@@ -806,7 +823,8 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
           const kind = session.history.at(-1)?.snapshot.input?.kind ?? "unknown";
           executionBreadcrumb(data.session, session.game, session.step, `${timeout ? "timeout" : "input"} (${kind})`, session.debug);
           const started = performance.now();
-          const snapshot = timeout ? session.runtime.timeout() : session.runtime.input(data.value as string);
+          const execute = () => timeout ? session.runtime.timeout() : session.runtime.input(data.value as string);
+          const snapshot = session.aiSekai ? session.aiSekai.run(data.aiSekai, execute) : execute();
           serverTiming(response, "execute", started);
           if (snapshot.status !== "waiting" && !qa && !liveMcp?.attached(data.session)) forgetSession(data.session);
           deliver(response, data.session, session, timeout ? "timeout" : waiting ? "continue" : "input", snapshot, session.runtime.game);
@@ -1037,7 +1055,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
         const session = sessions.get(data.session);
         if (client && session) session.runtime.setClient(client);
         if (session) executionBreadcrumb(data.session, session.game, session.step, "prefetch", session.debug);
-        json(response, { prefetched: session && !liveMcp?.attached(data.session) ? session.runtime.prefetch() : false });
+        json(response, { prefetched: session && !session.aiSekai && !liveMcp?.attached(data.session) ? session.runtime.prefetch() : false });
         return;
       }
       if (request.method === "GET" && url.pathname === "/api/sprite") {
@@ -1197,6 +1215,7 @@ export function createApp(games: Game | readonly GameEntry[], development = fals
     });
   });
   app.on("close", () => {
+    for (const session of sessions.values()) session.aiSekai?.close();
     for (const reloader of reloaders.values()) reloader.close();
     void liveMcp?.close().catch(error => console.error("MCP shutdown failed:", error));
   });

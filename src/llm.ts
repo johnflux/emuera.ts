@@ -14,9 +14,10 @@ export interface LlmProxyResult {
 
 export class LlmRequestError extends Error {}
 
-export async function proxyLlm(data: Record<string, unknown>, signal?: AbortSignal): Promise<LlmProxyResult> {
+export async function proxyLlm(data: Record<string, unknown>, signal?: AbortSignal, openRouterKeyCheck = false): Promise<LlmProxyResult> {
   const { endpoint, apiKey, path, payload, provider } = data;
-  if (typeof endpoint !== "string" || (path !== "chat/completions" && path !== "models"))
+  const keyCheck = openRouterKeyCheck && provider === "openrouter" && path === "key";
+  if (typeof endpoint !== "string" || (path !== "chat/completions" && path !== "models" && !keyCheck))
     throw new LlmRequestError("Expected an endpoint and a path of chat/completions or models");
   if (apiKey !== undefined && typeof apiKey !== "string") throw new LlmRequestError("API key must be a string");
   if (path === "chat/completions" && (!payload || typeof payload !== "object" || Array.isArray(payload)))
@@ -32,15 +33,15 @@ export async function proxyLlm(data: Record<string, unknown>, signal?: AbortSign
     headers["HTTP-Referer"] = "https://github.com/johnflux/emuera.ts";
     headers["X-Title"] = "Emuera.ts";
   }
-  const init: RequestInit = { method: path === "models" ? "GET" : "POST", headers, redirect: "error" };
+  const init: RequestInit = { method: path === "chat/completions" ? "POST" : "GET", headers, redirect: "error" };
   if (path === "chat/completions") {
     headers["Content-Type"] = "application/json";
     init.body = JSON.stringify(payload);
   }
-  const timeout = AbortSignal.timeout(path === "models" ? MODELS_TIMEOUT_MS : CHAT_TIMEOUT_MS);
+  const timeout = AbortSignal.timeout(path === "chat/completions" ? CHAT_TIMEOUT_MS : MODELS_TIMEOUT_MS);
   init.signal = signal ? AbortSignal.any([signal, timeout]) : timeout;
   let response: Response;
-  try { response = await fetch(new URL(path, base), init); }
+  try { response = await fetch(new URL(keyCheck ? "key" : path, base), init); }
   catch (error) {
     const cause = (error as { cause?: { code?: string; message?: string } }).cause;
     const reason = timeout.aborted ? "timed out" : cause?.code ?? cause?.message ?? (error as Error).message;

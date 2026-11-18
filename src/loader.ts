@@ -10,6 +10,7 @@ const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
 const shiftJisDecoder = new TextDecoder("shift_jis", { fatal: true });
 /** Browser-presentation ERB layered over eraToho The World without editing its files (see docs/hotpatches.md). */
 export const HOTPATCH_ROOT = fileURLToPath(new URL("../hotpatch/", import.meta.url));
+const AISEKAI_HOTPATCH = fileURLToPath(new URL("../hotpatch-aisekai/", import.meta.url));
 export const GAMES_DIR = path.resolve(process.env.ERA_GAMES_DIR ?? "GAMES");
 /**
  * How a known game is recognized in a folder with another name. A matching Git origin decides first; otherwise
@@ -27,6 +28,7 @@ export const KNOWN_GAMES: readonly GameDefinition[] = [
   },
   { id: "k", title: "eraTohoK", root: path.join(GAMES_DIR, "eraTohoK", "eraTohoK-master") },
   { id: "rancek", title: "eraRanceK", root: path.join(GAMES_DIR, "eraRanceK") },
+  { id: "eratohotw-aisekai-v0-6", title: "EraTohoTW AiSekai v0.6", root: path.join(GAMES_DIR, "EraTohoTW AiSekai v0.6"), hotpatch: AISEKAI_HOTPATCH },
 ];
 /** Resolve Emuera's standard folders without assuming a case-insensitive filesystem. Exact spelling wins. */
 export function gameDirectory(root: string, name: string): string {

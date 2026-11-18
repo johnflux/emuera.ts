@@ -425,6 +425,14 @@ function message(value, error = false) {
 }
 async function api(url, data) {
   const started = profileStart();
+  if (runGame === "eratohotw-aisekai-v0-6" && ["/api/start", "/api/input", "/api/timeout"].includes(url)
+    && games.some(game => game.id === runGame && game.aiSekaiBridge)) {
+    const llm = activeLlm();
+    if (llm) {
+      const { provider, endpoint, model, apiKey, jsonMode } = llm;
+      data = { ...data, aiSekai: { provider, endpoint, model, apiKey, jsonMode } };
+    }
+  }
   const response = await fetch(url, data === undefined ? {} : {
     method: "POST", headers: { "Content-Type": "application/json", ...(profiling ? { "X-Era-Profile": "1" } : {}) }, body: JSON.stringify(data),
   });
@@ -2130,7 +2138,21 @@ async function renderHtml(markup, parent, sprites) {
       const checked = node.getAttribute("aria-checked");
       const checkbox = node.getAttribute("role") === "checkbox";
       if (checkbox && !["true", "false", "mixed"].includes(checked)) throw new Error(`Unsupported checkbox state: ${checked}`);
-      if (value !== null) element = choice("", value, node.classList.contains("era-dialog-close") ? "" : node.getAttribute("title") ?? "", checkbox ? checked === "mixed" ? "mixed" : checked === "true" : null);
+      if (node.getAttribute("data-app-action") === "llm-settings" && runGame === "eratohotw-aisekai-v0-6" && value === null) {
+        element = document.createElement("button");
+        element.type = "button";
+        element.className = "ui-button ui-button--small";
+        element.addEventListener("click", () => {
+          if (!element.closest(".screen.is-active") || busy || input?.kind !== "integer") return;
+          const current = generation, currentStep = step, previousLlm = JSON.stringify(activeLlm());
+          if (!openLlmConfig()) return;
+          llmConfig.addEventListener("close", () => {
+            if (previousLlm !== JSON.stringify(activeLlm()) && current === generation && currentStep === step
+              && !busy && element.closest(".screen.is-active")) void submit("14");
+          }, { once: true });
+        });
+      }
+      else if (value !== null) element = choice("", value, node.classList.contains("era-dialog-close") ? "" : node.getAttribute("title") ?? "", checkbox ? checked === "mixed" ? "mixed" : checked === "true" : null);
       else element = document.createElement("span");
       if (node.getAttribute("role") === "radio") {
         if (value === null) throw new Error("Radio choices require a command value");
@@ -3866,9 +3888,10 @@ const smallLlmScreen = matchMedia("(max-width: 1280px) and (max-height: 800px)")
 function openLlmConfig() {
   if (smallLlmScreen.matches) {
     message("LLM configuration requires a viewport larger than 1280×800.", true);
-    return;
+    return false;
   }
   showLlmConfig();
+  return true;
 }
 smallLlmScreen.addEventListener("change", () => {
   if (smallLlmScreen.matches && llmConfig.open) llmConfig.close();

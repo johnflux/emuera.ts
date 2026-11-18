@@ -7,6 +7,26 @@ Unlike [game patches](game-patches.md), which fix genuine bugs in the game, a
 hotpatch normally only changes presentation. `INTIMACY_COMMANDS.ERB` and
 `RELATIONSHIPS.ERB` also make deliberate gameplay changes.
 
+## AiSekai LLM settings
+
+The [AiSekai hotpatch](../hotpatch-aisekai/AI_CONFIG_MENU.ERB) shows the active
+provider, model, and key status in AiSekai's settings screen. **Test Connection**
+uses the app's configured provider (and verifies the key for OpenRouter).
+**LLM Settings** opens Emuera.ts's existing dialog to change provider settings.
+Closing it without changing the saved connection leaves the game input untouched;
+saving a changed connection refreshes the displayed provider settings.
+The installed game needs the importable AiSekai bridge
+(`createBridge` in `ai_bridge/bridge.mjs`). The integration loads automatically
+for AiSekai; no environment variable or standalone bridge process is needed.
+The status identifies Emuera.ts as the bridge and the source of configured
+credentials. This runs JavaScript from that installation with the server's permissions.
+Do not run the standalone bridge against the same game directory at the same
+time. The embedded bridge still owns AiSekai's prompts, lorebooks, history, and
+summaries, but its game request/reply files stay in memory and provider calls
+use the app's selected endpoint, model, and JSON mode. The API key is passed
+only to the app's LLM proxy, not to the bridge. External Notepad launch is
+disabled in embedded mode; the bridge still prepares its edit files.
+
 ## GUI input
 
 Game dialog popovers and their dimming backdrops use the terminal's measured

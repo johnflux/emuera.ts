@@ -393,6 +393,7 @@ export interface RuntimeOptions {
   jit?: boolean;
   /** Character voices the player edited for LLM chat (default: kept in memory). */
   voices?: VoiceStore;
+  aiSekai?: { read(file: string): string | null | undefined; send(file: string, text: string): boolean };
 }
 // RanceK's default scenario builds its diplomacy maps in ~187 million instructions before asking for input.
 export const GAME_INSTRUCTION_LIMIT = 250_000_000;
@@ -633,7 +634,9 @@ export class Runtime {
   private dynamicSprites = new Map<string, SpriteInfo>();
   private spriteSizes = new Map<string, SpriteInfo>();
   private disposedSprites = new Set<string>();
+  private readonly aiSekai: RuntimeOptions["aiSekai"];
   constructor(public game: Game, private maxSteps = 50_000, options: RuntimeOptions = {}) {
+    this.aiSekai = options.aiSekai;
     this.fullWidthSpace = allowsFullWidthSpace(game.config);
     let shared = COMPILED.get(game);
     if (!shared) COMPILED.set(game, shared = { compiled: new Map(), analysis: { suspends: new Map(), targets: new Map() } });
@@ -3017,7 +3020,11 @@ export class Runtime {
             const position = Number(argInt(args, name, 1));
             return position < 0 || position >= argText(args, name, 0).length ? "" : argText(args, name, 0)[position]!;
           }
-          case "EXISTFILE": return this.gameFile(argText(args, name, 0)) ? 1n : 0n;
+          case "EXISTFILE": {
+            const name = argText(args, "EXISTFILE", 0);
+            const reply = this.aiSekai?.read(name);
+            return (reply === undefined ? !!this.gameFile(name) : reply !== null) ? 1n : 0n;
+          }
           case "FIND_CHARADATA": {
             // Directory.GetFiles("chara_<pattern>.dat"): * and ? wildcards, case-insensitive; the empty name never matches.
             const pattern = args[0] === undefined ? "*" : argText(args, name, 0);
@@ -3037,12 +3044,15 @@ export class Runtime {
             return result.state;
           }
           case "SAVETEXT": {
+            if (typeof args[1] === "string" && this.aiSekai?.send(args[1], argText(args, name, 0))) return 1n;
             const file = this.textFile(args[1]!);
             if (!file) return 0n;
             this.saves.write(file.store, argText(args, name, 0));
             return 1n;
           }
           case "LOADTEXT": {
+            const reply = typeof args[0] === "string" ? this.aiSekai?.read(args[0]) : undefined;
+            if (reply !== undefined) return reply ?? "";
             const file = this.textFile(args[0]!);
             if (!file) return "";
             const saved = this.saves.read(file.store) ?? (file.game ? readTextFileSync(file.game) : null);
@@ -4779,8 +4789,8 @@ export class Runtime {
           case "SETCOLOR": case "SETBGCOLOR": {
             const channels = this.arguments(args).map(num);
             if (channels.length !== 1 && channels.length !== 3) throw new EraError(`${op} expects RGB integer or three channels`);
-            if (channels.some((c) => c < 0n || c > (channels.length === 1 ? 0xffffffn : 255n))) throw new EraError("Color out of range");
-            const color = channels.length === 1 ? channels[0]! : (channels[0]! << 16n) | (channels[1]! << 8n) | channels[2]!;
+            if (channels.length === 3 && channels.some((c) => c < 0n || c > 255n)) throw new EraError("Color out of range");
+            const color = channels.length === 1 ? channels[0]! & 0xffffffn : (channels[0]! << 16n) | (channels[1]! << 8n) | channels[2]!;
             this.style[op === "SETCOLOR" ? "color" : "background"] = "#" + color.toString(16).padStart(6, "0"); break;
           }
           case "RESETCOLOR": this.style.color = this.display.foreground; break;

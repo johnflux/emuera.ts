@@ -64,6 +64,7 @@
       "dist/**/*",
       "web/**/*",
       "hotpatch/**/*",
+      "hotpatch-aisekai/**/*",
       "electron/main.cjs",
       "electron/preload.cjs",
       "electron/game-paths.cjs",

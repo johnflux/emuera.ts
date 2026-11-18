@@ -643,6 +643,23 @@ PRINTL after`, undefined, { display: { foreground: "#112233", background: "#0000
   assert.equal(after.output[0]!.type === "text" && after.output[0]!.style.color, "#445566");
 });
 
+test("SETCOLOR and SETBGCOLOR mask packed integers to RGB channels", () => {
+  for (const jit of [false, true]) {
+    const result = runtime(`@SYSTEM_TITLE
+SETCOLOR 0x32CD322
+SETBGCOLOR -1
+PRINTL packed`, undefined, { jit }).start();
+    assert.equal(result.status, "halted", JSON.stringify(result.error));
+    assert.equal(result.output[0]!.type === "text" && result.output[0]!.style.color, "#2cd322");
+    assert.equal(result.output[0]!.type === "text" && result.output[0]!.style.background, "#ffffff");
+    for (const args of ["-1, 2, 3", "1, 2, 256"]) {
+      const invalid = runtime(`@SYSTEM_TITLE\nSETCOLOR ${args}`, undefined, { jit }).start();
+      assert.equal(invalid.status, "error");
+      assert.match(invalid.error!.message, /Color out of range/);
+    }
+  }
+});
+
 test("expression functions bind REF parameters to the caller's variables", () => {
   const result = runtime(`@SYSTEM_TITLE
 #DIM SEED
